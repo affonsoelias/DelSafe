@@ -8,6 +8,7 @@ bin/generated/
 *.ppu
 *.dcu
 *.bak
+*.vsix
 *.lps
 .DS_Store
 Thumbs.db
