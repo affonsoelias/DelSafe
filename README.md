@@ -67,30 +67,46 @@ end;
 
 O compilador oficial está implementado em Free Pascal na pasta `compiler/` e disponível em `bin/aetherc.exe`.
 
-### 1. Diagnóstico do Ambiente
+### 1. Criar e Gerenciar Projetos (`init`, `build`, `run`)
+```bash
+# 1. Cria um novo projeto com manifesto aether.json e estrutura organizada
+./bin/aetherc init meu_projeto
+cd meu_projeto
+
+# 2. Compila o projeto baseado no aether.json
+aetherc build
+
+# 3. Compila e executa imediatamente
+aetherc run
+
+# 4. Compila utilizando o backend C99/GCC
+aetherc build --target=c
+```
+
+### 2. Diagnóstico do Ambiente
 ```bash
 ./bin/aetherc --doctor
 ```
 Verifica automaticamente se o **Free Pascal (`fpc`)** e o **compilador C (`gcc`)** (via MSYS2 no Windows ou nativo no Linux/macOS) estão instalados e operacionais.
 
-### 2. Compilar para Binário Nativo (Backend Pascal - Padrão)
+### 3. Compilar Arquivo Avulso (Backend Pascal - Padrão)
 ```bash
 ./bin/aetherc examples/01_hello_world.aeth
 ./bin/01_hello_world.exe
 ```
 
-### 3. Compilar para Binário Nativo via C99 (MSYS2 GCC)
+### 4. Compilar Arquivo Avulso via C99 (MSYS2 GCC)
 ```bash
 ./bin/aetherc examples/01_hello_world.aeth --target=c
 ```
 
-### 4. Modo Diagnóstico para IA (JSON Diagnostics)
+### 5. Modo Diagnóstico para IA (JSON Diagnostics)
 ```bash
 ./bin/aetherc examples/02_ownership_and_borrow.aeth --emit-json-diag
 ```
 Retorna diagnósticos em formato JSON estruturado com localização exata e sugestões de correção pronta para modelos de linguagem.
 
-### 5. Servidor de Linguagem (LSP - Language Server Protocol)
+### 6. Servidor de Linguagem (LSP - Language Server Protocol)
 ```bash
 ./bin/aetherc --lsp
 ```

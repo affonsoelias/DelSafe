@@ -328,6 +328,42 @@ function activate(context) {
         })
     );
 
+    // Comando: Inicializar Projeto Aether
+    context.subscriptions.push(
+        vscode.commands.registerCommand('aether.initProject', async () => {
+            const name = await vscode.window.showInputBox({
+                prompt: 'Nome do novo projeto Aether (deixe em branco para inicializar na pasta atual):',
+                placeHolder: 'meu_projeto'
+            });
+            if (name === undefined) return; // Cancelado
+
+            const compiler = getCompilerPath();
+            const term = vscode.window.createTerminal('Aether (Init)');
+            term.show();
+            term.sendText(`"${compiler}" init ${name.trim()}`);
+        })
+    );
+
+    // Comando: Compilar Projeto (Build)
+    context.subscriptions.push(
+        vscode.commands.registerCommand('aether.buildProject', () => {
+            const compiler = getCompilerPath();
+            const term = vscode.window.createTerminal('Aether Build');
+            term.show();
+            term.sendText(`"${compiler}" build`);
+        })
+    );
+
+    // Comando: Executar Projeto (Run)
+    context.subscriptions.push(
+        vscode.commands.registerCommand('aether.runProject', () => {
+            const compiler = getCompilerPath();
+            const term = vscode.window.createTerminal('Aether Run');
+            term.show();
+            term.sendText(`"${compiler}" run`);
+        })
+    );
+
     // Comando: Compilar via Pascal
     context.subscriptions.push(
         vscode.commands.registerCommand('aether.compilePascal', () => {

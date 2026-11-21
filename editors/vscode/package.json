@@ -2,7 +2,7 @@
   "name": "aether-lang",
   "displayName": "Aether Programming Language",
   "description": "Suporte oficial para a linguagem Aether (.aeth): realce de sintaxe, snippets, LSP nativo com diagnosticos em tempo real, autocompletar, hover e go-to-definition.",
-  "version": "0.9.0",
+  "version": "0.10.0",
   "publisher": "aether-lang",
   "engines": {
     "vscode": "^1.75.0"
@@ -21,7 +21,10 @@
   ],
   "main": "./extension.js",
   "activationEvents": [
-    "onLanguage:aether"
+    "onLanguage:aether",
+    "onCommand:aether.initProject",
+    "onCommand:aether.buildProject",
+    "onCommand:aether.runProject"
   ],
   "contributes": {
     "languages": [
@@ -51,6 +54,21 @@
       }
     ],
     "commands": [
+      {
+        "command": "aether.initProject",
+        "title": "Aether: Inicializar Novo Projeto (Init / aether.json)",
+        "category": "Aether"
+      },
+      {
+        "command": "aether.buildProject",
+        "title": "Aether: Compilar Projeto (Build)",
+        "category": "Aether"
+      },
+      {
+        "command": "aether.runProject",
+        "title": "Aether: Executar Projeto (Run)",
+        "category": "Aether"
+      },
       {
         "command": "aether.compilePascal",
         "title": "Aether: Compilar Arquivo Atual (Backend Pascal)",

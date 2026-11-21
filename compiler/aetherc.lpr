@@ -16,7 +16,8 @@ uses
   uAetherEmitterC,
   uAetherToolchain,
   uAetherJSONDiag,
-  uAetherLSP;
+  uAetherLSP,
+  uAetherProject;
 
 procedure PrintBanner;
 begin
@@ -28,7 +29,13 @@ end;
 
 procedure PrintUsage;
 begin
-  WriteLn('Uso: aetherc <arquivo.aeth> [opcoes]');
+  WriteLn('Uso: aetherc <comando | arquivo.aeth> [opcoes]');
+  WriteLn('');
+  WriteLn('Comandos de Gerenciamento de Projetos:');
+  WriteLn('  init [nome]       Inicializa um novo projeto Aether com manifesto aether.json');
+  WriteLn('  new <nome>        Cria uma nova pasta com o projeto Aether estruturado');
+  WriteLn('  build             Compila o projeto atual baseado no manifesto aether.json');
+  WriteLn('  run               Compila e executa imediatamente o binario do projeto');
   WriteLn('');
   WriteLn('Opcoes Principais:');
   WriteLn('  --doctor          Verifica e diagnostica o ambiente (FPC e MSYS2/GCC)');
@@ -348,6 +355,8 @@ var
   OptionCheckOnly: Boolean;
   OptionTargetPascal: Boolean;
   OptionJSONDiag: Boolean;
+  IsRunCommand: Boolean;
+  ProjConfig: TAetherProjectConfig;
   I: Integer;
   Arg: string;
 begin
@@ -358,6 +367,117 @@ begin
   OptionCheckOnly := False;
   OptionTargetPascal := True;
   OptionJSONDiag := False;
+  IsRunCommand := False;
+
+  // 1. Checa comandos de projeto: init / new
+  if (ParamCount >= 1) and ((LowerCase(ParamStr(1)) = 'init') or (LowerCase(ParamStr(1)) = 'new')) then
+  begin
+    PrintBanner;
+    Arg := '';
+    if ParamCount >= 2 then Arg := ParamStr(2);
+    try
+      HandleProjectInit(Arg);
+      Halt(0);
+    except
+      on E: Exception do
+      begin
+        WriteLn(ErrOutput, 'Erro ao inicializar projeto: ', E.Message);
+        Halt(1);
+      end;
+    end;
+  end;
+
+  // 2. Checa comandos de projeto: build / run
+  if (ParamCount >= 1) and ((LowerCase(ParamStr(1)) = 'build') or (LowerCase(ParamStr(1)) = 'run')) then
+  begin
+    IsRunCommand := LowerCase(ParamStr(1)) = 'run';
+    if not LoadProjectConfig(ProjConfig) then
+    begin
+      PrintBanner;
+      WriteLn(ErrOutput, 'Erro: Nenhum arquivo "aether.json" foi encontrado no diretorio atual ou pastas superiores.');
+      WriteLn(ErrOutput, 'Dica: Execute "aetherc init" para inicializar um novo projeto Aether.');
+      Halt(1);
+    end;
+
+    InputFile := ProjConfig.RootDir + PathDelim + StringReplace(ProjConfig.Entry, '/', PathDelim, [rfReplaceAll]);
+    OutputExe := ProjConfig.RootDir + PathDelim + StringReplace(ProjConfig.Output, '/', PathDelim, [rfReplaceAll]);
+    OptionTargetPascal := ProjConfig.Backend <> 'c';
+
+    // Permite sobrescrever flags como --target=c, -o, etc. na linha de comando
+    I := 2;
+    while I <= ParamCount do
+    begin
+      Arg := ParamStr(I);
+      if Arg = '--target=pascal' then OptionTargetPascal := True
+      else if Arg = '--target=c' then OptionTargetPascal := False
+      else if Arg = '--check-only' then OptionCheckOnly := True
+      else if (Arg = '--emit-json-diag') or (Arg = '--emit-json-diagnostics') then OptionJSONDiag := True
+      else if Arg = '-o' then
+      begin
+        Inc(I);
+        if I <= ParamCount then OutputExe := ParamStr(I);
+      end;
+      Inc(I);
+    end;
+
+    if not OptionJSONDiag then
+      PrintBanner;
+
+    try
+      CompileFile(InputFile, OptionTargetPascal, OptionCheckOnly, False, OutputExe, OptionJSONDiag);
+      if IsRunCommand and not OptionCheckOnly then
+      begin
+        WriteLn('');
+        WriteLn('--------------------------------------------------------');
+        WriteLn(' Executando: ' + ExtractFileName(OutputExe));
+        WriteLn('--------------------------------------------------------');
+        ExecuteProcess(OutputExe, '');
+      end;
+      Halt(0);
+    except
+      on E: EAetherBorrowError do
+      begin
+        if OptionJSONDiag then
+          WriteLn(GenerateJSONDiagnostic(InputFile, 'Error', E.Code, E.Message, E.Line, E.Col, E.MovedLine, E.MovedCol,
+            'borrow_instead_of_move', 'Altere a chamada para "borrow" se a transferencia de posse nao for necessaria.', 'borrow'))
+        else
+          WriteLn(ErrOutput, 'Erro de Compilacao: ', E.Message);
+        Halt(1);
+      end;
+      on E: EAetherTypeError do
+      begin
+        if OptionJSONDiag then
+          WriteLn(GenerateJSONDiagnostic(InputFile, 'Error', E.Code, E.Message, E.Line, E.Col))
+        else
+          WriteLn(ErrOutput, 'Erro de Compilacao: ', E.Message);
+        Halt(1);
+      end;
+      on E: EAetherParserError do
+      begin
+        if OptionJSONDiag then
+          WriteLn(GenerateJSONDiagnostic(InputFile, 'Error', 'E0001', E.Message, E.Line, E.Col))
+        else
+          WriteLn(ErrOutput, 'Erro de Compilacao: ', E.Message);
+        Halt(1);
+      end;
+      on E: EAetherLexerError do
+      begin
+        if OptionJSONDiag then
+          WriteLn(GenerateJSONDiagnostic(InputFile, 'Error', 'E0000', E.Message, E.Line, E.Col))
+        else
+          WriteLn(ErrOutput, 'Erro de Compilacao: ', E.Message);
+        Halt(1);
+      end;
+      on E: Exception do
+      begin
+        if OptionJSONDiag then
+          WriteLn(GenerateJSONDiagnostic(InputFile, 'Error', 'E9999', E.Message, 1, 1))
+        else
+          WriteLn(ErrOutput, 'Erro de Compilacao: ', E.Message);
+        Halt(1);
+      end;
+    end;
+  end;
 
   I := 1;
   while I <= ParamCount do

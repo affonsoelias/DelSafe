@@ -66,10 +66,23 @@ Este documento traça o status oficial de desenvolvimento do compilador e as pr�
 
 ---
 
-## 🚀 Próximas Fases e Metas Futuras
+### ✅ Fase 10: Developer Experience & Gerenciamento de Projetos (`init`, `build`, `run`) (Concluído)
+- [x] Comando `aetherc init [nome]` / `aetherc new`: Criação de projetos estruturados com `aether.json`, `src/main.aeth`, `tests/`, `.gitignore` e `README.md`.
+- [x] Manifesto de Projeto (`aether.json`): Configuração de nome, versão, ponto de entrada (`entry`), backend padrão (`pascal` ou `c`) e saída (`output`).
+- [x] Comandos automáticos de compilação e execução: `aetherc build` e `aetherc run` com suporte a sobrescrita de backend (`--target=c`).
+- [x] Integração com a extensão oficial do VS Code / Antigravity IDE (comandos na paleta para iniciar, compilar e rodar projetos).
+- [x] Módulo nativo do projeto em Pascal (`compiler/src/uAetherProject.pas`).
 
-### 🎯 Fase 10: Gerenciador de Pacotes (`aethpm` / Integração com Boss)
-- [ ] Criação de um utilitário de linha de comando ou integração nativa para gerenciar dependências e módulos Aether.
+---
 
-### 🎯 Fase 11: Backend LLVM / Compilação Nativa Direta
-- [ ] Backend emissor de LLVM IR para otimizações agressivas de baixo nível sem depender do GCC ou FPC.
+## 🚀 Próximas Fases e Metas
+
+### 🎯 Fase 11: Maturidade de Linguagem para Auto-Hospedagem (Self-Hosting)
+- [ ] Suporte a `Box<T>` (ponteiro inteligente com posse única para estruturas de dados recursivas como árvores de AST).
+- [ ] Coleções dinâmicas na biblioteca padrão (`std/collections.List<T>` ou `Vec<T>`).
+- [ ] I/O avançado na biblioteca padrão (`std/io.ReadFileToString`, `std/io.WriteStringToFile`).
+
+### 🎯 Fase 12: O Compilador Aether Auto-Hospedado (`aetherc-core`)
+- [ ] Lexer escrito nativamente em Aether (`compiler/aeth/lexer.aeth`).
+- [ ] Parser e AST escritos nativamente em Aether (`compiler/aeth/parser.aeth`).
+- [ ] Bootstrapping completo: Compilador em Aether compilado pelo `aetherc` atual.
