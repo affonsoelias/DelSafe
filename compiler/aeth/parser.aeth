@@ -59,6 +59,11 @@ begin
         return NewStringExpr(borrow tok.text);
     end;
 
+    if (tok.kind = TokenKind.tkIdentifier) and ((tok.text = "true") or (tok.text = "false")) then
+        AdvanceParser(mut borrow p);
+        return NewBoolExpr(borrow tok.text);
+    end;
+
     if tok.kind = TokenKind.tkLParen then
         AdvanceParser(mut borrow p);
         inner := ParseExpr(mut borrow p);
@@ -70,7 +75,6 @@ begin
         callee := tok.text;
         AdvanceParser(mut borrow p);
         if p.current.kind = TokenKind.tkLParen then
-            // Chamada de Funcao: Callee(arg)
             AdvanceParser(mut borrow p);
             arg := ParseExpr(mut borrow p);
             MatchToken(mut borrow p, TokenKind.tkRParen);
@@ -102,7 +106,7 @@ begin
     return left;
 end;
 
-function ParseExpr(mut borrow p: ParserState): ASTExprNode
+function ParseAdditive(mut borrow p: ParserState): ASTExprNode
 var
     left: ASTExprNode;
     right: ASTExprNode;
@@ -120,23 +124,97 @@ begin
     return left;
 end;
 
+function ParseExpr(mut borrow p: ParserState): ASTExprNode
+var
+    left: ASTExprNode;
+    right: ASTExprNode;
+    op: String;
+begin
+    left := ParseAdditive(mut borrow p);
+
+    while (p.current.kind = TokenKind.tkEqual) or (p.current.kind = TokenKind.tkNotEqual) or
+          (p.current.kind = TokenKind.tkLess) or (p.current.kind = TokenKind.tkLessEqual) or
+          (p.current.kind = TokenKind.tkGreater) or (p.current.kind = TokenKind.tkGreaterEqual) do
+        op := p.current.text;
+        AdvanceParser(mut borrow p);
+        right := ParseAdditive(mut borrow p);
+        left := NewBinaryExpr(borrow op, take left, take right);
+    end;
+
+    return left;
+end;
+
 function ParseStmt(mut borrow p: ParserState): ASTStmtNode
 var
     tok: Token;
     vname: String;
+    tname: String;
     val_expr: ASTExprNode;
     call_expr: ASTExprNode;
+    cond_expr: ASTExprNode;
+    then_st: ASTStmtNode;
+    else_st: ASTStmtNode;
+    ret_expr: ASTExprNode;
 begin
     tok := p.current;
 
-    // 1. Chamada de PrintLn(...)
+    // 1. Declaracao de variavel: var vname: tname;
+    if tok.kind = TokenKind.tkVar then
+        AdvanceParser(mut borrow p);
+        if p.current.kind = TokenKind.tkIdentifier then
+            vname := p.current.text;
+            AdvanceParser(mut borrow p);
+            MatchToken(mut borrow p, TokenKind.tkColon);
+            tname := p.current.text;
+            AdvanceParser(mut borrow p);
+            MatchToken(mut borrow p, TokenKind.tkSemi);
+            return NewVarDeclStmt(borrow vname, borrow tname);
+        end;
+    end;
+
+    // 2. Chamada de PrintLn(...)
     if (tok.kind = TokenKind.tkIdentifier) and (tok.text = "PrintLn") then
         call_expr := ParsePrimary(mut borrow p);
         MatchToken(mut borrow p, TokenKind.tkSemi);
         return NewPrintLnStmt(take call_expr);
     end;
 
-    // 2. Atribuicao: vname := expr;
+    // 3. Estrutura condicional: if cond then stmts else stmts end;
+    if tok.kind = TokenKind.tkIf then
+        AdvanceParser(mut borrow p);
+        cond_expr := ParseExpr(mut borrow p);
+        MatchToken(mut borrow p, TokenKind.tkThen);
+        then_st := ParseBlock(mut borrow p);
+        else_st := NewVarDeclStmt(borrow "", borrow "");
+        if p.current.kind = TokenKind.tkElse then
+            AdvanceParser(mut borrow p);
+            else_st := ParseBlock(mut borrow p);
+        end;
+        MatchToken(mut borrow p, TokenKind.tkEnd);
+        MatchToken(mut borrow p, TokenKind.tkSemi);
+        return NewIfStmt(take cond_expr, take then_st, take else_st);
+    end;
+
+    // 4. Laco de repeticao: while cond do stmts end;
+    if tok.kind = TokenKind.tkWhile then
+        AdvanceParser(mut borrow p);
+        cond_expr := ParseExpr(mut borrow p);
+        MatchToken(mut borrow p, TokenKind.tkDo);
+        then_st := ParseBlock(mut borrow p);
+        MatchToken(mut borrow p, TokenKind.tkEnd);
+        MatchToken(mut borrow p, TokenKind.tkSemi);
+        return NewWhileStmt(take cond_expr, take then_st);
+    end;
+
+    // 5. Retorno: return expr;
+    if tok.kind = TokenKind.tkReturn then
+        AdvanceParser(mut borrow p);
+        ret_expr := ParseExpr(mut borrow p);
+        MatchToken(mut borrow p, TokenKind.tkSemi);
+        return NewReturnStmt(take ret_expr);
+    end;
+
+    // 6. Atribuicao: vname := expr;
     if tok.kind = TokenKind.tkIdentifier then
         vname := tok.text;
         AdvanceParser(mut borrow p);
@@ -149,4 +227,65 @@ begin
 
     AdvanceParser(mut borrow p);
     return NewVarDeclStmt(borrow "", borrow "");
+end;
+
+function ParseBlock(mut borrow p: ParserState): ASTStmtNode
+var
+    st: ASTStmtNode;
+    rest: ASTStmtNode;
+begin
+    if (IsAtEnd(borrow p.lexer)) or (p.current.kind = TokenKind.tkEnd) or (p.current.kind = TokenKind.tkElse) or (p.current.kind = TokenKind.tkEOF) then
+        return NewVarDeclStmt(borrow "", borrow "");
+    end;
+
+    st := ParseStmt(mut borrow p);
+    rest := ParseBlock(mut borrow p);
+    st.next := Some(Box(rest));
+    return st;
+end;
+
+function ParseVarSection(mut borrow p: ParserState): ASTStmtNode
+var
+    vname: String;
+    tname: String;
+    decl: ASTStmtNode;
+    rest: ASTStmtNode;
+begin
+    if (IsAtEnd(borrow p.lexer)) or (p.current.kind = TokenKind.tkBegin) or (p.current.kind = TokenKind.tkEOF) then
+        return NewVarDeclStmt(borrow "", borrow "");
+    end;
+
+    if p.current.kind = TokenKind.tkIdentifier then
+        vname := p.current.text;
+        AdvanceParser(mut borrow p);
+        MatchToken(mut borrow p, TokenKind.tkColon);
+        tname := p.current.text;
+        AdvanceParser(mut borrow p);
+        MatchToken(mut borrow p, TokenKind.tkSemi);
+        decl := NewVarDeclStmt(borrow vname, borrow tname);
+        rest := ParseVarSection(mut borrow p);
+        decl.next := Some(Box(rest));
+        return decl;
+    else
+        AdvanceParser(mut borrow p);
+        return ParseVarSection(mut borrow p);
+    end;
+end;
+
+function AppendStmt(take first: ASTStmtNode; take second: ASTStmtNode): ASTStmtNode
+var
+    tail: ASTStmtNode;
+begin
+    if first.name = "" then
+        return second;
+    else
+        if first.next.is_some then
+            tail := AppendStmt(take first.next.value, take second);
+            first.next := Some(Box(tail));
+            return first;
+        else
+            first.next := Some(Box(second));
+            return first;
+        end;
+    end;
 end;

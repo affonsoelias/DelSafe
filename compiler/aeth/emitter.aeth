@@ -3,6 +3,19 @@ module Emitter;
 import AST;
 import Collections;
 
+function MapTypeToC(borrow aeth_type: String): String
+begin
+    if aeth_type = "Int32" then return "int32_t"; end;
+    if aeth_type = "UInt32" then return "uint32_t"; end;
+    if aeth_type = "Int64" then return "int64_t"; end;
+    if aeth_type = "UInt64" then return "uint64_t"; end;
+    if aeth_type = "String" then return "const char*"; end;
+    if aeth_type = "Bool" then return "bool"; end;
+    if aeth_type = "Real" then return "double"; end;
+    if aeth_type = "Void" then return "void"; end;
+    return aeth_type;
+end;
+
 function EmitExprC(borrow expr: ASTExprNode): String
 var
     l_str: String;
@@ -10,14 +23,19 @@ var
 begin
     if expr.kind = ASTExprKind.ekIntLiteral then return expr.str_val; end;
     if expr.kind = ASTExprKind.ekStringLiteral then return expr.str_val; end;
+    if expr.kind = ASTExprKind.ekBoolLiteral then return expr.str_val; end;
     if expr.kind = ASTExprKind.ekIdentifier then return expr.str_val; end;
 
     if expr.kind = ASTExprKind.ekCall then
         if expr.left.is_some then
             l_str := EmitExprC(borrow expr.left.value);
-            return "printf(\"%s\\n\", " + l_str + ")";
+            if expr.str_val = "PrintLn" then
+                return "printf(\"%s\\n\", " + l_str + ")";
+            else
+                return expr.str_val + "(" + l_str + ")";
+            end;
         else
-            return "printf(\"\\n\")";
+            return expr.str_val + "()";
         end;
     end;
 
@@ -30,6 +48,12 @@ begin
         if expr.right.is_some then
             r_str := EmitExprC(borrow expr.right.value);
         end;
+        if expr.op = "=" then
+            return "(" + l_str + " == " + r_str + ")";
+        end;
+        if expr.op = "<>" then
+            return "(" + l_str + " != " + r_str + ")";
+        end;
         return "(" + l_str + " " + expr.op + " " + r_str + ")";
     end;
 
@@ -39,11 +63,16 @@ end;
 function EmitStmtC(borrow stmt: ASTStmtNode): String
 var
     expr_str: String;
+    c_type: String;
+    then_str: String;
+    else_str: String;
 begin
-    if stmt.kind = ASTStmtKind.skPrintLn then
-        if stmt.expr.is_some then
-            expr_str := EmitExprC(borrow stmt.expr.value);
-            return "    " + expr_str + ";\n";
+    if stmt.kind = ASTStmtKind.skVarDecl then
+        if stmt.name <> "" then
+            c_type := MapTypeToC(borrow stmt.type_name);
+            return "    " + c_type + " " + stmt.name + ";\n";
+        else
+            return "";
         end;
     end;
 
@@ -54,9 +83,64 @@ begin
         end;
     end;
 
-    if stmt.kind = ASTStmtKind.skVarDecl then
-        return "    // var decl\n";
+    if stmt.kind = ASTStmtKind.skPrintLn then
+        if stmt.expr.is_some then
+            expr_str := EmitExprC(borrow stmt.expr.value);
+            return "    " + expr_str + ";\n";
+        end;
+    end;
+
+    if stmt.kind = ASTStmtKind.skIf then
+        if stmt.expr.is_some then
+            expr_str := EmitExprC(borrow stmt.expr.value);
+            then_str := "";
+            else_str := "";
+            if stmt.then_branch.is_some then
+                then_str := EmitBlockC(borrow stmt.then_branch.value);
+            end;
+            if stmt.else_branch.is_some then
+                else_str := EmitBlockC(borrow stmt.else_branch.value);
+            end;
+
+            if else_str <> "" then
+                return "    if (" + expr_str + ") {\n" + then_str + "    } else {\n" + else_str + "    }\n";
+            else
+                return "    if (" + expr_str + ") {\n" + then_str + "    }\n";
+            end;
+        end;
+    end;
+
+    if stmt.kind = ASTStmtKind.skWhile then
+        if stmt.expr.is_some then
+            expr_str := EmitExprC(borrow stmt.expr.value);
+            then_str := "";
+            if stmt.then_branch.is_some then
+                then_str := EmitBlockC(borrow stmt.then_branch.value);
+            end;
+            return "    while (" + expr_str + ") {\n" + then_str + "    }\n";
+        end;
+    end;
+
+    if stmt.kind = ASTStmtKind.skReturn then
+        if stmt.expr.is_some then
+            expr_str := EmitExprC(borrow stmt.expr.value);
+            return "    return " + expr_str + ";\n";
+        else
+            return "    return;\n";
+        end;
     end;
 
     return "";
+end;
+
+function EmitBlockC(borrow stmt: ASTStmtNode): String
+var
+    code: String;
+begin
+    code := EmitStmtC(borrow stmt);
+    if stmt.next.is_some then
+        return code + EmitBlockC(borrow stmt.next.value);
+    else
+        return code;
+    end;
 end;

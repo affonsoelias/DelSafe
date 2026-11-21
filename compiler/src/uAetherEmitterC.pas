@@ -315,6 +315,8 @@ begin
     Id := TASTIdentifierExpr(Expr);
     if Id.Name = 'None' then
       Result := 'NULL'
+    else if IsMutBorrowParam(Id.Name) then
+      Result := '(*' + Id.Name + ')'
     else
       Result := Id.Name;
     Exit;
@@ -330,7 +332,14 @@ begin
       Result := '(' + TargetStr + ' != NULL)'
     else if Acc.Member = 'is_none' then
       Result := '(' + TargetStr + ' == NULL)'
-    else if IsPointerTarget(Acc.Target) or ((Acc.Target is TASTIdentifierExpr) and IsMutBorrowParam(TASTIdentifierExpr(Acc.Target).Name)) then
+    else if (Acc.Target is TASTIdentifierExpr) and IsMutBorrowParam(TASTIdentifierExpr(Acc.Target).Name) then
+    begin
+      if Acc.Member = 'value' then
+        Result := '(*' + TASTIdentifierExpr(Acc.Target).Name + ')'
+      else
+        Result := TASTIdentifierExpr(Acc.Target).Name + '->' + Acc.Member;
+    end
+    else if IsPointerTarget(Acc.Target) then
     begin
       if Acc.Member = 'value' then
         Result := '(*' + TargetStr + ')'
@@ -338,7 +347,12 @@ begin
         Result := TargetStr + '->' + Acc.Member;
     end
     else
-      Result := TargetStr + '.' + Acc.Member;
+    begin
+      if Acc.Member = 'value' then
+        Result := TargetStr
+      else
+        Result := TargetStr + '.' + Acc.Member;
+    end;
     Exit;
   end;
 
@@ -498,22 +512,21 @@ begin
     ArgsStr := '';
     for I := 0 to Call.Args.Count - 1 do
     begin
-      ArgVal := EmitExpr(TASTCallArg(Call.Args[I]).Expr);
       if Assigned(FuncDecl) and (I < FuncDecl.Params.Count) then
       begin
         if TASTParam(FuncDecl.Params[I]).Ownership = owMutBorrow then
         begin
-          if not ((TASTCallArg(Call.Args[I]).Expr is TASTIdentifierExpr) and
-                  IsMutBorrowParam(TASTIdentifierExpr(TASTCallArg(Call.Args[I]).Expr).Name)) then
-            ArgVal := '&' + ArgVal;
-        end
-        else
-        begin
           if (TASTCallArg(Call.Args[I]).Expr is TASTIdentifierExpr) and
              IsMutBorrowParam(TASTIdentifierExpr(TASTCallArg(Call.Args[I]).Expr).Name) then
-            ArgVal := '(*' + ArgVal + ')';
-        end;
-      end;
+            ArgVal := TASTIdentifierExpr(TASTCallArg(Call.Args[I]).Expr).Name
+          else
+            ArgVal := '&' + EmitExpr(TASTCallArg(Call.Args[I]).Expr);
+        end
+        else
+          ArgVal := EmitExpr(TASTCallArg(Call.Args[I]).Expr);
+      end
+      else
+        ArgVal := EmitExpr(TASTCallArg(Call.Args[I]).Expr);
       ArgsStr := ArgsStr + ArgVal;
       if I < Call.Args.Count - 1 then
         ArgsStr := ArgsStr + ', ';
@@ -540,7 +553,10 @@ begin
   if Stmt is TASTAssignStmt then
   begin
     Assign := TASTAssignStmt(Stmt);
-    Emit(Format('%s = %s;', [EmitExpr(Assign.Target), EmitExpr(Assign.Expr)]));
+    if (Assign.Target is TASTIdentifierExpr) and IsMutBorrowParam(TASTIdentifierExpr(Assign.Target).Name) then
+      Emit(Format('*%s = %s;', [TASTIdentifierExpr(Assign.Target).Name, EmitExpr(Assign.Expr)]))
+    else
+      Emit(Format('%s = %s;', [EmitExpr(Assign.Target), EmitExpr(Assign.Expr)]));
   end
   else if Stmt is TASTCallStmt then
   begin

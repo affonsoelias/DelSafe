@@ -1,0 +1,160 @@
+module BorrowChecker;
+
+import IO;
+import Strings;
+import AST;
+
+type
+    OwnershipState = enum
+        osAvailable,
+        osMoved,
+        osBorrowed,
+        osMutBorrowed
+    end;
+
+    VarOwnership = record
+        name: String;
+        state: OwnershipState;
+    end;
+
+    OwnershipNode = record
+        entry: VarOwnership;
+        next: Option<Box<OwnershipNode>>;
+    end;
+
+    BorrowTable = record
+        head: Option<Box<OwnershipNode>>;
+        count: UInt32;
+    end;
+
+function NewBorrowTable(): BorrowTable
+begin
+    return BorrowTable(head: None, count: 0);
+end;
+
+function RegisterVar(mut borrow table: BorrowTable; borrow var_name: String): Void
+var
+    entry: VarOwnership;
+    node: OwnershipNode;
+begin
+    entry := VarOwnership(name: var_name, state: OwnershipState.osAvailable);
+    node := OwnershipNode(entry: entry, next: table.head);
+    table.head := Some(Box(node));
+    table.count := table.count + 1;
+end;
+
+function CheckAndUseVar(borrow table: BorrowTable; borrow var_name: String; mut borrow err_count: UInt32): Bool
+var
+    curr: Option<Box<OwnershipNode>>;
+begin
+    curr := table.head;
+    while curr.is_some do
+        if curr.value.entry.name = var_name then
+            if curr.value.entry.state = OwnershipState.osMoved then
+                PrintLn("[Erro de Posse E0382]: Uso de valor movido \"%s\" (valor foi movido anteriormente).", var_name);
+                err_count := err_count + 1;
+                return false;
+            end;
+            if curr.value.entry.state = OwnershipState.osMutBorrowed then
+                PrintLn("[Erro de Posse E0502]: Variavel \"%s\" nao pode ser lida enquanto houver um emprestimo mutavel ativo.", var_name);
+                err_count := err_count + 1;
+                return false;
+            end;
+            return true;
+        end;
+        curr := curr.value.next;
+    end;
+    return true;
+end;
+
+function MarkVarMoved(mut borrow table: BorrowTable; borrow var_name: String; mut borrow err_count: UInt32): Void
+var
+    curr: Option<Box<OwnershipNode>>;
+begin
+    curr := table.head;
+    while curr.is_some do
+        if curr.value.entry.name = var_name then
+            if curr.value.entry.state = OwnershipState.osMoved then
+                PrintLn("[Erro de Posse E0382]: Tentativa de mover valor ja movido \"%s\".", var_name);
+                err_count := err_count + 1;
+            else
+                curr.value.entry.state := OwnershipState.osMoved;
+            end;
+            return;
+        end;
+        curr := curr.value.next;
+    end;
+end;
+
+function CheckExprBorrow(borrow table: BorrowTable; borrow expr: ASTExprNode; mut borrow err_count: UInt32): Void
+begin
+    if expr.kind = ASTExprKind.ekIdentifier then
+        CheckAndUseVar(borrow table, borrow expr.str_val, mut borrow err_count);
+    end;
+
+    if expr.kind = ASTExprKind.ekBinary then
+        if expr.left.is_some then
+            CheckExprBorrow(borrow table, borrow expr.left.value, mut borrow err_count);
+        end;
+        if expr.right.is_some then
+            CheckExprBorrow(borrow table, borrow expr.right.value, mut borrow err_count);
+        end;
+    end;
+end;
+
+function CheckStmtBorrow(mut borrow table: BorrowTable; borrow stmt: ASTStmtNode; mut borrow err_count: UInt32): Void
+begin
+    if stmt.kind = ASTStmtKind.skVarDecl then
+        if stmt.name <> "" then
+            RegisterVar(mut borrow table, borrow stmt.name);
+        end;
+    end;
+
+    if stmt.kind = ASTStmtKind.skAssign then
+        if stmt.expr.is_some then
+            CheckExprBorrow(borrow table, borrow stmt.expr.value, mut borrow err_count);
+        end;
+    end;
+
+    if stmt.kind = ASTStmtKind.skPrintLn then
+        if stmt.expr.is_some then
+            CheckExprBorrow(borrow table, borrow stmt.expr.value, mut borrow err_count);
+        end;
+    end;
+
+    if stmt.kind = ASTStmtKind.skIf then
+        if stmt.expr.is_some then
+            CheckExprBorrow(borrow table, borrow stmt.expr.value, mut borrow err_count);
+        end;
+        if stmt.then_branch.is_some then
+            CheckStmtBorrow(mut borrow table, borrow stmt.then_branch.value, mut borrow err_count);
+        end;
+        if stmt.else_branch.is_some then
+            CheckStmtBorrow(mut borrow table, borrow stmt.else_branch.value, mut borrow err_count);
+        end;
+    end;
+
+    if stmt.kind = ASTStmtKind.skWhile then
+        if stmt.expr.is_some then
+            CheckExprBorrow(borrow table, borrow stmt.expr.value, mut borrow err_count);
+        end;
+        if stmt.then_branch.is_some then
+            CheckStmtBorrow(mut borrow table, borrow stmt.then_branch.value, mut borrow err_count);
+        end;
+    end;
+
+    if stmt.next.is_some then
+        CheckStmtBorrow(mut borrow table, borrow stmt.next.value, mut borrow err_count);
+    end;
+end;
+
+function BorrowCheckAST(borrow first_stmt: ASTStmtNode): UInt32
+var
+    table: BorrowTable;
+    err_count: UInt32;
+begin
+    table := NewBorrowTable();
+    err_count := 0;
+    CheckStmtBorrow(mut borrow table, borrow first_stmt, mut borrow err_count);
+    return err_count;
+end;

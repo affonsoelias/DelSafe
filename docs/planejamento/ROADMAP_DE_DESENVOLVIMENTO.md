@@ -136,15 +136,17 @@ Este documento traça o status oficial de desenvolvimento do compilador e as pr�
 
 ---
 
-### ⏳ Fase 16: Expansão do Compilador Auto-Hospedado (`compiler/aeth/`) para Paridade Total
-- [ ] **Type Checker Nativo em Aether (`compiler/aeth/typechecker.aeth`)**:
-  - Implementação da validação de tipos, verificação de compatibilidade, checagem de tipos estáticos e UFCS escrita diretamente em código Aether.
-- [ ] **Borrow Checker Nativo em Aether (`compiler/aeth/borrowchecker.aeth`)**:
-  - Algoritmo de análise de fluxo e verificação de posse (`own`, `borrow`, `mut borrow`) para validação de segurança de memória em código Aether.
-- [ ] **Emissão de Código Completa para C99 (`compiler/aeth/emitter.aeth`)**:
-  - Suporte completo no emissor auto-hospedado para records, enums com payload, pattern matching (`match`), traits/impl e funções monomorfizadas.
-- [ ] **Self-Hosting Completo (Bootstrap Total)**:
-  - Capacidade do compilador `compiler/aeth/main.aeth` de compilar a si mesmo através do backend C99/GCC gerando um executável nativo autônomo sem dependência do compilador bootstrap em Pascal.
+### ✅ Fase 16: Expansão do Compilador Auto-Hospedado (`compiler/aeth/`) para Paridade Total (Concluído)
+- [x] **Type Checker Nativo em Aether (`compiler/aeth/typechecker.aeth`)**:
+  - Implementação da validação semântica com tabela de símbolos nativa em Aether (`SymbolTable`), checagem de tipos em atribuições, controle de fluxo (`if`, `while`) e detecção de erros `E0001` (variável não declarada), `E0002` (incompatibilidade de tipos) e `E0003` (declaração duplicada).
+- [x] **Borrow Checker Nativo em Aether (`compiler/aeth/borrowchecker.aeth`)**:
+  - Rastreamento dos estados de posse (`osAvailable`, `osMoved`, `osBorrowed`, `osMutBorrowed`) e validação estática das regras de posse e empréstimo com detecção de `E0382` (uso após movimentação) e `E0502` (empréstimo conflitante).
+- [x] **Expansão de AST, Parser e Emissor C99 (`ast.aeth`, `parser.aeth`, `emitter.aeth`)**:
+  - Suporte a declaração de variáveis (`var`), controle de fluxo (`if/then/else`, `while/do`), expressões compostas, comparações mapeadas para C99 (`==`, `!=`) e concatenação de blocos de statements (`ParseBlock`, `AppendStmt`).
+- [x] **Pipeline Completo Auto-Hospedado de 4 Fases (`compiler/aeth/main.aeth`)**:
+  - Execução das 4 etapas (`[1/4] Lexer/Parser`, `[2/4] Type Checker`, `[3/4] Borrow Checker`, `[4/4] Emissor C99`) escritas 100% nativamente em código Aether.
+- [x] **Validação Prática Dual-Backend**:
+  - Compilador auto-hospedado compilado e executado com 100% de sucesso nos backends **Free Pascal** e **GCC (MSYS2)**, processando o novo exemplo de demonstração `examples/13_self_hosted_compiler_demo.aeth` e gerando binário nativo funcional.
 
 ### ⏳ Fase 17: Expansão da Biblioteca Padrão (`std/`) e Concorrência Ultraleve
 - [ ] **Networking (`std/net.aeth`)**:

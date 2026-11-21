@@ -50,6 +50,7 @@ type
     function ResolveLocal(const AName: string): TBorrowVarInfo;
     procedure ReleaseTemporaryBorrows;
     property Parent: TBorrowScope read FParent;
+    property Vars: TFPList read FVars;
   end;
 
   TAetherBorrowChecker = class
@@ -343,8 +344,11 @@ var
   CaseNode: TASTMatchCase;
   Ret: TASTReturnStmt;
   CallStmt: TASTCallStmt;
-  VarInfo: TBorrowVarInfo;
+  VarInfo, V: TBorrowVarInfo;
   I, J: Integer;
+  SavedStates, ThenStates: TFPList;
+  Scope: TBorrowScope;
+  ThenSt: TVariableState;
 begin
   if Stmt is TASTAssignStmt then
   begin
@@ -371,10 +375,56 @@ begin
     CheckExpr(IfStmt.Condition, accRead);
     if Assigned(FCurrentScope) then
       FCurrentScope.ReleaseTemporaryBorrows;
-    for I := 0 to IfStmt.ThenBranch.Count - 1 do
-      CheckStmt(TASTStmt(IfStmt.ThenBranch[I]));
-    for I := 0 to IfStmt.ElseBranch.Count - 1 do
-      CheckStmt(TASTStmt(IfStmt.ElseBranch[I]));
+
+    SavedStates := TFPList.Create;
+    try
+      Scope := FCurrentScope;
+      while Assigned(Scope) do
+      begin
+        for I := 0 to Scope.Vars.Count - 1 do
+        begin
+          V := TBorrowVarInfo(Scope.Vars[I]);
+          SavedStates.Add(V);
+          SavedStates.Add(Pointer(PtrUInt(V.State)));
+        end;
+        Scope := Scope.Parent;
+      end;
+
+      for I := 0 to IfStmt.ThenBranch.Count - 1 do
+        CheckStmt(TASTStmt(IfStmt.ThenBranch[I]));
+
+      if IfStmt.ElseBranch.Count > 0 then
+      begin
+        ThenStates := TFPList.Create;
+        try
+          I := 0;
+          while I < SavedStates.Count do
+          begin
+            V := TBorrowVarInfo(SavedStates[I]);
+            ThenStates.Add(Pointer(PtrUInt(V.State)));
+            V.State := TVariableState(PtrUInt(SavedStates[I + 1]));
+            Inc(I, 2);
+          end;
+
+          for I := 0 to IfStmt.ElseBranch.Count - 1 do
+            CheckStmt(TASTStmt(IfStmt.ElseBranch[I]));
+
+          I := 0;
+          while I < SavedStates.Count do
+          begin
+            V := TBorrowVarInfo(SavedStates[I]);
+            ThenSt := TVariableState(PtrUInt(ThenStates[I div 2]));
+            if (ThenSt = vsMoved) or (V.State = vsMoved) then
+              V.State := vsMoved;
+            Inc(I, 2);
+          end;
+        finally
+          ThenStates.Free;
+        end;
+      end;
+    finally
+      SavedStates.Free;
+    end;
   end
   else if Stmt is TASTWhileStmt then
   begin

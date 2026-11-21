@@ -201,9 +201,28 @@ begin
   if (Pos('Result', TargetType) = 1) and (SameText(Acc.Member, 'is_ok') or SameText(Acc.Member, 'is_err')) then
     Exit('Bool');
 
-  // Propriedades intrinsecas de Option (ex: opt.is_some)
-  if (Pos('Option', TargetType) = 1) and (SameText(Acc.Member, 'is_some') or SameText(Acc.Member, 'is_none')) then
-    Exit('Bool');
+  // Propriedades intrinsecas de Option (ex: opt.is_some, opt.is_none, opt.value)
+  if (Pos('Option', TargetType) = 1) then
+  begin
+    if SameText(Acc.Member, 'is_some') or SameText(Acc.Member, 'is_none') then
+      Exit('Bool');
+
+    if SameText(Acc.Member, 'value') then
+    begin
+      P1 := Pos('<', TargetType);
+      InnerRecName := Copy(TargetType, P1 + 1, Length(TargetType));
+      P2 := Pos('>', InnerRecName);
+      if P2 > 0 then InnerRecName := Copy(InnerRecName, 1, P2 - 1);
+      if Pos('Box<', InnerRecName) = 1 then
+      begin
+        P1 := Pos('<', InnerRecName);
+        InnerRecName := Copy(InnerRecName, P1 + 1, Length(InnerRecName));
+        P2 := Pos('>', InnerRecName);
+        if P2 > 0 then InnerRecName := Copy(InnerRecName, 1, P2 - 1);
+      end;
+      Exit(InnerRecName);
+    end;
+  end;
 
   // Auto-deref de Box<Record> ou Option<Box<Record>>
   if Pos('Box<', TargetType) > 0 then

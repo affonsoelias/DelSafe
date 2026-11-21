@@ -321,7 +321,12 @@ begin
         Result := TargetStr + '^.' + Acc.Member;
     end
     else
-      Result := TargetStr + '.' + Acc.Member;
+    begin
+      if Acc.Member = 'value' then
+        Result := TargetStr
+      else
+        Result := TargetStr + '.' + Acc.Member;
+    end;
     Exit;
   end;
 
@@ -661,6 +666,7 @@ begin
     case Param.Ownership of
       owMutBorrow: ModStr := 'var ';
       owBorrow:    ModStr := 'const ';
+      owTake:      ModStr := '';
     else
       ModStr := 'const ';
     end;
@@ -918,6 +924,7 @@ begin
         case Param.Ownership of
           owMutBorrow: ModStr := 'var ';
           owBorrow:    ModStr := 'const ';
+          owTake:      ModStr := '';
         else
           ModStr := 'const ';
         end;

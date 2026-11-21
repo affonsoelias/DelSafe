@@ -4,6 +4,7 @@ type
     ASTExprKind = enum
         ekIntLiteral,
         ekStringLiteral,
+        ekBoolLiteral,
         ekIdentifier,
         ekBinary,
         ekCall
@@ -20,7 +21,10 @@ type
     ASTStmtKind = enum
         skVarDecl,
         skAssign,
-        skPrintLn
+        skPrintLn,
+        skIf,
+        skWhile,
+        skReturn
     end;
 
     ASTStmtNode = record
@@ -28,6 +32,8 @@ type
         name: String;
         type_name: String;
         expr: Option<Box<ASTExprNode>>;
+        then_branch: Option<Box<ASTStmtNode>>;
+        else_branch: Option<Box<ASTStmtNode>>;
         next: Option<Box<ASTStmtNode>>;
     end;
 
@@ -39,6 +45,11 @@ end;
 function NewStringExpr(borrow s: String): ASTExprNode
 begin
     return ASTExprNode(kind: ASTExprKind.ekStringLiteral, str_val: s, op: "", left: None, right: None);
+end;
+
+function NewBoolExpr(borrow s: String): ASTExprNode
+begin
+    return ASTExprNode(kind: ASTExprKind.ekBoolLiteral, str_val: s, op: "", left: None, right: None);
 end;
 
 function NewIdentExpr(borrow s: String): ASTExprNode
@@ -58,15 +69,30 @@ end;
 
 function NewVarDeclStmt(borrow vname: String; borrow tname: String): ASTStmtNode
 begin
-    return ASTStmtNode(kind: ASTStmtKind.skVarDecl, name: vname, type_name: tname, expr: None, next: None);
+    return ASTStmtNode(kind: ASTStmtKind.skVarDecl, name: vname, type_name: tname, expr: None, then_branch: None, else_branch: None, next: None);
 end;
 
 function NewAssignStmt(borrow vname: String; take e: ASTExprNode): ASTStmtNode
 begin
-    return ASTStmtNode(kind: ASTStmtKind.skAssign, name: vname, type_name: "", expr: Some(Box(e)), next: None);
+    return ASTStmtNode(kind: ASTStmtKind.skAssign, name: vname, type_name: "", expr: Some(Box(e)), then_branch: None, else_branch: None, next: None);
 end;
 
 function NewPrintLnStmt(take e: ASTExprNode): ASTStmtNode
 begin
-    return ASTStmtNode(kind: ASTStmtKind.skPrintLn, name: "PrintLn", type_name: "", expr: Some(Box(e)), next: None);
+    return ASTStmtNode(kind: ASTStmtKind.skPrintLn, name: "PrintLn", type_name: "", expr: Some(Box(e)), then_branch: None, else_branch: None, next: None);
+end;
+
+function NewIfStmt(take cond: ASTExprNode; take then_st: ASTStmtNode; take else_st: ASTStmtNode): ASTStmtNode
+begin
+    return ASTStmtNode(kind: ASTStmtKind.skIf, name: "if", type_name: "", expr: Some(Box(cond)), then_branch: Some(Box(then_st)), else_branch: Some(Box(else_st)), next: None);
+end;
+
+function NewWhileStmt(take cond: ASTExprNode; take body_st: ASTStmtNode): ASTStmtNode
+begin
+    return ASTStmtNode(kind: ASTStmtKind.skWhile, name: "while", type_name: "", expr: Some(Box(cond)), then_branch: Some(Box(body_st)), else_branch: None, next: None);
+end;
+
+function NewReturnStmt(take e: ASTExprNode): ASTStmtNode
+begin
+    return ASTStmtNode(kind: ASTStmtKind.skReturn, name: "return", type_name: "", expr: Some(Box(e)), then_branch: None, else_branch: None, next: None);
 end;

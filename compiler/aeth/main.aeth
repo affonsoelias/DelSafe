@@ -7,6 +7,8 @@ import Tokens;
 import Lexer;
 import AST;
 import Parser;
+import TypeChecker;
+import BorrowChecker;
 import Emitter;
 
 program Main;
@@ -16,31 +18,43 @@ var
     codigo_fonte: String;
     parser: ParserState;
     sb: StringBuilder;
-    stmt: ASTStmtNode;
-    emissao_stmt: String;
+    var_decls: ASTStmtNode;
+    body_stmts: ASTStmtNode;
+    root_stmt: ASTStmtNode;
+    codigo_c: String;
     ok_escrita: Bool;
-    tok_kind: TokenKind;
-    count_stmts: UInt32;
+    erros_tipo: UInt32;
+    erros_posse: UInt32;
 begin
     PrintLn("====================================================================");
-    PrintLn("  AetherLang Self-Hosted Compiler (aetherc-core) - Fase 12          ");
+    PrintLn("  AetherLang Self-Hosted Compiler (aetherc-core) - Fase 16          ");
     PrintLn("  Compilador Aether escrito 100% nativamente na linguagem Aether!   ");
     PrintLn("====================================================================");
     PrintLn("");
 
-    caminho_entrada := "examples/01_hello_world.aeth";
+    caminho_entrada := "examples/13_self_hosted_compiler_demo.aeth";
     caminho_saida := "bin/self_hosted_output.c";
 
-    PrintLn("[1/4] Lendo arquivo de entrada: \"%s\"...", caminho_entrada);
+    PrintLn("[1/4] Analise Lexica e Sintatica de \"%s\"...", caminho_entrada);
     codigo_fonte := ReadFile(borrow caminho_entrada);
 
     if Length(borrow codigo_fonte) > 0 then
         PrintLn("      Fonte lido com sucesso (%d bytes).", Length(borrow codigo_fonte));
 
-        PrintLn("[2/4] Inicializando Lexer e Parser nativos em Aether...");
         parser := NewParser(borrow codigo_fonte);
+        var_decls := NewVarDeclStmt(borrow "", borrow "");
 
-        // Ignora cabecalho inicial ate 'begin'
+        // 1. Procura secao 'var' ou 'begin'
+        while (not IsAtEnd(borrow parser.lexer)) and (parser.current.kind <> TokenKind.tkVar) and (parser.current.kind <> TokenKind.tkBegin) do
+            AdvanceParser(mut borrow parser);
+        end;
+
+        if parser.current.kind = TokenKind.tkVar then
+            AdvanceParser(mut borrow parser); // consome 'var'
+            var_decls := ParseVarSection(mut borrow parser);
+        end;
+
+        // 2. Procura 'begin'
         while (not IsAtEnd(borrow parser.lexer)) and (parser.current.kind <> TokenKind.tkBegin) do
             AdvanceParser(mut borrow parser);
         end;
@@ -49,36 +63,58 @@ begin
             AdvanceParser(mut borrow parser); // Consome 'begin'
         end;
 
-        PrintLn("[3/4] Analisando AST e emitindo codigo C99...");
-        sb := NewStringBuilder();
-        sb.Append(borrow "// Gerado pelo Compilador Auto-Hospedado Aether (aetherc-core)\n");
-        sb.Append(borrow "#include <stdio.h>\n\n");
-        sb.Append(borrow "int main(void) {\n");
+        body_stmts := ParseBlock(mut borrow parser);
+        root_stmt := AppendStmt(take var_decls, take body_stmts);
+        PrintLn("      Analise Sintatica concluida com exito.");
 
-        count_stmts := 0;
-        while (not IsAtEnd(borrow parser.lexer)) and (parser.current.kind <> TokenKind.tkEnd) and (parser.current.kind <> TokenKind.tkEOF) do
-            stmt := ParseStmt(mut borrow parser);
-            emissao_stmt := EmitStmtC(borrow stmt);
-            sb.Append(borrow emissao_stmt);
-            count_stmts := count_stmts + 1;
+        // [2/4] Verificacao de Tipos (Type Checker Nativo)
+        PrintLn("[2/4] Verificacao de Tipos: Executando Type Checker nativo...");
+        erros_tipo := TypeCheckAST(borrow root_stmt);
+        if erros_tipo = 0 then
+            PrintLn("      Verificacao de Tipos: OK (0 erros)");
+        else
+            PrintLn("      [ERRO] Verificacao de Tipos falhou com %d erros.", erros_tipo);
         end;
 
-        sb.Append(borrow "    return 0;\n");
-        sb.Append(borrow "}\n");
-
-        PrintLn("      Processadas %d instrucoes na AST.", count_stmts);
-
-        PrintLn("[4/4] Gravando codigo C gerado em \"%s\"...", caminho_saida);
-        ok_escrita := WriteFile(borrow caminho_saida, borrow sb.ToString());
-
-        if ok_escrita then
-            PrintLn("[SUCESSO] Codigo gerado pelo compilador auto-hospedado com exito!");
-            PrintLn("");
-            PrintLn("--- Codigo C99 Gerado: ---");
-            PrintLn("%s", sb.ToString());
-            PrintLn("--------------------------");
+        // [3/4] Verificacao de Posse (Borrow Checker Nativo)
+        PrintLn("[3/4] Verificacao de Posse: Executando Borrow Checker nativo...");
+        erros_posse := BorrowCheckAST(borrow root_stmt);
+        if erros_posse = 0 then
+            PrintLn("      Verificacao de Posse: OK (0 erros)");
         else
-            PrintLn("[ERRO] Falha ao salvar arquivo de saida.");
+            PrintLn("      [ERRO] Verificacao de Posse falhou com %d erros.", erros_posse);
+        end;
+
+        if (erros_tipo = 0) and (erros_posse = 0) then
+            // [4/4] Emissao de Codigo C99
+            PrintLn("[4/4] Emissao de Codigo C99...");
+            sb := NewStringBuilder();
+            sb.Append(borrow "// Gerado pelo Compilador Auto-Hospedado Aether (aetherc-core)\n");
+            sb.Append(borrow "#include <stdio.h>\n");
+            sb.Append(borrow "#include <stdint.h>\n");
+            sb.Append(borrow "#include <stdbool.h>\n\n");
+            sb.Append(borrow "int main(void) {\n");
+
+            codigo_c := EmitBlockC(borrow root_stmt);
+            sb.Append(borrow codigo_c);
+
+            sb.Append(borrow "    return 0;\n");
+            sb.Append(borrow "}\n");
+
+            PrintLn("      Gravando codigo C gerado em \"%s\"...", caminho_saida);
+            ok_escrita := WriteFile(borrow caminho_saida, borrow sb.ToString());
+
+            if ok_escrita then
+                PrintLn("[SUCESSO] Codigo gerado pelo compilador auto-hospedado com exito!");
+                PrintLn("");
+                PrintLn("--- Codigo C99 Gerado: ---");
+                PrintLn("%s", sb.ToString());
+                PrintLn("--------------------------");
+            else
+                PrintLn("[ERRO] Falha ao salvar arquivo de saida.");
+            end;
+        else
+            PrintLn("[FALHA] Compilacao abortada devido a erros semanticos ou de posse.");
         end;
     else
         PrintLn("[ERRO] Nao foi possivel ler o arquivo de entrada.");

@@ -1,0 +1,19 @@
+module SelfHostedDemo;
+
+program SelfHostedDemo;
+var
+    x: Int32;
+    contador: Int32;
+begin
+    x := 10;
+    contador := 0;
+    PrintLn("Inicio do teste do compilador auto-hospedado");
+    if x = 10 then
+        PrintLn("Condicional x = 10 avaliada com sucesso!");
+    end;
+    while contador < 3 do
+        PrintLn("Iteracao no laco while");
+        contador := contador + 1;
+    end;
+    PrintLn("Fim do teste!");
+end.

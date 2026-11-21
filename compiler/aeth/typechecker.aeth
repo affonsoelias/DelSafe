@@ -1,0 +1,215 @@
+module TypeChecker;
+
+import IO;
+import Strings;
+import Collections;
+import AST;
+
+type
+    SymbolKind = enum
+        skVar,
+        skFunction,
+        skType
+    end;
+
+    Symbol = record
+        name: String;
+        type_name: String;
+        kind: SymbolKind;
+        is_mut: Bool;
+    end;
+
+    SymbolNode = record
+        sym: Symbol;
+        next: Option<Box<SymbolNode>>;
+    end;
+
+    SymbolTable = record
+        head: Option<Box<SymbolNode>>;
+        count: UInt32;
+    end;
+
+function NewSymbolTable(): SymbolTable
+begin
+    return SymbolTable(head: None, count: 0);
+end;
+
+function DefineSymbol(mut borrow table: SymbolTable; borrow sym_name: String; borrow sym_type: String; borrow sym_kind: SymbolKind; borrow mut_flag: Bool): Bool
+var
+    curr: Option<Box<SymbolNode>>;
+    new_sym: Symbol;
+    new_node: SymbolNode;
+begin
+    curr := table.head;
+    while curr.is_some do
+        if curr.value.sym.name = sym_name then
+            return false;
+        end;
+        curr := curr.value.next;
+    end;
+
+    new_sym := Symbol(name: sym_name, type_name: sym_type, kind: sym_kind, is_mut: mut_flag);
+    new_node := SymbolNode(sym: new_sym, next: table.head);
+    table.head := Some(Box(new_node));
+    table.count := table.count + 1;
+    return true;
+end;
+
+function LookupSymbol(borrow table: SymbolTable; borrow sym_name: String; mut borrow out_sym: Symbol): Bool
+var
+    curr: Option<Box<SymbolNode>>;
+begin
+    curr := table.head;
+    while curr.is_some do
+        if curr.value.sym.name = sym_name then
+            out_sym := curr.value.sym;
+            return true;
+        end;
+        curr := curr.value.next;
+    end;
+    return false;
+end;
+
+function CheckExprType(borrow table: SymbolTable; borrow expr: ASTExprNode; mut borrow err_count: UInt32): String
+var
+    sym: Symbol;
+    found: Bool;
+    t_left: String;
+    t_right: String;
+begin
+    if expr.kind = ASTExprKind.ekIntLiteral then
+        return "Int32";
+    end;
+
+    if expr.kind = ASTExprKind.ekStringLiteral then
+        return "String";
+    end;
+
+    if expr.kind = ASTExprKind.ekBoolLiteral then
+        return "Bool";
+    end;
+
+    if expr.kind = ASTExprKind.ekIdentifier then
+        found := LookupSymbol(borrow table, borrow expr.str_val, mut borrow sym);
+        if found then
+            return sym.type_name;
+        else
+            PrintLn("[Erro Semantico E0001]: Variavel \"%s\" nao declarada.", expr.str_val);
+            err_count := err_count + 1;
+            return "Desconhecido";
+        end;
+    end;
+
+    if expr.kind = ASTExprKind.ekBinary then
+        t_left := "";
+        t_right := "";
+        if expr.left.is_some then
+            t_left := CheckExprType(borrow table, borrow expr.left.value, mut borrow err_count);
+        end;
+        if expr.right.is_some then
+            t_right := CheckExprType(borrow table, borrow expr.right.value, mut borrow err_count);
+        end;
+
+        if (expr.op = "=") or (expr.op = "<>") or (expr.op = "<") or (expr.op = "<=") or (expr.op = ">") or (expr.op = ">=") then
+            return "Bool";
+        end;
+
+        if (t_left <> t_right) and (t_left <> "Desconhecido") and (t_right <> "Desconhecido") then
+            PrintLn("[Erro Semantico E0002]: Tipos incompativeis na operacao \"%s\": \"%s\" e \"%s\".", expr.op, t_left, t_right);
+            err_count := err_count + 1;
+        end;
+
+        return t_left;
+    end;
+
+    if expr.kind = ASTExprKind.ekCall then
+        return "Void";
+    end;
+
+    return "Desconhecido";
+end;
+
+function CheckStmt(mut borrow table: SymbolTable; borrow stmt: ASTStmtNode; mut borrow err_count: UInt32): Void
+var
+    ok_def: Bool;
+    t_expr: String;
+    sym: Symbol;
+    found: Bool;
+    cond_type: String;
+begin
+    if stmt.kind = ASTStmtKind.skVarDecl then
+        if stmt.name <> "" then
+            ok_def := DefineSymbol(mut borrow table, borrow stmt.name, borrow stmt.type_name, SymbolKind.skVar, false);
+            if not ok_def then
+                PrintLn("[Erro Semantico E0003]: Variavel \"%s\" ja declarada neste escopo.", stmt.name);
+                err_count := err_count + 1;
+            end;
+        end;
+    end;
+
+    if stmt.kind = ASTStmtKind.skAssign then
+        found := LookupSymbol(borrow table, borrow stmt.name, mut borrow sym);
+        if not found then
+            PrintLn("[Erro Semantico E0001]: Variavel \"%s\" nao declarada antes da atribuicao.", stmt.name);
+            err_count := err_count + 1;
+        else
+            if stmt.expr.is_some then
+                t_expr := CheckExprType(borrow table, borrow stmt.expr.value, mut borrow err_count);
+                if (t_expr <> sym.type_name) and (t_expr <> "Desconhecido") then
+                    PrintLn("[Erro Semantico E0002]: Nao e possivel atribuir tipo \"%s\" a variavel \"%s\" do tipo \"%s\".", t_expr, stmt.name, sym.type_name);
+                    err_count := err_count + 1;
+                end;
+            end;
+        end;
+    end;
+
+    if stmt.kind = ASTStmtKind.skPrintLn then
+        if stmt.expr.is_some then
+            CheckExprType(borrow table, borrow stmt.expr.value, mut borrow err_count);
+        end;
+    end;
+
+    if stmt.kind = ASTStmtKind.skIf then
+        if stmt.expr.is_some then
+            cond_type := CheckExprType(borrow table, borrow stmt.expr.value, mut borrow err_count);
+            if (cond_type <> "Bool") and (cond_type <> "Desconhecido") then
+                PrintLn("[Erro Semantico E0002]: Condicao de \"if\" deve ser do tipo Bool (encontrado: \"%s\").", cond_type);
+                err_count := err_count + 1;
+            end;
+        end;
+        if stmt.then_branch.is_some then
+            CheckStmt(mut borrow table, borrow stmt.then_branch.value, mut borrow err_count);
+        end;
+        if stmt.else_branch.is_some then
+            CheckStmt(mut borrow table, borrow stmt.else_branch.value, mut borrow err_count);
+        end;
+    end;
+
+    if stmt.kind = ASTStmtKind.skWhile then
+        if stmt.expr.is_some then
+            cond_type := CheckExprType(borrow table, borrow stmt.expr.value, mut borrow err_count);
+            if (cond_type <> "Bool") and (cond_type <> "Desconhecido") then
+                PrintLn("[Erro Semantico E0002]: Condicao de \"while\" deve ser do tipo Bool (encontrado: \"%s\").", cond_type);
+                err_count := err_count + 1;
+            end;
+        end;
+        if stmt.then_branch.is_some then
+            CheckStmt(mut borrow table, borrow stmt.then_branch.value, mut borrow err_count);
+        end;
+    end;
+
+    if stmt.next.is_some then
+        CheckStmt(mut borrow table, borrow stmt.next.value, mut borrow err_count);
+    end;
+end;
+
+function TypeCheckAST(borrow first_stmt: ASTStmtNode): UInt32
+var
+    table: SymbolTable;
+    err_count: UInt32;
+begin
+    table := NewSymbolTable();
+    err_count := 0;
+    CheckStmt(mut borrow table, borrow first_stmt, mut borrow err_count);
+    return err_count;
+end;
