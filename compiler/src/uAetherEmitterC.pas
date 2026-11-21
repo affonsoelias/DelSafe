@@ -444,6 +444,27 @@ var
   ModStr: string;
   VarDecl: TASTVarDecl;
 begin
+  if Func.IsExtern then
+  begin
+    ParamListStr := '';
+    for I := 0 to Func.Params.Count - 1 do
+    begin
+      Param := TASTParam(Func.Params[I]);
+      ModStr := '';
+      if Param.Ownership = owMutBorrow then
+        ModStr := '*'
+      else if Param.Ownership = owBorrow then
+        ModStr := '';
+      ParamListStr := ParamListStr + Format('%s %s%s', [EmitTypeRef(Param.TypeName), ModStr, Param.Name]);
+      if I < Func.Params.Count - 1 then
+        ParamListStr := ParamListStr + ', ';
+    end;
+    if ParamListStr = '' then ParamListStr := 'void';
+    Emit(Format('extern %s %s(%s);', [EmitTypeRef(Func.ReturnType), Func.Name, ParamListStr]));
+    Emit('');
+    Exit;
+  end;
+
   FCurrentFunc := Func;
   ParamListStr := '';
   for I := 0 to Func.Params.Count - 1 do
@@ -522,6 +543,7 @@ begin
   Emit('#include <stdint.h>');
   Emit('#include <stdbool.h>');
   Emit('#include <assert.h>');
+  Emit('#include <math.h>');
   Emit('');
 
   // Estrutura Result para C

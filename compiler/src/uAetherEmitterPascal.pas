@@ -425,7 +425,41 @@ var
   Param: TASTParam;
   ModStr: string;
   VarDecl: TASTVarDecl;
+  LibClause: string;
+  ParamType: string;
 begin
+  if Func.IsExtern then
+  begin
+    if Func.ExternLib <> '' then
+      LibClause := Format(' external ''%s'';', [Func.ExternLib])
+    else
+      LibClause := ' external ''msvcrt'';'; // C runtime padrao no Windows/FPC
+
+    ParamListStr := '';
+    for I := 0 to Func.Params.Count - 1 do
+    begin
+      Param := TASTParam(Func.Params[I]);
+      case Param.Ownership of
+        owMutBorrow: ModStr := 'var ';
+        owBorrow:    ModStr := 'const ';
+      else
+        ModStr := 'const ';
+      end;
+      ParamType := EmitTypeRef(Param.TypeName);
+      if Param.TypeName = 'String' then ParamType := 'PChar';
+      ParamListStr := ParamListStr + Format('%s%s: %s', [ModStr, Param.Name, ParamType]);
+      if I < Func.Params.Count - 1 then
+        ParamListStr := ParamListStr + '; ';
+    end;
+
+    if (Func.ReturnType = 'Void') or (Func.ReturnType = '') then
+      Emit(Format('procedure %s(%s); cdecl;%s', [Func.Name, ParamListStr, LibClause]))
+    else
+      Emit(Format('function %s(%s): %s; cdecl;%s', [Func.Name, ParamListStr, EmitTypeRef(Func.ReturnType), LibClause]));
+    Emit('');
+    Exit;
+  end;
+
   ParamListStr := '';
   for I := 0 to Func.Params.Count - 1 do
   begin
@@ -546,6 +580,7 @@ end;
 function TAetherEmitterPascal.Generate(AModule: TASTModule): string;
 var
   I: Integer;
+  UsesClause: string;
 begin
   FModule := AModule;
   FOutput.Clear;
@@ -557,8 +592,14 @@ begin
   Emit('');
   Emit('{$mode objfpc}{$H+}{$assertions on}');
   Emit('');
+
+  UsesClause := '  SysUtils';
+  for I := 0 to AModule.PascalImports.Count - 1 do
+    UsesClause := UsesClause + ', ' + AModule.PascalImports[I];
+  UsesClause := UsesClause + ';';
+
   Emit('uses');
-  Emit('  SysUtils;');
+  Emit(UsesClause);
   Emit('');
 
   // Helpers nativos do Aether para Result<T, E>

@@ -625,6 +625,10 @@ begin
         Error('E0308', 'Expressao em "ensure" deve ser do tipo Bool', Func.Line, Func.Col);
     end;
 
+    // Se for extern, nao possui corpo nem variaveis locais
+    if Func.IsExtern then
+      Exit;
+
     // Registra variaveis locais
     for I := 0 to Func.LocalVars.Count - 1 do
     begin

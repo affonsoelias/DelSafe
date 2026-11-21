@@ -36,14 +36,15 @@ Este documento traça o status oficial de desenvolvimento do compilador e as pr�
 - [x] Schema padronizado de erro com intervalo de linha/coluna.
 - [x] Contexto enriquecido (`moved_at`) e bloco de sugestão de autocorreção (`suggested_fix`).
 
+### ✅ Fase 6: Interoperabilidade Externa (`extern` e `import pascal`) (Concluído)
+- [x] Implementação da palavra-chave `extern function` para declarar funções C nativas (`puts`, `sqrt`, etc.).
+- [x] Implementação de `import pascal <UnitName>` para inclusão direta de units do Free Pascal / Lazarus e pacotes do Boss na compilação.
+- [x] Suporte à convenção de chamada C (`cdecl`) com vinculação dinâmica/estática (`msvcrt`/`libc`).
+- [x] Suporte a contratos (`contract require / ensure`) em funções `extern`.
+
 ---
 
 ## 🚀 Próximas Fases e Metas Futuras
-
-### 🎯 Fase 6: Interoperabilidade Externa (`extern` e `import pascal`)
-- [ ] Implementar a palavra-chave `extern function` para declarar funções de bibliotecas C (ex: `extern function sqrt(borrow x: Float64): Float64;`).
-- [ ] Implementar `import pascal "UnitName"` para inclusão direta de units do Free Pascal / Lazarus e pacotes do Boss na compilação.
-- [ ] Suporte a convenções de chamada (`cdecl`, `stdcall`).
 
 ### 🎯 Fase 7: Extensão Oficial do VS Code para Aether (`.aeth`)
 - [ ] Criação do pacote de extensão com realce de sintaxe (*Syntax Highlighting* TextMate).

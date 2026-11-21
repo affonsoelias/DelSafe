@@ -1,0 +1,31 @@
+module InteropDemo;
+
+import pascal Math;
+
+// Declaracao de funcoes externas C (libc / C runtime)
+extern function puts(borrow s: String): Int32;
+extern function sqrt(borrow x: Float64): Float64
+contract
+    require
+        x >= 0.0;
+;
+
+program Main;
+var
+    raiz: Float64;
+    res_puts: Int32;
+begin
+    PrintLn("=== TESTE DE INTEROPERABILIDADE EXTERNA (FASE 6) ===");
+
+    // 1. Chamada a funcao C externa: puts()
+    res_puts := puts(borrow "Mensagem impressa diretamente pela funcao C: puts()");
+
+    // 2. Chamada a funcao C externa com ponto flutuante: sqrt()
+    raiz := sqrt(borrow 144.0);
+    PrintLn("Raiz quadrada de 144.0 calculada via C sqrt(): %f", raiz);
+
+    raiz := sqrt(borrow 49.0);
+    PrintLn("Raiz quadrada de 49.0 calculada via C sqrt(): %f", raiz);
+
+    PrintLn("\nInteroperabilidade C e import Pascal funcionando com sucesso!");
+end.

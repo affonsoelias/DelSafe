@@ -406,6 +406,10 @@ begin
       FCurrentScope.AddVar(Param.Name, vsOwned, Param.Line, Param.Col, IsPrimitiveType(Param.TypeName));
     end;
 
+    // Se for extern, nao possui corpo de instrucoes
+    if Func.IsExtern then
+      Exit;
+
     // Variaveis locais
     for I := 0 to Func.LocalVars.Count - 1 do
     begin

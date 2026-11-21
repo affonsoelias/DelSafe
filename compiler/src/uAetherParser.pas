@@ -134,13 +134,22 @@ end;
 procedure TAetherParser.ParseImport(AModule: TASTModule);
 var
   ImportName: string;
+  IsPascal: Boolean;
 begin
   Expect(tokImport);
+  IsPascal := False;
+  if Match(tokPascal) then
+    IsPascal := True;
+
   ImportName := Expect(tokIdentifier, 'Esperado nome do modulo importado').Value;
-  if Match(tokAs) then
+  if (not IsPascal) and Match(tokAs) then
     ImportName := ImportName + ' as ' + Expect(tokIdentifier).Value;
   Expect(tokSemicolon);
-  AModule.Imports.Add(ImportName);
+
+  if IsPascal then
+    AModule.PascalImports.Add(ImportName)
+  else
+    AModule.Imports.Add(ImportName);
 end;
 
 function TAetherParser.ParseRecordDecl(const AName: string; ALine, ACol: Integer): TASTRecordDecl;
@@ -266,13 +275,28 @@ var
   FuncName, ReturnType, ParamName, ParamType: string;
   FLine, FCol: Integer;
   Ownership: TOwnershipKind;
+  IsExt: Boolean;
+  ExtLib: string;
 begin
   FLine := FCurTok.Line;
   FCol := FCurTok.Col;
+  IsExt := False;
+  ExtLib := '';
+
+  if Match(tokExtern) then
+  begin
+    IsExt := True;
+    if Check(tokStringLiteral) then
+      ExtLib := Expect(tokStringLiteral).Value;
+  end;
+
   Expect(tokFunction);
   FuncName := Expect(tokIdentifier, 'Esperado nome da funcao').Value;
 
   Result := TASTFunction.Create(FLine, FCol, FuncName, '');
+  Result.IsExtern := IsExt;
+  Result.ExternLib := ExtLib;
+  Result.ExternAbi := 'c';
   try
     Expect(tokLParen, 'Esperado "(" apos nome da funcao');
     if not Check(tokRParen) then
@@ -307,7 +331,7 @@ begin
     begin
       if Match(tokRequire) then
       begin
-        while not Check(tokEnsure) and not Check(tokVar) and not Check(tokLet) and not Check(tokBegin) and not Check(tokEOF) do
+        while not Check(tokEnsure) and not Check(tokVar) and not Check(tokLet) and not Check(tokBegin) and not Check(tokSemicolon) and not Check(tokEOF) do
         begin
           Result.Requires.Add(ParseExpr);
           Expect(tokSemicolon, 'Esperado ";" apos expressao de require');
@@ -316,12 +340,20 @@ begin
 
       if Match(tokEnsure) then
       begin
-        while not Check(tokVar) and not Check(tokLet) and not Check(tokBegin) and not Check(tokEOF) do
+        while not Check(tokVar) and not Check(tokLet) and not Check(tokBegin) and not Check(tokSemicolon) and not Check(tokEOF) do
         begin
           Result.Ensures.Add(ParseExpr);
           Expect(tokSemicolon, 'Esperado ";" apos expressao de ensure');
         end;
       end;
+    end;
+
+    // Se for extern, nao possui corpo begin..end
+    if IsExt then
+    begin
+      if Check(tokSemicolon) then
+        Match(tokSemicolon);
+      Exit;
     end;
 
     // Variaveis Locais
@@ -795,7 +827,7 @@ begin
     begin
       if Check(tokType) then
         ParseTypeSection(Result)
-      else if Check(tokFunction) then
+      else if Check(tokFunction) or Check(tokExtern) then
         Result.Functions.Add(ParseFunction)
       else if Check(tokProgram) then
       begin

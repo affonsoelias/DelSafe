@@ -1,8 +1,10 @@
 # Compilador e executáveis gerados
 bin/*.exe
+bin/*.a
 bin/generated/
 *.exe
 *.o
+*.a
 *.ppu
 *.dcu
 *.bak

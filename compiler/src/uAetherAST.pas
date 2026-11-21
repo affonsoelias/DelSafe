@@ -238,6 +238,9 @@ type
     Ensures: TASTNodeList;     // TASTExpr
     LocalVars: TASTNodeList;   // TASTVarDecl
     Body: TASTNodeList;        // TASTStmt
+    IsExtern: Boolean;
+    ExternAbi: string;
+    ExternLib: string;
     constructor Create(ALine, ACol: Integer; const AName, AReturnType: string);
     destructor Destroy; override;
     function Dump(Indent: Integer = 0): string; override;
@@ -257,6 +260,7 @@ type
   public
     Name: string;
     Imports: TStringList;
+    PascalImports: TStringList;
     Types: TASTNodeList;       // TASTRecordDecl, TASTEnumDecl
     Functions: TASTNodeList;   // TASTFunction
     ProgramBlock: TASTProgramBlock;
@@ -822,6 +826,9 @@ begin
   Ensures := TASTNodeList.Create;
   LocalVars := TASTNodeList.Create;
   Body := TASTNodeList.Create;
+  IsExtern := False;
+  ExternAbi := 'c';
+  ExternLib := '';
 end;
 
 destructor TASTFunction.Destroy;
@@ -919,6 +926,7 @@ begin
   inherited Create(ALine, ACol);
   Name := AName;
   Imports := TStringList.Create;
+  PascalImports := TStringList.Create;
   Types := TASTNodeList.Create;
   Functions := TASTNodeList.Create;
   ProgramBlock := nil;
@@ -927,6 +935,7 @@ end;
 destructor TASTModule.Destroy;
 begin
   Imports.Free;
+  PascalImports.Free;
   Types.Free;
   Functions.Free;
   ProgramBlock.Free;

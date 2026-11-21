@@ -29,6 +29,7 @@ Além disso, o Aether inclui:
   - [`03_result_and_match.aeth`](file:///c:/Users/Pichau/Documents/aether/examples/03_result_and_match.aeth): Contratos, enum algébrico e casamento de padrões exaustivo.
   - [`04_method_syntax_ufcs.aeth`](file:///c:/Users/Pichau/Documents/aether/examples/04_method_syntax_ufcs.aeth): Orientação a objetos moderna via UFCS (`meu_buffer.Inspecionar()`).
   - [`05_curso_projeto_final.aeth`](file:///c:/Users/Pichau/Documents/aether/examples/05_curso_projeto_final.aeth): Sistema bancário seguro unindo UFCS, `mut borrow`, `Result` e contratos.
+  - [`06_interop_extern.aeth`](file:///c:/Users/Pichau/Documents/aether/examples/06_interop_extern.aeth): Interoperabilidade com bibliotecas C (`extern function`) e inclusão de units Pascal (`import pascal`).
 
 ---
 

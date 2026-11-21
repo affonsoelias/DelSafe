@@ -25,6 +25,8 @@ type
     tokProgram,
     tokImport,
     tokAs,
+    tokExtern,
+    tokPascal,
 
     // Palavras-chave: Tipos
     tokType,
@@ -120,6 +122,8 @@ begin
     tokProgram:       Result := 'program';
     tokImport:        Result := 'import';
     tokAs:            Result := 'as';
+    tokExtern:        Result := 'extern';
+    tokPascal:        Result := 'pascal';
     tokType:          Result := 'type';
     tokRecord:        Result := 'record';
     tokEnum:          Result := 'enum';
@@ -186,6 +190,8 @@ begin
   else if Lower = 'program' then Result := tokProgram
   else if Lower = 'import' then Result := tokImport
   else if Lower = 'as' then Result := tokAs
+  else if Lower = 'extern' then Result := tokExtern
+  else if Lower = 'pascal' then Result := tokPascal
   else if Lower = 'type' then Result := tokType
   else if Lower = 'record' then Result := tokRecord
   else if Lower = 'enum' then Result := tokEnum
