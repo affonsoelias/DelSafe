@@ -1,8 +1,8 @@
 {
   "name": "aether-lang",
   "displayName": "Aether Programming Language",
-  "description": "Suporte oficial para a linguagem Aether (.aeth): realce de sintaxe, snippets, diagnosticos inteligentes e integracao com compilador aetherc.",
-  "version": "0.7.0",
+  "description": "Suporte oficial para a linguagem Aether (.aeth): realce de sintaxe, snippets, LSP nativo com diagnosticos em tempo real, autocompletar, hover e go-to-definition.",
+  "version": "0.9.0",
   "publisher": "aether-lang",
   "engines": {
     "vscode": "^1.75.0"

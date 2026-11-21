@@ -1,6 +1,7 @@
 program aetherc;
 
 {$mode objfpc}{$H+}
+{$codepage utf8}
 
 uses
   SysUtils, Classes,
@@ -14,7 +15,8 @@ uses
   uAetherEmitterPascal,
   uAetherEmitterC,
   uAetherToolchain,
-  uAetherJSONDiag;
+  uAetherJSONDiag,
+  uAetherLSP;
 
 procedure PrintBanner;
 begin
@@ -36,6 +38,7 @@ begin
   WriteLn('  --dump-tokens     Exibe a lista de tokens do Lexer');
   WriteLn('  --dump-ast        Exibe a Arvore Sintatica Abstrata (AST)');
   WriteLn('  --emit-json-diag  Gera relatorio de diagnostico de erros em formato JSON para IA');
+  WriteLn('  --lsp             Inicia o servidor de linguagem (Language Server Protocol)');
   WriteLn('  -o <arquivo.exe>  Especifica o nome do executavel de saida');
   WriteLn('  -h, --help        Exibe esta mensagem de ajuda');
 end;
@@ -370,6 +373,11 @@ begin
     begin
       PrintBanner;
       PrintDoctorReport;
+      Halt(0);
+    end
+    else if Arg = '--lsp' then
+    begin
+      RunAetherLSP;
       Halt(0);
     end
     else if Arg = '--dump-tokens' then

@@ -55,9 +55,21 @@ Este documento traça o status oficial de desenvolvimento do compilador e as pr�
 - [x] `std/io.aeth`: Tipos e rotinas seguras de entrada/saída (`IOError`, `Informar`).
 - [x] `std/collections.aeth`: Estrutura de dados com semântica de posse e métodos UFCS (`FixedBuffer`, `NewBuffer`, `IsFull`, `Available`, `PushItem`).
 
+### ✅ Fase 9: LSP (Language Server Protocol) e IDE em Tempo Real (Concluído)
+- [x] Implementação do servidor LSP oficial do Aether em `compiler/src/uAetherLSP.pas` sob a flag `aetherc --lsp`.
+- [x] Protocolo JSON-RPC com cabeçalhos HTTP-like (`Content-Length: ...\r\n\r\n{...}`) em UTF-8 puro via `fpjson`.
+- [x] Diagnósticos em tempo real (`textDocument/publishDiagnostics`) integrados com o Lexer, Parser, TypeChecker e Borrow Checker.
+- [x] Autocompletar inteligente (`textDocument/completion`) com palavras-chave de posse (`borrow`, `take`, `mut`), tipos primitivos, mônades e símbolos locais da AST.
+- [x] Dicas ao passar o cursor (`textDocument/hover`) documentando a semântica de empréstimo/posse e assinaturas de funções com contratos.
+- [x] Ir para a Definição (`textDocument/definition`) localizando declarações de funções, records e enums no código fonte.
+- [x] Integração cliente na extensão do VS Code / Antigravity IDE (`editors/vscode/extension.js`) atualizada para versão `0.9.0`.
+
 ---
 
 ## 🚀 Próximas Fases e Metas Futuras
 
-### 🎯 Fase 9: LSP (Language Server Protocol)
-- [ ] Servidor de linguagem básico para autocompletar, go-to-definition e diagnósticos em tempo real durante a digitação.
+### 🎯 Fase 10: Gerenciador de Pacotes (`aethpm` / Integração com Boss)
+- [ ] Criação de um utilitário de linha de comando ou integração nativa para gerenciar dependências e módulos Aether.
+
+### 🎯 Fase 11: Backend LLVM / Compilação Nativa Direta
+- [ ] Backend emissor de LLVM IR para otimizações agressivas de baixo nível sem depender do GCC ou FPC.

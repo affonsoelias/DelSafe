@@ -89,3 +89,9 @@ Verifica automaticamente se o **Free Pascal (`fpc`)** e o **compilador C (`gcc`)
 ./bin/aetherc examples/02_ownership_and_borrow.aeth --emit-json-diag
 ```
 Retorna diagnósticos em formato JSON estruturado com localização exata e sugestões de correção pronta para modelos de linguagem.
+
+### 5. Servidor de Linguagem (LSP - Language Server Protocol)
+```bash
+./bin/aetherc --lsp
+```
+Inicia o servidor de linguagem nativo via `stdio` (JSON-RPC) para autocompletar, go-to-definition, hover e diagnósticos em tempo real no VS Code e Antigravity IDE.
