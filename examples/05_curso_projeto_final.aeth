@@ -1,0 +1,92 @@
+module BancoDigital;
+
+type
+    ContaError = enum
+        SaldoInsuficiente,
+        ValorInvalido
+    end;
+
+    ContaBancaria = record
+        id: UInt32;
+        saldo: Float64;
+    end;
+
+function ExibirSaldo(borrow c: ContaBancaria): Void
+begin
+    PrintLn("Conta #%d - Saldo atual: R$ %f", c.id, c.saldo);
+end;
+
+function Depositar(mut borrow c: ContaBancaria; borrow valor: Float64): Result<Float64, ContaError>
+contract
+    require
+        valor > 0.0;
+    ensure
+        result.is_ok;
+begin
+    if valor <= 0.0 then
+        return Err(ContaError.ValorInvalido);
+    else
+        c.saldo := c.saldo + valor;
+        return Ok(c.saldo);
+    end;
+end;
+
+function Sacar(mut borrow c: ContaBancaria; borrow valor: Float64): Result<Float64, ContaError>
+contract
+    require
+        valor > 0.0;
+    ensure
+        true;
+begin
+    if valor <= 0.0 then
+        return Err(ContaError.ValorInvalido);
+    else
+        if c.saldo < valor then
+            return Err(ContaError.SaldoInsuficiente);
+        else
+            c.saldo := c.saldo - valor;
+            return Ok(c.saldo);
+        end;
+    end;
+end;
+
+program Main;
+var
+    minha_conta: ContaBancaria;
+    res_deposito: Result<Float64, ContaError>;
+    res_saque: Result<Float64, ContaError>;
+begin
+    PrintLn("=== SISTEMA BANCARIO SEGURO AETHER ===");
+
+    // Criando a conta
+    minha_conta := ContaBancaria(id: 1001, saldo: 250.0);
+    minha_conta.ExibirSaldo();
+
+    // Realizando um depósito
+    PrintLn("\nDepositando R$ 150.00...");
+    res_deposito := minha_conta.Depositar(borrow 150.0);
+    match res_deposito do
+        case Ok(let novo_saldo):
+            PrintLn("Deposito concluido! Novo saldo: R$ %f", novo_saldo);
+        case Err(ContaError.ValorInvalido):
+            PrintLn("Erro: Valor de deposito invalido.");
+        case Err(ContaError.SaldoInsuficiente):
+            PrintLn("Erro: Saldo insuficiente.");
+    end;
+
+    // Tentando realizar um saque excessivo
+    PrintLn("\nTentando sacar R$ 500.00...");
+    res_saque := minha_conta.Sacar(borrow 500.0);
+    match res_saque do
+        case Ok(let saldo_restante):
+            PrintLn("Saque autorizado! Saldo restante: R$ %f", saldo_restante);
+        case Err(ContaError.SaldoInsuficiente):
+            PrintLn("Saque recusado: Saldo insuficiente na conta!");
+        case Err(ContaError.ValorInvalido):
+            PrintLn("Saque recusado: Valor informado e invalido.");
+    end;
+
+    // Saldo final
+    PrintLn("\nExtrato final:");
+    minha_conta.ExibirSaldo();
+end.

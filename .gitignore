@@ -1,0 +1,11 @@
+# Compilador e executáveis gerados
+bin/*.exe
+bin/generated/
+*.exe
+*.o
+*.ppu
+*.dcu
+*.bak
+*.lps
+.DS_Store
+Thumbs.db

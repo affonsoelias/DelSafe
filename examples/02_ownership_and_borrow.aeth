@@ -1,0 +1,37 @@
+module OwnershipDemo;
+
+type
+    DataBuffer = record
+        id: UInt32;
+        size: UInt64;
+    end;
+
+// 'borrow' apenas pega emprestado (leitura)
+function Inspecionar(borrow buf: DataBuffer): Void
+begin
+    PrintLn("Inspecionando buffer id: %d, tamanho: %d", buf.id, buf.size);
+end;
+
+// 'take' consome o buffer (transfere posse)
+function Consumir(take buf: DataBuffer): Void
+begin
+    PrintLn("Buffer %d consumido com sucesso!", buf.id);
+    // Ao sair deste escopo, a memoria do buffer e liberada automaticamente!
+end;
+
+program Main;
+var
+    meu_buffer: DataBuffer;
+begin
+    meu_buffer := DataBuffer(id: 101, size: 2048);
+
+    // Permitido: empresta apenas para leitura
+    Inspecionar(borrow meu_buffer);
+
+    // Permitido: transfere posse para Consumir
+    Consumir(take meu_buffer);
+
+    // ERRO DE COMPILACAO proposital (Borrow Checker):
+    // Descomentar a linha abaixo acusara erro E0382: 'meu_buffer' ja foi movido!
+    // Inspecionar(borrow meu_buffer);
+end.

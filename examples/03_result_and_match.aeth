@@ -1,0 +1,37 @@
+module SafeMath;
+
+type
+    MathError = enum
+        DivisaoPorZero,
+        NumeroNegativo
+    end;
+
+function Dividir(borrow dividendo: Float64; borrow divisor: Float64): Result<Float64, MathError>
+contract
+    require
+        true;
+    ensure
+        result.is_ok implies divisor <> 0.0;
+begin
+    if divisor = 0.0 then
+        return Err(MathError.DivisaoPorZero);
+    else
+        return Ok(dividendo / divisor);
+    end;
+end;
+
+program Main;
+var
+    resultado: Result<Float64, MathError>;
+begin
+    resultado := Dividir(borrow 100.0, borrow 0.0);
+
+    match resultado do
+        case Ok(let valor):
+            PrintLn("Resultado da divisao: %f", valor);
+        case Err(MathError.DivisaoPorZero):
+            PrintLn("Erro detectado: Divisao por zero impedida!");
+        case Err(MathError.NumeroNegativo):
+            PrintLn("Erro detectado: Numero negativo invalido.");
+    end;
+end.
