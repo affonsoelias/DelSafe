@@ -148,7 +148,7 @@ Este documento traça o status oficial de desenvolvimento do compilador e as pr�
 - [x] **Validação Prática Dual-Backend**:
   - Compilador auto-hospedado compilado e executado com 100% de sucesso nos backends **Free Pascal** e **GCC (MSYS2)**, processando o novo exemplo de demonstração `examples/13_self_hosted_compiler_demo.aeth` e gerando binário nativo funcional.
 
-### 🎯 Fase 17: Expansão da Biblioteca Padrão (`std/`) e Concorrência Ultraleve
+### ✅ Fase 17: Expansão da Biblioteca Padrão (`std/`) e Concorrência Ultraleve (Concluído)
 - [x] **Serialização e Parser JSON (`std/json.aeth`)**:
   - `JsonBuilder` com formatação e serialização estruturada (`AddString`, `AddInt`, `AddBool`, `Build`).
   - Extratores tipados zero-alocação com empréstimo mutável (`ExtractString`, `ExtractInt`, `ExtractBool`) e validação estrutural (`Validate`, `HasKey`, `FindSubstr`).
@@ -162,7 +162,7 @@ Este documento traça o status oficial de desenvolvimento do compilador e as pr�
 - [x] **Validação Prática Dual-Backend**:
   - Suíte de demonstração em `examples/14_stdlib_and_concurrency.aeth` compilada e executada com 100% de paridade nos backends **Free Pascal** e **GCC C99**, integrando typecastings primitivos e operadores `mod`/`div`.
 
-### 🎯 Fase 18: Polimento de Ferramentas de Desenvolvimento (LSP & Extensão VS Code)
+### ✅ Fase 18: Polimento de Ferramentas de Desenvolvimento (LSP & Extensão VS Code) (Concluído)
 - [x] **Aprimoramento do LSP (`compiler/src/uAetherLSP.pas`)**:
   - Autocompletion completo de palavras-chave (`trait`, `impl`, `for`, `own`, `borrow`, `mut`), tipos e mônades.
   - Exibição de assinaturas de funções com lista completa de parâmetros e modificadores de posse (`FormatFunctionSignature`).
@@ -177,7 +177,7 @@ Este documento traça o status oficial de desenvolvimento do compilador e as pr�
   - Código da extensão (`src/extension.ts` e `out/extension.js`) com integração ao Language Client via stdio e comandos de compilação (`Pascal` / `C99`), execução de testes e reinicialização do LSP.
   - Documentação de uso e instalação local (`ide/vscode/README.md`).
 
-### 🎯 Fase 19: Suporte a Dependências Git no `aether add`
+### ✅ Fase 19: Suporte a Dependências Git no `aether add` (Concluído)
 - [x] **Download e Cache Automático via Git**:
   - `aetherc add <url-git> [--branch=... / --tag=... / --version=...]` com extração automática do nome do pacote da URL (`ExtractPackageNameFromGitUrl`).
   - Clonagem e sincronização automática via Git (`SyncGitPackage`) com armazenamento seguro no cache global (`~/.aether/cache/<pkg>`) e replicação para `.aether/deps/<pkg>`.
