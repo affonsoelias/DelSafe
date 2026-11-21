@@ -1,0 +1,106 @@
+module TraitsAndPolymorphism;
+
+// Definicao de Contrato de Tipo (Trait) para representacao em texto
+trait Printable
+    function ToString(borrow self): String;
+end;
+
+// Definicao de Contrato de Tipo (Trait) para calculos geometricos
+trait Shape
+    function Area(borrow self): Int32;
+    function Perimeter(borrow self): Int32;
+end;
+
+type
+    Circle = record
+        radius: Int32;
+    end;
+
+    Rectangle = record
+        width: Int32;
+        height: Int32;
+    end;
+
+// Implementacao da Trait Printable para Circle
+impl Printable for Circle
+    function ToString(borrow self): String
+    begin
+        return "Circulo Geometrico";
+    end;
+end;
+
+// Implementacao da Trait Shape para Circle
+impl Shape for Circle
+    function Area(borrow self): Int32
+    begin
+        // Pi aproximado = 3 para calculo inteiro exato
+        return 3 * self.radius * self.radius;
+    end;
+
+    function Perimeter(borrow self): Int32
+    begin
+        return 2 * 3 * self.radius;
+    end;
+end;
+
+// Implementacao da Trait Printable para Rectangle
+impl Printable for Rectangle
+    function ToString(borrow self): String
+    begin
+        return "Retangulo Geometrico";
+    end;
+end;
+
+// Implementacao da Trait Shape para Rectangle
+impl Shape for Rectangle
+    function Area(borrow self): Int32
+    begin
+        return self.width * self.height;
+    end;
+
+    function Perimeter(borrow self): Int32
+    begin
+        return 2 * (self.width + self.height);
+    end;
+end;
+
+// Funcao Polimorfica Estatica com Trait Bound (Zero-Cost Abstraction)
+function ExibirElemento<T: Printable>(borrow item: T): Void
+begin
+    PrintLn("Exibindo elemento via Polimorfismo Estatico: %s", item.ToString());
+end;
+
+program Main;
+var
+    c: Circle;
+    r: Rectangle;
+    area_c: Int32;
+    perim_c: Int32;
+    area_r: Int32;
+    perim_r: Int32;
+begin
+    PrintLn("=== TESTE DE TRAITS E POLIMORFISMO ESTATICO (FASE 14) ===");
+
+    c := Circle(radius: 5);
+    r := Rectangle(width: 10, height: 4);
+
+    // 1. Despacho Estatico Direto via Chamada Estilo Metodo (UFCS)
+    PrintLn("\n1. Despacho Estatico de Metodos (Traits):");
+    PrintLn("Identificacao do circulo: %s", c.ToString());
+    PrintLn("Identificacao do retangulo: %s", r.ToString());
+
+    area_c := c.Area();
+    perim_c := c.Perimeter();
+    PrintLn("Circulo (raio = 5) -> Area aproximada: %d, Perimetro: %d", area_c, perim_c);
+
+    area_r := r.Area();
+    perim_r := r.Perimeter();
+    PrintLn("Retangulo (10x4) -> Area: %d, Perimetro: %d", area_r, perim_r);
+
+    // 2. Polimorfismo Estatico com Trait Bounds e Monomorfizacao Zero-Cost
+    PrintLn("\n2. Polimorfismo Estatico com Trait Bound <T: Printable>:");
+    ExibirElemento(c);
+    ExibirElemento(r);
+
+    PrintLn("\n[PASS] Todos os contratos de tipo e despachos estaticos executados com sucesso!");
+end.

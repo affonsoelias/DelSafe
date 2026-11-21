@@ -108,10 +108,18 @@ Este documento traça o status oficial de desenvolvimento do compilador e as pr�
 - [x] **Alinhamento Canônico Oficial**: Todos os arquivos de exemplo (`examples/01` a `10`) e módulos do compilador auto-hospedado (`compiler/aeth/`) atualizados para a nomenclatura canônica 1:1.
 - [x] **Validação Dual-Backend**: Exemplo `examples/10_hierarchical_modules.aeth` compilado e executado com 100% de paridade em Free Pascal e GCC.
 
-### 🎯 Fase 14: Traits e Polimorfismo Estático (Contratos de Tipos)
-- [ ] Declaração de `trait` como contratos de capacidade comportamental (ex: `trait Display`, `trait Clone`, `trait Printable`).
-- [ ] Implementação de contratos de traits para records existentes (`impl Display for ASTExprNode begin ... end;`).
-- [ ] Despacho estático (*zero-cost abstractions*) com monomorfização para ambos os backends (Object Pascal e C99).
+### ✅ Fase 14: Traits e Polimorfismo Estático (Contratos de Tipos) (Concluído)
+- [x] **Declaração de `trait`**: Suporte à definição de contratos comportamentais via `trait Nome ... end;` no nível do módulo ou na seção `type` (ex: `trait Printable`, `trait Shape`).
+- [x] **Implementação de Traits (`impl Trait for Type`)**: Implementação de blocos de métodos para records (ex: `impl Printable for Circle ... end;`), com inferência automática de tipo para o parâmetro `borrow self`.
+- [x] **Verificação Semântica Rigorosa (Type-Level Contracts)**:
+  - Validação de completude: emite `[Erro Semantico E0046]` caso o tipo não implemente todos os métodos exigidos pela trait.
+  - Validação de assinaturas: emite `[Erro Semantico E0053]` se a quantidade de parâmetros, tipos ou retorno divergirem da definição da trait.
+  - Verificação de Trait Bound: emite `[Erro Semantico E0277]` se uma função genérica com bound (ex: `<T: Printable>`) receber um tipo que não implementa a trait exigida.
+- [x] **Despacho Estático (*Zero-Cost Abstractions*)**:
+  - Resolução direta de chamadas estilo método via UFCS (`c.ToString()`, `c.Area()`) mapeadas estaticamente para `<Type>_<Method>` em tempo de compilação sem tabelas virtuais (vtable) nem overhead em runtime.
+- [x] **Monomorfização Estática de Funções Genéricas com Trait Bounds**:
+  - Funções genéricas parametrizadas (ex: `function ExibirElemento<T: Printable>(borrow item: T)`) são monomorfizadas e especializadas estaticamente para cada tipo concreto invocado (ex: `ExibirElemento_Circle`), garantindo máxima otimização e performance de código nativo.
+- [x] **Validação Dual-Backend e Testes**: Exemplo completo `examples/11_traits_and_polymorphism.aeth` compilado e validado com 100% de paridade e sucesso nos backends Free Pascal e GCC (MSYS2).
 
 ### 🎯 Fase 15: Gerenciador de Pacotes e Dependências (`aether add` / `aether test`)
 - [ ] Suporte a dependências remotas e locais no manifesto `aether.json` (estilo Cargo / Boss).

@@ -620,6 +620,7 @@ var
   LibClause: string;
   ParamType: string;
 begin
+  if Func.GenericParam <> '' then Exit; // Molde generico nao emite codigo diretamente
   FCurrentFunc := Func;
   if Func.IsExtern then
   begin
@@ -908,7 +909,7 @@ begin
   for I := 0 to AModule.Functions.Count - 1 do
   begin
     Func := TASTFunction(AModule.Functions[I]);
-    if not Func.IsExtern then
+    if (not Func.IsExtern) and (Func.GenericParam = '') then
     begin
       ParamListStr := '';
       for J := 0 to Func.Params.Count - 1 do

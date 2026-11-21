@@ -8,7 +8,7 @@ uses
   SysUtils, Classes, uAetherAST;
 
 type
-  TSymbolKind = (skVariable, skFunction, skType, skEnumVariant);
+  TSymbolKind = (skVariable, skFunction, skType, skEnumVariant, skTrait);
 
   TSymbol = class
   public

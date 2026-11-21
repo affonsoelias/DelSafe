@@ -28,10 +28,12 @@ type
     tokExtern,
     tokPascal,
 
-    // Palavras-chave: Tipos
+    // Palavras-chave: Tipos e Contratos de Tipos (Traits)
     tokType,
     tokRecord,
     tokEnum,
+    tokTrait,
+    tokImpl,
 
     // Palavras-chave: Funções e Contratos
     tokFunction,
@@ -127,6 +129,8 @@ begin
     tokType:          Result := 'type';
     tokRecord:        Result := 'record';
     tokEnum:          Result := 'enum';
+    tokTrait:         Result := 'trait';
+    tokImpl:          Result := 'impl';
     tokFunction:      Result := 'function';
     tokContract:      Result := 'contract';
     tokRequire:       Result := 'require';
@@ -195,6 +199,8 @@ begin
   else if Lower = 'type' then Result := tokType
   else if Lower = 'record' then Result := tokRecord
   else if Lower = 'enum' then Result := tokEnum
+  else if Lower = 'trait' then Result := tokTrait
+  else if Lower = 'impl' then Result := tokImpl
   else if Lower = 'function' then Result := tokFunction
   else if Lower = 'contract' then Result := tokContract
   else if Lower = 'require' then Result := tokRequire

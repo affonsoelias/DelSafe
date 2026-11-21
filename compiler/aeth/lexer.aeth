@@ -173,6 +173,8 @@ begin
         if txt = "var" then return NewToken(TokenKind.tkVar, txt, token_line, token_col); end;
         if txt = "let" then return NewToken(TokenKind.tkLet, txt, token_line, token_col); end;
         if txt = "function" then return NewToken(TokenKind.tkFunction, txt, token_line, token_col); end;
+        if txt = "trait" then return NewToken(TokenKind.tkTrait, txt, token_line, token_col); end;
+        if txt = "impl" then return NewToken(TokenKind.tkImpl, txt, token_line, token_col); end;
         if txt = "if" then return NewToken(TokenKind.tkIf, txt, token_line, token_col); end;
         if txt = "then" then return NewToken(TokenKind.tkThen, txt, token_line, token_col); end;
         if txt = "else" then return NewToken(TokenKind.tkElse, txt, token_line, token_col); end;

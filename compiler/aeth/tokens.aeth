@@ -13,6 +13,8 @@ type
         tkVar,
         tkLet,
         tkFunction,
+        tkTrait,
+        tkImpl,
         tkIf,
         tkThen,
         tkElse,
@@ -66,6 +68,8 @@ begin
     if k = TokenKind.tkVar then return "var"; end;
     if k = TokenKind.tkLet then return "let"; end;
     if k = TokenKind.tkFunction then return "function"; end;
+    if k = TokenKind.tkTrait then return "trait"; end;
+    if k = TokenKind.tkImpl then return "impl"; end;
     if k = TokenKind.tkIf then return "if"; end;
     if k = TokenKind.tkThen then return "then"; end;
     if k = TokenKind.tkElse then return "else"; end;

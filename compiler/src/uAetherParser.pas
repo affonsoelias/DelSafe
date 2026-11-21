@@ -34,7 +34,9 @@ type
     procedure ParseTypeSection(AModule: TASTModule);
     function ParseRecordDecl(const AName: string; ALine, ACol: Integer): TASTRecordDecl;
     function ParseEnumDecl(const AName: string; ALine, ACol: Integer): TASTEnumDecl;
-    function ParseFunction: TASTFunction;
+    function ParseTraitDecl(const AName: string; ALine, ACol: Integer): TASTTraitDecl;
+    function ParseImplDecl: TASTImplDecl;
+    function ParseFunction(IsSignatureOnly: Boolean = False): TASTFunction;
     function ParseProgramBlock: TASTProgramBlock;
     procedure ParseVarSection(ALocalVars: TASTNodeList);
 
@@ -238,10 +240,78 @@ begin
       AModule.Types.Add(ParseRecordDecl(TypeName, TLine, TCol))
     else if Check(tokEnum) then
       AModule.Types.Add(ParseEnumDecl(TypeName, TLine, TCol))
+    else if Check(tokTrait) then
+      AModule.Traits.Add(ParseTraitDecl(TypeName, TLine, TCol))
     else
-      raise EAetherParserError.Create('Esperado "record" ou "enum" na declaracao de tipo', TLine, TCol);
+      raise EAetherParserError.Create('Esperado "record", "enum" ou "trait" na declaracao de tipo', TLine, TCol);
 
     Expect(tokSemicolon, 'Esperado ";" apos declaracao de tipo');
+  end;
+end;
+
+function TAetherParser.ParseTraitDecl(const AName: string; ALine, ACol: Integer): TASTTraitDecl;
+var
+  TraitName: string;
+begin
+  Expect(tokTrait);
+  if AName <> '' then
+    TraitName := AName
+  else
+    TraitName := Expect(tokIdentifier, 'Esperado identificador com nome da trait').Value;
+
+  Result := TASTTraitDecl.Create(ALine, ACol, TraitName);
+  try
+    while not Check(tokEnd) and not Check(tokEOF) do
+    begin
+      if Check(tokFunction) then
+        Result.Methods.Add(ParseFunction(True))
+      else
+        raise EAetherParserError.Create('Esperado "function" na declaracao da trait', FCurTok.Line, FCurTok.Col);
+    end;
+    Expect(tokEnd, 'Esperado "end" no fechamento da trait');
+    if AName = '' then
+      Expect(tokSemicolon, 'Esperado ";" apos "end" da trait');
+  except
+    Result.Free;
+    raise;
+  end;
+end;
+
+function TAetherParser.ParseImplDecl: TASTImplDecl;
+var
+  TraitName, TargetName: string;
+  ILine, ICol, J: Integer;
+  FuncNode: TASTFunction;
+begin
+  ILine := FCurTok.Line;
+  ICol := FCurTok.Col;
+  Expect(tokImpl);
+  TraitName := Expect(tokIdentifier, 'Esperado nome da trait apos "impl"').Value;
+  Expect(tokFor, 'Esperado "for" apos nome da trait');
+  TargetName := Expect(tokIdentifier, 'Esperado nome do tipo apos "for"').Value;
+
+  Result := TASTImplDecl.Create(ILine, ICol, TraitName, TargetName);
+  try
+    while not Check(tokEnd) and not Check(tokEOF) do
+    begin
+      if Check(tokFunction) then
+      begin
+        FuncNode := ParseFunction(False);
+        for J := 0 to FuncNode.Params.Count - 1 do
+        begin
+          if SameText(TASTParam(FuncNode.Params[J]).TypeName, 'Self') then
+            TASTParam(FuncNode.Params[J]).TypeName := TargetName;
+        end;
+        Result.Methods.Add(FuncNode);
+      end
+      else
+        raise EAetherParserError.Create('Esperado "function" na implementacao da trait', FCurTok.Line, FCurTok.Col);
+    end;
+    Expect(tokEnd, 'Esperado "end" no fechamento do bloco impl');
+    Expect(tokSemicolon, 'Esperado ";" apos "end" do bloco impl');
+  except
+    Result.Free;
+    raise;
   end;
 end;
 
@@ -272,7 +342,7 @@ begin
   end;
 end;
 
-function TAetherParser.ParseFunction: TASTFunction;
+function TAetherParser.ParseFunction(IsSignatureOnly: Boolean): TASTFunction;
 var
   FuncName, ReturnType, ParamName, ParamType: string;
   FLine, FCol: Integer;
@@ -300,6 +370,15 @@ begin
   Result.ExternLib := ExtLib;
   Result.ExternAbi := 'c';
   try
+    // Parametro generico com bound opcional: function Imprimir<T: Printable>(...)
+    if Match(tokLess) then
+    begin
+      Result.GenericParam := Expect(tokIdentifier, 'Esperado nome do parametro generico').Value;
+      if Match(tokColon) then
+        Result.TraitBound := Expect(tokIdentifier, 'Esperado nome da trait no bound').Value;
+      Expect(tokGreater, 'Esperado ">" no fechamento do parametro generico');
+    end;
+
     Expect(tokLParen, 'Esperado "(" apos nome da funcao');
     if not Check(tokRParen) then
     begin
@@ -316,8 +395,12 @@ begin
         end;
 
         ParamName := Expect(tokIdentifier, 'Esperado nome do parametro').Value;
-        Expect(tokColon, 'Esperado ":" apos nome do parametro');
-        ParamType := ParseTypeRef;
+        if Match(tokColon) then
+          ParamType := ParseTypeRef
+        else if SameText(ParamName, 'self') then
+          ParamType := 'Self'
+        else
+          raise EAetherParserError.Create('Esperado ":" apos nome do parametro', FCurTok.Line, FCurTok.Col);
 
         Result.Params.Add(TASTParam.Create(FCurTok.Line, FCurTok.Col, ParamName, ParamType, Ownership));
       until not Match(tokSemicolon);
@@ -327,6 +410,13 @@ begin
     Expect(tokColon, 'Esperado ":" apos parametros da funcao');
     ReturnType := ParseTypeRef;
     Result.ReturnType := ReturnType;
+
+    // Se for assinatura de trait, nao possui contratos nem corpo
+    if IsSignatureOnly then
+    begin
+      Expect(tokSemicolon, 'Esperado ";" apos assinatura do metodo da trait');
+      Exit;
+    end;
 
     // Bloco de Contratos Opcional
     if Match(tokContract) then
@@ -824,13 +914,17 @@ begin
     while Check(tokImport) do
       ParseImport(Result);
 
-    // Tipos, Funcoes e Programa Principal
+    // Tipos, Traits, Impls, Funcoes e Programa Principal
     while not Check(tokEOF) do
     begin
       if Check(tokType) then
         ParseTypeSection(Result)
+      else if Check(tokTrait) then
+        Result.Traits.Add(ParseTraitDecl('', FCurTok.Line, FCurTok.Col))
+      else if Check(tokImpl) then
+        Result.Impls.Add(ParseImplDecl)
       else if Check(tokFunction) or Check(tokExtern) then
-        Result.Functions.Add(ParseFunction)
+        Result.Functions.Add(ParseFunction(False))
       else if Check(tokProgram) then
       begin
         Result.ProgramBlock := ParseProgramBlock;

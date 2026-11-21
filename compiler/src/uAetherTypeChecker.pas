@@ -10,6 +10,14 @@ uses
   uAetherSymbols;
 
 type
+  PTraitImplInfo = ^TTraitImplInfo;
+  TTraitImplInfo = record
+    TargetType: string;
+    TraitName: string;
+    OriginalMethod: string;
+    MangledMethod: string;
+  end;
+
   EAetherTypeError = class(Exception)
   public
     Line: Integer;
@@ -22,6 +30,8 @@ type
   private
     FSymbols: TSymbolTable;
     FCurrentFunction: TASTFunction;
+    FModule: TASTModule;
+    FTraitImpls: TFPList;
 
     procedure Error(const ACode, AMsg: string; ALine, ACol: Integer);
     function IsNumericType(const AType: string): Boolean;
@@ -44,7 +54,12 @@ type
     procedure CheckMatch(MatchStmt: TASTMatchStmt);
 
     procedure RegisterTypes(AModule: TASTModule);
+    procedure RegisterTraits(AModule: TASTModule);
+    procedure RegisterImpls(AModule: TASTModule);
     procedure RegisterFunctions(AModule: TASTModule);
+    function TypeImplementsTrait(const ATypeName, ATraitName: string): Boolean;
+    function FindTraitMethod(const ATypeName, AMethodName: string): string;
+    function MonomorphizeFunction(OriginalFunc: TASTFunction; const ConcreteType: string): TASTFunction;
     procedure CheckFunction(Func: TASTFunction);
     procedure CheckProgramBlock(Prog: TASTProgramBlock);
   public
@@ -69,10 +84,17 @@ begin
   inherited Create;
   FSymbols := TSymbolTable.Create;
   FCurrentFunction := nil;
+  FModule := nil;
+  FTraitImpls := TFPList.Create;
 end;
 
 destructor TAetherTypeChecker.Destroy;
+var
+  I: Integer;
 begin
+  for I := 0 to FTraitImpls.Count - 1 do
+    Dispose(PTraitImplInfo(FTraitImpls[I]));
+  FTraitImpls.Free;
   FSymbols.Free;
   inherited Destroy;
 end;
@@ -294,12 +316,12 @@ end;
 
 function TAetherTypeChecker.CheckCall(Call: TASTCallExpr): string;
 var
-  Sym: TSymbol;
-  FuncNode: TASTFunction;
+  Sym, SymMono: TSymbol;
+  FuncNode, MonoFunc: TASTFunction;
   RecDecl: TASTRecordDecl;
   I: Integer;
   Arg: TASTCallArg;
-  ArgType, ExpectedType: string;
+  ArgType, ExpectedType, Mangled, MonomorphedName: string;
 begin
   // Atalhos embutidos Ok() e Err()
   if Call.Callee = 'Ok' then
@@ -336,7 +358,29 @@ begin
 
   Sym := FSymbols.Resolve(Call.Callee);
   if not Assigned(Sym) then
-    Error('E0425', Format('Funcao ou tipo nao encontrado: "%s"', [Call.Callee]), Call.Line, Call.Col);
+  begin
+    // Resolução de método de Trait via primeiro argumento (UFCS)
+    if Call.Args.Count > 0 then
+    begin
+      ArgType := CheckExpr(TASTCallArg(Call.Args[0]).Expr);
+      if Pos('Box<', ArgType) = 1 then
+      begin
+        ArgType := Copy(ArgType, 5, Length(ArgType) - 5);
+        if (Length(ArgType) > 0) and (ArgType[Length(ArgType)] = '>') then
+          ArgType := Copy(ArgType, 1, Length(ArgType) - 1);
+      end;
+
+      Mangled := FindTraitMethod(ArgType, Call.Callee);
+      if Mangled <> '' then
+      begin
+        Call.Callee := Mangled;
+        Sym := FSymbols.Resolve(Call.Callee);
+      end;
+    end;
+
+    if not Assigned(Sym) then
+      Error('E0425', Format('Funcao ou tipo nao encontrado: "%s"', [Call.Callee]), Call.Line, Call.Col);
+  end;
 
   // Construtor de Record: DataBuffer(id: 101, size: 2048)
   if (Sym.Kind = skType) and (Sym.Node is TASTRecordDecl) then
@@ -358,9 +402,47 @@ begin
     Exit(RecDecl.Name);
   end;
 
-  // Chamada de Funcao Normal
+  // Chamada de Funcao Normal ou Generica
   if Sym.Kind = skFunction then
   begin
+    FuncNode := TASTFunction(Sym.Node);
+
+    // Se for funcao generica com Trait Bound, monomorfiza para o tipo concreto
+    if Assigned(FuncNode) and (FuncNode.GenericParam <> '') then
+    begin
+      if Call.Args.Count = 0 then
+        Error('E0061', Format('Funcao generica "%s" requer pelo menos 1 argumento para deducao de tipo', [FuncNode.Name]), Call.Line, Call.Col);
+
+      ArgType := CheckExpr(TASTCallArg(Call.Args[0]).Expr);
+      if Pos('Box<', ArgType) = 1 then
+      begin
+        ArgType := Copy(ArgType, 5, Length(ArgType) - 5);
+        if (Length(ArgType) > 0) and (ArgType[Length(ArgType)] = '>') then
+          ArgType := Copy(ArgType, 1, Length(ArgType) - 1);
+      end;
+
+      if FuncNode.TraitBound <> '' then
+      begin
+        if not TypeImplementsTrait(ArgType, FuncNode.TraitBound) then
+          Error('E0277', Format('O tipo "%s" nao implementa a trait "%s"', [ArgType, FuncNode.TraitBound]), Call.Line, Call.Col);
+      end;
+
+      MonomorphedName := FuncNode.Name + '_' + ArgType;
+      SymMono := FSymbols.Resolve(MonomorphedName);
+      if not Assigned(SymMono) then
+      begin
+        MonoFunc := MonomorphizeFunction(FuncNode, ArgType);
+        FModule.Functions.Add(MonoFunc);
+        FSymbols.Define(TSymbol.Create(MonoFunc.Name, skFunction, MonoFunc.ReturnType, MonoFunc.Line, MonoFunc.Col, False, owNone, MonoFunc));
+        CheckFunction(MonoFunc);
+        SymMono := FSymbols.Resolve(MonomorphedName);
+      end;
+
+      Call.Callee := MonomorphedName;
+      Sym := SymMono;
+      FuncNode := TASTFunction(Sym.Node);
+    end;
+
     // PrintLn embutido com parametros variaveis
     if (Call.Callee = 'PrintLn') or (Call.Callee = 'Print') then
     begin
@@ -815,15 +897,204 @@ begin
   end;
 end;
 
+procedure TAetherTypeChecker.RegisterTraits(AModule: TASTModule);
+var
+  I: Integer;
+  Trait: TASTTraitDecl;
+begin
+  for I := 0 to AModule.Traits.Count - 1 do
+  begin
+    Trait := TASTTraitDecl(AModule.Traits[I]);
+    FSymbols.Define(TSymbol.Create(Trait.Name, skTrait, Trait.Name, Trait.Line, Trait.Col, False, owNone, Trait));
+  end;
+end;
+
+procedure TAetherTypeChecker.RegisterImpls(AModule: TASTModule);
+var
+  I, TM, IM, P: Integer;
+  Impl: TASTImplDecl;
+  SymTrait, SymType: TSymbol;
+  TraitDecl: TASTTraitDecl;
+  TraitMethod, ImplMethod: TASTFunction;
+  Found: Boolean;
+  ExpectedParamType: string;
+  MangledName: string;
+  Info: PTraitImplInfo;
+begin
+  for I := 0 to AModule.Impls.Count - 1 do
+  begin
+    Impl := TASTImplDecl(AModule.Impls[I]);
+
+    SymTrait := FSymbols.Resolve(Impl.TraitName);
+    if (not Assigned(SymTrait)) or (SymTrait.Kind <> skTrait) then
+      Error('E0425', Format('Trait "%s" nao encontrada', [Impl.TraitName]), Impl.Line, Impl.Col);
+
+    SymType := FSymbols.Resolve(Impl.TargetTypeName);
+    if (not Assigned(SymType)) or (SymType.Kind <> skType) then
+      Error('E0425', Format('Tipo "%s" nao encontrado', [Impl.TargetTypeName]), Impl.Line, Impl.Col);
+
+    TraitDecl := TASTTraitDecl(SymTrait.Node);
+
+    // Validação de completude: todos os métodos da trait foram implementados?
+    for TM := 0 to TraitDecl.Methods.Count - 1 do
+    begin
+      TraitMethod := TASTFunction(TraitDecl.Methods[TM]);
+      Found := False;
+      for IM := 0 to Impl.Methods.Count - 1 do
+      begin
+        if SameText(TASTFunction(Impl.Methods[IM]).Name, TraitMethod.Name) then
+        begin
+          Found := True;
+          Break;
+        end;
+      end;
+      if not Found then
+        Error('E0046', Format('O tipo "%s" nao implementou o metodo obrigatorio "%s" da trait "%s"',
+          [Impl.TargetTypeName, TraitMethod.Name, Impl.TraitName]), Impl.Line, Impl.Col);
+    end;
+
+    // Validação das assinaturas e registro dos métodos
+    for IM := 0 to Impl.Methods.Count - 1 do
+    begin
+      ImplMethod := TASTFunction(Impl.Methods[IM]);
+      TraitMethod := nil;
+      for TM := 0 to TraitDecl.Methods.Count - 1 do
+      begin
+        if SameText(TASTFunction(TraitDecl.Methods[TM]).Name, ImplMethod.Name) then
+        begin
+          TraitMethod := TASTFunction(TraitDecl.Methods[TM]);
+          Break;
+        end;
+      end;
+
+      if Assigned(TraitMethod) then
+      begin
+        // Verifica parâmetros
+        if ImplMethod.Params.Count <> TraitMethod.Params.Count then
+          Error('E0053', Format('A assinatura do metodo "%s" em "%s" diverge da definicao da trait "%s" (quantidade de parametros incompativel: esperado %d, recebido %d)',
+            [ImplMethod.Name, Impl.TargetTypeName, Impl.TraitName, TraitMethod.Params.Count, ImplMethod.Params.Count]), ImplMethod.Line, ImplMethod.Col);
+
+        // Verifica tipo de retorno
+        if not SameText(ImplMethod.ReturnType, TraitMethod.ReturnType) then
+          Error('E0053', Format('A assinatura do metodo "%s" em "%s" diverge da definicao da trait "%s" (tipo de retorno incompativel: esperado "%s", recebido "%s")',
+            [ImplMethod.Name, Impl.TargetTypeName, Impl.TraitName, TraitMethod.ReturnType, ImplMethod.ReturnType]), ImplMethod.Line, ImplMethod.Col);
+
+        for P := 0 to TraitMethod.Params.Count - 1 do
+        begin
+          ExpectedParamType := TASTParam(TraitMethod.Params[P]).TypeName;
+          if SameText(ExpectedParamType, 'Self') then
+            ExpectedParamType := Impl.TargetTypeName;
+
+          if not SameText(ExpectedParamType, TASTParam(ImplMethod.Params[P]).TypeName) then
+            Error('E0053', Format('A assinatura do metodo "%s" em "%s" diverge da definicao da trait "%s" no parametro "%s" (esperado "%s", recebido "%s")',
+              [ImplMethod.Name, Impl.TargetTypeName, Impl.TraitName, TASTParam(ImplMethod.Params[P]).Name, ExpectedParamType, TASTParam(ImplMethod.Params[P]).TypeName]), ImplMethod.Line, ImplMethod.Col);
+        end;
+      end;
+
+      // Mangling canônico do método para despacho estático
+      MangledName := Impl.TargetTypeName + '_' + ImplMethod.Name;
+      ImplMethod.OriginalName := ImplMethod.Name;
+      ImplMethod.Name := MangledName;
+
+      // Registra a implementação da trait para lookup
+      New(Info);
+      Info^.TargetType := Impl.TargetTypeName;
+      Info^.TraitName := Impl.TraitName;
+      Info^.OriginalMethod := ImplMethod.OriginalName;
+      Info^.MangledMethod := MangledName;
+      FTraitImpls.Add(Info);
+
+      // Adiciona o método em AModule.Functions para checagem e emissão (sera registrado por RegisterFunctions)
+      AModule.Functions.Add(ImplMethod);
+    end;
+
+    // Desvincula os nós de Impl.Methods para não causar double-free ao destruir o módulo
+    while Impl.Methods.Count > 0 do
+      Impl.Methods.Extract(Impl.Methods[0]);
+  end;
+end;
+
+function TAetherTypeChecker.TypeImplementsTrait(const ATypeName, ATraitName: string): Boolean;
+var
+  I: Integer;
+  Info: PTraitImplInfo;
+begin
+  for I := 0 to FTraitImpls.Count - 1 do
+  begin
+    Info := PTraitImplInfo(FTraitImpls[I]);
+    if SameText(Info^.TargetType, ATypeName) and SameText(Info^.TraitName, ATraitName) then
+      Exit(True);
+  end;
+  Result := False;
+end;
+
+function TAetherTypeChecker.FindTraitMethod(const ATypeName, AMethodName: string): string;
+var
+  I: Integer;
+  Info: PTraitImplInfo;
+begin
+  for I := 0 to FTraitImpls.Count - 1 do
+  begin
+    Info := PTraitImplInfo(FTraitImpls[I]);
+    if SameText(Info^.TargetType, ATypeName) and SameText(Info^.OriginalMethod, AMethodName) then
+      Exit(Info^.MangledMethod);
+  end;
+  Result := '';
+end;
+
+function TAetherTypeChecker.MonomorphizeFunction(OriginalFunc: TASTFunction; const ConcreteType: string): TASTFunction;
+var
+  I: Integer;
+  Param: TASTParam;
+  PType: string;
+  VarDecl: TASTVarDecl;
+  VType: string;
+begin
+  Result := TASTFunction.Create(OriginalFunc.Line, OriginalFunc.Col, OriginalFunc.Name + '_' + ConcreteType, OriginalFunc.ReturnType);
+  if SameText(Result.ReturnType, OriginalFunc.GenericParam) then
+    Result.ReturnType := ConcreteType;
+
+  for I := 0 to OriginalFunc.Params.Count - 1 do
+  begin
+    Param := TASTParam(OriginalFunc.Params[I]);
+    PType := Param.TypeName;
+    if SameText(PType, OriginalFunc.GenericParam) then
+      PType := ConcreteType;
+    Result.Params.Add(TASTParam.Create(Param.Line, Param.Col, Param.Name, PType, Param.Ownership));
+  end;
+
+  for I := 0 to OriginalFunc.LocalVars.Count - 1 do
+  begin
+    VarDecl := TASTVarDecl(OriginalFunc.LocalVars[I]);
+    VType := VarDecl.TypeName;
+    if SameText(VType, OriginalFunc.GenericParam) then
+      VType := ConcreteType;
+    Result.LocalVars.Add(TASTVarDecl.Create(VarDecl.Line, VarDecl.Col, VarDecl.Name, VType, TASTExpr(CloneASTNode(VarDecl.InitialExpr)), VarDecl.IsMutable));
+  end;
+
+  for I := 0 to OriginalFunc.Body.Count - 1 do
+    Result.Body.Add(CloneASTNode(TASTStmt(OriginalFunc.Body[I])));
+end;
+
 procedure TAetherTypeChecker.CheckModule(AModule: TASTModule);
 var
   I: Integer;
+  Func: TASTFunction;
 begin
+  FModule := AModule;
   RegisterTypes(AModule);
+  RegisterTraits(AModule);
+  RegisterImpls(AModule);
   RegisterFunctions(AModule);
 
-  for I := 0 to AModule.Functions.Count - 1 do
-    CheckFunction(TASTFunction(AModule.Functions[I]));
+  I := 0;
+  while I < AModule.Functions.Count do
+  begin
+    Func := TASTFunction(AModule.Functions[I]);
+    if Func.GenericParam = '' then
+      CheckFunction(Func);
+    Inc(I);
+  end;
 
   if Assigned(AModule.ProgramBlock) then
     CheckProgramBlock(AModule.ProgramBlock);

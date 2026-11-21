@@ -475,9 +475,14 @@ end;
 procedure TAetherBorrowChecker.CheckModule(AModule: TASTModule);
 var
   I: Integer;
+  Func: TASTFunction;
 begin
   for I := 0 to AModule.Functions.Count - 1 do
-    CheckFunction(TASTFunction(AModule.Functions[I]));
+  begin
+    Func := TASTFunction(AModule.Functions[I]);
+    if Func.GenericParam = '' then
+      CheckFunction(Func);
+  end;
 
   if Assigned(AModule.ProgramBlock) then
     CheckProgramBlock(AModule.ProgramBlock);

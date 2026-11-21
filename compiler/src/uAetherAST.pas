@@ -234,6 +234,9 @@ type
   TASTFunction = class(TASTNode)
   public
     Name: string;
+    GenericParam: string;      // Parametro generico (ex: 'T')
+    TraitBound: string;        // Trait bound (ex: 'Printable')
+    OriginalName: string;      // Nome original do metodo (ex: 'ToString')
     Params: TASTNodeList;      // TASTParam
     ReturnType: string;
     Requires: TASTNodeList;    // TASTExpr
@@ -244,6 +247,25 @@ type
     ExternAbi: string;
     ExternLib: string;
     constructor Create(ALine, ACol: Integer; const AName, AReturnType: string);
+    destructor Destroy; override;
+    function Dump(Indent: Integer = 0): string; override;
+  end;
+
+  TASTTraitDecl = class(TASTNode)
+  public
+    Name: string;
+    Methods: TASTNodeList;      // TASTFunction (assinaturas)
+    constructor Create(ALine, ACol: Integer; const AName: string);
+    destructor Destroy; override;
+    function Dump(Indent: Integer = 0): string; override;
+  end;
+
+  TASTImplDecl = class(TASTNode)
+  public
+    TraitName: string;
+    TargetTypeName: string;
+    Methods: TASTNodeList;      // TASTFunction (implementacoes concretas)
+    constructor Create(ALine, ACol: Integer; const ATraitName, ATargetTypeName: string);
     destructor Destroy; override;
     function Dump(Indent: Integer = 0): string; override;
   end;
@@ -264,6 +286,8 @@ type
     Imports: TStringList;
     PascalImports: TStringList;
     Types: TASTNodeList;       // TASTRecordDecl, TASTEnumDecl
+    Traits: TASTNodeList;      // TASTTraitDecl
+    Impls: TASTNodeList;       // TASTImplDecl
     Functions: TASTNodeList;   // TASTFunction
     ProgramBlock: TASTProgramBlock;
     constructor Create(ALine, ACol: Integer; const AName: string);
@@ -273,6 +297,7 @@ type
 
 function OwnershipToString(O: TOwnershipKind): string;
 function MakeIndent(Level: Integer): string;
+function CloneASTNode(Node: TASTNode): TASTNode;
 
 implementation
 
@@ -833,6 +858,9 @@ begin
   inherited Create(ALine, ACol);
   Name := AName;
   ReturnType := AReturnType;
+  GenericParam := '';
+  TraitBound := '';
+  OriginalName := '';
   Params := TASTNodeList.Create;
   Requires := TASTNodeList.Create;
   Ensures := TASTNodeList.Create;
@@ -931,6 +959,63 @@ begin
   end;
 end;
 
+{ TASTTraitDecl }
+
+constructor TASTTraitDecl.Create(ALine, ACol: Integer; const AName: string);
+begin
+  inherited Create(ALine, ACol);
+  Name := AName;
+  Methods := TASTNodeList.Create;
+end;
+
+destructor TASTTraitDecl.Destroy;
+begin
+  Methods.Free;
+  inherited Destroy;
+end;
+
+function TASTTraitDecl.Dump(Indent: Integer): string;
+var
+  I: Integer;
+begin
+  Result := MakeIndent(Indent) + Format('Trait: %s', [Name]);
+  if Methods.Count > 0 then
+  begin
+    Result := Result + LineEnding + MakeIndent(Indent + 1) + 'Metodos:';
+    for I := 0 to Methods.Count - 1 do
+      Result := Result + LineEnding + Methods[I].Dump(Indent + 2);
+  end;
+end;
+
+{ TASTImplDecl }
+
+constructor TASTImplDecl.Create(ALine, ACol: Integer; const ATraitName, ATargetTypeName: string);
+begin
+  inherited Create(ALine, ACol);
+  TraitName := ATraitName;
+  TargetTypeName := ATargetTypeName;
+  Methods := TASTNodeList.Create;
+end;
+
+destructor TASTImplDecl.Destroy;
+begin
+  Methods.Free;
+  inherited Destroy;
+end;
+
+function TASTImplDecl.Dump(Indent: Integer): string;
+var
+  I: Integer;
+begin
+  Result := MakeIndent(Indent) + Format('Impl: %s para %s', [TraitName, TargetTypeName]);
+  if Methods.Count > 0 then
+  begin
+    Result := Result + LineEnding + MakeIndent(Indent + 1) + 'Metodos Implementados:';
+    for I := 0 to Methods.Count - 1 do
+      Result := Result + LineEnding + Methods[I].Dump(Indent + 2);
+  end;
+end;
+
 { TASTModule }
 
 constructor TASTModule.Create(ALine, ACol: Integer; const AName: string);
@@ -940,6 +1025,8 @@ begin
   Imports := TStringList.Create;
   PascalImports := TStringList.Create;
   Types := TASTNodeList.Create;
+  Traits := TASTNodeList.Create;
+  Impls := TASTNodeList.Create;
   Functions := TASTNodeList.Create;
   ProgramBlock := nil;
 end;
@@ -949,6 +1036,8 @@ begin
   Imports.Free;
   PascalImports.Free;
   Types.Free;
+  Traits.Free;
+  Impls.Free;
   Functions.Free;
   ProgramBlock.Free;
   inherited Destroy;
@@ -971,6 +1060,20 @@ begin
       Result := Result + LineEnding + Types[I].Dump(Indent + 2);
   end;
 
+  if Traits.Count > 0 then
+  begin
+    Result := Result + LineEnding + MakeIndent(Indent + 1) + 'Traits Declaradas:';
+    for I := 0 to Traits.Count - 1 do
+      Result := Result + LineEnding + Traits[I].Dump(Indent + 2);
+  end;
+
+  if Impls.Count > 0 then
+  begin
+    Result := Result + LineEnding + MakeIndent(Indent + 1) + 'Implementacoes (Impls):';
+    for I := 0 to Impls.Count - 1 do
+      Result := Result + LineEnding + Impls[I].Dump(Indent + 2);
+  end;
+
   if Functions.Count > 0 then
   begin
     Result := Result + LineEnding + MakeIndent(Indent + 1) + 'Funcoes:';
@@ -982,6 +1085,91 @@ begin
   begin
     Result := Result + LineEnding + ProgramBlock.Dump(Indent + 1);
   end;
+end;
+
+function CloneASTNode(Node: TASTNode): TASTNode;
+var
+  I: Integer;
+  InitNode: TASTExpr;
+begin
+  if not Assigned(Node) then Exit(nil);
+
+  // Literais e Identificadores
+  if Node is TASTLiteralExpr then
+    Exit(TASTLiteralExpr.Create(Node.Line, Node.Col, TASTLiteralExpr(Node).Kind, TASTLiteralExpr(Node).Value))
+  else if Node is TASTIdentifierExpr then
+    Exit(TASTIdentifierExpr.Create(Node.Line, Node.Col, TASTIdentifierExpr(Node).Name))
+  else if Node is TASTMemberAccessExpr then
+    Exit(TASTMemberAccessExpr.Create(Node.Line, Node.Col, TASTExpr(CloneASTNode(TASTMemberAccessExpr(Node).Target)), TASTMemberAccessExpr(Node).Member))
+  else if Node is TASTBinaryExpr then
+    Exit(TASTBinaryExpr.Create(Node.Line, Node.Col, TASTExpr(CloneASTNode(TASTBinaryExpr(Node).Left)), TASTBinaryExpr(Node).Op, TASTExpr(CloneASTNode(TASTBinaryExpr(Node).Right))))
+  else if Node is TASTUnaryExpr then
+    Exit(TASTUnaryExpr.Create(Node.Line, Node.Col, TASTUnaryExpr(Node).Op, TASTExpr(CloneASTNode(TASTUnaryExpr(Node).Expr))))
+  else if Node is TASTCallArg then
+    Exit(TASTCallArg.Create(Node.Line, Node.Col, TASTCallArg(Node).Ownership, TASTExpr(CloneASTNode(TASTCallArg(Node).Expr))))
+  else if Node is TASTCallExpr then
+  begin
+    Result := TASTCallExpr.Create(Node.Line, Node.Col, TASTCallExpr(Node).Callee);
+    for I := 0 to TASTCallExpr(Node).Args.Count - 1 do
+      TASTCallExpr(Result).Args.Add(CloneASTNode(TASTCallExpr(Node).Args[I]));
+    Exit;
+  end
+
+  // Instruções
+  else if Node is TASTAssignStmt then
+    Exit(TASTAssignStmt.Create(Node.Line, Node.Col, TASTExpr(CloneASTNode(TASTAssignStmt(Node).Target)), TASTExpr(CloneASTNode(TASTAssignStmt(Node).Expr))))
+  else if Node is TASTCallStmt then
+    Exit(TASTCallStmt.Create(Node.Line, Node.Col, TASTCallExpr(CloneASTNode(TASTCallStmt(Node).CallExpr))))
+  else if Node is TASTIfStmt then
+  begin
+    Result := TASTIfStmt.Create(Node.Line, Node.Col, TASTExpr(CloneASTNode(TASTIfStmt(Node).Condition)));
+    for I := 0 to TASTIfStmt(Node).ThenBranch.Count - 1 do
+      TASTIfStmt(Result).ThenBranch.Add(CloneASTNode(TASTIfStmt(Node).ThenBranch[I]));
+    for I := 0 to TASTIfStmt(Node).ElseBranch.Count - 1 do
+      TASTIfStmt(Result).ElseBranch.Add(CloneASTNode(TASTIfStmt(Node).ElseBranch[I]));
+    Exit;
+  end
+  else if Node is TASTWhileStmt then
+  begin
+    Result := TASTWhileStmt.Create(Node.Line, Node.Col, TASTExpr(CloneASTNode(TASTWhileStmt(Node).Condition)));
+    for I := 0 to TASTWhileStmt(Node).Body.Count - 1 do
+      TASTWhileStmt(Result).Body.Add(CloneASTNode(TASTWhileStmt(Node).Body[I]));
+    Exit;
+  end
+  else if Node is TASTPattern then
+    Exit(TASTPattern.Create(Node.Line, Node.Col, TASTPattern(Node).Value, TASTPattern(Node).SubPattern, TASTPattern(Node).IsLet))
+  else if Node is TASTMatchCase then
+  begin
+    Result := TASTMatchCase.Create(Node.Line, Node.Col, TASTPattern(CloneASTNode(TASTMatchCase(Node).Pattern)));
+    for I := 0 to TASTMatchCase(Node).Body.Count - 1 do
+      TASTMatchCase(Result).Body.Add(CloneASTNode(TASTMatchCase(Node).Body[I]));
+    Exit;
+  end
+  else if Node is TASTMatchStmt then
+  begin
+    Result := TASTMatchStmt.Create(Node.Line, Node.Col, TASTExpr(CloneASTNode(TASTMatchStmt(Node).Expr)));
+    for I := 0 to TASTMatchStmt(Node).Cases.Count - 1 do
+      TASTMatchStmt(Result).Cases.Add(CloneASTNode(TASTMatchStmt(Node).Cases[I]));
+    Exit;
+  end
+  else if Node is TASTReturnStmt then
+  begin
+    if Assigned(TASTReturnStmt(Node).Expr) then
+      Exit(TASTReturnStmt.Create(Node.Line, Node.Col, TASTExpr(CloneASTNode(TASTReturnStmt(Node).Expr))))
+    else
+      Exit(TASTReturnStmt.Create(Node.Line, Node.Col, nil));
+  end
+  else if Node is TASTParam then
+    Exit(TASTParam.Create(Node.Line, Node.Col, TASTParam(Node).Name, TASTParam(Node).TypeName, TASTParam(Node).Ownership))
+  else if Node is TASTVarDecl then
+  begin
+    InitNode := nil;
+    if Assigned(TASTVarDecl(Node).InitialExpr) then
+      InitNode := TASTExpr(CloneASTNode(TASTVarDecl(Node).InitialExpr));
+    Exit(TASTVarDecl.Create(Node.Line, Node.Col, TASTVarDecl(Node).Name, TASTVarDecl(Node).TypeName, InitNode, TASTVarDecl(Node).IsMutable));
+  end;
+
+  Result := nil;
 end;
 
 end.

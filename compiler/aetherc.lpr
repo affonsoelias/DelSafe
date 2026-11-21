@@ -144,7 +144,7 @@ begin
   if FileExists(Candidate) then Exit(Candidate);
 end;
 
-procedure CollectModuleImports(TargetMod: TASTModule; const BaseDir: string; Visited: TStringList; AllTypes, AllFuncs: TFPList; PascalImports: TStringList);
+procedure CollectModuleImports(TargetMod: TASTModule; const BaseDir: string; Visited: TStringList; AllTypes, AllTraits, AllImpls, AllFuncs: TFPList; PascalImports: TStringList);
 var
   I, J: Integer;
   ModName, ModPath, ModSource: string;
@@ -169,7 +169,7 @@ begin
     try
       SubMod := SubParser.ParseModule;
       try
-        CollectModuleImports(SubMod, ExtractFilePath(ModPath), Visited, AllTypes, AllFuncs, PascalImports);
+        CollectModuleImports(SubMod, ExtractFilePath(ModPath), Visited, AllTypes, AllTraits, AllImpls, AllFuncs, PascalImports);
 
         // Validação Estrita 1:1 de Módulos Importados (Fase 13)
         ExpectedName := ModName;
@@ -183,6 +183,12 @@ begin
 
         while SubMod.Types.Count > 0 do
           AllTypes.Add(SubMod.Types.Extract(SubMod.Types[0]));
+
+        while SubMod.Traits.Count > 0 do
+          AllTraits.Add(SubMod.Traits.Extract(SubMod.Traits[0]));
+
+        while SubMod.Impls.Count > 0 do
+          AllImpls.Add(SubMod.Impls.Extract(SubMod.Impls[0]));
 
         while SubMod.Functions.Count > 0 do
           AllFuncs.Add(SubMod.Functions.Extract(SubMod.Functions[0]));
@@ -198,19 +204,27 @@ end;
 
 procedure ResolveModuleImports(TargetMod: TASTModule; const BaseDir: string; Visited: TStringList);
 var
-  AllTypes, AllFuncs: TFPList;
+  AllTypes, AllTraits, AllImpls, AllFuncs: TFPList;
   I: Integer;
 begin
   AllTypes := TFPList.Create;
+  AllTraits := TFPList.Create;
+  AllImpls := TFPList.Create;
   AllFuncs := TFPList.Create;
   try
-    CollectModuleImports(TargetMod, BaseDir, Visited, AllTypes, AllFuncs, TargetMod.PascalImports);
+    CollectModuleImports(TargetMod, BaseDir, Visited, AllTypes, AllTraits, AllImpls, AllFuncs, TargetMod.PascalImports);
     for I := AllTypes.Count - 1 downto 0 do
       TargetMod.Types.Insert(0, TASTNode(AllTypes[I]));
+    for I := AllTraits.Count - 1 downto 0 do
+      TargetMod.Traits.Insert(0, TASTNode(AllTraits[I]));
+    for I := AllImpls.Count - 1 downto 0 do
+      TargetMod.Impls.Insert(0, TASTNode(AllImpls[I]));
     for I := AllFuncs.Count - 1 downto 0 do
       TargetMod.Functions.Insert(0, TASTFunction(AllFuncs[I]));
   finally
     AllTypes.Free;
+    AllTraits.Free;
+    AllImpls.Free;
     AllFuncs.Free;
   end;
 end;
