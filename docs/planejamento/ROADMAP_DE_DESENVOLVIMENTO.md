@@ -146,13 +146,17 @@ Este documento traça o status oficial de desenvolvimento do compilador e as pr�
 - [ ] **Self-Hosting Completo (Bootstrap Total)**:
   - Capacidade do compilador `compiler/aeth/main.aeth` de compilar a si mesmo através do backend C99/GCC gerando um executável nativo autônomo sem dependência do compilador bootstrap em Pascal.
 
-### ⏳ Fase 17: Expansão da Biblioteca Padrão (`std/`)
+### ⏳ Fase 17: Expansão da Biblioteca Padrão (`std/`) e Concorrência Ultraleve
 - [ ] **Networking (`std/net.aeth`)**:
   - Sockets TCP/UDP e cliente HTTP básico com tratamento idiomático de erros usando `Result<T, E>`.
 - [ ] **Serialização e Parser JSON (`std/json.aeth`)**:
   - Parser e gerador JSON rápido e tipado nativamente em Aether com segurança de memória.
-- [ ] **Concorrência e Primitivas de Sincronização (`std/sync.aeth` / `std/threads.aeth`)**:
-  - Primitivas de concorrência com segurança de posse (Threads, Mutexes e Canais `mpsc`), prevenindo *data races* em tempo de compilação.
+- [ ] **Concorrência Ultraleve e Primitivas de Sincronização (`std/sync.aeth` / `std/threads.aeth`)**:
+  - **Arquitetura de Alto Desempenho sem Garbage Collector**:
+    - **Thread Pool com Work-Stealing (estilo Rayon do Rust)**: Pool de threads fixo dimensionado pelo número de núcleos da CPU (`N`), permitindo o disparo de milhões de micro-tarefas (`Task.Run`, `Parallel.For`) armazenadas em fila de memória RAM ultraleve, sem o custo de criar threads de SO para cada operação.
+    - **Sincronização Zero-Cost**: `Mutex<T>` tipado e canais assíncronos (`Channel<T>` / MPSC) com mapeamento direto para primitivas rápidas do sistema operacional (`SRWLock` no Windows, `futex` no Linux) sem overhead de runtime.
+    - **Segurança Estática contra Data Races**: Aplicação rigorosa das regras de posse (`take`) e empréstimo (`Aliasing XOR Mutability`) impedindo acesso concorrente não sincronizado em tempo de compilação.
+    - **Concorrência Assíncrona para I/O**: Base para tarefas cooperativas e event loop (IOCP no Windows / epoll no Linux) para suporte a dezenas de milhares de conexões de rede simultâneas com consumo mínimo de memória.
 
 ### ⏳ Fase 18: Polimento de Ferramentas de Desenvolvimento (LSP & Extensão VS Code)
 - [ ] **Aprimoramento do LSP (`compiler/src/uAetherLSP.pas`)**:
