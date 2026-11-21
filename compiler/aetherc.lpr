@@ -38,6 +38,7 @@ begin
   WriteLn('  test [filtro]     Executa testes unitarios da pasta tests/');
   WriteLn('  build             Compila o projeto atual baseado no manifesto aether.json');
   WriteLn('  run               Compila e executa imediatamente o binario do projeto');
+  WriteLn('  lsp               Inicia o servidor de linguagem (Language Server Protocol)');
   WriteLn('');
   WriteLn('Opcoes Principais:');
   WriteLn('  --doctor          Verifica e diagnostica o ambiente (FPC e MSYS2/GCC)');
@@ -807,7 +808,7 @@ begin
       PrintDoctorReport;
       Halt(0);
     end
-    else if Arg = '--lsp' then
+    else if (Arg = '--lsp') or (Arg = 'lsp') then
     begin
       RunAetherLSP;
       Halt(0);

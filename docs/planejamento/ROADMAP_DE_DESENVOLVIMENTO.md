@@ -162,13 +162,20 @@ Este documento traça o status oficial de desenvolvimento do compilador e as pr�
 - [x] **Validação Prática Dual-Backend**:
   - Suíte de demonstração em `examples/14_stdlib_and_concurrency.aeth` compilada e executada com 100% de paridade nos backends **Free Pascal** e **GCC C99**, integrando typecastings primitivos e operadores `mod`/`div`.
 
-### ⏳ Fase 18: Polimento de Ferramentas de Desenvolvimento (LSP & Extensão VS Code)
-- [ ] **Aprimoramento do LSP (`compiler/src/uAetherLSP.pas`)**:
-  - Suporte a autocompletion de métodos estáticos e dinâmicos via UFCS e traits implementadas.
-  - Hover de documentação e tipos inferidos em tempo real.
-- [ ] **Extensão Oficial para VS Code (`ide/vscode/`)**:
-  - Destaque sintático completo para as novas palavras-chave (`trait`, `impl`, `own`, `borrow`, `mut`).
-  - Integração do explorador de testes do VS Code com o comando `aetherc test`.
+### 🎯 Fase 18: Polimento de Ferramentas de Desenvolvimento (LSP & Extensão VS Code)
+- [x] **Aprimoramento do LSP (`compiler/src/uAetherLSP.pas`)**:
+  - Autocompletion completo de palavras-chave (`trait`, `impl`, `for`, `own`, `borrow`, `mut`), tipos e mônades.
+  - Exibição de assinaturas de funções com lista completa de parâmetros e modificadores de posse (`FormatFunctionSignature`).
+  - Suporte a métodos de traits e extensões UFCS no autocompletion e go-to-definition.
+  - Hover rico com formatação Markdown para funções, contratos (`require`/`ensure`), records com campos, enums com variantes, traits com métodos e variáveis locais/parâmetros.
+  - Navegação Go-To-Definition para funções, records, enums, traits e métodos de impls.
+  - Suporte ao subcomando direto `aetherc lsp` além de `aetherc --lsp`.
+- [x] **Extensão Oficial para VS Code (`ide/vscode/`)**:
+  - Destaque sintático completo (`syntaxes/aether.tmLanguage.json`) para keywords de posse, tipos, mônades, operadores e literais.
+  - Configuração de linguagem (`language-configuration.json`) com pares de fechamento e regras de indentação inteligente (`begin..end`, `case`, `contract`, etc.).
+  - Snippets de código (`snippets/aether.json`) para criação rápida de módulos, funções com contratos, records, enums, traits, impls e testes.
+  - Código da extensão (`src/extension.ts` e `out/extension.js`) com integração ao Language Client via stdio e comandos de compilação (`Pascal` / `C99`), execução de testes e reinicialização do LSP.
+  - Documentação de uso e instalação local (`ide/vscode/README.md`).
 
 ### ⏳ Fase 19: Suporte a Dependências Git no `aether add`
 - [ ] **Download e Cache Automático via Git**:

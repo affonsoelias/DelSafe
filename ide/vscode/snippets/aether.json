@@ -1,0 +1,98 @@
+{
+  "Aether Module": {
+    "prefix": "module",
+    "body": [
+      "module ${1:ModuleName};",
+      "",
+      "import IO;",
+      "",
+      "${0}",
+      "",
+      "program ${1:ModuleName};",
+      "begin",
+      "    PrintLn(\"Ola do Aether!\");",
+      "end."
+    ],
+    "description": "Estrutura básica de um módulo executável Aether"
+  },
+  "Aether Function with Contract": {
+    "prefix": "fn",
+    "body": [
+      "function ${1:NomeFuncao}(${2:borrow x: Int32}): ${3:Result<Int32, String>}",
+      "contract",
+      "    require",
+      "        ${4:true};",
+      "    ensure",
+      "        ${5:result.is_ok};",
+      "begin",
+      "    ${0:return Ok(x);}",
+      "end;"
+    ],
+    "description": "Declaração de função Aether com contratos formais (require / ensure)"
+  },
+  "Aether Record": {
+    "prefix": "record",
+    "body": [
+      "${1:NomeRecord} = record",
+      "    ${2:campo1}: ${3:String};",
+      "    ${4:campo2}: ${5:Int32};",
+      "end;"
+    ],
+    "description": "Declaração de tipo Record no Aether"
+  },
+  "Aether Enum": {
+    "prefix": "enum",
+    "body": [
+      "${1:NomeEnum} = enum",
+      "    ${2:Variante1},",
+      "    ${3:Variante2}",
+      "end;"
+    ],
+    "description": "Declaração de tipo Enum no Aether"
+  },
+  "Aether Trait": {
+    "prefix": "trait",
+    "body": [
+      "trait ${1:NomeTrait}",
+      "    function ${2:Metodo}(${3:borrow self: ${4:Tipo}}): ${5:Void};",
+      "end;"
+    ],
+    "description": "Declaração de Trait / Interface no Aether"
+  },
+  "Aether Impl": {
+    "prefix": "impl",
+    "body": [
+      "impl ${1:NomeTrait} for ${2:NomeTipo}",
+      "    function ${3:Metodo}(${4:borrow self: ${2:NomeTipo}}): ${5:Void}",
+      "    begin",
+      "        ${0}",
+      "    end;",
+      "end;"
+    ],
+    "description": "Implementação de Trait para um Tipo Record (UFCS)"
+  },
+  "Aether Match Result": {
+    "prefix": "match",
+    "body": [
+      "match ${1:resultado} do",
+      "    case Ok(let ${2:valor}):",
+      "        ${3:PrintLn(\"Sucesso: %s\", valor);}",
+      "    case Err(let ${4:msg}):",
+      "        ${5:PrintLn(\"Erro: %s\", msg);}",
+      "end;"
+    ],
+    "description": "Casamento de padrões exaustivo em Result<T, E>"
+  },
+  "Aether Unit Test": {
+    "prefix": "test",
+    "body": [
+      "function Test_${1:NomeCaso}(): Bool",
+      "begin",
+      "    PrintLn(\"[TEST] Executando teste de ${1:NomeCaso}...\");",
+      "    ${0}",
+      "    return true;",
+      "end;"
+    ],
+    "description": "Função de teste unitário para o runner aetherc test"
+  }
+}

@@ -319,6 +319,22 @@ begin
   SendLSPNotification('textDocument/publishDiagnostics', ParamsObj);
 end;
 
+function FormatFunctionSignature(Func: TASTFunction): string;
+var
+  I: Integer;
+  ParamsStr: string;
+  P: TASTParam;
+begin
+  ParamsStr := '';
+  for I := 0 to Func.Params.Count - 1 do
+  begin
+    P := TASTParam(Func.Params[I]);
+    if I > 0 then ParamsStr := ParamsStr + '; ';
+    ParamsStr := ParamsStr + OwnershipToString(P.Ownership) + P.Name + ': ' + P.TypeName;
+  end;
+  Result := Format('function %s(%s): %s', [Func.Name, ParamsStr, Func.ReturnType]);
+end;
+
 function HandleCompletion(Params: TJSONObject): TJSONArray;
 var
   Items: TJSONArray;
@@ -328,18 +344,20 @@ var
   begin
     Item := TJSONObject.Create;
     Item.Add('label', LabelStr);
-    Item.Add('kind', Kind); // 14 = Keyword, 7 = Class/Type, 3 = Function
+    Item.Add('kind', Kind); // 14 = Keyword, 7 = Class/Type, 3 = Function, 8 = Interface/Trait
     if DetailStr <> '' then
       Item.Add('detail', DetailStr);
     Items.Add(Item);
   end;
 var
   URI: string;
-  Idx, I: Integer;
+  Idx, I, J: Integer;
   ModNode: TASTModule;
   Func: TASTFunction;
   Rec: TASTRecordDecl;
   Enm: TASTEnumDecl;
+  TraitDecl: TASTTraitDecl;
+  ImplDecl: TASTImplDecl;
 begin
   Items := TJSONArray.Create;
 
@@ -355,6 +373,9 @@ begin
   AddItem('type', 14, 'Seção de Tipos');
   AddItem('record', 14, 'Tipo Estruturado Record');
   AddItem('enum', 14, 'Tipo Algébrico Enum');
+  AddItem('trait', 14, 'Declaração de Interface/Trait');
+  AddItem('impl', 14, 'Implementação de Trait para Tipo');
+  AddItem('for', 14, 'Cláusula de Associação (impl Trait for Tipo)');
   AddItem('var', 14, 'Variável Mutável');
   AddItem('let', 14, 'Variável Imutável');
   AddItem('begin', 14, 'Início de Bloco');
@@ -371,6 +392,7 @@ begin
   AddItem('borrow', 14, 'Empréstimo Imutável (Somente Leitura)');
   AddItem('take', 14, 'Transferência de Posse (Move)');
   AddItem('mut borrow', 14, 'Empréstimo Mutável Exclusivo');
+  AddItem('own', 14, 'Modificador de Posse Exclusiva');
 
   // Tipos Primitivos
   AddItem('Int8', 7, 'Inteiro 8-bit com sinal');
@@ -404,6 +426,8 @@ begin
     if (Idx >= 0) and Assigned(FDocuments[Idx].AST) then
     begin
       ModNode := FDocuments[Idx].AST;
+
+      // Records e Enums
       for I := 0 to ModNode.Types.Count - 1 do
       begin
         if ModNode.Types[I] is TASTRecordDecl then
@@ -418,10 +442,29 @@ begin
         end;
       end;
 
+      // Traits declaradas
+      for I := 0 to ModNode.Traits.Count - 1 do
+      begin
+        TraitDecl := TASTTraitDecl(ModNode.Traits[I]);
+        AddItem(TraitDecl.Name, 8, 'Trait Declarada no Módulo');
+      end;
+
+      // Funcoes do modulo com assinatura completa
       for I := 0 to ModNode.Functions.Count - 1 do
       begin
         Func := TASTFunction(ModNode.Functions[I]);
-        AddItem(Func.Name, 3, Format('function %s(): %s', [Func.Name, Func.ReturnType]));
+        AddItem(Func.Name, 3, FormatFunctionSignature(Func));
+      end;
+
+      // Metodos implementados em Impls (UFCS / Trait Methods)
+      for I := 0 to ModNode.Impls.Count - 1 do
+      begin
+        ImplDecl := TASTImplDecl(ModNode.Impls[I]);
+        for J := 0 to ImplDecl.Methods.Count - 1 do
+        begin
+          Func := TASTFunction(ImplDecl.Methods[J]);
+          AddItem(Func.Name, 3, Format('%s (impl %s for %s)', [FormatFunctionSignature(Func), ImplDecl.TraitName, ImplDecl.TargetTypeName]));
+        end;
       end;
     end;
   end;
@@ -461,12 +504,18 @@ function HandleHover(Params: TJSONObject): TJSONObject;
 var
   URI: string;
   PosObj: TJSONObject;
-  Line, Col, Idx, I: Integer;
+  Line, Col, Idx, I, J: Integer;
   Word: string;
   ModNode: TASTModule;
   Func: TASTFunction;
+  Rec: TASTRecordDecl;
+  Enm: TASTEnumDecl;
+  TraitDecl: TASTTraitDecl;
+  ImplDecl: TASTImplDecl;
+  ParamNode: TASTParam;
+  VarNode: TASTVarDecl;
   ContentsObj: TJSONObject;
-  InfoText: string;
+  InfoText, SubText: string;
 begin
   Result := nil;
   if not Assigned(Params) then Exit;
@@ -484,7 +533,7 @@ begin
 
   InfoText := '';
 
-  // 1. Palavras de Memoria
+  // 1. Palavras-chave de Posse e Concorrencia
   if LowerCase(Word) = 'borrow' then
     InfoText := '**borrow (Empréstimo Imutável)**'#10#10 +
                 'Garante acesso somente-leitura ao dado sem transferir posse. Múltiplos leitores permitidos simultaneamente.'
@@ -494,6 +543,15 @@ begin
   else if LowerCase(Word) = 'mut' then
     InfoText := '**mut (Mutabilidade Exclusiva)**'#10#10 +
                 'Quando combinado com `mut borrow`, garante um único escritor ativo por vez, prevenindo corridas de dados (*data races*).'
+  else if LowerCase(Word) = 'own' then
+    InfoText := '**own (Posse de Memória / Ownership)**'#10#10 +
+                'Modificador que explicita posse sobre um recurso ou ponteiro em memória.'
+  else if LowerCase(Word) = 'trait' then
+    InfoText := '**trait (Interface / Contrato de Tipos)**'#10#10 +
+                'Define um conjunto de assinaturas de métodos e regras contratuais que tipos concretos podem implementar via `impl Trait for Tipo`.'
+  else if LowerCase(Word) = 'impl' then
+    InfoText := '**impl (Implementação de Trait)**'#10#10 +
+                'Implementa os métodos e comportamentos exigidos por uma `trait` para um tipo record específico.'
   else if LowerCase(Word) = 'contract' then
     InfoText := '**contract (Contrato Formal)**'#10#10 +
                 'Especifica pré-condições (`require`) e pós-condições (`ensure`) validadas pelo compilador Aether.'
@@ -504,21 +562,136 @@ begin
     InfoText := '**Option<T> (Mônade Opcional)**'#10#10 +
                 'Elimina ponteiros nulos (`nil`/`null`). Contém `Some(v)` quando presente ou `None` quando ausente.';
 
-  // 2. Busca nas funcoes do modulo
+  // 2. Busca na AST do documento atual
   if (InfoText = '') and Assigned(FDocuments[Idx].AST) then
   begin
     ModNode := FDocuments[Idx].AST;
+
+    // Funcoes do modulo
     for I := 0 to ModNode.Functions.Count - 1 do
     begin
       Func := TASTFunction(ModNode.Functions[I]);
       if SameText(Func.Name, Word) then
       begin
-        InfoText := Format('```aether'#10'function %s(): %s'#10'```', [Func.Name, Func.ReturnType]);
+        InfoText := Format('```aether'#10'%s'#10'```', [FormatFunctionSignature(Func)]);
         if Func.Requires.Count > 0 then
-          InfoText := InfoText + #10#10'**Contrato (require):** Proteção de pré-condição ativa.';
+          InfoText := InfoText + #10#10'**Contrato (require):** Pré-condições ativas de validação.';
         if Func.Ensures.Count > 0 then
-          InfoText := InfoText + #10#10'**Contrato (ensure):** Validação de pós-condição ativa.';
+          InfoText := InfoText + #10#10'**Contrato (ensure):** Pós-condições ativas de validação.';
         Break;
+      end;
+
+      // Parâmetros da função
+      for J := 0 to Func.Params.Count - 1 do
+      begin
+        ParamNode := TASTParam(Func.Params[J]);
+        if SameText(ParamNode.Name, Word) then
+        begin
+          InfoText := Format('```aether'#10'param %s%s: %s'#10'```'#10#10'*Parâmetro da função `%s`*',
+            [OwnershipToString(ParamNode.Ownership), ParamNode.Name, ParamNode.TypeName, Func.Name]);
+          Break;
+        end;
+      end;
+      if InfoText <> '' then Break;
+
+      // Variáveis locais da função
+      for J := 0 to Func.LocalVars.Count - 1 do
+      begin
+        VarNode := TASTVarDecl(Func.LocalVars[J]);
+        if SameText(VarNode.Name, Word) then
+        begin
+          InfoText := Format('```aether'#10'var %s: %s'#10'```'#10#10'*Variável local da função `%s`*',
+            [VarNode.Name, VarNode.TypeName, Func.Name]);
+          Break;
+        end;
+      end;
+      if InfoText <> '' then Break;
+    end;
+
+    // Traits do modulo
+    if InfoText = '' then
+    begin
+      for I := 0 to ModNode.Traits.Count - 1 do
+      begin
+        TraitDecl := TASTTraitDecl(ModNode.Traits[I]);
+        if SameText(TraitDecl.Name, Word) then
+        begin
+          SubText := '';
+          for J := 0 to TraitDecl.Methods.Count - 1 do
+            SubText := SubText + '    ' + FormatFunctionSignature(TASTFunction(TraitDecl.Methods[J])) + ';'#10;
+          InfoText := Format('```aether'#10'trait %s'#10'%send'#10'```', [TraitDecl.Name, SubText]);
+          Break;
+        end;
+      end;
+    end;
+
+    // Metodos em Impls
+    if InfoText = '' then
+    begin
+      for I := 0 to ModNode.Impls.Count - 1 do
+      begin
+        ImplDecl := TASTImplDecl(ModNode.Impls[I]);
+        for J := 0 to ImplDecl.Methods.Count - 1 do
+        begin
+          Func := TASTFunction(ImplDecl.Methods[J]);
+          if SameText(Func.Name, Word) then
+          begin
+            InfoText := Format('```aether'#10'%s'#10'```'#10#10'*Implementação da trait `%s` para o tipo `%s`*',
+              [FormatFunctionSignature(Func), ImplDecl.TraitName, ImplDecl.TargetTypeName]);
+            Break;
+          end;
+        end;
+        if InfoText <> '' then Break;
+      end;
+    end;
+
+    // Records e Enums
+    if InfoText = '' then
+    begin
+      for I := 0 to ModNode.Types.Count - 1 do
+      begin
+        if ModNode.Types[I] is TASTRecordDecl then
+        begin
+          Rec := TASTRecordDecl(ModNode.Types[I]);
+          if SameText(Rec.Name, Word) then
+          begin
+            SubText := '';
+            for J := 0 to Rec.Fields.Count - 1 do
+              SubText := SubText + Format('    %s: %s;'#10, [TASTRecordField(Rec.Fields[J]).Name, TASTRecordField(Rec.Fields[J]).TypeName]);
+            InfoText := Format('```aether'#10'type %s = record'#10'%send;'#10'```', [Rec.Name, SubText]);
+            Break;
+          end;
+        end
+        else if ModNode.Types[I] is TASTEnumDecl then
+        begin
+          Enm := TASTEnumDecl(ModNode.Types[I]);
+          if SameText(Enm.Name, Word) then
+          begin
+            SubText := '';
+            for J := 0 to Enm.Variants.Count - 1 do
+            begin
+              if J > 0 then SubText := SubText + ','#10;
+              SubText := SubText + '    ' + TASTEnumVariant(Enm.Variants[J]).Name;
+            end;
+            InfoText := Format('```aether'#10'type %s = enum'#10'%s'#10'end;'#10'```', [Enm.Name, SubText]);
+            Break;
+          end;
+        end;
+      end;
+    end;
+
+    // Variaveis do bloco principal do programa
+    if (InfoText = '') and Assigned(ModNode.ProgramBlock) then
+    begin
+      for I := 0 to ModNode.ProgramBlock.LocalVars.Count - 1 do
+      begin
+        VarNode := TASTVarDecl(ModNode.ProgramBlock.LocalVars[I]);
+        if SameText(VarNode.Name, Word) then
+        begin
+          InfoText := Format('```aether'#10'var %s: %s'#10'```'#10#10'*Variável do programa principal*',
+            [VarNode.Name, VarNode.TypeName]);
+          Break;
+        end;
       end;
     end;
   end;
@@ -535,12 +708,14 @@ function HandleDefinition(Params: TJSONObject): TJSONObject;
 var
   URI: string;
   PosObj: TJSONObject;
-  Line, Col, Idx, I: Integer;
+  Line, Col, Idx, I, J: Integer;
   Word: string;
   ModNode: TASTModule;
   Func: TASTFunction;
   Rec: TASTRecordDecl;
   Enm: TASTEnumDecl;
+  TraitDecl: TASTTraitDecl;
+  ImplDecl: TASTImplDecl;
   DefLine, DefCol: Integer;
   RangeObj, StartPos, EndPos: TJSONObject;
 begin
@@ -562,6 +737,7 @@ begin
   DefCol := -1;
   ModNode := FDocuments[Idx].AST;
 
+  // 1. Busca em funcoes do modulo
   for I := 0 to ModNode.Functions.Count - 1 do
   begin
     Func := TASTFunction(ModNode.Functions[I]);
@@ -573,6 +749,42 @@ begin
     end;
   end;
 
+  // 2. Busca em Traits
+  if DefLine < 0 then
+  begin
+    for I := 0 to ModNode.Traits.Count - 1 do
+    begin
+      TraitDecl := TASTTraitDecl(ModNode.Traits[I]);
+      if SameText(TraitDecl.Name, Word) then
+      begin
+        DefLine := TraitDecl.Line - 1;
+        DefCol := TraitDecl.Col - 1;
+        Break;
+      end;
+    end;
+  end;
+
+  // 3. Busca em Metodos de Impls
+  if DefLine < 0 then
+  begin
+    for I := 0 to ModNode.Impls.Count - 1 do
+    begin
+      ImplDecl := TASTImplDecl(ModNode.Impls[I]);
+      for J := 0 to ImplDecl.Methods.Count - 1 do
+      begin
+        Func := TASTFunction(ImplDecl.Methods[J]);
+        if SameText(Func.Name, Word) then
+        begin
+          DefLine := Func.Line - 1;
+          DefCol := Func.Col - 1;
+          Break;
+        end;
+      end;
+      if DefLine >= 0 then Break;
+    end;
+  end;
+
+  // 4. Busca em Tipos (Records e Enums)
   if DefLine < 0 then
   begin
     for I := 0 to ModNode.Types.Count - 1 do

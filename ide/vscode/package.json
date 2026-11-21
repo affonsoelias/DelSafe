@@ -1,0 +1,108 @@
+{
+  "name": "aether-lang",
+  "displayName": "Aether Programming Language",
+  "description": "Suporte oficial e inteligente para a linguagem Aether (LSP, Destaque Sintático, Borrow Checker, Snippets e Testes)",
+  "version": "0.5.0",
+  "publisher": "aether-lang",
+  "engines": {
+    "vscode": "^1.75.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Linters",
+    "Snippets"
+  ],
+  "keywords": [
+    "aether",
+    "pascal",
+    "rust",
+    "borrow-checker",
+    "ownership",
+    "c99",
+    "lsp"
+  ],
+  "activationEvents": [
+    "onLanguage:aether"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "languages": [
+      {
+        "id": "aether",
+        "aliases": [
+          "Aether",
+          "aether"
+        ],
+        "extensions": [
+          ".aeth"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "aether",
+        "scopeName": "source.aether",
+        "path": "./syntaxes/aether.tmLanguage.json"
+      }
+    ],
+    "snippets": [
+      {
+        "language": "aether",
+        "path": "./snippets/aether.json"
+      }
+    ],
+    "commands": [
+      {
+        "command": "aether.build",
+        "title": "Aether: Compilar Arquivo Atual (Backend Pascal)",
+        "category": "Aether"
+      },
+      {
+        "command": "aether.buildC",
+        "title": "Aether: Compilar Arquivo Atual (Backend C99 / GCC)",
+        "category": "Aether"
+      },
+      {
+        "command": "aether.runTests",
+        "title": "Aether: Executar Testes Unitarios (aetherc test)",
+        "category": "Aether"
+      },
+      {
+        "command": "aether.restartLSP",
+        "title": "Aether: Reiniciar Servidor de Linguagem (LSP)",
+        "category": "Aether"
+      }
+    ],
+    "configuration": {
+      "type": "object",
+      "title": "Configuração da Linguagem Aether",
+      "properties": {
+        "aether.compilerPath": {
+          "type": "string",
+          "default": "aetherc",
+          "description": "Caminho absoluto ou relativo para o executável do compilador Aether (aetherc / aetherc.exe)."
+        },
+        "aether.defaultBackend": {
+          "type": "string",
+          "enum": [
+            "pascal",
+            "c"
+          ],
+          "default": "pascal",
+          "description": "Backend padrão de compilação utilizado pelos comandos e testes."
+        },
+        "aether.trace.server": {
+          "type": "string",
+          "enum": [
+            "off",
+            "messages",
+            "verbose"
+          ],
+          "default": "off",
+          "description": "Nível de rastreamento e logs das mensagens do Language Server (LSP)."
+        }
+      }
+    }
+  }
+}
