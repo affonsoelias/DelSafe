@@ -1,4 +1,4 @@
-module SafeMath;
+module ResultAndMatch;
 
 type
     MathError = enum

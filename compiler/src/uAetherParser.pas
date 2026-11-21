@@ -142,6 +142,8 @@ begin
     IsPascal := True;
 
   ImportName := Expect(tokIdentifier, 'Esperado nome do modulo importado').Value;
+  while Match(tokDot) do
+    ImportName := ImportName + '.' + Expect(tokIdentifier, 'Esperado identificador apos "." no nome do modulo importado').Value;
   if (not IsPascal) and Match(tokAs) then
     ImportName := ImportName + ' as ' + Expect(tokIdentifier).Value;
   Expect(tokSemicolon);

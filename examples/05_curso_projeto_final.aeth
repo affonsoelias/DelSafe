@@ -1,4 +1,4 @@
-module BancoDigital;
+module CursoProjetoFinal;
 
 type
     ContaError = enum

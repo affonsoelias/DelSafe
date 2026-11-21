@@ -1,4 +1,4 @@
-module StdLibDemo;
+module StandardLibrary;
 
 import Math;
 import Strings;

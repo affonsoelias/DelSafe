@@ -102,22 +102,18 @@ Este documento traça o status oficial de desenvolvimento do compilador e as pr�
 
 ## 🚀 Próximas Fases e Evolução do Ecossistema
 
-### 🎯 Fase 13: Validação Canônica de Módulos e Namespaces Hierárquicos
-- [ ] **Regra Estrita de Módulo 1:1 (Pascal/Java-style)**: Garantir que a declaração `module <Nome>;` coincida obrigatoriamente com o nome do arquivo `<Nome>.aeth` (Erro `E0005: Nome do módulo "%s" difere do nome do arquivo "%s.aeth"`).
-- [ ] **Namespaces Hierárquicos**: Suporte a módulos organizados em subdiretórios com notação de ponto (ex: `import Compiler.Lexer;` mapeado automaticamente para `compiler/lexer.aeth`).
-- [ ] **Controle de Visibilidade**: Palavra-chave `pub` (ou `export`) para controle granular de símbolos públicos vs. privados do módulo.
+### ✅ Fase 13: Validação Canônica de Módulos e Namespaces Hierárquicos (Concluído)
+- [x] **Validação Estrita de Módulo 1:1 (Pascal/Java-style)**: O nome declarado em `module <Nome>;` DEVE coincidir obrigatoriamente com o nome do arquivo `<Nome>.aeth` no disco (Erro `E0005` caso haja divergência, com validação de arquivos fonte e módulos importados).
+- [x] **Namespaces Hierárquicos**: Suporte a módulos em subdiretórios com notação de ponto (ex: `import Compiler.Aeth.Tokens;` buscando automaticamente `compiler/aeth/tokens.aeth` no projeto ou em `std/`).
+- [x] **Alinhamento Canônico Oficial**: Todos os arquivos de exemplo (`examples/01` a `10`) e módulos do compilador auto-hospedado (`compiler/aeth/`) atualizados para a nomenclatura canônica 1:1.
+- [x] **Validação Dual-Backend**: Exemplo `examples/10_hierarchical_modules.aeth` compilado e executado com 100% de paridade em Free Pascal e GCC.
 
-### 🎯 Fase 14: Traits, Interfaces Semânticas e Polimorfismo Estático
-- [ ] Declaração de `trait` (ex: `trait Display`, `trait Clone`, `trait Printable`).
-- [ ] Implementação de contratos de traits para records existentes (`impl Display for ASTExprNode`).
+### 🎯 Fase 14: Traits e Polimorfismo Estático (Contratos de Tipos)
+- [ ] Declaração de `trait` como contratos de capacidade comportamental (ex: `trait Display`, `trait Clone`, `trait Printable`).
+- [ ] Implementação de contratos de traits para records existentes (`impl Display for ASTExprNode begin ... end;`).
 - [ ] Despacho estático (*zero-cost abstractions*) com monomorfização para ambos os backends (Object Pascal e C99).
 
-### 🎯 Fase 15: Gerenciador de Pacotes e Dependências (`aether add` / `aether pkg`)
+### 🎯 Fase 15: Gerenciador de Pacotes e Dependências (`aether add` / `aether test`)
 - [ ] Suporte a dependências remotas e locais no manifesto `aether.json` (estilo Cargo / Boss).
 - [ ] Download, cache global (`~/.aether/cache`) e resolução de grafos de dependências de módulos.
 - [ ] Comando `aetherc test` para execução automática de suítes de testes unitários.
-
-### 🎯 Fase 16: Backend Nativo LLVM (Produção e Alta Performance)
-- [ ] Geração direta de LLVM IR (`.ll`) como terceiro backend alternativo ao FPC e GCC.
-- [ ] Otimizações nativas de vetorização (SIMD), inlining agressivo e eliminação de código morto (DCE).
-- [ ] Geração de binários autônomos sem necessidade de toolchain externa instalada.

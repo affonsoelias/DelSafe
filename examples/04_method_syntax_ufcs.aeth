@@ -1,4 +1,4 @@
-module UFCSDemo;
+module MethodSyntaxUFCS;
 
 type
     DataBuffer = record

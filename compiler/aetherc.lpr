@@ -93,38 +93,54 @@ begin
   end;
 end;
 
+function ExtractLastSegment(const S: string): string;
+var
+  I: Integer;
+begin
+  for I := Length(S) downto 1 do
+    if S[I] = '.' then
+      Exit(Copy(S, I + 1, Length(S)));
+  Result := S;
+end;
+
 function FindModuleFile(const ModName, BaseDir: string): string;
 var
   Candidate: string;
   ExeDir, StdDir: string;
+  RelPath, RelPathLower: string;
 begin
   Result := '';
+  RelPath := StringReplace(ModName, '.', PathDelim, [rfReplaceAll]);
+  RelPathLower := LowerCase(RelPath);
+
   // 1. Diretório do arquivo fonte
-  Candidate := BaseDir + ModName + '.aeth';
+  Candidate := BaseDir + RelPath + '.aeth';
   if FileExists(Candidate) then Exit(Candidate);
-  Candidate := BaseDir + LowerCase(ModName) + '.aeth';
+  Candidate := BaseDir + RelPathLower + '.aeth';
   if FileExists(Candidate) then Exit(Candidate);
 
   // 2. Subpasta std/ relativa ao diretório do arquivo fonte
-  Candidate := BaseDir + 'std' + PathDelim + ModName + '.aeth';
+  Candidate := BaseDir + 'std' + PathDelim + RelPath + '.aeth';
   if FileExists(Candidate) then Exit(Candidate);
-  Candidate := BaseDir + 'std' + PathDelim + LowerCase(ModName) + '.aeth';
+  Candidate := BaseDir + 'std' + PathDelim + RelPathLower + '.aeth';
   if FileExists(Candidate) then Exit(Candidate);
 
   // 3. Subpasta std/ relativa ao compilador (bin/../std)
   ExeDir := ExtractFilePath(ParamStr(0));
   StdDir := ExpandFileName(ExeDir + '..' + PathDelim + 'std');
-  Candidate := StdDir + PathDelim + ModName + '.aeth';
+  Candidate := StdDir + PathDelim + RelPath + '.aeth';
   if FileExists(Candidate) then Exit(Candidate);
-  Candidate := StdDir + PathDelim + LowerCase(ModName) + '.aeth';
+  Candidate := StdDir + PathDelim + RelPathLower + '.aeth';
   if FileExists(Candidate) then Exit(Candidate);
 
   // 4. Diretório de trabalho atual (cwd)
-  Candidate := GetCurrentDir + PathDelim + 'std' + PathDelim + ModName + '.aeth';
+  Candidate := GetCurrentDir + PathDelim + RelPath + '.aeth';
   if FileExists(Candidate) then Exit(Candidate);
-  Candidate := GetCurrentDir + PathDelim + 'std' + PathDelim + LowerCase(ModName) + '.aeth';
+  Candidate := GetCurrentDir + PathDelim + RelPathLower + '.aeth';
   if FileExists(Candidate) then Exit(Candidate);
-  Candidate := GetCurrentDir + PathDelim + ModName + '.aeth';
+  Candidate := GetCurrentDir + PathDelim + 'std' + PathDelim + RelPath + '.aeth';
+  if FileExists(Candidate) then Exit(Candidate);
+  Candidate := GetCurrentDir + PathDelim + 'std' + PathDelim + RelPathLower + '.aeth';
   if FileExists(Candidate) then Exit(Candidate);
 end;
 
@@ -135,6 +151,7 @@ var
   SubLexer: TAetherLexer;
   SubParser: TAetherParser;
   SubMod: TASTModule;
+  ExpectedName, LastSegment: string;
 begin
   for I := 0 to TargetMod.Imports.Count - 1 do
   begin
@@ -153,6 +170,12 @@ begin
       SubMod := SubParser.ParseModule;
       try
         CollectModuleImports(SubMod, ExtractFilePath(ModPath), Visited, AllTypes, AllFuncs, PascalImports);
+
+        // Validação Estrita 1:1 de Módulos Importados (Fase 13)
+        ExpectedName := ModName;
+        LastSegment := ExtractLastSegment(ExpectedName);
+        if not SameText(SubMod.Name, ExpectedName) and not SameText(SubMod.Name, LastSegment) then
+          raise Exception.CreateFmt('[Erro de Modulo E0005 em %s]: Nome do modulo declarado "%s" difere do esperado "%s". Em Aether, o nome do modulo deve corresponder ao nome do arquivo.', [ExtractFileName(ModPath), SubMod.Name, ExpectedName]);
 
         for J := 0 to SubMod.PascalImports.Count - 1 do
           if PascalImports.IndexOf(SubMod.PascalImports[J]) < 0 then
@@ -208,12 +231,28 @@ var
   CompileLog: string;
   CodeFile: TStringList;
   Visited: TStringList;
+  FileBase, CleanBase, CleanMod: string;
+  P: Integer;
 begin
   Source := LoadFileContent(SourceFile);
   Lexer := TAetherLexer.Create(Source);
   Parser := TAetherParser.Create(Lexer);
   try
     ModuleNode := Parser.ParseModule;
+
+    // Validação Estrita 1:1 de Módulo no arquivo raiz (Fase 13)
+    FileBase := ChangeFileExt(ExtractFileName(SourceFile), '');
+    CleanBase := FileBase;
+    P := 1;
+    while (P <= Length(CleanBase)) and (CleanBase[P] in ['0'..'9', '_']) do Inc(P);
+    if P <= Length(CleanBase) then
+      CleanBase := Copy(CleanBase, P, Length(CleanBase));
+    CleanBase := StringReplace(CleanBase, '_', '', [rfReplaceAll]);
+    CleanMod := StringReplace(ModuleNode.Name, '_', '', [rfReplaceAll]);
+
+    if not SameText(FileBase, ModuleNode.Name) and not SameText(CleanBase, CleanMod) then
+      raise Exception.CreateFmt('[Erro de Modulo E0005 em %s]: Nome do modulo declarado "%s" difere do nome do arquivo "%s.aeth". Em Aether, o nome do modulo deve corresponder ao nome do arquivo.', [ExtractFileName(SourceFile), ModuleNode.Name, FileBase]);
+
     try
       Visited := TStringList.Create;
       try

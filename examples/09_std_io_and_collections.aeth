@@ -1,4 +1,4 @@
-module IoAndCollectionsDemo;
+module StdIoAndCollections;
 
 import IO;
 import Strings;

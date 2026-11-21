@@ -1,4 +1,4 @@
-module OwnershipDemo;
+module OwnershipAndBorrow;
 
 type
     DataBuffer = record

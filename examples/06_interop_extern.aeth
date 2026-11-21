@@ -1,4 +1,4 @@
-module InteropDemo;
+module InteropExtern;
 
 import pascal Math;
 

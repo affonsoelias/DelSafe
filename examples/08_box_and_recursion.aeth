@@ -1,4 +1,4 @@
-module BoxRecursionDemo;
+module BoxAndRecursion;
 
 type
     // No de arvore de expressao binaria recursiva

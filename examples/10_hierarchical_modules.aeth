@@ -1,0 +1,15 @@
+module HierarchicalModules;
+
+import Compiler.Aeth.Tokens;
+
+program Main;
+var
+    tok: Token;
+begin
+    PrintLn("=== TESTE DE NAMESPACES HIERARQUICOS (FASE 13) ===");
+    tok := NewToken(TokenKind.tkProgram, "program", 1, 1);
+    PrintLn("Token criado via import hierarquico Compiler.Aeth.Tokens:");
+    PrintLn("  Texto: %s", tok.text);
+    PrintLn("  Kind : %s", TokenKindToString(borrow tok.kind));
+    PrintLn("SUCESSO! Modulo importado via namespace com ponto com exito!");
+end.
