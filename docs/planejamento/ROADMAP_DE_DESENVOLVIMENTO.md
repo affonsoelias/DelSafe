@@ -133,3 +133,36 @@ Este documento traça o status oficial de desenvolvimento do compilador e as pr�
   - Execução automatizada de testes unitários na pasta `tests/` com suporte a filtros (ex: `aetherc test math`), medição de latência em milissegundos e status detalhado (`PASS` / `FAIL`).
   - Suporte completo a ambos os backends (`--target=pascal` e `--target=c`).
 - [x] **Validação Prática**: Projeto modelo e testes criados e validados em `examples/12_package_manager_and_tests/` com execução bem-sucedida de `run` e `test` em Free Pascal e GCC.
+
+---
+
+### ⏳ Fase 16: Expansão do Compilador Auto-Hospedado (`compiler/aeth/`) para Paridade Total
+- [ ] **Type Checker Nativo em Aether (`compiler/aeth/typechecker.aeth`)**:
+  - Implementação da validação de tipos, verificação de compatibilidade, checagem de tipos estáticos e UFCS escrita diretamente em código Aether.
+- [ ] **Borrow Checker Nativo em Aether (`compiler/aeth/borrowchecker.aeth`)**:
+  - Algoritmo de análise de fluxo e verificação de posse (`own`, `borrow`, `mut borrow`) para validação de segurança de memória em código Aether.
+- [ ] **Emissão de Código Completa para C99 (`compiler/aeth/emitter.aeth`)**:
+  - Suporte completo no emissor auto-hospedado para records, enums com payload, pattern matching (`match`), traits/impl e funções monomorfizadas.
+- [ ] **Self-Hosting Completo (Bootstrap Total)**:
+  - Capacidade do compilador `compiler/aeth/main.aeth` de compilar a si mesmo através do backend C99/GCC gerando um executável nativo autônomo sem dependência do compilador bootstrap em Pascal.
+
+### ⏳ Fase 17: Expansão da Biblioteca Padrão (`std/`)
+- [ ] **Networking (`std/net.aeth`)**:
+  - Sockets TCP/UDP e cliente HTTP básico com tratamento idiomático de erros usando `Result<T, E>`.
+- [ ] **Serialização e Parser JSON (`std/json.aeth`)**:
+  - Parser e gerador JSON rápido e tipado nativamente em Aether com segurança de memória.
+- [ ] **Concorrência e Primitivas de Sincronização (`std/sync.aeth` / `std/threads.aeth`)**:
+  - Primitivas de concorrência com segurança de posse (Threads, Mutexes e Canais `mpsc`), prevenindo *data races* em tempo de compilação.
+
+### ⏳ Fase 18: Polimento de Ferramentas de Desenvolvimento (LSP & Extensão VS Code)
+- [ ] **Aprimoramento do LSP (`compiler/src/uAetherLSP.pas`)**:
+  - Suporte a autocompletion de métodos estáticos e dinâmicos via UFCS e traits implementadas.
+  - Hover de documentação e tipos inferidos em tempo real.
+- [ ] **Extensão Oficial para VS Code (`ide/vscode/`)**:
+  - Destaque sintático completo para as novas palavras-chave (`trait`, `impl`, `own`, `borrow`, `mut`).
+  - Integração do explorador de testes do VS Code com o comando `aetherc test`.
+
+### ⏳ Fase 19: Suporte a Dependências Git no `aether add`
+- [ ] **Download e Cache Automático via Git**:
+  - `aetherc add <url-git> [--branch=... / --tag=...]` executando clone ou checkout automático para o cache global (`~/.aether/cache/<pkg>`).
+  - Resolução transparente de dependências aninhadas e versionamento semântico de pacotes remotos.
