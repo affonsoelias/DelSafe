@@ -1,0 +1,86 @@
+module MainModule;
+
+import IO;
+import Strings;
+import Collections;
+import Tokens;
+import Lexer;
+import AST;
+import Parser;
+import Emitter;
+
+program Main;
+var
+    caminho_entrada: String;
+    caminho_saida: String;
+    codigo_fonte: String;
+    parser: ParserState;
+    sb: StringBuilder;
+    stmt: ASTStmtNode;
+    emissao_stmt: String;
+    ok_escrita: Bool;
+    tok_kind: TokenKind;
+    count_stmts: UInt32;
+begin
+    PrintLn("====================================================================");
+    PrintLn("  AetherLang Self-Hosted Compiler (aetherc-core) - Fase 12          ");
+    PrintLn("  Compilador Aether escrito 100% nativamente na linguagem Aether!   ");
+    PrintLn("====================================================================");
+    PrintLn("");
+
+    caminho_entrada := "examples/01_hello_world.aeth";
+    caminho_saida := "bin/self_hosted_output.c";
+
+    PrintLn("[1/4] Lendo arquivo de entrada: \"%s\"...", caminho_entrada);
+    codigo_fonte := ReadFile(borrow caminho_entrada);
+
+    if Length(borrow codigo_fonte) > 0 then
+        PrintLn("      Fonte lido com sucesso (%d bytes).", Length(borrow codigo_fonte));
+
+        PrintLn("[2/4] Inicializando Lexer e Parser nativos em Aether...");
+        parser := NewParser(borrow codigo_fonte);
+
+        // Ignora cabecalho inicial ate 'begin'
+        while (not IsAtEnd(borrow parser.lexer)) and (parser.current.kind <> TokenKind.tkBegin) do
+            AdvanceParser(mut borrow parser);
+        end;
+
+        if parser.current.kind = TokenKind.tkBegin then
+            AdvanceParser(mut borrow parser); // Consome 'begin'
+        end;
+
+        PrintLn("[3/4] Analisando AST e emitindo codigo C99...");
+        sb := NewStringBuilder();
+        sb.Append(borrow "// Gerado pelo Compilador Auto-Hospedado Aether (aetherc-core)\n");
+        sb.Append(borrow "#include <stdio.h>\n\n");
+        sb.Append(borrow "int main(void) {\n");
+
+        count_stmts := 0;
+        while (not IsAtEnd(borrow parser.lexer)) and (parser.current.kind <> TokenKind.tkEnd) and (parser.current.kind <> TokenKind.tkEOF) do
+            stmt := ParseStmt(mut borrow parser);
+            emissao_stmt := EmitStmtC(borrow stmt);
+            sb.Append(borrow emissao_stmt);
+            count_stmts := count_stmts + 1;
+        end;
+
+        sb.Append(borrow "    return 0;\n");
+        sb.Append(borrow "}\n");
+
+        PrintLn("      Processadas %d instrucoes na AST.", count_stmts);
+
+        PrintLn("[4/4] Gravando codigo C gerado em \"%s\"...", caminho_saida);
+        ok_escrita := WriteFile(borrow caminho_saida, borrow sb.ToString());
+
+        if ok_escrita then
+            PrintLn("[SUCESSO] Codigo gerado pelo compilador auto-hospedado com exito!");
+            PrintLn("");
+            PrintLn("--- Codigo C99 Gerado: ---");
+            PrintLn("%s", sb.ToString());
+            PrintLn("--------------------------");
+        else
+            PrintLn("[ERRO] Falha ao salvar arquivo de saida.");
+        end;
+    else
+        PrintLn("[ERRO] Nao foi possivel ler o arquivo de entrada.");
+    end;
+end.

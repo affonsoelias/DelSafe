@@ -128,7 +128,7 @@ begin
   if FileExists(Candidate) then Exit(Candidate);
 end;
 
-procedure ResolveModuleImports(TargetMod: TASTModule; const BaseDir: string; Visited: TStringList);
+procedure CollectModuleImports(TargetMod: TASTModule; const BaseDir: string; Visited: TStringList; AllTypes, AllFuncs: TFPList; PascalImports: TStringList);
 var
   I, J: Integer;
   ModName, ModPath, ModSource: string;
@@ -152,20 +152,17 @@ begin
     try
       SubMod := SubParser.ParseModule;
       try
-        ResolveModuleImports(SubMod, ExtractFilePath(ModPath), Visited);
+        CollectModuleImports(SubMod, ExtractFilePath(ModPath), Visited, AllTypes, AllFuncs, PascalImports);
 
-        // Mescla PascalImports se houver
         for J := 0 to SubMod.PascalImports.Count - 1 do
-          if TargetMod.PascalImports.IndexOf(SubMod.PascalImports[J]) < 0 then
-            TargetMod.PascalImports.Add(SubMod.PascalImports[J]);
+          if PascalImports.IndexOf(SubMod.PascalImports[J]) < 0 then
+            PascalImports.Add(SubMod.PascalImports[J]);
 
-        // Mescla Types no início
-        for J := SubMod.Types.Count - 1 downto 0 do
-          TargetMod.Types.Insert(0, SubMod.Types.Extract(SubMod.Types[J]));
+        while SubMod.Types.Count > 0 do
+          AllTypes.Add(SubMod.Types.Extract(SubMod.Types[0]));
 
-        // Mescla Functions no início
-        for J := SubMod.Functions.Count - 1 downto 0 do
-          TargetMod.Functions.Insert(0, SubMod.Functions.Extract(SubMod.Functions[J]));
+        while SubMod.Functions.Count > 0 do
+          AllFuncs.Add(SubMod.Functions.Extract(SubMod.Functions[0]));
       finally
         SubMod.Free;
       end;
@@ -173,6 +170,25 @@ begin
       SubParser.Free;
       SubLexer.Free;
     end;
+  end;
+end;
+
+procedure ResolveModuleImports(TargetMod: TASTModule; const BaseDir: string; Visited: TStringList);
+var
+  AllTypes, AllFuncs: TFPList;
+  I: Integer;
+begin
+  AllTypes := TFPList.Create;
+  AllFuncs := TFPList.Create;
+  try
+    CollectModuleImports(TargetMod, BaseDir, Visited, AllTypes, AllFuncs, TargetMod.PascalImports);
+    for I := AllTypes.Count - 1 downto 0 do
+      TargetMod.Types.Insert(0, TASTNode(AllTypes[I]));
+    for I := AllFuncs.Count - 1 downto 0 do
+      TargetMod.Functions.Insert(0, TASTFunction(AllFuncs[I]));
+  finally
+    AllTypes.Free;
+    AllFuncs.Free;
   end;
 end;
 

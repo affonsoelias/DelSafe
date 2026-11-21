@@ -1,0 +1,62 @@
+module Emitter;
+
+import AST;
+import Collections;
+
+function EmitExprC(borrow expr: ASTExprNode): String
+var
+    l_str: String;
+    r_str: String;
+begin
+    if expr.kind = ASTExprKind.ekIntLiteral then return expr.str_val; end;
+    if expr.kind = ASTExprKind.ekStringLiteral then return expr.str_val; end;
+    if expr.kind = ASTExprKind.ekIdentifier then return expr.str_val; end;
+
+    if expr.kind = ASTExprKind.ekCall then
+        if expr.left.is_some then
+            l_str := EmitExprC(borrow expr.left.value);
+            return "printf(\"%s\\n\", " + l_str + ")";
+        else
+            return "printf(\"\\n\")";
+        end;
+    end;
+
+    if expr.kind = ASTExprKind.ekBinary then
+        l_str := "";
+        r_str := "";
+        if expr.left.is_some then
+            l_str := EmitExprC(borrow expr.left.value);
+        end;
+        if expr.right.is_some then
+            r_str := EmitExprC(borrow expr.right.value);
+        end;
+        return "(" + l_str + " " + expr.op + " " + r_str + ")";
+    end;
+
+    return "";
+end;
+
+function EmitStmtC(borrow stmt: ASTStmtNode): String
+var
+    expr_str: String;
+begin
+    if stmt.kind = ASTStmtKind.skPrintLn then
+        if stmt.expr.is_some then
+            expr_str := EmitExprC(borrow stmt.expr.value);
+            return "    " + expr_str + ";\n";
+        end;
+    end;
+
+    if stmt.kind = ASTStmtKind.skAssign then
+        if stmt.expr.is_some then
+            expr_str := EmitExprC(borrow stmt.expr.value);
+            return "    " + stmt.name + " = " + expr_str + ";\n";
+        end;
+    end;
+
+    if stmt.kind = ASTStmtKind.skVarDecl then
+        return "    // var decl\n";
+    end;
+
+    return "";
+end;

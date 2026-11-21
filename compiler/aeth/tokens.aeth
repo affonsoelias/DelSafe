@@ -1,0 +1,96 @@
+module Tokens;
+
+type
+    TokenKind = enum
+        tkEOF,
+        tkIdentifier,
+        tkIntLiteral,
+        tkStringLiteral,
+        tkModule,
+        tkProgram,
+        tkBegin,
+        tkEnd,
+        tkVar,
+        tkLet,
+        tkFunction,
+        tkIf,
+        tkThen,
+        tkElse,
+        tkWhile,
+        tkDo,
+        tkReturn,
+        tkBorrow,
+        tkMut,
+        tkTake,
+        tkColon,
+        tkSemi,
+        tkComma,
+        tkDot,
+        tkPlus,
+        tkMinus,
+        tkStar,
+        tkSlash,
+        tkAssign,
+        tkEqual,
+        tkNotEqual,
+        tkLess,
+        tkLessEqual,
+        tkGreater,
+        tkGreaterEqual,
+        tkLParen,
+        tkRParen
+    end;
+
+    Token = record
+        kind: TokenKind;
+        text: String;
+        line: UInt32;
+        col: UInt32;
+    end;
+
+function NewToken(borrow k: TokenKind; borrow txt: String; borrow l: UInt32; borrow c: UInt32): Token
+begin
+    return Token(kind: k, text: txt, line: l, col: c);
+end;
+
+function TokenKindToString(borrow k: TokenKind): String
+begin
+    if k = TokenKind.tkEOF then return "EOF"; end;
+    if k = TokenKind.tkIdentifier then return "Identificador"; end;
+    if k = TokenKind.tkIntLiteral then return "Literal Inteiro"; end;
+    if k = TokenKind.tkStringLiteral then return "Literal String"; end;
+    if k = TokenKind.tkModule then return "module"; end;
+    if k = TokenKind.tkProgram then return "program"; end;
+    if k = TokenKind.tkBegin then return "begin"; end;
+    if k = TokenKind.tkEnd then return "end"; end;
+    if k = TokenKind.tkVar then return "var"; end;
+    if k = TokenKind.tkLet then return "let"; end;
+    if k = TokenKind.tkFunction then return "function"; end;
+    if k = TokenKind.tkIf then return "if"; end;
+    if k = TokenKind.tkThen then return "then"; end;
+    if k = TokenKind.tkElse then return "else"; end;
+    if k = TokenKind.tkWhile then return "while"; end;
+    if k = TokenKind.tkDo then return "do"; end;
+    if k = TokenKind.tkReturn then return "return"; end;
+    if k = TokenKind.tkBorrow then return "borrow"; end;
+    if k = TokenKind.tkMut then return "mut"; end;
+    if k = TokenKind.tkTake then return "take"; end;
+    if k = TokenKind.tkColon then return ":"; end;
+    if k = TokenKind.tkSemi then return ";"; end;
+    if k = TokenKind.tkComma then return ","; end;
+    if k = TokenKind.tkDot then return "."; end;
+    if k = TokenKind.tkPlus then return "+"; end;
+    if k = TokenKind.tkMinus then return "-"; end;
+    if k = TokenKind.tkStar then return "*"; end;
+    if k = TokenKind.tkSlash then return "/"; end;
+    if k = TokenKind.tkAssign then return ":="; end;
+    if k = TokenKind.tkEqual then return "="; end;
+    if k = TokenKind.tkNotEqual then return "<>"; end;
+    if k = TokenKind.tkLess then return "<"; end;
+    if k = TokenKind.tkLessEqual then return "<="; end;
+    if k = TokenKind.tkGreater then return ">"; end;
+    if k = TokenKind.tkGreaterEqual then return ">="; end;
+    if k = TokenKind.tkLParen then return "("; end;
+    if k = TokenKind.tkRParen then return ")"; end;
+    return "Desconhecido";
+end;

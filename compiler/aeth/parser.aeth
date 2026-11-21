@@ -1,0 +1,152 @@
+module Parser;
+
+import Tokens;
+import Lexer;
+import AST;
+
+type
+    ParserState = record
+        lexer: Lexer;
+        current: Token;
+        has_error: Bool;
+    end;
+
+function NewParser(borrow src: String): ParserState
+var
+    lex: Lexer;
+    first_tok: Token;
+begin
+    lex := NewLexer(borrow src);
+    first_tok := NextToken(mut borrow lex);
+    return ParserState(lexer: lex, current: first_tok, has_error: false);
+end;
+
+function AdvanceParser(mut borrow p: ParserState): Token
+var
+    old_tok: Token;
+begin
+    old_tok := p.current;
+    p.current := NextToken(mut borrow p.lexer);
+    return old_tok;
+end;
+
+function MatchToken(mut borrow p: ParserState; borrow k: TokenKind): Bool
+begin
+    if p.current.kind = k then
+        AdvanceParser(mut borrow p);
+        return true;
+    else
+        return false;
+    end;
+end;
+
+function ParsePrimary(mut borrow p: ParserState): ASTExprNode
+var
+    tok: Token;
+    callee: String;
+    arg: ASTExprNode;
+    inner: ASTExprNode;
+begin
+    tok := p.current;
+
+    if tok.kind = TokenKind.tkIntLiteral then
+        AdvanceParser(mut borrow p);
+        return NewIntExpr(borrow tok.text);
+    end;
+
+    if tok.kind = TokenKind.tkStringLiteral then
+        AdvanceParser(mut borrow p);
+        return NewStringExpr(borrow tok.text);
+    end;
+
+    if tok.kind = TokenKind.tkLParen then
+        AdvanceParser(mut borrow p);
+        inner := ParseExpr(mut borrow p);
+        MatchToken(mut borrow p, TokenKind.tkRParen);
+        return inner;
+    end;
+
+    if tok.kind = TokenKind.tkIdentifier then
+        callee := tok.text;
+        AdvanceParser(mut borrow p);
+        if p.current.kind = TokenKind.tkLParen then
+            // Chamada de Funcao: Callee(arg)
+            AdvanceParser(mut borrow p);
+            arg := ParseExpr(mut borrow p);
+            MatchToken(mut borrow p, TokenKind.tkRParen);
+            return NewCallExpr(borrow callee, take arg);
+        else
+            return NewIdentExpr(borrow callee);
+        end;
+    end;
+
+    AdvanceParser(mut borrow p);
+    return NewStringExpr(borrow "\"\"");
+end;
+
+function ParseMultiplicative(mut borrow p: ParserState): ASTExprNode
+var
+    left: ASTExprNode;
+    right: ASTExprNode;
+    op: String;
+begin
+    left := ParsePrimary(mut borrow p);
+
+    while (p.current.kind = TokenKind.tkStar) or (p.current.kind = TokenKind.tkSlash) do
+        op := p.current.text;
+        AdvanceParser(mut borrow p);
+        right := ParsePrimary(mut borrow p);
+        left := NewBinaryExpr(borrow op, take left, take right);
+    end;
+
+    return left;
+end;
+
+function ParseExpr(mut borrow p: ParserState): ASTExprNode
+var
+    left: ASTExprNode;
+    right: ASTExprNode;
+    op: String;
+begin
+    left := ParseMultiplicative(mut borrow p);
+
+    while (p.current.kind = TokenKind.tkPlus) or (p.current.kind = TokenKind.tkMinus) do
+        op := p.current.text;
+        AdvanceParser(mut borrow p);
+        right := ParseMultiplicative(mut borrow p);
+        left := NewBinaryExpr(borrow op, take left, take right);
+    end;
+
+    return left;
+end;
+
+function ParseStmt(mut borrow p: ParserState): ASTStmtNode
+var
+    tok: Token;
+    vname: String;
+    val_expr: ASTExprNode;
+    call_expr: ASTExprNode;
+begin
+    tok := p.current;
+
+    // 1. Chamada de PrintLn(...)
+    if (tok.kind = TokenKind.tkIdentifier) and (tok.text = "PrintLn") then
+        call_expr := ParsePrimary(mut borrow p);
+        MatchToken(mut borrow p, TokenKind.tkSemi);
+        return NewPrintLnStmt(take call_expr);
+    end;
+
+    // 2. Atribuicao: vname := expr;
+    if tok.kind = TokenKind.tkIdentifier then
+        vname := tok.text;
+        AdvanceParser(mut borrow p);
+        if MatchToken(mut borrow p, TokenKind.tkAssign) then
+            val_expr := ParseExpr(mut borrow p);
+            MatchToken(mut borrow p, TokenKind.tkSemi);
+            return NewAssignStmt(borrow vname, take val_expr);
+        end;
+    end;
+
+    AdvanceParser(mut borrow p);
+    return NewVarDeclStmt(borrow "", borrow "");
+end;

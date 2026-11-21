@@ -89,7 +89,16 @@ Este documento traça o status oficial de desenvolvimento do compilador e as pr�
 
 ## 🚀 Próximas Fases e Metas
 
-### 🎯 Fase 12: O Compilador Aether Auto-Hospedado (`aetherc-core`)
-- [ ] Lexer escrito nativamente em Aether (`compiler/aeth/lexer.aeth`).
-- [ ] Parser e AST escritos nativamente em Aether (`compiler/aeth/parser.aeth`).
-- [ ] Bootstrapping completo: Compilador em Aether compilado pelo `aetherc` atual.
+### ✅ Fase 12: O Compilador Aether Auto-Hospedado (`aetherc-core`) (Concluído)
+- [x] Definição de Tokens oficiais nativos em `compiler/aeth/tokens.aeth`.
+- [x] Analisador Léxico (Lexer) 100% nativo em Aether em `compiler/aeth/lexer.aeth`.
+- [x] Árvore Sintática Abstrata (AST) nativa com nós recursivos via `Box` em `compiler/aeth/ast.aeth`.
+- [x] Parser descendente recursivo nativo em Aether em `compiler/aeth/parser.aeth`.
+- [x] Emissor C99 nativo em Aether em `compiler/aeth/emitter.aeth`.
+- [x] Driver principal do compilador auto-hospedado em `compiler/aeth/main.aeth`.
+- [x] Bootstrapping completo: Compilador Aether compilado pelo `aetherc` atual (`bin/aetherc_core.exe` e `bin/aetherc_core_c.exe`), capaz de ler, analisar e transpilar programas Aether (`01_hello_world.aeth`) para executáveis nativos via GCC.
+
+---
+
+## 🏆 Conclusão do Roadmap Fundamental
+Com a conclusão da **Fase 12**, a linguagem **Aether** atinge o status histórico de **linguagem auto-hospedada (self-hosted)**, demonstrando estabilidade completa de tipagem, borrow checker de posse estrita, biblioteca padrão de I/O e coleções, e interoperabilidade nativa com Object Pascal e C99.

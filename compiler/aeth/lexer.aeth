@@ -1,0 +1,222 @@
+module Lexer;
+
+import Tokens;
+
+type
+    Lexer = record
+        source: String;
+        pos: UInt32;
+        line: UInt32;
+        col: UInt32;
+        len: UInt32;
+    end;
+
+function NewLexer(borrow src: String): Lexer
+var
+    total_len: UInt32;
+begin
+    total_len := Length(borrow src);
+    return Lexer(source: src, pos: 0, line: 1, col: 1, len: total_len);
+end;
+
+function IsAtEnd(borrow lex: Lexer): Bool
+begin
+    if lex.pos >= lex.len then
+        return true;
+    else
+        return false;
+    end;
+end;
+
+function Peek(borrow lex: Lexer): String
+begin
+    if lex.pos >= lex.len then
+        return "";
+    else
+        return CharAt(borrow lex.source, lex.pos);
+    end;
+end;
+
+function PeekNext(borrow lex: Lexer): String
+begin
+    if (lex.pos + 1) >= lex.len then
+        return "";
+    else
+        return CharAt(borrow lex.source, lex.pos + 1);
+    end;
+end;
+
+function Advance(mut borrow lex: Lexer): String
+var
+    ch: String;
+begin
+    if lex.pos >= lex.len then
+        return "";
+    end;
+    ch := CharAt(borrow lex.source, lex.pos);
+    lex.pos := lex.pos + 1;
+    if ch = "\n" then
+        lex.line := lex.line + 1;
+        lex.col := 1;
+    else
+        lex.col := lex.col + 1;
+    end;
+    return ch;
+end;
+
+function SkipWhitespace(mut borrow lex: Lexer): Void
+var
+    ch: String;
+    continua: Bool;
+begin
+    continua := true;
+    while continua do
+        if lex.pos >= lex.len then
+            continua := false;
+        else
+            ch := Peek(borrow lex);
+            if (ch = " ") or (ch = "\t") or (ch = "\r") or (ch = "\n") then
+                Advance(mut borrow lex);
+            else
+                if (ch = "/") and (PeekNext(borrow lex) = "/") then
+                    // Comentário de linha //
+                    while (not IsAtEnd(borrow lex)) and (Peek(borrow lex) <> "\n") do
+                        Advance(mut borrow lex);
+                    end;
+                else
+                    continua := false;
+                end;
+            end;
+        end;
+    end;
+end;
+
+function IsAlpha(borrow ch: String): Bool
+begin
+    if ((ch >= "a") and (ch <= "z")) or ((ch >= "A") and (ch <= "Z")) or (ch = "_") then
+        return true;
+    else
+        return false;
+    end;
+end;
+
+function IsDigit(borrow ch: String): Bool
+begin
+    if (ch >= "0") and (ch <= "9") then
+        return true;
+    else
+        return false;
+    end;
+end;
+
+function NextToken(mut borrow lex: Lexer): Token
+var
+    token_line: UInt32;
+    token_col: UInt32;
+    start_pos: UInt32;
+    ch: String;
+    txt: String;
+    sub_len: UInt32;
+    continua: Bool;
+begin
+    SkipWhitespace(mut borrow lex);
+
+    if IsAtEnd(borrow lex) then
+        return NewToken(TokenKind.tkEOF, "", lex.line, lex.col);
+    end;
+
+    token_line := lex.line;
+    token_col := lex.col;
+    start_pos := lex.pos;
+    ch := Advance(mut borrow lex);
+
+    // 1. Strings entre aspas duplas
+    if ch = "\"" then
+        continua := true;
+        while (not IsAtEnd(borrow lex)) and continua do
+            if Peek(borrow lex) = "\"" then
+                continua := false;
+            else
+                Advance(mut borrow lex);
+            end;
+        end;
+        if not IsAtEnd(borrow lex) then
+            Advance(mut borrow lex); // consome aspas finais
+        end;
+        sub_len := lex.pos - start_pos;
+        txt := Substring(borrow lex.source, start_pos, sub_len);
+        return NewToken(TokenKind.tkStringLiteral, txt, token_line, token_col);
+    end;
+
+    // 2. Numeros
+    if IsDigit(borrow ch) then
+        while IsDigit(borrow Peek(borrow lex)) do
+            Advance(mut borrow lex);
+        end;
+        sub_len := lex.pos - start_pos;
+        txt := Substring(borrow lex.source, start_pos, sub_len);
+        return NewToken(TokenKind.tkIntLiteral, txt, token_line, token_col);
+    end;
+
+    // 3. Identificadores e Palavras-chave
+    if IsAlpha(borrow ch) then
+        while IsAlpha(borrow Peek(borrow lex)) or IsDigit(borrow Peek(borrow lex)) do
+            Advance(mut borrow lex);
+        end;
+        sub_len := lex.pos - start_pos;
+        txt := Substring(borrow lex.source, start_pos, sub_len);
+
+        if txt = "module" then return NewToken(TokenKind.tkModule, txt, token_line, token_col); end;
+        if txt = "program" then return NewToken(TokenKind.tkProgram, txt, token_line, token_col); end;
+        if txt = "begin" then return NewToken(TokenKind.tkBegin, txt, token_line, token_col); end;
+        if txt = "end" then return NewToken(TokenKind.tkEnd, txt, token_line, token_col); end;
+        if txt = "var" then return NewToken(TokenKind.tkVar, txt, token_line, token_col); end;
+        if txt = "let" then return NewToken(TokenKind.tkLet, txt, token_line, token_col); end;
+        if txt = "function" then return NewToken(TokenKind.tkFunction, txt, token_line, token_col); end;
+        if txt = "if" then return NewToken(TokenKind.tkIf, txt, token_line, token_col); end;
+        if txt = "then" then return NewToken(TokenKind.tkThen, txt, token_line, token_col); end;
+        if txt = "else" then return NewToken(TokenKind.tkElse, txt, token_line, token_col); end;
+        if txt = "while" then return NewToken(TokenKind.tkWhile, txt, token_line, token_col); end;
+        if txt = "do" then return NewToken(TokenKind.tkDo, txt, token_line, token_col); end;
+        if txt = "return" then return NewToken(TokenKind.tkReturn, txt, token_line, token_col); end;
+        if txt = "borrow" then return NewToken(TokenKind.tkBorrow, txt, token_line, token_col); end;
+        if txt = "mut" then return NewToken(TokenKind.tkMut, txt, token_line, token_col); end;
+        if txt = "take" then return NewToken(TokenKind.tkTake, txt, token_line, token_col); end;
+
+        return NewToken(TokenKind.tkIdentifier, txt, token_line, token_col);
+    end;
+
+    // 4. Operadores e Pontuacao
+    if (ch = ":") and (Peek(borrow lex) = "=") then
+        Advance(mut borrow lex);
+        return NewToken(TokenKind.tkAssign, ":=", token_line, token_col);
+    end;
+    if (ch = "<") and (Peek(borrow lex) = ">") then
+        Advance(mut borrow lex);
+        return NewToken(TokenKind.tkNotEqual, "<>", token_line, token_col);
+    end;
+    if (ch = "<") and (Peek(borrow lex) = "=") then
+        Advance(mut borrow lex);
+        return NewToken(TokenKind.tkLessEqual, "<=", token_line, token_col);
+    end;
+    if (ch = ">") and (Peek(borrow lex) = "=") then
+        Advance(mut borrow lex);
+        return NewToken(TokenKind.tkGreaterEqual, ">=", token_line, token_col);
+    end;
+
+    if ch = ":" then return NewToken(TokenKind.tkColon, ":", token_line, token_col); end;
+    if ch = ";" then return NewToken(TokenKind.tkSemi, ";", token_line, token_col); end;
+    if ch = "," then return NewToken(TokenKind.tkComma, ",", token_line, token_col); end;
+    if ch = "." then return NewToken(TokenKind.tkDot, ".", token_line, token_col); end;
+    if ch = "+" then return NewToken(TokenKind.tkPlus, "+", token_line, token_col); end;
+    if ch = "-" then return NewToken(TokenKind.tkMinus, "-", token_line, token_col); end;
+    if ch = "*" then return NewToken(TokenKind.tkStar, "*", token_line, token_col); end;
+    if ch = "/" then return NewToken(TokenKind.tkSlash, "/", token_line, token_col); end;
+    if ch = "=" then return NewToken(TokenKind.tkEqual, "=", token_line, token_col); end;
+    if ch = "<" then return NewToken(TokenKind.tkLess, "<", token_line, token_col); end;
+    if ch = ">" then return NewToken(TokenKind.tkGreater, ">", token_line, token_col); end;
+    if ch = "(" then return NewToken(TokenKind.tkLParen, "(", token_line, token_col); end;
+    if ch = ")" then return NewToken(TokenKind.tkRParen, ")", token_line, token_col); end;
+
+    return NewToken(TokenKind.tkEOF, ch, token_line, token_col);
+end;

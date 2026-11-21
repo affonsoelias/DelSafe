@@ -134,6 +134,7 @@ var
   Id: TASTIdentifierExpr;
   Acc: TASTMemberAccessExpr;
   Call: TASTCallExpr;
+  Bin: TASTBinaryExpr;
   TargetType, CleanTarget: string;
   I, J, P1, P2: Integer;
   Rec: TASTRecordDecl;
@@ -206,6 +207,12 @@ begin
         end;
       end;
     end;
+  end
+  else if Expr is TASTBinaryExpr then
+  begin
+    Bin := TASTBinaryExpr(Expr);
+    if (Bin.Op = '+') and ((GetExprTypeName(Bin.Left) = 'String') or (GetExprTypeName(Bin.Right) = 'String')) then
+      Exit('String');
   end
   else if Expr is TASTCallExpr then
   begin
@@ -767,8 +774,11 @@ end;
 
 function TAetherEmitterPascal.Generate(AModule: TASTModule): string;
 var
-  I: Integer;
+  I, J: Integer;
   UsesClause: string;
+  Func: TASTFunction;
+  Param: TASTParam;
+  ParamListStr, ModStr: string;
 begin
   FModule := AModule;
   FOutput.Clear;
@@ -892,6 +902,34 @@ begin
   Emit('  CloseFile(F);');
   Emit('  Result := True;');
   Emit('end;');
+  Emit('');
+
+  // Declaracoes antecipadas (forward) de todas as funcoes
+  for I := 0 to AModule.Functions.Count - 1 do
+  begin
+    Func := TASTFunction(AModule.Functions[I]);
+    if not Func.IsExtern then
+    begin
+      ParamListStr := '';
+      for J := 0 to Func.Params.Count - 1 do
+      begin
+        Param := TASTParam(Func.Params[J]);
+        case Param.Ownership of
+          owMutBorrow: ModStr := 'var ';
+          owBorrow:    ModStr := 'const ';
+        else
+          ModStr := 'const ';
+        end;
+        ParamListStr := ParamListStr + Format('%s%s: %s', [ModStr, Param.Name, EmitTypeRef(Param.TypeName)]);
+        if J < Func.Params.Count - 1 then
+          ParamListStr := ParamListStr + '; ';
+      end;
+      if (Func.ReturnType = 'Void') or (Func.ReturnType = '') then
+        Emit(Format('procedure %s(%s); forward;', [Func.Name, ParamListStr]))
+      else
+        Emit(Format('function %s(%s): %s; forward;', [Func.Name, ParamListStr, EmitTypeRef(Func.ReturnType)]));
+    end;
+  end;
   Emit('');
 
   // Funções

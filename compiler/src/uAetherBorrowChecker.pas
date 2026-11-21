@@ -48,6 +48,7 @@ type
     procedure AddVar(const AName: string; AState: TVariableState; ALine, ACol: Integer; AIsPrim: Boolean);
     function Resolve(const AName: string): TBorrowVarInfo;
     function ResolveLocal(const AName: string): TBorrowVarInfo;
+    procedure ReleaseTemporaryBorrows;
     property Parent: TBorrowScope read FParent;
   end;
 
@@ -167,6 +168,16 @@ begin
     Curr := Curr.Parent;
   end;
   Result := nil;
+end;
+
+procedure TBorrowScope.ReleaseTemporaryBorrows;
+var
+  I: Integer;
+begin
+  for I := 0 to FVars.Count - 1 do
+    TBorrowVarInfo(FVars[I]).SharedBorrowCount := 0;
+  if Assigned(FParent) then
+    FParent.ReleaseTemporaryBorrows;
 end;
 
 { TAetherBorrowChecker }
@@ -332,17 +343,22 @@ var
   CaseNode: TASTMatchCase;
   Ret: TASTReturnStmt;
   CallStmt: TASTCallStmt;
+  VarInfo: TBorrowVarInfo;
   I, J: Integer;
 begin
   if Stmt is TASTAssignStmt then
   begin
     Assign := TASTAssignStmt(Stmt);
     CheckExpr(Assign.Expr, accRead);
-    // Atribuicao a uma variavel reinicializa/toma posse se antes estava movida
+    // Atribuicao a uma variavel reinicializa a posse se antes estava movida
     if Assign.Target is TASTIdentifierExpr then
     begin
+      VarInfo := FCurrentScope.Resolve(TASTIdentifierExpr(Assign.Target).Name);
+      if Assigned(VarInfo) then
+        VarInfo.State := vsOwned;
+    end
+    else
       CheckExpr(Assign.Target, accRead);
-    end;
   end
   else if Stmt is TASTCallStmt then
   begin
@@ -353,6 +369,8 @@ begin
   begin
     IfStmt := TASTIfStmt(Stmt);
     CheckExpr(IfStmt.Condition, accRead);
+    if Assigned(FCurrentScope) then
+      FCurrentScope.ReleaseTemporaryBorrows;
     for I := 0 to IfStmt.ThenBranch.Count - 1 do
       CheckStmt(TASTStmt(IfStmt.ThenBranch[I]));
     for I := 0 to IfStmt.ElseBranch.Count - 1 do
@@ -362,6 +380,8 @@ begin
   begin
     WhileStmt := TASTWhileStmt(Stmt);
     CheckExpr(WhileStmt.Condition, accRead);
+    if Assigned(FCurrentScope) then
+      FCurrentScope.ReleaseTemporaryBorrows;
     for I := 0 to WhileStmt.Body.Count - 1 do
       CheckStmt(TASTStmt(WhileStmt.Body[I]));
   end
@@ -389,6 +409,9 @@ begin
       end;
     end;
   end;
+
+  if Assigned(FCurrentScope) then
+    FCurrentScope.ReleaseTemporaryBorrows;
 end;
 
 procedure TAetherBorrowChecker.CheckFunction(Func: TASTFunction);

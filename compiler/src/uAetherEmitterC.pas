@@ -141,6 +141,7 @@ var
   Id: TASTIdentifierExpr;
   Acc: TASTMemberAccessExpr;
   Call: TASTCallExpr;
+  Bin: TASTBinaryExpr;
   TargetType, CleanTarget: string;
   I, J, P1, P2: Integer;
   Rec: TASTRecordDecl;
@@ -212,6 +213,12 @@ begin
       end;
     end;
   end
+  else if Expr is TASTBinaryExpr then
+  begin
+    Bin := TASTBinaryExpr(Expr);
+    if (Bin.Op = '+') and ((GetExprTypeName(Bin.Left) = 'String') or (GetExprTypeName(Bin.Right) = 'String')) then
+      Exit('String');
+  end
   else if Expr is TASTCallExpr then
   begin
     Call := TASTCallExpr(Expr);
@@ -220,6 +227,12 @@ begin
     if (Call.Callee = 'ReadFile') or (Call.Callee = 'CharAt') or (Call.Callee = 'Substring') or (Call.Callee = 'ToString') then Exit('String');
     if (Call.Callee = 'Length') then Exit('UInt32');
     if (Call.Callee = 'FileExists') or (Call.Callee = 'WriteFile') then Exit('Bool');
+    if Assigned(FModule) then
+    begin
+      for I := 0 to FModule.Functions.Count - 1 do
+        if SameText(TASTFunction(FModule.Functions[I]).Name, Call.Callee) then
+          Exit(TASTFunction(FModule.Functions[I]).ReturnType);
+    end;
   end;
 end;
 
@@ -347,6 +360,26 @@ begin
       else
         OpStr := '!=';
     end
+    else if OpStr = '<' then
+    begin
+      if (GetExprTypeName(Bin.Left) = 'String') or (GetExprTypeName(Bin.Right) = 'String') then
+        Exit(Format('(strcmp(%s, %s) < 0)', [EmitExpr(Bin.Left), EmitExpr(Bin.Right)]));
+    end
+    else if OpStr = '<=' then
+    begin
+      if (GetExprTypeName(Bin.Left) = 'String') or (GetExprTypeName(Bin.Right) = 'String') then
+        Exit(Format('(strcmp(%s, %s) <= 0)', [EmitExpr(Bin.Left), EmitExpr(Bin.Right)]));
+    end
+    else if OpStr = '>' then
+    begin
+      if (GetExprTypeName(Bin.Left) = 'String') or (GetExprTypeName(Bin.Right) = 'String') then
+        Exit(Format('(strcmp(%s, %s) > 0)', [EmitExpr(Bin.Left), EmitExpr(Bin.Right)]));
+    end
+    else if OpStr = '>=' then
+    begin
+      if (GetExprTypeName(Bin.Left) = 'String') or (GetExprTypeName(Bin.Right) = 'String') then
+        Exit(Format('(strcmp(%s, %s) >= 0)', [EmitExpr(Bin.Left), EmitExpr(Bin.Right)]));
+    end
     else if OpStr = '+' then
     begin
       if (GetExprTypeName(Bin.Left) = 'String') or (GetExprTypeName(Bin.Right) = 'String') then
@@ -466,12 +499,20 @@ begin
     for I := 0 to Call.Args.Count - 1 do
     begin
       ArgVal := EmitExpr(TASTCallArg(Call.Args[I]).Expr);
-      if Assigned(FuncDecl) and (I < FuncDecl.Params.Count) and
-         (TASTParam(FuncDecl.Params[I]).Ownership = owMutBorrow) then
+      if Assigned(FuncDecl) and (I < FuncDecl.Params.Count) then
       begin
-        if not ((TASTCallArg(Call.Args[I]).Expr is TASTIdentifierExpr) and
-                IsMutBorrowParam(TASTIdentifierExpr(TASTCallArg(Call.Args[I]).Expr).Name)) then
-          ArgVal := '&' + ArgVal;
+        if TASTParam(FuncDecl.Params[I]).Ownership = owMutBorrow then
+        begin
+          if not ((TASTCallArg(Call.Args[I]).Expr is TASTIdentifierExpr) and
+                  IsMutBorrowParam(TASTIdentifierExpr(TASTCallArg(Call.Args[I]).Expr).Name)) then
+            ArgVal := '&' + ArgVal;
+        end
+        else
+        begin
+          if (TASTCallArg(Call.Args[I]).Expr is TASTIdentifierExpr) and
+             IsMutBorrowParam(TASTIdentifierExpr(TASTCallArg(Call.Args[I]).Expr).Name) then
+            ArgVal := '(*' + ArgVal + ')';
+        end;
       end;
       ArgsStr := ArgsStr + ArgVal;
       if I < Call.Args.Count - 1 then
@@ -731,7 +772,10 @@ end;
 
 function TAetherEmitterC.Generate(AModule: TASTModule): string;
 var
-  I: Integer;
+  I, J: Integer;
+  Func: TASTFunction;
+  Param: TASTParam;
+  ParamListStr, ModStr: string;
 begin
   FModule := AModule;
   FOutput.Clear;
@@ -852,6 +896,30 @@ begin
       Emit('');
     end;
   end;
+
+  // Prototipos antecipados de todas as funcoes
+  for I := 0 to AModule.Functions.Count - 1 do
+  begin
+    Func := TASTFunction(AModule.Functions[I]);
+    if not Func.IsExtern then
+    begin
+      ParamListStr := '';
+      for J := 0 to Func.Params.Count - 1 do
+      begin
+        Param := TASTParam(Func.Params[J]);
+        ModStr := '';
+        if Param.Ownership = owMutBorrow then
+          ModStr := '*'
+        else if Param.Ownership = owBorrow then
+          ModStr := '';
+        ParamListStr := ParamListStr + Format('%s %s%s', [EmitTypeRef(Param.TypeName), ModStr, Param.Name]);
+        if J < Func.Params.Count - 1 then
+          ParamListStr := ParamListStr + ', ';
+      end;
+      Emit(Format('%s %s(%s);', [EmitTypeRef(Func.ReturnType), Func.Name, ParamListStr]));
+    end;
+  end;
+  Emit('');
 
   // Funções
   for I := 0 to AModule.Functions.Count - 1 do

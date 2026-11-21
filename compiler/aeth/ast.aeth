@@ -1,0 +1,72 @@
+module AST;
+
+type
+    ASTExprKind = enum
+        ekIntLiteral,
+        ekStringLiteral,
+        ekIdentifier,
+        ekBinary,
+        ekCall
+    end;
+
+    ASTExprNode = record
+        kind: ASTExprKind;
+        str_val: String;
+        op: String;
+        left: Option<Box<ASTExprNode>>;
+        right: Option<Box<ASTExprNode>>;
+    end;
+
+    ASTStmtKind = enum
+        skVarDecl,
+        skAssign,
+        skPrintLn
+    end;
+
+    ASTStmtNode = record
+        kind: ASTStmtKind;
+        name: String;
+        type_name: String;
+        expr: Option<Box<ASTExprNode>>;
+        next: Option<Box<ASTStmtNode>>;
+    end;
+
+function NewIntExpr(borrow s: String): ASTExprNode
+begin
+    return ASTExprNode(kind: ASTExprKind.ekIntLiteral, str_val: s, op: "", left: None, right: None);
+end;
+
+function NewStringExpr(borrow s: String): ASTExprNode
+begin
+    return ASTExprNode(kind: ASTExprKind.ekStringLiteral, str_val: s, op: "", left: None, right: None);
+end;
+
+function NewIdentExpr(borrow s: String): ASTExprNode
+begin
+    return ASTExprNode(kind: ASTExprKind.ekIdentifier, str_val: s, op: "", left: None, right: None);
+end;
+
+function NewBinaryExpr(borrow op_str: String; take l: ASTExprNode; take r: ASTExprNode): ASTExprNode
+begin
+    return ASTExprNode(kind: ASTExprKind.ekBinary, str_val: "", op: op_str, left: Some(Box(l)), right: Some(Box(r)));
+end;
+
+function NewCallExpr(borrow callee: String; take arg: ASTExprNode): ASTExprNode
+begin
+    return ASTExprNode(kind: ASTExprKind.ekCall, str_val: callee, op: "", left: Some(Box(arg)), right: None);
+end;
+
+function NewVarDeclStmt(borrow vname: String; borrow tname: String): ASTStmtNode
+begin
+    return ASTStmtNode(kind: ASTStmtKind.skVarDecl, name: vname, type_name: tname, expr: None, next: None);
+end;
+
+function NewAssignStmt(borrow vname: String; take e: ASTExprNode): ASTStmtNode
+begin
+    return ASTStmtNode(kind: ASTStmtKind.skAssign, name: vname, type_name: "", expr: Some(Box(e)), next: None);
+end;
+
+function NewPrintLnStmt(take e: ASTExprNode): ASTStmtNode
+begin
+    return ASTStmtNode(kind: ASTStmtKind.skPrintLn, name: "PrintLn", type_name: "", expr: Some(Box(e)), next: None);
+end;
