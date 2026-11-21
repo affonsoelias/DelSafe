@@ -184,3 +184,23 @@ Este documento traça o status oficial de desenvolvimento do compilador e as pr�
   - Resolução recursiva de dependências aninhadas a partir de `aether.json` de subpacotes com proteção contra dependências circulares.
   - Restauração automática de dependências (`RestoreProjectDependencies`) nos comandos `aetherc build`, `aetherc run` e `aetherc test`.
   - Validação completa com repositório Git real testado em ambos os backends (**Free Pascal** e **GCC C99**).
+
+### ⏳ Fase 20: Sockets Reais do Sistema Operacional & Servidor HTTP Nativo
+- [ ] **Integração Nativa com a Camada de Rede do SO (`std/net.aeth`)**:
+  - Implementação de chamadas de rede reais nos emissores C e Pascal:
+    - No Windows: Suporte a `WinSock2` (`ws2_32.dll` com inicialização `WSAStartup`/`WSACleanup`).
+    - No Linux/POSIX: Suporte a `sys/socket.h`, `arpa/inet.h`, `netdb.h`.
+  - Primitivas reais de rede em `std/net.aeth`: `SocketListen`, `SocketAccept`, `SocketConnect`, `SocketSend`, `SocketRecv`, `SocketClose`.
+- [ ] **Servidor HTTP & REST de Altíssimo Desempenho**:
+  - Servidor HTTP nativo em código Aether puro, sem dependências externas nem garbage collector.
+  - Parser completo de cabeçalhos e roteamento de rotas (`GET`, `POST`, `PUT`, `DELETE`).
+  - Serialização e resposta de payloads JSON estruturados utilizando `std/json.aeth`.
+  - Exemplo prático de micro-serviço web com validação dual-backend (`fpc` e `gcc`).
+
+### ⏳ Fase 21: Bootstrapping 100% Autônomo do Compilador Auto-Hospedado (`compiler/aeth/`)
+- [ ] **Resolução Multi-Módulo no Compilador Auto-Hospedado**:
+  - Capacidade de analisar e resolver múltiplos arquivos com `import` diretamente no código Aether de `compiler/aeth/`.
+- [ ] **Geração Completa do Binário Final Auto-Gerado**:
+  - Pipeline completo compilando todo o código-fonte do compilador (`compiler/aeth/main.aeth`) gerando o código C99 correspondente.
+  - Compilação do executável final autônomo sem necessidade do compilador Free Pascal para o ciclo de compilação diário.
+  - Testes de ciclo completo de auto-hospedagem (*Self-Hosting Verification*).
