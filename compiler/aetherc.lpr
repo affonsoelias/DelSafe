@@ -83,6 +83,89 @@ begin
   end;
 end;
 
+function FindModuleFile(const ModName, BaseDir: string): string;
+var
+  Candidate: string;
+  ExeDir, StdDir: string;
+begin
+  Result := '';
+  // 1. Diretório do arquivo fonte
+  Candidate := BaseDir + ModName + '.aeth';
+  if FileExists(Candidate) then Exit(Candidate);
+  Candidate := BaseDir + LowerCase(ModName) + '.aeth';
+  if FileExists(Candidate) then Exit(Candidate);
+
+  // 2. Subpasta std/ relativa ao diretório do arquivo fonte
+  Candidate := BaseDir + 'std' + PathDelim + ModName + '.aeth';
+  if FileExists(Candidate) then Exit(Candidate);
+  Candidate := BaseDir + 'std' + PathDelim + LowerCase(ModName) + '.aeth';
+  if FileExists(Candidate) then Exit(Candidate);
+
+  // 3. Subpasta std/ relativa ao compilador (bin/../std)
+  ExeDir := ExtractFilePath(ParamStr(0));
+  StdDir := ExpandFileName(ExeDir + '..' + PathDelim + 'std');
+  Candidate := StdDir + PathDelim + ModName + '.aeth';
+  if FileExists(Candidate) then Exit(Candidate);
+  Candidate := StdDir + PathDelim + LowerCase(ModName) + '.aeth';
+  if FileExists(Candidate) then Exit(Candidate);
+
+  // 4. Diretório de trabalho atual (cwd)
+  Candidate := GetCurrentDir + PathDelim + 'std' + PathDelim + ModName + '.aeth';
+  if FileExists(Candidate) then Exit(Candidate);
+  Candidate := GetCurrentDir + PathDelim + 'std' + PathDelim + LowerCase(ModName) + '.aeth';
+  if FileExists(Candidate) then Exit(Candidate);
+  Candidate := GetCurrentDir + PathDelim + ModName + '.aeth';
+  if FileExists(Candidate) then Exit(Candidate);
+end;
+
+procedure ResolveModuleImports(TargetMod: TASTModule; const BaseDir: string; Visited: TStringList);
+var
+  I, J: Integer;
+  ModName, ModPath, ModSource: string;
+  SubLexer: TAetherLexer;
+  SubParser: TAetherParser;
+  SubMod: TASTModule;
+begin
+  for I := 0 to TargetMod.Imports.Count - 1 do
+  begin
+    ModName := TargetMod.Imports[I];
+    if Visited.IndexOf(LowerCase(ModName)) >= 0 then Continue;
+    Visited.Add(LowerCase(ModName));
+
+    ModPath := FindModuleFile(ModName, BaseDir);
+    if ModPath = '' then
+      raise Exception.CreateFmt('Modulo Aether "%s" nao encontrado. Verifique se o arquivo existe ou se esta em "std/".', [ModName]);
+
+    ModSource := LoadFileContent(ModPath);
+    SubLexer := TAetherLexer.Create(ModSource);
+    SubParser := TAetherParser.Create(SubLexer);
+    try
+      SubMod := SubParser.ParseModule;
+      try
+        ResolveModuleImports(SubMod, ExtractFilePath(ModPath), Visited);
+
+        // Mescla PascalImports se houver
+        for J := 0 to SubMod.PascalImports.Count - 1 do
+          if TargetMod.PascalImports.IndexOf(SubMod.PascalImports[J]) < 0 then
+            TargetMod.PascalImports.Add(SubMod.PascalImports[J]);
+
+        // Mescla Types no início
+        for J := SubMod.Types.Count - 1 downto 0 do
+          TargetMod.Types.Insert(0, SubMod.Types.Extract(SubMod.Types[J]));
+
+        // Mescla Functions no início
+        for J := SubMod.Functions.Count - 1 downto 0 do
+          TargetMod.Functions.Insert(0, SubMod.Functions.Extract(SubMod.Functions[J]));
+      finally
+        SubMod.Free;
+      end;
+    finally
+      SubParser.Free;
+      SubLexer.Free;
+    end;
+  end;
+end;
+
 procedure CompileFile(const SourceFile: string; TargetPascal: Boolean; CheckOnly, DumpASTOnly: Boolean; const OutputExeName: string; SilentBanner: Boolean);
 var
   Source: string;
@@ -98,6 +181,7 @@ var
   Success: Boolean;
   CompileLog: string;
   CodeFile: TStringList;
+  Visited: TStringList;
 begin
   Source := LoadFileContent(SourceFile);
   Lexer := TAetherLexer.Create(Source);
@@ -105,6 +189,12 @@ begin
   try
     ModuleNode := Parser.ParseModule;
     try
+      Visited := TStringList.Create;
+      try
+        ResolveModuleImports(ModuleNode, ExtractFilePath(ExpandFileName(SourceFile)), Visited);
+      finally
+        Visited.Free;
+      end;
       if DumpASTOnly then
       begin
         WriteLn(Format('--- Arvore Sintatica Abstrata (AST) de: %s ---', [SourceFile]));

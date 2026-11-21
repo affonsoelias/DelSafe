@@ -1,0 +1,36 @@
+module Collections;
+
+type
+    FixedBuffer = record
+        capacity: UInt32;
+        count: UInt32;
+    end;
+
+function NewBuffer(borrow cap: UInt32): FixedBuffer
+begin
+    return FixedBuffer(capacity: cap, count: 0);
+end;
+
+function IsFull(borrow buf: FixedBuffer): Bool
+begin
+    if buf.count >= buf.capacity then
+        return true;
+    else
+        return false;
+    end;
+end;
+
+function Available(borrow buf: FixedBuffer): UInt32
+begin
+    return buf.capacity - buf.count;
+end;
+
+function PushItem(mut borrow buf: FixedBuffer): Bool
+begin
+    if buf.count < buf.capacity then
+        buf.count := buf.count + 1;
+        return true;
+    else
+        return false;
+    end;
+end;

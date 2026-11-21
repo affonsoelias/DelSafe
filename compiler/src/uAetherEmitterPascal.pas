@@ -26,7 +26,8 @@ type
     function EmitTypeRef(const AType: string): string;
     function EmitExpr(Expr: TASTExpr): string;
     procedure EmitStmt(Stmt: TASTStmt);
-    procedure EmitRecordDecl(Rec: TASTRecordDecl);
+    procedure EmitRecordType(Rec: TASTRecordDecl);
+    procedure EmitRecordConstructor(Rec: TASTRecordDecl);
     procedure EmitEnumDecl(Enm: TASTEnumDecl);
     procedure EmitFunction(Func: TASTFunction);
     procedure EmitProgramBlock(Prog: TASTProgramBlock);
@@ -358,11 +359,10 @@ begin
   end;
 end;
 
-procedure TAetherEmitterPascal.EmitRecordDecl(Rec: TASTRecordDecl);
+procedure TAetherEmitterPascal.EmitRecordType(Rec: TASTRecordDecl);
 var
   I: Integer;
   Field: TASTRecordField;
-  CtorParams: string;
 begin
   Emit(Format('T%s = record', [Rec.Name]));
   IncIndent;
@@ -374,8 +374,14 @@ begin
   DecIndent;
   Emit('end;');
   Emit('');
+end;
 
-  // Emite funcao construtora estilo DataBuffer(id: 1, size: 2)
+procedure TAetherEmitterPascal.EmitRecordConstructor(Rec: TASTRecordDecl);
+var
+  I: Integer;
+  Field: TASTRecordField;
+  CtorParams: string;
+begin
   CtorParams := '';
   for I := 0 to Rec.Fields.Count - 1 do
   begin
@@ -629,11 +635,19 @@ begin
     for I := 0 to AModule.Types.Count - 1 do
     begin
       if AModule.Types[I] is TASTRecordDecl then
-        EmitRecordDecl(TASTRecordDecl(AModule.Types[I]))
+        EmitRecordType(TASTRecordDecl(AModule.Types[I]))
       else if AModule.Types[I] is TASTEnumDecl then
         EmitEnumDecl(TASTEnumDecl(AModule.Types[I]));
     end;
     DecIndent;
+    Emit('');
+
+    // Construtores de records
+    for I := 0 to AModule.Types.Count - 1 do
+    begin
+      if AModule.Types[I] is TASTRecordDecl then
+        EmitRecordConstructor(TASTRecordDecl(AModule.Types[I]));
+    end;
   end;
 
   // Funções

@@ -1,0 +1,13 @@
+module IO;
+
+type
+    IOError = enum
+        FileNotFound,
+        PermissionDenied,
+        DiskError
+    end;
+
+function Informar(borrow mensagem: String): Void
+begin
+    PrintLn("[IO]: %s", mensagem);
+end;

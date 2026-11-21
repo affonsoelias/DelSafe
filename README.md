@@ -24,6 +24,7 @@ Além disso, o Aether inclui:
   - **[Documentação Técnica](file:///c:/Users/Pichau/Documents/aether/docs/tecnica/ESPECIFICACAO_LINGUAGEM.md):** Gramática formal EBNF, segurança de memória e arquitetura do compilador.
   - **[Roadmap de Desenvolvimento](file:///c:/Users/Pichau/Documents/aether/docs/planejamento/ROADMAP_DE_DESENVOLVIMENTO.md):** Fases concluídas e metas futuras.
 - **[`editors/vscode/`](file:///c:/Users/Pichau/Documents/aether/editors/vscode/README.md):** Extensão oficial do VS Code (realce de sintaxe TextMate, snippets, diagnósticos do compilador e integração com a aba *Problems*).
+- **[`std/`](file:///c:/Users/Pichau/Documents/aether/std/):** Biblioteca Padrão oficial (`math.aeth`, `strings.aeth`, `io.aeth`, `collections.aeth`).
 - **`examples/`:** Exemplos conceituais e programas de teste para validar o compilador:
   - [`01_hello_world.aeth`](file:///c:/Users/Pichau/Documents/aether/examples/01_hello_world.aeth): Estrutura básica e saída formatada.
   - [`02_ownership_and_borrow.aeth`](file:///c:/Users/Pichau/Documents/aether/examples/02_ownership_and_borrow.aeth): Posse, empréstimo (`borrow`) e movimentação (`take`).
@@ -31,6 +32,7 @@ Além disso, o Aether inclui:
   - [`04_method_syntax_ufcs.aeth`](file:///c:/Users/Pichau/Documents/aether/examples/04_method_syntax_ufcs.aeth): Orientação a objetos moderna via UFCS (`meu_buffer.Inspecionar()`).
   - [`05_curso_projeto_final.aeth`](file:///c:/Users/Pichau/Documents/aether/examples/05_curso_projeto_final.aeth): Sistema bancário seguro unindo UFCS, `mut borrow`, `Result` e contratos.
   - [`06_interop_extern.aeth`](file:///c:/Users/Pichau/Documents/aether/examples/06_interop_extern.aeth): Interoperabilidade com bibliotecas C (`extern function`) e inclusão de units Pascal (`import pascal`).
+  - [`07_standard_library.aeth`](file:///c:/Users/Pichau/Documents/aether/examples/07_standard_library.aeth): Demonstração da Biblioteca Padrão (`import Math; import Strings; import IO; import Collections;`).
 
 ---
 

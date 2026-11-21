@@ -1,0 +1,69 @@
+module StdLibDemo;
+
+import Math;
+import Strings;
+import IO;
+import Collections;
+
+program Main;
+var
+    val_abs: Float64;
+    val_max: Float64;
+    val_clamped: Float64;
+    val_pow: Float64;
+    res_sqrt: Result<Float64, MathError>;
+    buffer: FixedBuffer;
+    ok_push: Bool;
+begin
+    PrintLn("=== TESTE DA BIBLIOTECA PADRAO AETHER (STD/) ===");
+
+    // 1. Testando std/io
+    Informar(borrow "Inicializando demonstracao da biblioteca padrao...");
+
+    // 2. Testando std/strings
+    PrintMessage(borrow "INFO", borrow "Modulo Strings carregado com sucesso!");
+    if IsEmpty(borrow "") then
+        PrintLn("Validacao Strings: IsEmpty(\"\") retornou true como esperado.");
+    end;
+
+    // 3. Testando std/math
+    val_abs := Abs(borrow -42.5);
+    val_max := Max(borrow 10.0, borrow 99.5);
+    val_clamped := Clamp(borrow 150.0, borrow 0.0, borrow 100.0);
+    val_pow := Pow(borrow 2.0, borrow 8.0);
+
+    PrintLn("Math.Abs(-42.5) = %f", val_abs);
+    PrintLn("Math.Max(10.0, 99.5) = %f", val_max);
+    PrintLn("Math.Clamp(150.0, 0.0, 100.0) = %f", val_clamped);
+    PrintLn("Math.Pow(2.0, 8.0) = %f", val_pow);
+
+    res_sqrt := SqrtSafe(borrow 81.0);
+    match res_sqrt do
+        case Ok(let raiz):
+            PrintLn("Math.SqrtSafe(81.0) = %f", raiz);
+        case Err(MathError.DominioInvalido):
+            PrintLn("Erro: Raiz de numero negativo!");
+        case Err(MathError.DivisaoPorZero):
+            PrintLn("Erro: Divisao por zero!");
+    end;
+
+    // 4. Testando std/collections com sintaxe UFCS e controle de posse
+    PrintLn("\n--- Testando std/collections (FixedBuffer) ---");
+    buffer := NewBuffer(borrow 3);
+    PrintLn("Buffer criado com capacidade: %d, itens: %d", buffer.capacity, buffer.count);
+
+    ok_push := buffer.PushItem();
+    ok_push := buffer.PushItem();
+    PrintLn("Apos 2 PushItem: itens = %d, disponivel = %d", buffer.count, buffer.Available());
+
+    if not buffer.IsFull() then
+        PrintLn("Buffer ainda possui espaco!");
+    end;
+
+    ok_push := buffer.PushItem();
+    if buffer.IsFull() then
+        PrintLn("Buffer agora esta totalmente cheio (capacidade esgotada)!");
+    end;
+
+    PrintLn("\nTodos os 4 modulos da std/ operando com sucesso!");
+end.

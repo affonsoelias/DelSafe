@@ -86,7 +86,7 @@ begin
   if Assigned(FModule) then
     for I := 0 to FModule.Types.Count - 1 do
       if (TASTNode(FModule.Types[I]) is TASTEnumDecl) and
-         (TASTEnumDecl(FModule.Types[I]).Name = AName) then
+         SameText(TASTEnumDecl(FModule.Types[I]).Name, AName) then
         Exit(True);
 end;
 
@@ -97,7 +97,7 @@ begin
   Result := False;
   if Assigned(FCurrentFunc) then
     for I := 0 to FCurrentFunc.Params.Count - 1 do
-      if (TASTParam(FCurrentFunc.Params[I]).Name = AName) and
+      if SameText(TASTParam(FCurrentFunc.Params[I]).Name, AName) and
          (TASTParam(FCurrentFunc.Params[I]).Ownership = owMutBorrow) then
         Exit(True);
 end;
@@ -109,7 +109,7 @@ begin
   Result := nil;
   if Assigned(FModule) then
     for I := 0 to FModule.Functions.Count - 1 do
-      if TASTFunction(FModule.Functions[I]).Name = AName then
+      if SameText(TASTFunction(FModule.Functions[I]).Name, AName) then
         Exit(TASTFunction(FModule.Functions[I]));
 end;
 
@@ -161,6 +161,7 @@ var
   Un: TASTUnaryExpr;
   Call: TASTCallExpr;
   FuncDecl: TASTFunction;
+  CalleeName: string;
   ArgsStr: string;
   ArgVal: string;
   I: Integer;
@@ -263,6 +264,11 @@ begin
 
     // Construtor ou chamada normal
     FuncDecl := FindFunction(Call.Callee);
+    if Assigned(FuncDecl) then
+      CalleeName := FuncDecl.Name
+    else
+      CalleeName := Call.Callee;
+
     ArgsStr := '';
     for I := 0 to Call.Args.Count - 1 do
     begin
@@ -278,7 +284,7 @@ begin
       if I < Call.Args.Count - 1 then
         ArgsStr := ArgsStr + ', ';
     end;
-    Result := Call.Callee + '(' + ArgsStr + ')';
+    Result := CalleeName + '(' + ArgsStr + ')';
     Exit;
   end;
 

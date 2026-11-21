@@ -1,0 +1,66 @@
+module Math;
+
+import pascal Math;
+
+extern function sqrt(borrow x: Float64): Float64;
+extern function pow(borrow base: Float64; borrow exp: Float64): Float64;
+
+type
+    MathError = enum
+        DivisaoPorZero,
+        DominioInvalido
+    end;
+
+function Abs(borrow x: Float64): Float64
+begin
+    if x < 0.0 then
+        return 0.0 - x;
+    else
+        return x;
+    end;
+end;
+
+function Max(borrow a: Float64; borrow b: Float64): Float64
+begin
+    if a > b then
+        return a;
+    else
+        return b;
+    end;
+end;
+
+function Min(borrow a: Float64; borrow b: Float64): Float64
+begin
+    if a < b then
+        return a;
+    else
+        return b;
+    end;
+end;
+
+function Clamp(borrow val: Float64; borrow min_val: Float64; borrow max_val: Float64): Float64
+contract
+    require
+        min_val <= max_val;
+    ensure
+        true;
+begin
+    if val < min_val then
+        return min_val;
+    else
+        if val > max_val then
+            return max_val;
+        else
+            return val;
+        end;
+    end;
+end;
+
+function SqrtSafe(borrow x: Float64): Result<Float64, MathError>
+begin
+    if x < 0.0 then
+        return Err(MathError.DominioInvalido);
+    else
+        return Ok(sqrt(borrow x));
+    end;
+end;

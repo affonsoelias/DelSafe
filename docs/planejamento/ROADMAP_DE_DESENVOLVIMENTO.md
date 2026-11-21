@@ -48,15 +48,16 @@ Este documento traça o status oficial de desenvolvimento do compilador e as pr�
 - [x] Integração do diagnósticos JSON (`--emit-json-diagnostics`) com a aba *Problems* do VS Code e sugestões (*suggested fixes*).
 - [x] Comandos integrados para compilar via backend Pascal e via backend C99 diretamente pelo editor.
 
+### ✅ Fase 8: Biblioteca Padrão (`std/`) e Resolução de Módulos (Concluído)
+- [x] Resolução automática e recursiva de `import <Modulo>` no compilador `aetherc` (busca local e em `std/`).
+- [x] `std/math.aeth`: Constantes e funções matemáticas fundamentais (`Abs`, `Max`, `Min`, `Clamp`, `Pow`, `SqrtSafe`).
+- [x] `std/strings.aeth`: Manipulação e validação de texto (`IsEmpty`, `Equals`, `PrintMessage`).
+- [x] `std/io.aeth`: Tipos e rotinas seguras de entrada/saída (`IOError`, `Informar`).
+- [x] `std/collections.aeth`: Estrutura de dados com semântica de posse e métodos UFCS (`FixedBuffer`, `NewBuffer`, `IsFull`, `Available`, `PushItem`).
+
 ---
 
 ## 🚀 Próximas Fases e Metas Futuras
-
-### 🎯 Fase 8: Biblioteca Padrão (`std/`)
-- [ ] `std/math.aeth`: Funções matemáticas fundamentais.
-- [ ] `std/io.aeth`: Leitura e escrita de arquivos, buffers e streams.
-- [ ] `std/strings.aeth`: Manipulação avançada de texto UTF-8.
-- [ ] `std/collections.aeth`: Listas dinâmicas seguras (`List<T>`) e dicionários com semântica de posse.
 
 ### 🎯 Fase 9: LSP (Language Server Protocol)
 - [ ] Servidor de linguagem básico para autocompletar, go-to-definition e diagnósticos em tempo real durante a digitação.

@@ -29,6 +29,8 @@ type
     constructor Create;
     destructor Destroy; override;
     procedure Add(Node: TASTNode);
+    procedure Insert(Index: Integer; Node: TASTNode);
+    function Extract(Node: TASTNode): TASTNode;
     property Count: Integer read GetCount;
     property Items[Index: Integer]: TASTNode read GetItem; default;
   end;
@@ -320,6 +322,16 @@ end;
 procedure TASTNodeList.Add(Node: TASTNode);
 begin
   FItems.Add(Node);
+end;
+
+procedure TASTNodeList.Insert(Index: Integer; Node: TASTNode);
+begin
+  FItems.Insert(Index, Node);
+end;
+
+function TASTNodeList.Extract(Node: TASTNode): TASTNode;
+begin
+  Result := TASTNode(FItems.Extract(Node));
 end;
 
 function TASTNodeList.GetCount: Integer;

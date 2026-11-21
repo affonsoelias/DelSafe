@@ -1,0 +1,26 @@
+module Strings;
+
+extern function puts(borrow s: String): Int32;
+
+function IsEmpty(borrow s: String): Bool
+begin
+    if s = "" then
+        return true;
+    else
+        return false;
+    end;
+end;
+
+function Equals(borrow a: String; borrow b: String): Bool
+begin
+    if a = b then
+        return true;
+    else
+        return false;
+    end;
+end;
+
+function PrintMessage(borrow prefix: String; borrow msg: String): Void
+begin
+    PrintLn("[%s] %s", prefix, msg);
+end;
