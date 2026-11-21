@@ -1,113 +1,181 @@
 # Aether Programming Language
 
-> **Uma linguagem de sistemas com a clareza e estrutura do Object Pascal, a segurança de memória do Rust e um compilador projetado para cooperação perfeita entre Humanos e Inteligências Artificiais.**
+> **Uma linguagem de sistemas moderna com a clareza estruturada de Object Pascal e Ada, a segurança estática de memória do Rust, interoperabilidade bilateral nativa com C e Pascal, e arquitetada do zero para colaboração perfeita com Inteligências Artificiais.**
 
 ---
 
-## 🌟 O Conceito
+## 🧭 Por que o Aether foi criado?
 
-**Aether** nasceu da união de duas filosofias de software extraordinárias:
-1. **A disciplina e legibilidade clássica do Pascal:** Blocos delimitados por palavras legíveis (`begin/end`, `module`, `contract`), separação rígida de seções (`var`, `type`), ausência de ambiguidades em chaves aninhadas e facilidade de leitura visual.
-2. **A blindagem de sistemas moderna do Rust:** Sistema de posse (*Ownership & Borrowing*), tipos de dados algébricos (`enum` com tuplas e records associados), monads de tratamento de falha explícitas (`Result<T, E>` / `Option<T>`) e zero vazamentos de memória sem a necessidade de coletor de lixo (*garbage collector*).
+O **Aether** nasceu de uma necessidade real de engenharia e da busca pelo equilíbrio perfeito no desenvolvimento de software de alta confiabilidade:
 
-Além disso, o Aether inclui:
-- **Contratos Nativos (estilo Ada / Eiffel):** Blocos `contract require / ensure` integrados diretamente na assinatura das funções.
-- **Compilador Amigável à IA:** Diagnósticos em JSON com sugestões estruturadas de correção (*auto-fix*) prontas para serem aplicadas por agentes inteligentes e IDEs modernas.
+### 1. Mais segura que Object Pascal sem perder sua essência
+O Object Pascal (Delphi / Free Pascal) é uma das linguagens mais elegantes, legíveis e produtivas já criadas. No entanto, em sistemas modernos, a gestão manual de memória tradicional pode levar a armadilhas silenciosas: *Access Violations* (ponteiros nulos), vazamentos de memória (*memory leaks*) e acessos após liberação (*use-after-free*). O Aether traz a segurança necessária para eliminar essas classes de bugs **em tempo de compilação**, preservando a clareza e legibilidade que tornam a família Pascal memorável.
+
+### 2. Sem a complexidade intimidadora do Rust
+O Rust provou que o sistema de posse (*Ownership & Borrowing*) é o padrão ouro da segurança de memória moderna sem coletor de lixo (*garbage collector*). Porém, essa segurança veio acompanhada de uma barreira de aprendizado extremamente íngreme: anotações complexas de ciclo de vida (`'a`), sintaxe árida carregada de símbolos e regras que tornam o desenvolvimento inicial lento e frustrante. O Aether implementa as garantias de posse, empréstimo (`borrow`) e movimentação (`take`) com uma semântica limpa, amigável e acessível — você ganha a segurança do Rust sem precisar lutar contra o compilador.
+
+### 3. Concebida para IAs: Sem Alucinações, Sem Ambiguidade (AI-Native)
+Ao programar com Inteligências Artificiais e LLMs em linguagens cheias de regras implícitas e chaves soltas (como C, C++ ou JavaScript), é comum a IA alucinar tipos, esquecer fechamentos de escopo ou introduzir efeitos colaterais imperceptíveis. 
+O Aether foi projetado como uma linguagem **AI-Native**:
+* **Gramática Estruturada e Explícita:** Seções claras e bem delimitadas (`type`, `var`, `contract`, `begin ... end`).
+* **Sintaxe Não Ambígua:** Blocos expressivos inspirados em **Pascal** e **Ada** reduzem a incerteza do modelo de linguagem.
+* **Previsibilidade:** Sem inferências mágicas que confundem o contexto da IA; o que está escrito é exatamente o que é executado.
+* **Diagnósticos em JSON para Agentes:** O compilador emite diagnósticos estruturados via `--emit-json-diag` com sugestões diretas de correção (*auto-fix*), permitindo que agentes de IA e IDEs consertem erros com precisão cirúrgica.
+
+### 4. Fácil Aprendizado: Próxima de Object Pascal e Ada
+A sintaxe do Aether se lê como pseudocódigo executável de alto nível. Qualquer desenvolvedor com conhecimento prévio de Pascal, Delphi, Ada ou linguagens estruturadas se sente em casa em poucos minutos, sem curvas misteriosas ou conceitos crípticos.
+
+### 5. Interoperabilidade Bilateral Total com C e Pascal
+O Aether não cria um ecossistema isolado:
+* **Consome C e Pascal nativamente:** Você pode importar e usar qualquer biblioteca em C (`extern function`) e qualquer unit do Free Pascal (`import pascal`) diretamente no código.
+* **Consumido por C e Pascal:** O compilador do Aether possui emissores nativos de alta performance para **C99** e **Object Pascal**. As bibliotecas que você escreve em Aether podem ser compiladas e consumidas de maneira transparente por bases de código existentes em C ou Delphi/FPC.
 
 ---
 
-## 📂 Estrutura do Projeto
+## 🌟 Principais Recursos
 
-- **[`docs/`](file:///c:/Users/Pichau/Documents/aether/docs/README.md):** Documentação oficial completa:
-  - **[Curso Oficial Aether](file:///c:/Users/Pichau/Documents/aether/docs/curso/README.md):** Trilha didática em 9 lições práticas (do Hello World a contratos, posse e projeto final).
-  - **[Guia do Usuário](file:///c:/Users/Pichau/Documents/aether/docs/usuario/GUIA_DO_INICIANTE.md):** Primeiros passos, instalação e conceitos de posse.
-  - **[Documentação Técnica](file:///c:/Users/Pichau/Documents/aether/docs/tecnica/ESPECIFICACAO_LINGUAGEM.md):** Gramática formal EBNF, segurança de memória e arquitetura do compilador.
-  - **[Roadmap de Desenvolvimento](file:///c:/Users/Pichau/Documents/aether/docs/planejamento/ROADMAP_DE_DESENVOLVIMENTO.md):** Fases concluídas e metas futuras.
-- **[`editors/vscode/`](file:///c:/Users/Pichau/Documents/aether/editors/vscode/README.md):** Extensão oficial do VS Code (realce de sintaxe TextMate, snippets, diagnósticos do compilador e integração com a aba *Problems*).
-- **[`std/`](file:///c:/Users/Pichau/Documents/aether/std/):** Biblioteca Padrão oficial (`math.aeth`, `strings.aeth`, `io.aeth`, `collections.aeth`).
-- **`examples/`:** Exemplos conceituais e programas de teste para validar o compilador:
-  - [`01_hello_world.aeth`](file:///c:/Users/Pichau/Documents/aether/examples/01_hello_world.aeth): Estrutura básica e saída formatada.
-  - [`02_ownership_and_borrow.aeth`](file:///c:/Users/Pichau/Documents/aether/examples/02_ownership_and_borrow.aeth): Posse, empréstimo (`borrow`) e movimentação (`take`).
-  - [`03_result_and_match.aeth`](file:///c:/Users/Pichau/Documents/aether/examples/03_result_and_match.aeth): Contratos, enum algébrico e casamento de padrões exaustivo.
-  - [`04_method_syntax_ufcs.aeth`](file:///c:/Users/Pichau/Documents/aether/examples/04_method_syntax_ufcs.aeth): Orientação a objetos moderna via UFCS (`meu_buffer.Inspecionar()`).
-  - [`05_curso_projeto_final.aeth`](file:///c:/Users/Pichau/Documents/aether/examples/05_curso_projeto_final.aeth): Sistema bancário seguro unindo UFCS, `mut borrow`, `Result` e contratos.
-  - [`06_interop_extern.aeth`](file:///c:/Users/Pichau/Documents/aether/examples/06_interop_extern.aeth): Interoperabilidade com bibliotecas C (`extern function`) e inclusão de units Pascal (`import pascal`).
-  - [`07_standard_library.aeth`](file:///c:/Users/Pichau/Documents/aether/examples/07_standard_library.aeth): Demonstração da Biblioteca Padrão (`import Math; import Strings; import IO; import Collections;`).
+- 🛡️ **Segurança de Memória Estática (*Ownership & Borrowing*):** Sem garbage collector, sem ponteiros soltos. Uso exclusivo de `own`, `borrow`, `mut borrow` e `take` checados em tempo de compilação.
+- 📜 **Contratos Nativos no Código (Ada / Eiffel style):** Pré-condições (`require`) e pós-condições (`ensure`) integradas diretamente na assinatura das funções.
+- 🧩 **Traits e Polimorfismo Estático (*Zero-Cost Abstractions*):** Defina contratos comportamentais com `trait` e implemente para seus tipos com `impl`. Despacho monomorfizado estático em tempo de compilação, sem tabelas virtuais (vtable) nem overhead em runtime.
+- 🎯 **Pattern Matching Algébrico:** `match` exaustivo e tipos algébricos com dados associados (`enum Payload`), eliminando a necessidade de `nil`/`null` com as mónadas nativas `Result<T, E>` e `Option<T>`.
+- ⚡ **Sintaxe de Métodos via UFCS:** Invocação intuitiva estilo objeto (`registro.Metodo()`) combinada com funções puras e modulares.
+- 📦 **Gerenciador de Pacotes e Test Runner Integrados:** Ferramental nativo (`aether add` e `aether test`) sem dependência de ferramentas externas.
+- 🔌 **LSP Nativo (Language Server Protocol):** Autocompletar, verificação em tempo real e integração completa com VS Code e editores modernos.
 
 ---
 
 ## 🚀 Sintaxe em 60 Segundos
 
 ```pascal
-module Exemplo;
+module ExemploBanco;
+
+import IO;
 
 type
-    Status = enum
-        Ok(code: UInt32),
-        Falha(motivo: String)
+    Conta = record
+        titular: String;
+        saldo: Real;
     end;
 
-function Validar(take s: Status): Result<UInt32, String>
-contract
-    require
-        true;
+    Operacao = enum
+        Deposito(valor: Real),
+        Saque(valor: Real)
+    end;
+
+trait Processavel
+    function Executar(mut borrow self: Conta, take op: Operacao): Result<Real, String>;
+end;
+
+impl Processavel for Conta
+    function Executar(mut borrow self: Conta, take op: Operacao): Result<Real, String>
+    contract
+        require
+            self.saldo >= 0.0;
+        ensure
+            result.IsOk() implies self.saldo >= 0.0;
+    begin
+        match op do
+            case Operacao.Deposito(let v):
+                self.saldo := self.saldo + v;
+                return Ok(self.saldo);
+
+            case Operacao.Saque(let v):
+                if self.saldo >= v then
+                    self.saldo := self.saldo - v;
+                    return Ok(self.saldo);
+                else
+                    return Err("Saldo insuficiente para o saque");
+                end;
+        end;
+    end;
+end;
+
+function Main()
+var
+    c: Conta;
+    res: Result<Real, String>;
 begin
-    match s do
-        case Status.Ok(let codigo):
-            return Ok(codigo);
-        case Status.Falha(let erro):
-            return Err("Operacao falhou: " + erro);
+    c.titular := "Alice";
+    c.saldo := 1000.0;
+
+    res := c.Executar(Operacao.Saque(250.0));
+    match res do
+        case Result.Ok(let novo_saldo):
+            IO.PrintFmt("Saque efetuado com sucesso! Saldo atual: %.2f\n", novo_saldo);
+        case Result.Err(let motivo):
+            IO.PrintFmt("Erro na transacao: %s\n", motivo);
     end;
 end;
 ```
 
 ---
 
-## 🛠️ Usando o Compilador `aetherc`
+## 🛠️ Instalação e Uso
 
-O compilador oficial está implementado em Free Pascal na pasta `compiler/` e disponível em `bin/aetherc.exe`.
+O compilador oficial `aetherc` é distribuído em `bin/aetherc.exe` e suporta compilação cruzada para **Free Pascal** e **GCC (C99)**.
 
-### 1. Criar e Gerenciar Projetos (`init`, `build`, `run`)
-```bash
-# 1. Cria um novo projeto com manifesto aether.json e estrutura organizada
-./bin/aetherc init meu_projeto
-cd meu_projeto
-
-# 2. Compila o projeto baseado no aether.json
-aetherc build
-
-# 3. Compila e executa imediatamente
-aetherc run
-
-# 4. Compila utilizando o backend C99/GCC
-aetherc build --target=c
-```
-
-### 2. Diagnóstico do Ambiente
+### 1. Verificação do Ambiente
 ```bash
 ./bin/aetherc --doctor
 ```
-Verifica automaticamente se o **Free Pascal (`fpc`)** e o **compilador C (`gcc`)** (via MSYS2 no Windows ou nativo no Linux/macOS) estão instalados e operacionais.
+Informa se o compilador Free Pascal (`fpc`) e o GCC (`gcc` via MSYS2 no Windows ou nativo em Linux/macOS) estão configurados corretamente.
 
-### 3. Compilar Arquivo Avulso (Backend Pascal - Padrão)
+### 2. Criar e Executar um Projeto
 ```bash
-./bin/aetherc examples/01_hello_world.aeth
-./bin/01_hello_world.exe
+# 1. Cria a estrutura do projeto com manifesto aether.json
+aetherc init meu_app
+cd meu_app
+
+# 2. Executa a compilação e roda a aplicação imediatamente
+aetherc run
+
+# 3. Compila utilizando o backend C99 nativo
+aetherc run --target=c
 ```
 
-### 4. Compilar Arquivo Avulso via C99 (MSYS2 GCC)
+### 3. Gerenciamento de Pacotes e Dependências
 ```bash
-./bin/aetherc examples/01_hello_world.aeth --target=c
+# Adiciona uma dependência local ao aether.json
+aetherc add math_extra --path=libs/math_extra
+
+# Adiciona uma dependência remota via Git
+aetherc add logger --git=https://github.com/exemplo/logger.git
 ```
 
-### 5. Modo Diagnóstico para IA (JSON Diagnostics)
+### 4. Execução de Testes Automatizados
 ```bash
-./bin/aetherc examples/02_ownership_and_borrow.aeth --emit-json-diag
-```
-Retorna diagnósticos em formato JSON estruturado com localização exata e sugestões de correção pronta para modelos de linguagem.
+# Roda todos os testes unitários da pasta tests/
+aetherc test
 
-### 6. Servidor de Linguagem (LSP - Language Server Protocol)
-```bash
-./bin/aetherc --lsp
+# Roda apenas testes que correspondam a um filtro
+aetherc test banco --target=c
 ```
-Inicia o servidor de linguagem nativo via `stdio` (JSON-RPC) para autocompletar, go-to-definition, hover e diagnósticos em tempo real no VS Code e Antigravity IDE.
+
+### 5. Compilar um Arquivo Único
+```bash
+# Backend Pascal (Padrão)
+aetherc examples/01_hello_world.aeth
+
+# Backend C99 (GCC)
+aetherc examples/01_hello_world.aeth --target=c
+```
+
+---
+
+## 📂 Estrutura do Repositório
+
+- **[`compiler/`](file:///c:/Users/Pichau/Documents/aether/compiler/):** Código-fonte do compilador oficial (bootstrap em Free Pascal e versão auto-hospedada em `compiler/aeth/`).
+- **[`std/`](file:///c:/Users/Pichau/Documents/aether/std/):** Biblioteca Padrão oficial (`math`, `strings`, `io`, `collections`).
+- **[`examples/`](file:///c:/Users/Pichau/Documents/aether/examples/):** Exemplos práticos cobrindo do Hello World a Traits, Pattern Matching, Ownership e Interoperabilidade.
+- **[`docs/`](file:///c:/Users/Pichau/Documents/aether/docs/):**
+  - **[Curso Oficial Aether](file:///c:/Users/Pichau/Documents/aether/docs/curso/README.md):** 9 lições práticas passo a passo.
+  - **[Guia do Iniciante](file:///c:/Users/Pichau/Documents/aether/docs/usuario/GUIA_DO_INICIANTE.md):** Manual completo de conceitos.
+  - **[Especificação Técnica](file:///c:/Users/Pichau/Documents/aether/docs/tecnica/ESPECIFICACAO_LINGUAGEM.md):** Gramática formal EBNF e arquitetura do compilador.
+  - **[Roadmap de Desenvolvimento](file:///c:/Users/Pichau/Documents/aether/docs/planejamento/ROADMAP_DE_DESENVOLVIMENTO.md):** Fases do projeto e metas futuras.
+- **[`ide/vscode/`](file:///c:/Users/Pichau/Documents/aether/ide/vscode/):** Extensão oficial para Visual Studio Code com syntax highlighting, snippets e LSP.
+
+---
+
+## 📄 Licença
+
+Projeto desenvolvido sob a licença aberta MIT. Consulte o arquivo [LICENSE](file:///c:/Users/Pichau/Documents/aether/LICENSE) para mais detalhes.
