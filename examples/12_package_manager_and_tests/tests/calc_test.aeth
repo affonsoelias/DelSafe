@@ -1,0 +1,14 @@
+module CalcTest;
+
+import MathExtra;
+
+program Main;
+var
+    t: Int32;
+begin
+    PrintLn("[TEST] Executando teste de calculo...");
+    t := Triplo(borrow 10);
+    if t = 30 then
+        PrintLn("  [PASS] Triplo(10) = 30");
+    end;
+end.

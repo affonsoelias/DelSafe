@@ -9,6 +9,13 @@ uses
   SysUtils, Classes, fpjson, jsonparser;
 
 type
+  TAetherDependency = record
+    Name: string;
+    Path: string;
+    GitUrl: string;
+    Version: string;
+  end;
+
   TAetherProjectConfig = record
     Name: string;
     Version: string;
@@ -18,13 +25,32 @@ type
     Output: string;
     RootDir: string;
     ConfigFile: string;
+    Dependencies: array of TAetherDependency;
   end;
 
 function FindProjectRoot(out RootDir, ConfigFile: string): Boolean;
 function LoadProjectConfig(out Config: TAetherProjectConfig): Boolean;
+function GetAetherCacheDir: string;
 procedure HandleProjectInit(const ProjectName: string);
+procedure HandleProjectAdd(const PkgName: string; const OptPath, OptGit, OptVer: string);
 
 implementation
+
+function GetAetherCacheDir: string;
+var
+  HomeDir: string;
+begin
+  {$IFDEF MSWINDOWS}
+  HomeDir := SysUtils.GetEnvironmentVariable('USERPROFILE');
+  if HomeDir = '' then HomeDir := SysUtils.GetEnvironmentVariable('APPDATA');
+  {$ELSE}
+  HomeDir := SysUtils.GetEnvironmentVariable('HOME');
+  {$ENDIF}
+  if HomeDir = '' then HomeDir := GetCurrentDir;
+  Result := HomeDir + PathDelim + '.aether' + PathDelim + 'cache';
+  if not DirectoryExists(Result) then
+    ForceDirectories(Result);
+end;
 
 function FindProjectRoot(out RootDir, ConfigFile: string): Boolean;
 var
@@ -56,10 +82,12 @@ var
   RootDir, ConfigFile, JsonStr: string;
   FileStream: TFileStream;
   StringStream: TStringStream;
-  JSON: TJSONData;
-  Obj: TJSONObject;
+  JSON, DepsData, ItemData: TJSONData;
+  Obj, DepsObj, ItemObj: TJSONObject;
+  I: Integer;
 begin
   Result := False;
+  SetLength(Config.Dependencies, 0);
   if not FindProjectRoot(RootDir, ConfigFile) then
     Exit(False);
 
@@ -88,6 +116,34 @@ begin
         Config.Backend := LowerCase(Obj.Get('backend', 'pascal'));
         Config.Entry := Obj.Get('entry', 'src' + PathDelim + 'main.aeth');
         Config.Output := Obj.Get('output', 'bin' + PathDelim + Config.Name + '.exe');
+
+        DepsData := Obj.Find('dependencies');
+        if Assigned(DepsData) and (DepsData is TJSONObject) then
+        begin
+          DepsObj := TJSONObject(DepsData);
+          SetLength(Config.Dependencies, DepsObj.Count);
+          for I := 0 to DepsObj.Count - 1 do
+          begin
+            Config.Dependencies[I].Name := DepsObj.Names[I];
+            Config.Dependencies[I].Path := '';
+            Config.Dependencies[I].GitUrl := '';
+            Config.Dependencies[I].Version := '';
+
+            ItemData := DepsObj.Items[I];
+            if ItemData is TJSONObject then
+            begin
+              ItemObj := TJSONObject(ItemData);
+              Config.Dependencies[I].Path := ItemObj.Get('path', '');
+              Config.Dependencies[I].GitUrl := ItemObj.Get('git', '');
+              Config.Dependencies[I].Version := ItemObj.Get('version', '');
+            end
+            else if ItemData is TJSONString then
+            begin
+              Config.Dependencies[I].Version := ItemData.AsString;
+            end;
+          end;
+        end;
+
         Result := True;
       end;
     finally
@@ -206,6 +262,7 @@ begin
     '    res := Abs(borrow -50.0);' + LineEnding +
     '    if res = 50.0 then' + LineEnding +
     '        PrintLn("  [PASS] Teste Abs passou com sucesso!");' + LineEnding +
+    '    end;' + LineEnding +
     '    PrintLn("[SUCESSO] Todos os testes passaram!");' + LineEnding +
     'end.' + LineEnding
   );
@@ -263,6 +320,110 @@ begin
   if ProjectName <> '' then
     WriteLn(Format('   cd %s', [ProjectName]));
   WriteLn('   aetherc run');
+  WriteLn('--------------------------------------------------------');
+end;
+
+procedure HandleProjectAdd(const PkgName: string; const OptPath, OptGit, OptVer: string);
+var
+  RootDir, ConfigFile, JsonStr: string;
+  FileStream: TFileStream;
+  StringStream: TStringStream;
+  JSON, DepsData: TJSONData;
+  Obj, DepsObj, SubObj: TJSONObject;
+  CachePkgDir: string;
+  Idx: Integer;
+begin
+  if PkgName = '' then
+    raise Exception.Create('Nome do pacote nao informado. Uso: aetherc add <nome_pacote> [--path=caminho] [--git=url] [--version=versao]');
+
+  if not FindProjectRoot(RootDir, ConfigFile) then
+    raise Exception.Create('Nenhum projeto Aether ("aether.json") encontrado no diretorio atual. Execute "aetherc init" primeiro.');
+
+  FileStream := TFileStream.Create(ConfigFile, fmOpenRead or fmShareDenyWrite);
+  StringStream := TStringStream.Create('');
+  try
+    StringStream.CopyFrom(FileStream, FileStream.Size);
+    JsonStr := StringStream.DataString;
+  finally
+    StringStream.Free;
+    FileStream.Free;
+  end;
+
+  JSON := GetJSON(JsonStr);
+  try
+    if not (JSON is TJSONObject) then
+      raise Exception.Create('Manifesto "aether.json" invalido.');
+
+    Obj := TJSONObject(JSON);
+    DepsData := Obj.Find('dependencies');
+    if not Assigned(DepsData) then
+    begin
+      DepsObj := TJSONObject.Create;
+      Obj.Add('dependencies', DepsObj);
+    end
+    else if DepsData is TJSONObject then
+      DepsObj := TJSONObject(DepsData)
+    else
+      raise Exception.Create('Secao "dependencies" em aether.json deve ser um objeto JSON.');
+
+    // Remove dependencia anterior se ja existia
+    Idx := DepsObj.IndexOfName(PkgName);
+    if Idx >= 0 then
+      DepsObj.Delete(Idx);
+
+    if OptPath <> '' then
+    begin
+      if not DirectoryExists(ExpandFileName(RootDir + PathDelim + OptPath)) and
+         not DirectoryExists(ExpandFileName(OptPath)) then
+        WriteLn(Format('Aviso: Diretorio local "%s" nao foi encontrado ainda.', [OptPath]));
+
+      SubObj := TJSONObject.Create;
+      SubObj.Add('path', StringReplace(OptPath, '\', '/', [rfReplaceAll]));
+      if OptVer <> '' then SubObj.Add('version', OptVer);
+      DepsObj.Add(PkgName, SubObj);
+    end
+    else if OptGit <> '' then
+    begin
+      SubObj := TJSONObject.Create;
+      SubObj.Add('git', OptGit);
+      if OptVer <> '' then
+        SubObj.Add('version', OptVer)
+      else
+        SubObj.Add('version', 'main');
+      DepsObj.Add(PkgName, SubObj);
+
+      CachePkgDir := GetAetherCacheDir + PathDelim + PkgName;
+      if not DirectoryExists(CachePkgDir) then
+        ForceDirectories(CachePkgDir);
+    end
+    else
+    begin
+      if OptVer <> '' then
+        DepsObj.Add(PkgName, OptVer)
+      else
+        DepsObj.Add(PkgName, '*');
+
+      CachePkgDir := GetAetherCacheDir + PathDelim + PkgName;
+      if not DirectoryExists(CachePkgDir) then
+        ForceDirectories(CachePkgDir);
+    end;
+
+    WriteStringToFile(ConfigFile, Obj.FormatJSON);
+  finally
+    JSON.Free;
+  end;
+
+  WriteLn('--------------------------------------------------------');
+  WriteLn(Format(' Pacote "%s" adicionado com sucesso a "aether.json"!', [PkgName]));
+  WriteLn('--------------------------------------------------------');
+  if OptPath <> '' then
+    WriteLn(' Origem: ' + OptPath)
+  else if OptGit <> '' then
+    WriteLn(' Repositorio Git: ' + OptGit)
+  else
+    WriteLn(' Versao: ' + OptVer);
+  WriteLn(' Pronto para importacao no projeto:');
+  WriteLn(Format('   import %s;', [UpCase(PkgName[1]) + Copy(PkgName, 2, Length(PkgName))]));
   WriteLn('--------------------------------------------------------');
 end;
 

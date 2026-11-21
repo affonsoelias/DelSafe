@@ -1,0 +1,11 @@
+module MathExtra;
+
+function Dobro(borrow v: Int32): Int32
+begin
+    return v * 2;
+end;
+
+function Triplo(borrow v: Int32): Int32
+begin
+    return v * 3;
+end;

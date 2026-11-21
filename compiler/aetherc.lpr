@@ -31,9 +31,11 @@ procedure PrintUsage;
 begin
   WriteLn('Uso: aetherc <comando | arquivo.aeth> [opcoes]');
   WriteLn('');
-  WriteLn('Comandos de Gerenciamento de Projetos:');
+  WriteLn('Comandos de Gerenciamento de Projetos e Pacotes:');
   WriteLn('  init [nome]       Inicializa um novo projeto Aether com manifesto aether.json');
   WriteLn('  new <nome>        Cria uma nova pasta com o projeto Aether estruturado');
+  WriteLn('  add <pacote>      Adiciona uma dependencia ao manifesto aether.json');
+  WriteLn('  test [filtro]     Executa testes unitarios da pasta tests/');
   WriteLn('  build             Compila o projeto atual baseado no manifesto aether.json');
   WriteLn('  run               Compila e executa imediatamente o binario do projeto');
   WriteLn('');
@@ -103,26 +105,47 @@ begin
   Result := S;
 end;
 
+function CamelToSnake(const S: string): string;
+var
+  I: Integer;
+begin
+  Result := '';
+  for I := 1 to Length(S) do
+  begin
+    if (S[I] in ['A'..'Z']) and (I > 1) and (S[I - 1] <> '.') and (S[I - 1] <> '_') and (S[I - 1] <> '/') and (S[I - 1] <> '\') then
+      Result := Result + '_' + LowerCase(S[I])
+    else
+      Result := Result + LowerCase(S[I]);
+  end;
+end;
+
 function FindModuleFile(const ModName, BaseDir: string): string;
 var
   Candidate: string;
-  ExeDir, StdDir: string;
-  RelPath, RelPathLower: string;
+  ExeDir, StdDir, CacheDir, DepDir: string;
+  RelPath, RelPathLower, RelPathSnake: string;
+  ProjConfig: TAetherProjectConfig;
+  I: Integer;
 begin
   Result := '';
   RelPath := StringReplace(ModName, '.', PathDelim, [rfReplaceAll]);
   RelPathLower := LowerCase(RelPath);
+  RelPathSnake := StringReplace(CamelToSnake(ModName), '.', PathDelim, [rfReplaceAll]);
 
   // 1. Diretório do arquivo fonte
   Candidate := BaseDir + RelPath + '.aeth';
   if FileExists(Candidate) then Exit(Candidate);
   Candidate := BaseDir + RelPathLower + '.aeth';
   if FileExists(Candidate) then Exit(Candidate);
+  Candidate := BaseDir + RelPathSnake + '.aeth';
+  if FileExists(Candidate) then Exit(Candidate);
 
   // 2. Subpasta std/ relativa ao diretório do arquivo fonte
   Candidate := BaseDir + 'std' + PathDelim + RelPath + '.aeth';
   if FileExists(Candidate) then Exit(Candidate);
   Candidate := BaseDir + 'std' + PathDelim + RelPathLower + '.aeth';
+  if FileExists(Candidate) then Exit(Candidate);
+  Candidate := BaseDir + 'std' + PathDelim + RelPathSnake + '.aeth';
   if FileExists(Candidate) then Exit(Candidate);
 
   // 3. Subpasta std/ relativa ao compilador (bin/../std)
@@ -132,16 +155,62 @@ begin
   if FileExists(Candidate) then Exit(Candidate);
   Candidate := StdDir + PathDelim + RelPathLower + '.aeth';
   if FileExists(Candidate) then Exit(Candidate);
+  Candidate := StdDir + PathDelim + RelPathSnake + '.aeth';
+  if FileExists(Candidate) then Exit(Candidate);
 
   // 4. Diretório de trabalho atual (cwd)
   Candidate := GetCurrentDir + PathDelim + RelPath + '.aeth';
   if FileExists(Candidate) then Exit(Candidate);
   Candidate := GetCurrentDir + PathDelim + RelPathLower + '.aeth';
   if FileExists(Candidate) then Exit(Candidate);
+  Candidate := GetCurrentDir + PathDelim + RelPathSnake + '.aeth';
+  if FileExists(Candidate) then Exit(Candidate);
   Candidate := GetCurrentDir + PathDelim + 'std' + PathDelim + RelPath + '.aeth';
   if FileExists(Candidate) then Exit(Candidate);
   Candidate := GetCurrentDir + PathDelim + 'std' + PathDelim + RelPathLower + '.aeth';
   if FileExists(Candidate) then Exit(Candidate);
+  Candidate := GetCurrentDir + PathDelim + 'std' + PathDelim + RelPathSnake + '.aeth';
+  if FileExists(Candidate) then Exit(Candidate);
+
+  // 5. Dependências do projeto atual (aether.json) e Cache Global (~/.aether/cache)
+  if LoadProjectConfig(ProjConfig) then
+  begin
+    for I := 0 to High(ProjConfig.Dependencies) do
+    begin
+      if ProjConfig.Dependencies[I].Path <> '' then
+        DepDir := ExpandFileName(ProjConfig.RootDir + PathDelim + ProjConfig.Dependencies[I].Path)
+      else
+        DepDir := ExpandFileName(ProjConfig.RootDir + PathDelim + '.aether' + PathDelim + 'deps' + PathDelim + ProjConfig.Dependencies[I].Name);
+
+      Candidate := DepDir + PathDelim + RelPath + '.aeth';
+      if FileExists(Candidate) then Exit(Candidate);
+      Candidate := DepDir + PathDelim + 'src' + PathDelim + RelPath + '.aeth';
+      if FileExists(Candidate) then Exit(Candidate);
+      Candidate := DepDir + PathDelim + RelPathLower + '.aeth';
+      if FileExists(Candidate) then Exit(Candidate);
+      Candidate := DepDir + PathDelim + 'src' + PathDelim + RelPathLower + '.aeth';
+      if FileExists(Candidate) then Exit(Candidate);
+      Candidate := DepDir + PathDelim + RelPathSnake + '.aeth';
+      if FileExists(Candidate) then Exit(Candidate);
+      Candidate := DepDir + PathDelim + 'src' + PathDelim + RelPathSnake + '.aeth';
+      if FileExists(Candidate) then Exit(Candidate);
+
+      // Cache global (~/.aether/cache/<pkg>)
+      CacheDir := GetAetherCacheDir + PathDelim + ProjConfig.Dependencies[I].Name;
+      Candidate := CacheDir + PathDelim + RelPath + '.aeth';
+      if FileExists(Candidate) then Exit(Candidate);
+      Candidate := CacheDir + PathDelim + 'src' + PathDelim + RelPath + '.aeth';
+      if FileExists(Candidate) then Exit(Candidate);
+      Candidate := CacheDir + PathDelim + RelPathLower + '.aeth';
+      if FileExists(Candidate) then Exit(Candidate);
+      Candidate := CacheDir + PathDelim + 'src' + PathDelim + RelPathLower + '.aeth';
+      if FileExists(Candidate) then Exit(Candidate);
+      Candidate := CacheDir + PathDelim + RelPathSnake + '.aeth';
+      if FileExists(Candidate) then Exit(Candidate);
+      Candidate := CacheDir + PathDelim + 'src' + PathDelim + RelPathSnake + '.aeth';
+      if FileExists(Candidate) then Exit(Candidate);
+    end;
+  end;
 end;
 
 procedure CollectModuleImports(TargetMod: TASTModule; const BaseDir: string; Visited: TStringList; AllTypes, AllTraits, AllImpls, AllFuncs: TFPList; PascalImports: TStringList);
@@ -321,6 +390,8 @@ begin
       else
         FinalExe := ExtractFilePath(ParamStr(0)) + ChangeFileExt(ExtractFileName(SourceFile), '.exe');
 
+      ForceDirectories(ExtractFileDir(FinalExe));
+
       if TargetPascal then
       begin
         IntermediateFile := GenDir + PathDelim + ChangeFileExt(ExtractFileName(SourceFile), '.pas');
@@ -416,6 +487,117 @@ begin
   end;
 end;
 
+procedure HandleProjectTest(const Filter: string; TargetPascal: Boolean);
+var
+  ProjConfig: TAetherProjectConfig;
+  TestsDir, TestFile, TestExe: string;
+  SearchRec: TSearchRec;
+  TestFiles: TStringList;
+  I, ExitCode: Integer;
+  PassedCount, FailedCount: Integer;
+  StartTime, ElapsedTime: TDateTime;
+  ElapsedMs: Int64;
+  BackendName: string;
+begin
+  if not LoadProjectConfig(ProjConfig) then
+  begin
+    WriteLn(ErrOutput, 'Erro: Nenhum projeto Aether ("aether.json") encontrado no diretorio atual.');
+    Halt(1);
+  end;
+
+  TestsDir := ProjConfig.RootDir + PathDelim + 'tests';
+  if not DirectoryExists(TestsDir) then
+  begin
+    WriteLn(Format('Aviso: Diretorio de testes "%s" nao encontrado.', [TestsDir]));
+    Halt(0);
+  end;
+
+  TestFiles := TStringList.Create;
+  try
+    if FindFirst(TestsDir + PathDelim + '*.aeth', faAnyFile, SearchRec) = 0 then
+    begin
+      repeat
+        if (SearchRec.Attr and faDirectory) = 0 then
+        begin
+          if (Filter = '') or (Pos(LowerCase(Filter), LowerCase(SearchRec.Name)) > 0) then
+            TestFiles.Add(TestsDir + PathDelim + SearchRec.Name);
+        end;
+      until FindNext(SearchRec) <> 0;
+      FindClose(SearchRec);
+    end;
+
+    if TestFiles.Count = 0 then
+    begin
+      if Filter <> '' then
+        WriteLn(Format('Nenhum teste encontrado correspondendo ao filtro "%s".', [Filter]))
+      else
+        WriteLn('Nenhum arquivo de teste (*.aeth) encontrado no diretorio "tests/".');
+      Exit;
+    end;
+
+    if TargetPascal then
+      BackendName := 'Free Pascal'
+    else
+      BackendName := 'GCC C99';
+
+    WriteLn('========================================================');
+    WriteLn('  Aether Test Runner - Suite de Testes Unitarios        ');
+    WriteLn('  Backend: ' + BackendName);
+    WriteLn('========================================================');
+
+    PassedCount := 0;
+    FailedCount := 0;
+
+    for I := 0 to TestFiles.Count - 1 do
+    begin
+      TestFile := TestFiles[I];
+      TestExe := ProjConfig.RootDir + PathDelim + 'bin' + PathDelim + 'tests' + PathDelim + ChangeFileExt(ExtractFileName(TestFile), '.exe');
+      ForceDirectories(ExtractFileDir(TestExe));
+
+      Write(Format('  [TEST] %s ... ', [ExtractFileName(TestFile)]));
+
+      try
+        // 1. Compila o teste de forma silenciosa
+        CompileFile(TestFile, TargetPascal, False, False, TestExe, True);
+
+        // 2. Executa o teste medindo tempo
+        StartTime := Now;
+        ExitCode := ExecuteProcess(TestExe, '');
+        ElapsedTime := Now - StartTime;
+        ElapsedMs := Round(ElapsedTime * 86400 * 1000);
+
+        if ExitCode = 0 then
+        begin
+          Inc(PassedCount);
+          WriteLn(Format('PASS (%d ms)', [ElapsedMs]));
+        end
+        else
+        begin
+          Inc(FailedCount);
+          WriteLn(Format('FAIL! (ExitCode: %d)', [ExitCode]));
+        end;
+      except
+        on E: Exception do
+        begin
+          Inc(FailedCount);
+          WriteLn('ERRO DE COMPILACAO: ' + E.Message);
+        end;
+      end;
+    end;
+
+    WriteLn('--------------------------------------------------------');
+    WriteLn(Format('  Resultados: %d executados | %d passaram | %d falharam', [TestFiles.Count, PassedCount, FailedCount]));
+    WriteLn('========================================================');
+
+    if FailedCount > 0 then
+      Halt(1)
+    else
+      Halt(0);
+  finally
+    TestFiles.Free;
+  end;
+end;
+
 var
   InputFile: string;
   OutputExe: string;
@@ -428,6 +610,7 @@ var
   ProjConfig: TAetherProjectConfig;
   I: Integer;
   Arg: string;
+  PkgName, OptPath, OptGit, OptVer, FilterName: string;
 begin
   InputFile := '';
   OutputExe := '';
@@ -451,6 +634,66 @@ begin
       on E: Exception do
       begin
         WriteLn(ErrOutput, 'Erro ao inicializar projeto: ', E.Message);
+        Halt(1);
+      end;
+    end;
+  end;
+
+  // 2. Checa comando de pacotes: add
+  if (ParamCount >= 1) and (LowerCase(ParamStr(1)) = 'add') then
+  begin
+    PrintBanner;
+    PkgName := '';
+    OptPath := '';
+    OptGit := '';
+    OptVer := '';
+    I := 2;
+    while I <= ParamCount do
+    begin
+      Arg := ParamStr(I);
+      if Pos('--path=', Arg) = 1 then
+        OptPath := Copy(Arg, 8, Length(Arg))
+      else if Pos('--git=', Arg) = 1 then
+        OptGit := Copy(Arg, 7, Length(Arg))
+      else if Pos('--version=', Arg) = 1 then
+        OptVer := Copy(Arg, 11, Length(Arg))
+      else if PkgName = '' then
+        PkgName := Arg;
+      Inc(I);
+    end;
+    try
+      HandleProjectAdd(PkgName, OptPath, OptGit, OptVer);
+      Halt(0);
+    except
+      on E: Exception do
+      begin
+        WriteLn(ErrOutput, 'Erro ao adicionar pacote: ', E.Message);
+        Halt(1);
+      end;
+    end;
+  end;
+
+  // 3. Checa comando de testes: test
+  if (ParamCount >= 1) and (LowerCase(ParamStr(1)) = 'test') then
+  begin
+    PrintBanner;
+    FilterName := '';
+    OptionTargetPascal := True;
+    I := 2;
+    while I <= ParamCount do
+    begin
+      Arg := ParamStr(I);
+      if Arg = '--target=pascal' then OptionTargetPascal := True
+      else if Arg = '--target=c' then OptionTargetPascal := False
+      else if FilterName = '' then FilterName := Arg;
+      Inc(I);
+    end;
+    try
+      HandleProjectTest(FilterName, OptionTargetPascal);
+    except
+      on E: Exception do
+      begin
+        WriteLn(ErrOutput, 'Erro durante execucao dos testes: ', E.Message);
         Halt(1);
       end;
     end;

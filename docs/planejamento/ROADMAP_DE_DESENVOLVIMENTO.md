@@ -121,7 +121,15 @@ Este documento traça o status oficial de desenvolvimento do compilador e as pr�
   - Funções genéricas parametrizadas (ex: `function ExibirElemento<T: Printable>(borrow item: T)`) são monomorfizadas e especializadas estaticamente para cada tipo concreto invocado (ex: `ExibirElemento_Circle`), garantindo máxima otimização e performance de código nativo.
 - [x] **Validação Dual-Backend e Testes**: Exemplo completo `examples/11_traits_and_polymorphism.aeth` compilado e validado com 100% de paridade e sucesso nos backends Free Pascal e GCC (MSYS2).
 
-### 🎯 Fase 15: Gerenciador de Pacotes e Dependências (`aether add` / `aether test`)
-- [ ] Suporte a dependências remotas e locais no manifesto `aether.json` (estilo Cargo / Boss).
-- [ ] Download, cache global (`~/.aether/cache`) e resolução de grafos de dependências de módulos.
-- [ ] Comando `aetherc test` para execução automática de suítes de testes unitários.
+### ✅ Fase 15: Gerenciador de Pacotes e Dependências (`aether add` / `aether test`) (Concluído)
+- [x] **Suporte a Dependências no Manifesto `aether.json`**:
+  - Seção `"dependencies"` para pacotes locais via `path` (ex: `"math_extra": { "path": "libs/math_extra" }`), git (`"git": "https://..."`) e versões semânticas.
+- [x] **Comando CLI `aetherc add <pacote>`**:
+  - Adição automática de dependências no manifesto `aether.json` com suporte a `--path=...`, `--git=...` e `--version=...`.
+  - Preparação e sincronização com cache global (`~/.aether/cache/<pkg>`) e dependências do projeto.
+- [x] **Resolução Inteligente de Módulos de Dependências**:
+  - `FindModuleFile` estendido para resolver módulos de dependências declaradas no manifesto em múltiplos níveis (`<dep>/`, `<dep>/src/`, busca em camelCase/snake_case e cache global).
+- [x] **Test Runner Nativo Integrado (`aetherc test`)**:
+  - Execução automatizada de testes unitários na pasta `tests/` com suporte a filtros (ex: `aetherc test math`), medição de latência em milissegundos e status detalhado (`PASS` / `FAIL`).
+  - Suporte completo a ambos os backends (`--target=pascal` e `--target=c`).
+- [x] **Validação Prática**: Projeto modelo e testes criados e validados em `examples/12_package_manager_and_tests/` com execução bem-sucedida de `run` e `test` em Free Pascal e GCC.

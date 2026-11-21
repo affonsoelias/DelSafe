@@ -1,0 +1,18 @@
+module Main;
+
+import IO;
+import MathExtra;
+
+program Main;
+var
+    d: Int32;
+    t: Int32;
+begin
+    PrintLn("=== DEMO DE GERENCIADOR DE PACOTES E DEPENDENCIAS (FASE 15) ===");
+    d := Dobro(borrow 21);
+    t := Triplo(borrow 14);
+    PrintLn("Chamando modulo da dependencia 'math_extra':");
+    PrintLn("  Dobro(21)  = %d", d);
+    PrintLn("  Triplo(14) = %d", t);
+    PrintLn("\nExecutado com sucesso via aetherc run!");
+end.
