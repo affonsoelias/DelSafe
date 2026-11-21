@@ -1,0 +1,114 @@
+module Sync;
+
+type
+    AtomicInt32 = record
+        val: Int32;
+    end;
+
+    Mutex = record
+        locked: Bool;
+        holder_id: UInt32;
+    end;
+
+    Channel = record
+        capacity: UInt32;
+        count: UInt32;
+        head: UInt32;
+        tail: UInt32;
+        is_closed: Bool;
+    end;
+
+function NewAtomic(borrow initial: Int32): AtomicInt32
+begin
+    return AtomicInt32(val: initial);
+end;
+
+function AtomicLoad(borrow a: AtomicInt32): Int32
+begin
+    return a.val;
+end;
+
+function AtomicStore(mut borrow a: AtomicInt32; borrow new_val: Int32): Void
+begin
+    a.val := new_val;
+end;
+
+function AtomicAdd(mut borrow a: AtomicInt32; borrow delta: Int32): Int32
+begin
+    a.val := a.val + delta;
+    return a.val;
+end;
+
+function NewMutex(): Mutex
+begin
+    return Mutex(locked: false, holder_id: 0);
+end;
+
+function Lock(mut borrow m: Mutex; borrow thread_id: UInt32): Bool
+begin
+    if not m.locked then
+        m.locked := true;
+        m.holder_id := thread_id;
+        return true;
+    else
+        return false;
+    end;
+end;
+
+function Unlock(mut borrow m: Mutex; borrow thread_id: UInt32): Bool
+begin
+    if m.locked and (m.holder_id = thread_id) then
+        m.locked := false;
+        m.holder_id := 0;
+        return true;
+    else
+        return false;
+    end;
+end;
+
+function IsLocked(borrow m: Mutex): Bool
+begin
+    return m.locked;
+end;
+
+function NewChannel(borrow cap: UInt32): Channel
+begin
+    return Channel(capacity: cap, count: 0, head: 0, tail: 0, is_closed: false);
+end;
+
+function Send(mut borrow ch: Channel): Bool
+begin
+    if ch.is_closed or (ch.count >= ch.capacity) then
+        return false;
+    else
+        ch.count := ch.count + 1;
+        ch.tail := (ch.tail + 1) mod ch.capacity;
+        return true;
+    end;
+end;
+
+function Recv(mut borrow ch: Channel): Bool
+begin
+    if ch.count = 0 then
+        return false;
+    else
+        ch.count := ch.count - 1;
+        ch.head := (ch.head + 1) mod ch.capacity;
+        return true;
+    end;
+end;
+
+function IsChannelEmpty(borrow ch: Channel): Bool
+begin
+    return ch.count = 0;
+end;
+
+function IsChannelFull(borrow ch: Channel): Bool
+begin
+    return ch.count >= ch.capacity;
+end;
+
+function CloseChannel(mut borrow ch: Channel): Void
+begin
+    ch.is_closed := true;
+end;

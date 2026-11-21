@@ -205,6 +205,8 @@ begin
   FGlobalScope.Define(TSymbol.Create('FileExists', skFunction, 'Bool', 0, 0));
   FGlobalScope.Define(TSymbol.Create('ReadFile', skFunction, 'String', 0, 0));
   FGlobalScope.Define(TSymbol.Create('WriteFile', skFunction, 'Bool', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('IntToStr', skFunction, 'String', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('StrToInt', skFunction, 'Int32', 0, 0));
 end;
 
 procedure TSymbolTable.EnterScope;

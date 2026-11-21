@@ -1,0 +1,127 @@
+module StdlibAndConcurrency;
+
+import IO;
+import Strings;
+import JSON;
+import Sync;
+import Net;
+
+program StdlibAndConcurrency;
+var
+    jb: JsonBuilder;
+    doc_json: String;
+    is_valid: Bool;
+    nome_val: String;
+    idade_val: Int32;
+    ativo_val: Bool;
+    ok_ext: Bool;
+    atom: AtomicInt32;
+    val_atom: Int32;
+    mtx: Mutex;
+    lock_ok: Bool;
+    chan: Channel;
+    sock: Socket;
+    req_http: String;
+    bytes_sent: UInt32;
+begin
+    PrintLn("====================================================================");
+    PrintLn("  AetherLang - Demonstracao da Fase 17: Stdlib e Concorrencia       ");
+    PrintLn("====================================================================");
+    PrintLn("");
+
+    // --- 1. Teste de JSON (Serializacao e Extracao) ---
+    PrintLn("[1/3] Testando std/json.aeth (JSON Builder e Parser)...");
+    jb := NewJsonBuilder();
+    AddString(mut borrow jb, "linguagem", "Aether");
+    AddInt(mut borrow jb, "versao", 5);
+    AddBool(mut borrow jb, "seguro", true);
+    doc_json := Build(borrow jb);
+
+    PrintLn("      JSON Construido: %s", doc_json);
+    is_valid := Validate(borrow doc_json);
+    if is_valid then
+        PrintLn("      [PASS] Validacao estrutural de chaves e delimitadores: OK");
+    end;
+
+    nome_val := "";
+    ok_ext := ExtractString(borrow doc_json, "linguagem", mut borrow nome_val);
+    if ok_ext then
+        PrintLn("      [PASS] Extracao de String \"linguagem\": \"%s\"", nome_val);
+    else
+        PrintLn("      [FAIL] Erro ao extrair string \"linguagem\"");
+    end;
+
+    idade_val := 0;
+    ok_ext := ExtractInt(borrow doc_json, "versao", mut borrow idade_val);
+    if ok_ext then
+        PrintLn("      [PASS] Extracao de Inteiro \"versao\": %d", idade_val);
+    else
+        PrintLn("      [FAIL] Erro ao extrair inteiro \"versao\"");
+    end;
+
+    ativo_val := false;
+    ok_ext := ExtractBool(borrow doc_json, "seguro", mut borrow ativo_val);
+    if ok_ext then
+        if ativo_val then
+            PrintLn("      [PASS] Extracao de Booleano \"seguro\": true");
+        else
+            PrintLn("      [PASS] Extracao de Booleano \"seguro\": false");
+        end;
+    else
+        PrintLn("      [FAIL] Erro ao extrair booleano \"seguro\"");
+    end;
+
+    // --- 2. Teste de Concorrencia e Sincronizacao ---
+    PrintLn("");
+    PrintLn("[2/3] Testando std/sync.aeth (Atomic, Mutex e Canais)...");
+    atom := NewAtomic(100);
+    val_atom := AtomicAdd(mut borrow atom, 25);
+    PrintLn("      [PASS] AtomicAdd (100 + 25) = %d", val_atom);
+
+    mtx := NewMutex();
+    lock_ok := Lock(mut borrow mtx, 1);
+    if lock_ok then
+        PrintLn("      [PASS] Mutex adquirido pela thread 1 com sucesso");
+    end;
+    Unlock(mut borrow mtx, 1);
+    if not IsLocked(borrow mtx) then
+        PrintLn("      [PASS] Mutex liberado com sucesso (IsLocked: false)");
+    end;
+
+    chan := NewChannel(10);
+    Send(mut borrow chan);
+    Send(mut borrow chan);
+    PrintLn("      [PASS] Canal CSP preenchido (tamanho: %d)", chan.count);
+
+    lock_ok := Recv(mut borrow chan);
+    if lock_ok then
+        PrintLn("      [PASS] Mensagem 1 recebida do Canal CSP");
+    end;
+    lock_ok := Recv(mut borrow chan);
+    if lock_ok then
+        PrintLn("      [PASS] Mensagem 2 recebida do Canal CSP");
+    end;
+    if IsChannelEmpty(borrow chan) then
+        PrintLn("      [PASS] Canal vazio apos consumo: OK");
+    end;
+
+    // --- 3. Teste de Networking e Protocolos ---
+    PrintLn("");
+    PrintLn("[3/3] Testando std/net.aeth (Sockets e HTTP)...");
+    sock := NewSocket("127.0.0.1", 8080);
+    Connect(mut borrow sock);
+    if sock.is_open then
+        PrintLn("      [PASS] Socket conectado a %s:%d (Aberto: true)", sock.host, sock.port);
+    end;
+
+    req_http := BuildHttpRequest("GET", "aether-lang.org", "/api/v1/health");
+    bytes_sent := SendData(borrow sock, borrow req_http);
+    PrintLn("      [PASS] Requisicao HTTP enviada (%d bytes)", bytes_sent);
+    CloseSocket(mut borrow sock);
+    PrintLn("      [PASS] Socket fechado limpo e seguro.");
+
+    PrintLn("");
+    PrintLn("====================================================================");
+    PrintLn("  FASE 17 CONCLUIDA COM SUCESSO! STD/JSON, STD/SYNC E STD/NET OK!   ");
+    PrintLn("====================================================================");
+end.

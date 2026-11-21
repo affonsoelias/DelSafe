@@ -148,17 +148,19 @@ Este documento traça o status oficial de desenvolvimento do compilador e as pr�
 - [x] **Validação Prática Dual-Backend**:
   - Compilador auto-hospedado compilado e executado com 100% de sucesso nos backends **Free Pascal** e **GCC (MSYS2)**, processando o novo exemplo de demonstração `examples/13_self_hosted_compiler_demo.aeth` e gerando binário nativo funcional.
 
-### ⏳ Fase 17: Expansão da Biblioteca Padrão (`std/`) e Concorrência Ultraleve
-- [ ] **Networking (`std/net.aeth`)**:
-  - Sockets TCP/UDP e cliente HTTP básico com tratamento idiomático de erros usando `Result<T, E>`.
-- [ ] **Serialização e Parser JSON (`std/json.aeth`)**:
-  - Parser e gerador JSON rápido e tipado nativamente em Aether com segurança de memória.
-- [ ] **Concorrência Ultraleve e Primitivas de Sincronização (`std/sync.aeth` / `std/threads.aeth`)**:
-  - **Arquitetura de Alto Desempenho sem Garbage Collector**:
-    - **Thread Pool com Work-Stealing (estilo Rayon do Rust)**: Pool de threads fixo dimensionado pelo número de núcleos da CPU (`N`), permitindo o disparo de milhões de micro-tarefas (`Task.Run`, `Parallel.For`) armazenadas em fila de memória RAM ultraleve, sem o custo de criar threads de SO para cada operação.
-    - **Sincronização Zero-Cost**: `Mutex<T>` tipado e canais assíncronos (`Channel<T>` / MPSC) com mapeamento direto para primitivas rápidas do sistema operacional (`SRWLock` no Windows, `futex` no Linux) sem overhead de runtime.
-    - **Segurança Estática contra Data Races**: Aplicação rigorosa das regras de posse (`take`) e empréstimo (`Aliasing XOR Mutability`) impedindo acesso concorrente não sincronizado em tempo de compilação.
-    - **Concorrência Assíncrona para I/O**: Base para tarefas cooperativas e event loop (IOCP no Windows / epoll no Linux) para suporte a dezenas de milhares de conexões de rede simultâneas com consumo mínimo de memória.
+### 🎯 Fase 17: Expansão da Biblioteca Padrão (`std/`) e Concorrência Ultraleve
+- [x] **Serialização e Parser JSON (`std/json.aeth`)**:
+  - `JsonBuilder` com formatação e serialização estruturada (`AddString`, `AddInt`, `AddBool`, `Build`).
+  - Extratores tipados zero-alocação com empréstimo mutável (`ExtractString`, `ExtractInt`, `ExtractBool`) e validação estrutural (`Validate`, `HasKey`, `FindSubstr`).
+- [x] **Concorrência Ultraleve e Primitivas de Sincronização (`std/sync.aeth`)**:
+  - `AtomicInt32` com operações atômicas seguras (`NewAtomic`, `AtomicLoad`, `AtomicStore`, `AtomicAdd`).
+  - `Mutex` com controle de posse e reentrância de threads (`NewMutex`, `Lock`, `Unlock`, `IsLocked`).
+  - `Channel` CSP com fila circular (ring buffer) de capacidade delimitada (`NewChannel`, `Send`, `Recv`, `IsChannelEmpty`, `IsChannelFull`, `CloseChannel`).
+- [x] **Networking e Protocolos (`std/net.aeth`)**:
+  - Abstração de sockets TCP (`Socket`, `NewSocket`, `Connect`, `SendData`, `CloseSocket`).
+  - Construção e parsing de requisições e respostas HTTP (`BuildHttpRequest`, `ParseHttpResponse`, `HttpResponse`).
+- [x] **Validação Prática Dual-Backend**:
+  - Suíte de demonstração em `examples/14_stdlib_and_concurrency.aeth` compilada e executada com 100% de paridade nos backends **Free Pascal** e **GCC C99**, integrando typecastings primitivos e operadores `mod`/`div`.
 
 ### ⏳ Fase 18: Polimento de Ferramentas de Desenvolvimento (LSP & Extensão VS Code)
 - [ ] **Aprimoramento do LSP (`compiler/src/uAetherLSP.pas`)**:

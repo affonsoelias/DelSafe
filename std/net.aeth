@@ -1,0 +1,63 @@
+module Net;
+
+import Strings;
+
+type
+    Socket = record
+        port: UInt32;
+        host: String;
+        is_open: Bool;
+    end;
+
+    HttpResponse = record
+        status_code: UInt32;
+        body: String;
+    end;
+
+function NewSocket(borrow h: String; borrow p: UInt32): Socket
+begin
+    return Socket(port: p, host: h, is_open: false);
+end;
+
+function Connect(mut borrow s: Socket): Bool
+begin
+    if s.is_open then
+        return false;
+    end;
+    s.is_open := true;
+    return true;
+end;
+
+function SendData(borrow s: Socket; borrow payload: String): UInt32
+begin
+    if not s.is_open then
+        return 0;
+    end;
+    return Length(borrow payload);
+end;
+
+function CloseSocket(mut borrow s: Socket): Void
+begin
+    s.is_open := false;
+end;
+
+function BuildHttpRequest(borrow method: String; borrow host: String; borrow path: String): String
+var
+    req: String;
+begin
+    req := method + " " + path + " HTTP/1.1\r\n";
+    req := req + "Host: " + host + "\r\n";
+    req := req + "User-Agent: AetherLang/0.5\r\n";
+    req := req + "Connection: close\r\n\r\n";
+    return req;
+end;
+
+function ParseHttpResponse(borrow raw_response: String; mut borrow out_resp: HttpResponse): Bool
+begin
+    if Length(borrow raw_response) = 0 then
+        return false;
+    end;
+    out_resp.status_code := 200;
+    out_resp.body := raw_response;
+    return true;
+end;

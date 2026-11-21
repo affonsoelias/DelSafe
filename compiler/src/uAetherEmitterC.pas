@@ -224,8 +224,8 @@ begin
     Call := TASTCallExpr(Expr);
     if Call.Callee = 'Box' then Exit('Box');
     if Call.Callee = 'Some' then Exit('Option');
-    if (Call.Callee = 'ReadFile') or (Call.Callee = 'CharAt') or (Call.Callee = 'Substring') or (Call.Callee = 'ToString') then Exit('String');
-    if (Call.Callee = 'Length') then Exit('UInt32');
+    if (Call.Callee = 'ReadFile') or (Call.Callee = 'CharAt') or (Call.Callee = 'Substring') or (Call.Callee = 'ToString') or (Call.Callee = 'IntToStr') then Exit('String');
+    if (Call.Callee = 'Length') or (Call.Callee = 'StrToInt') then Exit('UInt32');
     if (Call.Callee = 'FileExists') or (Call.Callee = 'WriteFile') then Exit('Bool');
     if Assigned(FModule) then
     begin
@@ -401,6 +401,8 @@ begin
     end
     else if OpStr = 'and' then OpStr := '&&'
     else if OpStr = 'or' then OpStr := '||'
+    else if OpStr = 'mod' then OpStr := '%'
+    else if OpStr = 'div' then OpStr := '/'
     else if OpStr = 'implies' then
       Exit(Format('(!(%s) || (%s))', [EmitExpr(Bin.Left), EmitExpr(Bin.Right)]));
 
@@ -500,6 +502,30 @@ begin
     begin
       Result := 'AetherWriteFile(' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + ', ' + EmitExpr(TASTCallArg(Call.Args[1]).Expr) + ')';
       Exit;
+    end;
+
+    if Call.Callee = 'IntToStr' then
+    begin
+      Result := 'AetherIntToStr(' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + ')';
+      Exit;
+    end;
+
+    if Call.Callee = 'StrToInt' then
+    begin
+      Result := 'AetherStrToInt(' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + ')';
+      Exit;
+    end;
+
+    // Typecast de tipos primitivos (ex: Int32(x), UInt32(x))
+    if (Call.Callee = 'Int8') or (Call.Callee = 'Int16') or (Call.Callee = 'Int32') or (Call.Callee = 'Int64') or
+       (Call.Callee = 'UInt8') or (Call.Callee = 'UInt16') or (Call.Callee = 'UInt32') or (Call.Callee = 'UInt64') or
+       (Call.Callee = 'Float32') or (Call.Callee = 'Float64') or (Call.Callee = 'Bool') then
+    begin
+      if Call.Args.Count = 1 then
+      begin
+        Result := '((' + EmitTypeRef(Call.Callee) + ')(' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + '))';
+        Exit;
+      end;
     end;
 
     // Construtor ou chamada normal
@@ -867,6 +893,17 @@ begin
   Emit('    if (content) fputs(content, f);');
   Emit('    fclose(f);');
   Emit('    return true;');
+  Emit('}');
+  Emit('');
+  Emit('static inline char* AetherIntToStr(int32_t val) {');
+  Emit('    char* buf = (char*)malloc(32);');
+  Emit('    snprintf(buf, 32, "%d", val);');
+  Emit('    return buf;');
+  Emit('}');
+  Emit('');
+  Emit('static inline int32_t AetherStrToInt(const char* s) {');
+  Emit('    if (!s) return 0;');
+  Emit('    return (int32_t)atoi(s);');
   Emit('}');
   Emit('');
 

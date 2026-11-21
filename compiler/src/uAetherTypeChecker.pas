@@ -123,6 +123,8 @@ begin
   if TargetType = SourceType then Exit(True);
   // Literais inteiros genericos sao compativeis com qualquer tipo inteiro
   if (SourceType = 'IntLiteral') and (Pos('Int', TargetType) > 0) then Exit(True);
+  // Compatibilidade entre tipos inteiros (Int32, UInt32, etc.)
+  if IsIntegerType(TargetType) and IsIntegerType(SourceType) then Exit(True);
   // Literais float genericos sao compativeis com Float32 ou Float64
   if (SourceType = 'FloatLiteral') and (Pos('Float', TargetType) > 0) then Exit(True);
   // Genericos Result / Option / Box
@@ -421,6 +423,16 @@ begin
     Exit(RecDecl.Name);
   end;
 
+  // Conversao explicita de tipo primitivo (Typecast: Int32(x), UInt32(x), Float64(x), etc.)
+  if (Sym.Kind = skType) and (not Assigned(Sym.Node) or not (Sym.Node is TASTRecordDecl)) then
+  begin
+    if Call.Args.Count <> 1 then
+      Error('E0061', Format('Conversao de tipo "%s" espera exatamente 1 argumento', [Call.Callee]), Call.Line, Call.Col);
+    if Call.Args.Count > 0 then
+      CheckExpr(TASTCallArg(Call.Args[0]).Expr);
+    Exit(Call.Callee);
+  end;
+
   // Chamada de Funcao Normal ou Generica
   if Sym.Kind = skFunction then
   begin
@@ -540,6 +552,20 @@ begin
       if ArgType <> 'String' then
         Error('E0308', Format('Segundo argumento de "WriteFile" deve ser String, recebido: "%s"', [ArgType]), Call.Line, Call.Col);
       Exit('Bool');
+    end;
+
+    if Call.Callee = 'IntToStr' then
+    begin
+      if Call.Args.Count <> 1 then
+        Error('E0061', 'Funcao "IntToStr" espera 1 argumento (Int32)', Call.Line, Call.Col);
+      Exit('String');
+    end;
+
+    if Call.Callee = 'StrToInt' then
+    begin
+      if Call.Args.Count <> 1 then
+        Error('E0061', 'Funcao "StrToInt" espera 1 argumento (String)', Call.Line, Call.Col);
+      Exit('Int32');
     end;
 
     if Assigned(Sym.Node) and (Sym.Node is TASTFunction) then
