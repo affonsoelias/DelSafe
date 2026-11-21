@@ -42,14 +42,15 @@ Este documento traça o status oficial de desenvolvimento do compilador e as pr�
 - [x] Suporte à convenção de chamada C (`cdecl`) com vinculação dinâmica/estática (`msvcrt`/`libc`).
 - [x] Suporte a contratos (`contract require / ensure`) em funções `extern`.
 
+### ✅ Fase 7: Extensão Oficial do VS Code para Aether (`.aeth`) (Concluído)
+- [x] Criação do pacote de extensão em `editors/vscode/` com realce de sintaxe (*Syntax Highlighting* TextMate).
+- [x] Snippets completos para `module`, `contract`, `record`, `enum`, `match`, `extern`, `if`, etc.
+- [x] Integração do diagnósticos JSON (`--emit-json-diagnostics`) com a aba *Problems* do VS Code e sugestões (*suggested fixes*).
+- [x] Comandos integrados para compilar via backend Pascal e via backend C99 diretamente pelo editor.
+
 ---
 
 ## 🚀 Próximas Fases e Metas Futuras
-
-### 🎯 Fase 7: Extensão Oficial do VS Code para Aether (`.aeth`)
-- [ ] Criação do pacote de extensão com realce de sintaxe (*Syntax Highlighting* TextMate).
-- [ ] Snippets para `module`, `contract`, `record`, `enum` e `match`.
-- [ ] Integração do diagnósticos JSON com a aba *Problems* do VS Code.
 
 ### 🎯 Fase 8: Biblioteca Padrão (`std/`)
 - [ ] `std/math.aeth`: Funções matemáticas fundamentais.

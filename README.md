@@ -23,6 +23,7 @@ Além disso, o Aether inclui:
   - **[Guia do Usuário](file:///c:/Users/Pichau/Documents/aether/docs/usuario/GUIA_DO_INICIANTE.md):** Primeiros passos, instalação e conceitos de posse.
   - **[Documentação Técnica](file:///c:/Users/Pichau/Documents/aether/docs/tecnica/ESPECIFICACAO_LINGUAGEM.md):** Gramática formal EBNF, segurança de memória e arquitetura do compilador.
   - **[Roadmap de Desenvolvimento](file:///c:/Users/Pichau/Documents/aether/docs/planejamento/ROADMAP_DE_DESENVOLVIMENTO.md):** Fases concluídas e metas futuras.
+- **[`editors/vscode/`](file:///c:/Users/Pichau/Documents/aether/editors/vscode/README.md):** Extensão oficial do VS Code (realce de sintaxe TextMate, snippets, diagnósticos do compilador e integração com a aba *Problems*).
 - **`examples/`:** Exemplos conceituais e programas de teste para validar o compilador:
   - [`01_hello_world.aeth`](file:///c:/Users/Pichau/Documents/aether/examples/01_hello_world.aeth): Estrutura básica e saída formatada.
   - [`02_ownership_and_borrow.aeth`](file:///c:/Users/Pichau/Documents/aether/examples/02_ownership_and_borrow.aeth): Posse, empréstimo (`borrow`) e movimentação (`take`).

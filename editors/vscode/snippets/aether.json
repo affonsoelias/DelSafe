@@ -1,0 +1,128 @@
+{
+  "Module Declaration": {
+    "prefix": "module",
+    "body": [
+      "module ${1:NomeModulo};",
+      "",
+      "$0"
+    ],
+    "description": "Cria a declaração inicial de um módulo Aether"
+  },
+  "Program Block": {
+    "prefix": "program",
+    "body": [
+      "program ${1:Main};",
+      "var",
+      "    ${2:variavel}: ${3:Tipo};",
+      "begin",
+      "    ${0:PrintLn(\"Hello Aether!\");}",
+      "end."
+    ],
+    "description": "Cria o bloco de ponto de entrada principal do programa"
+  },
+  "Function Declaration": {
+    "prefix": "function",
+    "body": [
+      "function ${1:NomeFuncao}(borrow ${2:param}: ${3:Tipo}): ${4:Retorno}",
+      "begin",
+      "    ${0:return ...;}",
+      "end;"
+    ],
+    "description": "Declara uma função com empréstimo (borrow)"
+  },
+  "Function with Contract": {
+    "prefix": "function-contract",
+    "body": [
+      "function ${1:NomeFuncao}(borrow ${2:param}: ${3:Tipo}): ${4:Retorno}",
+      "contract",
+      "    require",
+      "        ${5:true};",
+      "    ensure",
+      "        ${6:result.is_ok};",
+      "begin",
+      "    ${0:return ...;}",
+      "end;"
+    ],
+    "description": "Declara uma função protegida por contratos require/ensure"
+  },
+  "Extern C Function": {
+    "prefix": "extern",
+    "body": [
+      "extern function ${1:puts}(borrow ${2:s}: String): ${3:Int32};$0"
+    ],
+    "description": "Declara uma função externa C (libc / C runtime)"
+  },
+  "Import Module": {
+    "prefix": "import",
+    "body": [
+      "import ${1:Modulo};$0"
+    ],
+    "description": "Importa outro módulo Aether"
+  },
+  "Import Pascal Unit": {
+    "prefix": "import-pascal",
+    "body": [
+      "import pascal ${1:Math};$0"
+    ],
+    "description": "Importa diretamente uma unit Object Pascal do Free Pascal ou Boss"
+  },
+  "Record Declaration": {
+    "prefix": "record",
+    "body": [
+      "${1:NomeRecord} = record",
+      "    ${2:id}: ${3:UInt32};",
+      "    ${4:campo}: ${5:String};",
+      "end;$0"
+    ],
+    "description": "Define uma estrutura record moderna"
+  },
+  "Enum ADT Declaration": {
+    "prefix": "enum",
+    "body": [
+      "${1:NomeEnum} = enum",
+      "    ${2:Variante1},",
+      "    ${3:VarianteComDado}(${4:dado}: ${5:String})",
+      "end;$0"
+    ],
+    "description": "Define um enum algébrico com suporte a dados associados"
+  },
+  "Match Statement": {
+    "prefix": "match",
+    "body": [
+      "match ${1:resultado} do",
+      "    case Ok(let ${2:valor}):",
+      "        ${3:PrintLn(\"Sucesso: %v\", valor);}",
+      "    case Err(${4:erro}):",
+      "        ${5:PrintLn(\"Erro: %v\", erro);}",
+      "end;$0"
+    ],
+    "description": "Casamento de padrões exaustivo sobre Result ou Enum"
+  },
+  "If Statement": {
+    "prefix": "if",
+    "body": [
+      "if ${1:condicao} then",
+      "    ${2:// entao}",
+      "else",
+      "    ${3:// senao}",
+      "end;$0"
+    ],
+    "description": "Estrutura condicional segura sem ambiguidade (terminada em end;)"
+  },
+  "While Loop": {
+    "prefix": "while",
+    "body": [
+      "while ${1:condicao} do",
+      "    ${2:// laco}",
+      "end;$0"
+    ],
+    "description": "Laço de repetição while..do..end;"
+  },
+  "PrintLn Statement": {
+    "prefix": "println",
+    "body": [
+      "PrintLn(\"${1:%s}\", ${2:valor});$0"
+    ],
+    "description": "Imprime texto formatado na saída padrão"
+  }
+}

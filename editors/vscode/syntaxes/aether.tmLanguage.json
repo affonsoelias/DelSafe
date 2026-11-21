@@ -1,0 +1,178 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "Aether",
+  "scopeName": "source.aeth",
+  "patterns": [
+    { "include": "#comments" },
+    { "include": "#strings" },
+    { "include": "#chars" },
+    { "include": "#ownership" },
+    { "include": "#keywords" },
+    { "include": "#contracts" },
+    { "include": "#types" },
+    { "include": "#monads" },
+    { "include": "#constants" },
+    { "include": "#numbers" },
+    { "include": "#operators" },
+    { "include": "#functions" }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.double-slash.aeth",
+          "match": "//.*$"
+        },
+        {
+          "name": "comment.block.c.aeth",
+          "begin": "/\\*",
+          "end": "\\*/"
+        },
+        {
+          "name": "comment.block.pascal.aeth",
+          "begin": "\\{",
+          "end": "\\}"
+        }
+      ]
+    },
+    "strings": {
+      "name": "string.quoted.double.aeth",
+      "begin": "\"",
+      "end": "\"",
+      "patterns": [
+        {
+          "name": "constant.character.escape.aeth",
+          "match": "\\\\(n|r|t|\\\\|\"|0)"
+        }
+      ]
+    },
+    "chars": {
+      "name": "string.quoted.single.aeth",
+      "match": "'(\\\\.|[^'])'"
+    },
+    "ownership": {
+      "patterns": [
+        {
+          "name": "storage.modifier.ownership.aeth keyword.other.ownership.aeth",
+          "match": "\\b(borrow|take|mut)\\b"
+        }
+      ]
+    },
+    "keywords": {
+      "patterns": [
+        {
+          "name": "keyword.control.module.aeth",
+          "match": "\\b(module|program|import|as|extern|pascal)\\b"
+        },
+        {
+          "name": "keyword.declaration.type.aeth",
+          "match": "\\b(type|record|enum|function)\\b"
+        },
+        {
+          "name": "keyword.declaration.variable.aeth",
+          "match": "\\b(var|let)\\b"
+        },
+        {
+          "name": "keyword.control.block.aeth",
+          "match": "\\b(begin|end)\\b"
+        },
+        {
+          "name": "keyword.control.flow.aeth",
+          "match": "\\b(if|then|else|while|do|for|in|match|case|return)\\b"
+        },
+        {
+          "name": "keyword.operator.logical.aeth",
+          "match": "\\b(and|or|not|mod|implies)\\b"
+        }
+      ]
+    },
+    "contracts": {
+      "patterns": [
+        {
+          "name": "keyword.control.contract.aeth",
+          "match": "\\b(contract|require|ensure)\\b"
+        }
+      ]
+    },
+    "types": {
+      "patterns": [
+        {
+          "name": "support.type.primitive.aeth",
+          "match": "\\b(Int8|Int16|Int32|Int64|UInt8|UInt16|UInt32|UInt64|Float32|Float64|Bool|Char|String|Void)\\b"
+        },
+        {
+          "name": "entity.name.type.aeth",
+          "match": "\\b[A-Z][a-zA-Z0-9_]*\\b"
+        }
+      ]
+    },
+    "monads": {
+      "patterns": [
+        {
+          "name": "support.class.monad.aeth",
+          "match": "\\b(Result|Option)\\b"
+        },
+        {
+          "name": "support.constant.monad-variant.aeth",
+          "match": "\\b(Ok|Err|Some|None)\\b"
+        },
+        {
+          "name": "support.function.builtin.aeth",
+          "match": "\\b(PrintLn|WriteLn|Print)\\b"
+        }
+      ]
+    },
+    "constants": {
+      "patterns": [
+        {
+          "name": "constant.language.boolean.aeth",
+          "match": "\\b(true|false)\\b"
+        }
+      ]
+    },
+    "numbers": {
+      "patterns": [
+        {
+          "name": "constant.numeric.hex.aeth",
+          "match": "\\b(0x[0-9a-fA-F_]+|\\$[0-9a-fA-F_]+)\\b"
+        },
+        {
+          "name": "constant.numeric.binary.aeth",
+          "match": "\\b(0b[01_]+|%[01_]+)\\b"
+        },
+        {
+          "name": "constant.numeric.float.aeth",
+          "match": "\\b[0-9][0-9_]*\\.[0-9][0-9_]*([eE][+-]?[0-9]+)?\\b"
+        },
+        {
+          "name": "constant.numeric.integer.aeth",
+          "match": "\\b[0-9][0-9_]*\\b"
+        }
+      ]
+    },
+    "operators": {
+      "patterns": [
+        {
+          "name": "keyword.operator.assignment.aeth",
+          "match": ":="
+        },
+        {
+          "name": "keyword.operator.comparison.aeth",
+          "match": "(<=|>=|<>|<|>|=)"
+        },
+        {
+          "name": "keyword.operator.arithmetic.aeth",
+          "match": "(\\+|-|\\*|/)"
+        }
+      ]
+    },
+    "functions": {
+      "patterns": [
+        {
+          "name": "entity.name.function.call.aeth",
+          "match": "\\b([a-zA-Z_][a-zA-Z0-9_]*)\\s*(?=\\()"
+        }
+      ]
+    }
+  }
+}
