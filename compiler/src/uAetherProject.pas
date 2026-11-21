@@ -6,7 +6,7 @@ unit uAetherProject;
 interface
 
 uses
-  SysUtils, Classes, fpjson, jsonparser;
+  SysUtils, Classes, fpjson, jsonparser, Process;
 
 type
   TAetherDependency = record
@@ -31,10 +31,258 @@ type
 function FindProjectRoot(out RootDir, ConfigFile: string): Boolean;
 function LoadProjectConfig(out Config: TAetherProjectConfig): Boolean;
 function GetAetherCacheDir: string;
+function ExtractPackageNameFromGitUrl(const Url: string): string;
+function SyncGitPackage(const PkgName, GitUrl, Version: string; out CacheDir: string; Visited: TStringList = nil): Boolean;
+procedure RestoreProjectDependencies(const Config: TAetherProjectConfig);
 procedure HandleProjectInit(const ProjectName: string);
 procedure HandleProjectAdd(const PkgName: string; const OptPath, OptGit, OptVer: string);
 
 implementation
+
+function RunGitProcess(const Params: string; var OutputLog: string): Integer;
+var
+  Proc: TProcess;
+  Buffer: array[0..2047] of Byte;
+  BytesRead: LongInt;
+  StringStream: TStringStream;
+begin
+  Result := -1;
+  OutputLog := '';
+  Proc := TProcess.Create(nil);
+  StringStream := TStringStream.Create('');
+  try
+    Proc.Executable := 'git';
+    Proc.CommandLine := 'git ' + Params;
+    Proc.Options := [poUsePipes, poStderrToOutPut];
+    Proc.ShowWindow := swoNone;
+    try
+      Proc.Execute;
+      while Proc.Running or (Proc.Output.NumBytesAvailable > 0) do
+      begin
+        if Proc.Output.NumBytesAvailable > 0 then
+        begin
+          BytesRead := Proc.Output.Read(Buffer[0], SizeOf(Buffer));
+          if BytesRead > 0 then
+            StringStream.WriteBuffer(Buffer[0], BytesRead);
+        end
+        else
+          Sleep(10);
+      end;
+      Result := Proc.ExitStatus;
+      OutputLog := Trim(StringStream.DataString);
+    except
+      on E: Exception do
+      begin
+        OutputLog := E.Message;
+        Result := -1;
+      end;
+    end;
+  finally
+    StringStream.Free;
+    Proc.Free;
+  end;
+end;
+
+function ExtractPackageNameFromGitUrl(const Url: string): string;
+var
+  CleanUrl: string;
+  LastSlash: Integer;
+begin
+  CleanUrl := Url;
+  while (Length(CleanUrl) > 0) and (CleanUrl[Length(CleanUrl)] in ['/', '\']) do
+    Delete(CleanUrl, Length(CleanUrl), 1);
+  if (Length(CleanUrl) > 4) and SameText(Copy(CleanUrl, Length(CleanUrl) - 3, 4), '.git') then
+    Delete(CleanUrl, Length(CleanUrl) - 3, 4);
+  LastSlash := LastDelimiter('/:\', CleanUrl);
+  if LastSlash > 0 then
+    Result := Copy(CleanUrl, LastSlash + 1, Length(CleanUrl))
+  else
+    Result := CleanUrl;
+end;
+
+procedure CopyDirectoryTree(const SrcDir, DstDir: string);
+var
+  SR: TSearchRec;
+  SrcItem, DstItem: string;
+  SrcStream, DstStream: TFileStream;
+begin
+  if not DirectoryExists(DstDir) then
+    ForceDirectories(DstDir);
+
+  if FindFirst(SrcDir + PathDelim + '*', faAnyFile, SR) = 0 then
+  begin
+    try
+      repeat
+        if (SR.Name = '.') or (SR.Name = '..') or (SR.Name = '.git') then
+          Continue;
+
+        SrcItem := SrcDir + PathDelim + SR.Name;
+        DstItem := DstDir + PathDelim + SR.Name;
+
+        if (SR.Attr and faDirectory) <> 0 then
+          CopyDirectoryTree(SrcItem, DstItem)
+        else
+        begin
+          try
+            SrcStream := TFileStream.Create(SrcItem, fmOpenRead or fmShareDenyWrite);
+            try
+              DstStream := TFileStream.Create(DstItem, fmCreate);
+              try
+                DstStream.CopyFrom(SrcStream, SrcStream.Size);
+              finally
+                DstStream.Free;
+              end;
+            finally
+              SrcStream.Free;
+            end;
+          except
+            // Ignora arquivos bloqueados
+          end;
+        end;
+      until FindNext(SR) <> 0;
+    finally
+      FindClose(SR);
+    end;
+  end;
+end;
+
+function SyncGitPackage(const PkgName, GitUrl, Version: string; out CacheDir: string; Visited: TStringList = nil): Boolean;
+var
+  OwnsVisited: Boolean;
+  CmdArgs, OutputLog: string;
+  ExitCode: Integer;
+  SubConfigFile: string;
+  SubConfig: TAetherProjectConfig;
+  I: Integer;
+  SubCacheDir: string;
+begin
+  Result := False;
+  CacheDir := GetAetherCacheDir + PathDelim + PkgName;
+
+  OwnsVisited := False;
+  if not Assigned(Visited) then
+  begin
+    Visited := TStringList.Create;
+    OwnsVisited := True;
+  end;
+
+  try
+    if Visited.IndexOf(PkgName) >= 0 then
+      Exit(True); // Previne dependencia circular
+    Visited.Add(PkgName);
+
+    WriteLn(Format('-> Sincronizando pacote Git "%s"...', [PkgName]));
+
+    // Se o repositorio ja existe no cache, tenta atualizar via checkout/pull
+    if DirectoryExists(CacheDir + PathDelim + '.git') then
+    begin
+      WriteLn(Format('   Cache existente em "%s"', [CacheDir]));
+      if (Version <> '') and (Version <> '*') and (Version <> 'main') then
+        CmdArgs := Format('-C "%s" checkout %s', [CacheDir, Version])
+      else
+        CmdArgs := Format('-C "%s" pull --quiet', [CacheDir]);
+
+      ExitCode := RunGitProcess(CmdArgs, OutputLog);
+      if ExitCode <> 0 then
+        WriteLn(Format('   Aviso: Nao foi possivel atualizar o repositorio local via Git (%s). Usando versao em cache.', [OutputLog]));
+      Result := True;
+    end
+    else
+    begin
+      // Clona o repositorio pela primeira vez
+      if not DirectoryExists(CacheDir) then
+        ForceDirectories(CacheDir);
+
+      if (Version <> '') and (Version <> '*') and (Version <> 'main') then
+        CmdArgs := Format('clone --depth 1 --branch %s %s "%s"', [Version, GitUrl, CacheDir])
+      else
+        CmdArgs := Format('clone --depth 1 %s "%s"', [GitUrl, CacheDir]);
+
+      WriteLn(Format('   Clonando de "%s"...', [GitUrl]));
+      ExitCode := RunGitProcess(CmdArgs, OutputLog);
+      if ExitCode = 0 then
+      begin
+        WriteLn(Format('   [OK] Pacote "%s" clonado com sucesso no cache.', [PkgName]));
+        Result := True;
+      end
+      else
+      begin
+        // Tenta clone sem --branch se falhar
+        CmdArgs := Format('clone --depth 1 %s "%s"', [GitUrl, CacheDir]);
+        ExitCode := RunGitProcess(CmdArgs, OutputLog);
+        if ExitCode = 0 then
+        begin
+          WriteLn(Format('   [OK] Pacote "%s" clonado (branch padrao).', [PkgName]));
+          Result := True;
+        end
+        else
+        begin
+          WriteLn(Format('   [Erro Git]: %s', [OutputLog]));
+          Exit(False);
+        end;
+      end;
+    end;
+
+    // Resolucao de dependencias aninhadas (transitiva)
+    SubConfigFile := CacheDir + PathDelim + 'aether.json';
+    if FileExists(SubConfigFile) then
+    begin
+      WriteLn(Format('   Verificando dependencias aninhadas em "%s/aether.json"...', [PkgName]));
+      try
+        // Carrega o manifesto do subpacote
+        if LoadProjectConfig(SubConfig) then
+        begin
+          for I := 0 to High(SubConfig.Dependencies) do
+          begin
+            if SubConfig.Dependencies[I].GitUrl <> '' then
+            begin
+              SyncGitPackage(SubConfig.Dependencies[I].Name,
+                             SubConfig.Dependencies[I].GitUrl,
+                             SubConfig.Dependencies[I].Version,
+                             SubCacheDir, Visited);
+            end;
+          end;
+        end;
+      except
+        // Ignora erros em aether.json de dependencias filhas
+      end;
+    end;
+
+  finally
+    if OwnsVisited then
+      Visited.Free;
+  end;
+end;
+
+procedure RestoreProjectDependencies(const Config: TAetherProjectConfig);
+var
+  I: Integer;
+  CacheDir, LocalDepDir: string;
+begin
+  if Length(Config.Dependencies) = 0 then Exit;
+
+  WriteLn('Restaurando dependencias do projeto ("aether.json")...');
+  for I := 0 to High(Config.Dependencies) do
+  begin
+    if Config.Dependencies[I].GitUrl <> '' then
+    begin
+      if SyncGitPackage(Config.Dependencies[I].Name,
+                        Config.Dependencies[I].GitUrl,
+                        Config.Dependencies[I].Version,
+                        CacheDir) then
+      begin
+        // Copia do cache para .aether/deps/ do projeto atual
+        LocalDepDir := Config.RootDir + PathDelim + '.aether' + PathDelim + 'deps' + PathDelim + Config.Dependencies[I].Name;
+        if not DirectoryExists(LocalDepDir) then
+        begin
+          WriteLn(Format('   Instalando "%s" em ".aether/deps/%s"...', [Config.Dependencies[I].Name, Config.Dependencies[I].Name]));
+          CopyDirectoryTree(CacheDir, LocalDepDir);
+        end;
+      end;
+    end;
+  end;
+  WriteLn('Todas as dependencias estao sincronizadas e prontas.');
+end;
 
 function GetAetherCacheDir: string;
 var
@@ -330,11 +578,25 @@ var
   StringStream: TStringStream;
   JSON, DepsData: TJSONData;
   Obj, DepsObj, SubObj: TJSONObject;
-  CachePkgDir: string;
+  CachePkgDir, LocalDepDir: string;
+  EffectivePkg, EffectiveGit, EffectiveVer: string;
   Idx: Integer;
 begin
   if PkgName = '' then
-    raise Exception.Create('Nome do pacote nao informado. Uso: aetherc add <nome_pacote> [--path=caminho] [--git=url] [--version=versao]');
+    raise Exception.Create('Nome do pacote nao informado. Uso: aetherc add <nome_pacote | git_url> [--path=caminho] [--git=url] [--version=versao]');
+
+  EffectivePkg := PkgName;
+  EffectiveGit := OptGit;
+  EffectiveVer := OptVer;
+
+  // Detecta se o primeiro argumento e uma URL Git
+  if (EffectiveGit = '') and
+     ((Pos('http://', EffectivePkg) = 1) or (Pos('https://', EffectivePkg) = 1) or
+      (Pos('git@', EffectivePkg) = 1) or (Copy(EffectivePkg, Length(EffectivePkg) - 3, 4) = '.git')) then
+  begin
+    EffectiveGit := EffectivePkg;
+    EffectivePkg := ExtractPackageNameFromGitUrl(EffectiveGit);
+  end;
 
   if not FindProjectRoot(RootDir, ConfigFile) then
     raise Exception.Create('Nenhum projeto Aether ("aether.json") encontrado no diretorio atual. Execute "aetherc init" primeiro.');
@@ -367,7 +629,7 @@ begin
       raise Exception.Create('Secao "dependencies" em aether.json deve ser um objeto JSON.');
 
     // Remove dependencia anterior se ja existia
-    Idx := DepsObj.IndexOfName(PkgName);
+    Idx := DepsObj.IndexOfName(EffectivePkg);
     if Idx >= 0 then
       DepsObj.Delete(Idx);
 
@@ -379,31 +641,34 @@ begin
 
       SubObj := TJSONObject.Create;
       SubObj.Add('path', StringReplace(OptPath, '\', '/', [rfReplaceAll]));
-      if OptVer <> '' then SubObj.Add('version', OptVer);
-      DepsObj.Add(PkgName, SubObj);
+      if EffectiveVer <> '' then SubObj.Add('version', EffectiveVer);
+      DepsObj.Add(EffectivePkg, SubObj);
     end
-    else if OptGit <> '' then
+    else if EffectiveGit <> '' then
     begin
       SubObj := TJSONObject.Create;
-      SubObj.Add('git', OptGit);
-      if OptVer <> '' then
-        SubObj.Add('version', OptVer)
+      SubObj.Add('git', EffectiveGit);
+      if EffectiveVer <> '' then
+        SubObj.Add('version', EffectiveVer)
       else
         SubObj.Add('version', 'main');
-      DepsObj.Add(PkgName, SubObj);
+      DepsObj.Add(EffectivePkg, SubObj);
 
-      CachePkgDir := GetAetherCacheDir + PathDelim + PkgName;
-      if not DirectoryExists(CachePkgDir) then
-        ForceDirectories(CachePkgDir);
+      // Clona/sincroniza o repositorio imediatamente
+      if SyncGitPackage(EffectivePkg, EffectiveGit, EffectiveVer, CachePkgDir) then
+      begin
+        LocalDepDir := RootDir + PathDelim + '.aether' + PathDelim + 'deps' + PathDelim + EffectivePkg;
+        CopyDirectoryTree(CachePkgDir, LocalDepDir);
+      end;
     end
     else
     begin
-      if OptVer <> '' then
-        DepsObj.Add(PkgName, OptVer)
+      if EffectiveVer <> '' then
+        DepsObj.Add(EffectivePkg, EffectiveVer)
       else
-        DepsObj.Add(PkgName, '*');
+        DepsObj.Add(EffectivePkg, '*');
 
-      CachePkgDir := GetAetherCacheDir + PathDelim + PkgName;
+      CachePkgDir := GetAetherCacheDir + PathDelim + EffectivePkg;
       if not DirectoryExists(CachePkgDir) then
         ForceDirectories(CachePkgDir);
     end;
@@ -414,16 +679,16 @@ begin
   end;
 
   WriteLn('--------------------------------------------------------');
-  WriteLn(Format(' Pacote "%s" adicionado com sucesso a "aether.json"!', [PkgName]));
+  WriteLn(Format(' Pacote "%s" adicionado com sucesso a "aether.json"!', [EffectivePkg]));
   WriteLn('--------------------------------------------------------');
   if OptPath <> '' then
     WriteLn(' Origem: ' + OptPath)
-  else if OptGit <> '' then
-    WriteLn(' Repositorio Git: ' + OptGit)
+  else if EffectiveGit <> '' then
+    WriteLn(' Repositorio Git: ' + EffectiveGit)
   else
-    WriteLn(' Versao: ' + OptVer);
+    WriteLn(' Versao: ' + EffectiveVer);
   WriteLn(' Pronto para importacao no projeto:');
-  WriteLn(Format('   import %s;', [UpCase(PkgName[1]) + Copy(PkgName, 2, Length(PkgName))]));
+  WriteLn(Format('   import %s;', [UpCase(EffectivePkg[1]) + Copy(EffectivePkg, 2, Length(EffectivePkg))]));
   WriteLn('--------------------------------------------------------');
 end;
 

@@ -1,306 +1,384 @@
-program aetherc;
+
+Program aetherc;
 
 {$mode objfpc}{$H+}
 {$codepage utf8}
 
-uses
-  SysUtils, Classes,
-  uAetherTokens,
-  uAetherLexer,
-  uAetherAST,
-  uAetherParser,
-  uAetherSymbols,
-  uAetherTypeChecker,
-  uAetherBorrowChecker,
-  uAetherEmitterPascal,
-  uAetherEmitterC,
-  uAetherToolchain,
-  uAetherJSONDiag,
-  uAetherLSP,
-  uAetherProject;
+Uses 
+SysUtils, Classes,
+uAetherTokens,
+uAetherLexer,
+uAetherAST,
+uAetherParser,
+uAetherSymbols,
+uAetherTypeChecker,
+uAetherBorrowChecker,
+uAetherEmitterPascal,
+uAetherEmitterC,
+uAetherToolchain,
+uAetherJSONDiag,
+uAetherLSP,
+uAetherProject;
 
-procedure PrintBanner;
-begin
+Procedure PrintBanner;
+Begin
   WriteLn('========================================================');
   WriteLn('  AetherLang Compiler (aetherc) - Versao 0.5.0 (Alpha)  ');
-  WriteLn('  Pascal Structure + Rust Safety + AI-Native Design     ');
+  WriteLn('  Pascal Structure + Pascal Safety + AI-Native Design   ');
   WriteLn('========================================================');
-end;
+End;
 
-procedure PrintUsage;
-begin
+Procedure PrintUsage;
+Begin
   WriteLn('Uso: aetherc <comando | arquivo.aeth> [opcoes]');
   WriteLn('');
   WriteLn('Comandos de Gerenciamento de Projetos e Pacotes:');
-  WriteLn('  init [nome]       Inicializa um novo projeto Aether com manifesto aether.json');
-  WriteLn('  new <nome>        Cria uma nova pasta com o projeto Aether estruturado');
-  WriteLn('  add <pacote>      Adiciona uma dependencia ao manifesto aether.json');
+  WriteLn(
+
+'  init [nome]       Inicializa um novo projeto Aether com manifesto aether.json'
+  );
+  WriteLn(
+
+      '  new <nome>        Cria uma nova pasta com o projeto Aether estruturado'
+  );
+  WriteLn(
+
+         '  add <pacote>      Adiciona uma dependencia ao manifesto aether.json'
+  );
   WriteLn('  test [filtro]     Executa testes unitarios da pasta tests/');
-  WriteLn('  build             Compila o projeto atual baseado no manifesto aether.json');
-  WriteLn('  run               Compila e executa imediatamente o binario do projeto');
-  WriteLn('  lsp               Inicia o servidor de linguagem (Language Server Protocol)');
+  WriteLn(
+
+  '  build             Compila o projeto atual baseado no manifesto aether.json'
+  );
+  WriteLn(
+
+      '  run               Compila e executa imediatamente o binario do projeto'
+  );
+  WriteLn(
+
+ '  lsp               Inicia o servidor de linguagem (Language Server Protocol)'
+  );
   WriteLn('');
   WriteLn('Opcoes Principais:');
-  WriteLn('  --doctor          Verifica e diagnostica o ambiente (FPC e MSYS2/GCC)');
-  WriteLn('  --target=pascal   Compila gerando Object Pascal e invoca FPC (Padrao)');
-  WriteLn('  --target=c        Compila gerando C99 e invoca GCC (MSYS2 no Windows)');
-  WriteLn('  --check-only      Executa apenas analise sintatica, tipos e borrow checker');
+  WriteLn(
+
+       '  --doctor          Verifica e diagnostica o ambiente (FPC e MSYS2/GCC)'
+  );
+  WriteLn(
+
+       '  --target=pascal   Compila gerando Object Pascal e invoca FPC (Padrao)'
+  );
+  WriteLn(
+
+       '  --target=c        Compila gerando C99 e invoca GCC (MSYS2 no Windows)'
+  );
+  WriteLn(
+
+  '  --check-only      Executa apenas analise sintatica, tipos e borrow checker'
+  );
   WriteLn('  --dump-tokens     Exibe a lista de tokens do Lexer');
   WriteLn('  --dump-ast        Exibe a Arvore Sintatica Abstrata (AST)');
-  WriteLn('  --emit-json-diag  Gera relatorio de diagnostico de erros em formato JSON para IA');
-  WriteLn('  --lsp             Inicia o servidor de linguagem (Language Server Protocol)');
+  WriteLn(
+
+'  --emit-json-diag  Gera relatorio de diagnostico de erros em formato JSON para IA'
+  );
+  WriteLn(
+
+ '  --lsp             Inicia o servidor de linguagem (Language Server Protocol)'
+  );
   WriteLn('  -o <arquivo.exe>  Especifica o nome do executavel de saida');
   WriteLn('  -h, --help        Exibe esta mensagem de ajuda');
-end;
+End;
 
-function LoadFileContent(const FileName: string): string;
-var
+Function LoadFileContent(Const FileName: String): string;
+
+Var 
   FileStream: TFileStream;
   StringStream: TStringStream;
-begin
-  if not FileExists(FileName) then
+Begin
+  If Not FileExists(FileName) Then
     raise Exception.CreateFmt('Arquivo nao encontrado: "%s"', [FileName]);
 
-  FileStream := TFileStream.Create(FileName, fmOpenRead or fmShareDenyWrite);
+  FileStream := TFileStream.Create(FileName, fmOpenRead Or fmShareDenyWrite);
   StringStream := TStringStream.Create('');
-  try
+  Try
     StringStream.CopyFrom(FileStream, FileStream.Size);
     Result := StringStream.DataString;
-  finally
+  Finally
     StringStream.Free;
     FileStream.Free;
-  end;
-end;
+End;
+End;
 
-procedure DumpTokens(const SourceFile: string);
-var
+Procedure DumpTokens(Const SourceFile: String);
+
+Var 
   Source: string;
   Lexer: TAetherLexer;
   Tok: TToken;
   Count: Integer;
-begin
+Begin
   Source := LoadFileContent(SourceFile);
   Lexer := TAetherLexer.Create(Source);
-  try
+  Try
     WriteLn(Format('--- Analise Lexica (Tokens) de: %s ---', [SourceFile]));
     Count := 0;
-    repeat
+    Repeat
       Tok := Lexer.NextToken;
       Inc(Count);
-      WriteLn(Format('[Linha %3d, Col %3d] %-16s : "%s"', 
-        [Tok.Line, Tok.Col, TokenKindToString(Tok.Kind), Tok.Value]));
-    until Tok.Kind = tokEOF;
+      WriteLn(Format('[Linha %3d, Col %3d] %-16s : "%s"',
+              [Tok.Line, Tok.Col, TokenKindToString(Tok.Kind), Tok.Value]));
+    Until Tok.Kind = tokEOF;
     WriteLn(Format('Total de tokens analisados: %d', [Count]));
-  finally
+  Finally
     Lexer.Free;
-  end;
-end;
+End;
+End;
 
-function ExtractLastSegment(const S: string): string;
-var
+Function ExtractLastSegment(Const S: String): string;
+
+Var 
   I: Integer;
-begin
-  for I := Length(S) downto 1 do
-    if S[I] = '.' then
+Begin
+  For I := Length(S) Downto 1 Do
+    If S[I] = '.' Then
       Exit(Copy(S, I + 1, Length(S)));
   Result := S;
-end;
+End;
 
-function CamelToSnake(const S: string): string;
-var
+Function CamelToSnake(Const S: String): string;
+
+Var 
   I: Integer;
-begin
+Begin
   Result := '';
-  for I := 1 to Length(S) do
-  begin
-    if (S[I] in ['A'..'Z']) and (I > 1) and (S[I - 1] <> '.') and (S[I - 1] <> '_') and (S[I - 1] <> '/') and (S[I - 1] <> '\') then
-      Result := Result + '_' + LowerCase(S[I])
-    else
-      Result := Result + LowerCase(S[I]);
-  end;
-end;
+  For I := 1 To Length(S) Do
+    Begin
+      If (S[I] In ['A'..'Z']) And (I > 1) And (S[I - 1] <> '.') And (S[I - 1] <>
+         '_') And (S[I - 1] <> '/') And (S[I - 1] <> '\') Then
+        Result := Result + '_' + LowerCase(S[I])
+      Else
+        Result := Result + LowerCase(S[I]);
+    End;
+End;
 
-function FindModuleFile(const ModName, BaseDir: string): string;
-var
+Function FindModuleFile(Const ModName, BaseDir: String): string;
+
+Var 
   Candidate: string;
   ExeDir, StdDir, CacheDir, DepDir: string;
   RelPath, RelPathLower, RelPathSnake: string;
   ProjConfig: TAetherProjectConfig;
   I: Integer;
-begin
+Begin
   Result := '';
   RelPath := StringReplace(ModName, '.', PathDelim, [rfReplaceAll]);
   RelPathLower := LowerCase(RelPath);
-  RelPathSnake := StringReplace(CamelToSnake(ModName), '.', PathDelim, [rfReplaceAll]);
+  RelPathSnake := StringReplace(CamelToSnake(ModName), '.', PathDelim, [
+                  rfReplaceAll]);
 
   // 1. Diretório do arquivo fonte
   Candidate := BaseDir + RelPath + '.aeth';
-  if FileExists(Candidate) then Exit(Candidate);
+  If FileExists(Candidate) Then Exit(Candidate);
   Candidate := BaseDir + RelPathLower + '.aeth';
-  if FileExists(Candidate) then Exit(Candidate);
+  If FileExists(Candidate) Then Exit(Candidate);
   Candidate := BaseDir + RelPathSnake + '.aeth';
-  if FileExists(Candidate) then Exit(Candidate);
+  If FileExists(Candidate) Then Exit(Candidate);
 
   // 2. Subpasta std/ relativa ao diretório do arquivo fonte
   Candidate := BaseDir + 'std' + PathDelim + RelPath + '.aeth';
-  if FileExists(Candidate) then Exit(Candidate);
+  If FileExists(Candidate) Then Exit(Candidate);
   Candidate := BaseDir + 'std' + PathDelim + RelPathLower + '.aeth';
-  if FileExists(Candidate) then Exit(Candidate);
+  If FileExists(Candidate) Then Exit(Candidate);
   Candidate := BaseDir + 'std' + PathDelim + RelPathSnake + '.aeth';
-  if FileExists(Candidate) then Exit(Candidate);
+  If FileExists(Candidate) Then Exit(Candidate);
 
   // 3. Subpasta std/ relativa ao compilador (bin/../std)
   ExeDir := ExtractFilePath(ParamStr(0));
   StdDir := ExpandFileName(ExeDir + '..' + PathDelim + 'std');
   Candidate := StdDir + PathDelim + RelPath + '.aeth';
-  if FileExists(Candidate) then Exit(Candidate);
+  If FileExists(Candidate) Then Exit(Candidate);
   Candidate := StdDir + PathDelim + RelPathLower + '.aeth';
-  if FileExists(Candidate) then Exit(Candidate);
+  If FileExists(Candidate) Then Exit(Candidate);
   Candidate := StdDir + PathDelim + RelPathSnake + '.aeth';
-  if FileExists(Candidate) then Exit(Candidate);
+  If FileExists(Candidate) Then Exit(Candidate);
 
   // 4. Diretório de trabalho atual (cwd)
   Candidate := GetCurrentDir + PathDelim + RelPath + '.aeth';
-  if FileExists(Candidate) then Exit(Candidate);
+  If FileExists(Candidate) Then Exit(Candidate);
   Candidate := GetCurrentDir + PathDelim + RelPathLower + '.aeth';
-  if FileExists(Candidate) then Exit(Candidate);
+  If FileExists(Candidate) Then Exit(Candidate);
   Candidate := GetCurrentDir + PathDelim + RelPathSnake + '.aeth';
-  if FileExists(Candidate) then Exit(Candidate);
-  Candidate := GetCurrentDir + PathDelim + 'std' + PathDelim + RelPath + '.aeth';
-  if FileExists(Candidate) then Exit(Candidate);
-  Candidate := GetCurrentDir + PathDelim + 'std' + PathDelim + RelPathLower + '.aeth';
-  if FileExists(Candidate) then Exit(Candidate);
-  Candidate := GetCurrentDir + PathDelim + 'std' + PathDelim + RelPathSnake + '.aeth';
-  if FileExists(Candidate) then Exit(Candidate);
+  If FileExists(Candidate) Then Exit(Candidate);
+  Candidate := GetCurrentDir + PathDelim + 'std' + PathDelim + RelPath + '.aeth'
+  ;
+  If FileExists(Candidate) Then Exit(Candidate);
+  Candidate := GetCurrentDir + PathDelim + 'std' + PathDelim + RelPathLower +
+               '.aeth';
+  If FileExists(Candidate) Then Exit(Candidate);
+  Candidate := GetCurrentDir + PathDelim + 'std' + PathDelim + RelPathSnake +
+               '.aeth';
+  If FileExists(Candidate) Then Exit(Candidate);
 
-  // 5. Dependências do projeto atual (aether.json) e Cache Global (~/.aether/cache)
-  if LoadProjectConfig(ProjConfig) then
-  begin
-    for I := 0 to High(ProjConfig.Dependencies) do
-    begin
-      if ProjConfig.Dependencies[I].Path <> '' then
-        DepDir := ExpandFileName(ProjConfig.RootDir + PathDelim + ProjConfig.Dependencies[I].Path)
-      else
-        DepDir := ExpandFileName(ProjConfig.RootDir + PathDelim + '.aether' + PathDelim + 'deps' + PathDelim + ProjConfig.Dependencies[I].Name);
 
-      Candidate := DepDir + PathDelim + RelPath + '.aeth';
-      if FileExists(Candidate) then Exit(Candidate);
-      Candidate := DepDir + PathDelim + 'src' + PathDelim + RelPath + '.aeth';
-      if FileExists(Candidate) then Exit(Candidate);
-      Candidate := DepDir + PathDelim + RelPathLower + '.aeth';
-      if FileExists(Candidate) then Exit(Candidate);
-      Candidate := DepDir + PathDelim + 'src' + PathDelim + RelPathLower + '.aeth';
-      if FileExists(Candidate) then Exit(Candidate);
-      Candidate := DepDir + PathDelim + RelPathSnake + '.aeth';
-      if FileExists(Candidate) then Exit(Candidate);
-      Candidate := DepDir + PathDelim + 'src' + PathDelim + RelPathSnake + '.aeth';
-      if FileExists(Candidate) then Exit(Candidate);
 
-      // Cache global (~/.aether/cache/<pkg>)
-      CacheDir := GetAetherCacheDir + PathDelim + ProjConfig.Dependencies[I].Name;
-      Candidate := CacheDir + PathDelim + RelPath + '.aeth';
-      if FileExists(Candidate) then Exit(Candidate);
-      Candidate := CacheDir + PathDelim + 'src' + PathDelim + RelPath + '.aeth';
-      if FileExists(Candidate) then Exit(Candidate);
-      Candidate := CacheDir + PathDelim + RelPathLower + '.aeth';
-      if FileExists(Candidate) then Exit(Candidate);
-      Candidate := CacheDir + PathDelim + 'src' + PathDelim + RelPathLower + '.aeth';
-      if FileExists(Candidate) then Exit(Candidate);
-      Candidate := CacheDir + PathDelim + RelPathSnake + '.aeth';
-      if FileExists(Candidate) then Exit(Candidate);
-      Candidate := CacheDir + PathDelim + 'src' + PathDelim + RelPathSnake + '.aeth';
-      if FileExists(Candidate) then Exit(Candidate);
-    end;
-  end;
-end;
+// 5. Dependências do projeto atual (aether.json) e Cache Global (~/.aether/cache)
+  If LoadProjectConfig(ProjConfig) Then
+    Begin
+      For I := 0 To High(ProjConfig.Dependencies) Do
+        Begin
+          If ProjConfig.Dependencies[I].Path <> '' Then
+            DepDir := ExpandFileName(ProjConfig.RootDir + PathDelim + ProjConfig
+                      .Dependencies[I].Path)
+          Else
+            DepDir := ExpandFileName(ProjConfig.RootDir + PathDelim + '.aether'
+                      + PathDelim + 'deps' + PathDelim + ProjConfig.Dependencies
+                      [I].Name);
 
-procedure CollectModuleImports(TargetMod: TASTModule; const BaseDir: string; Visited: TStringList; AllTypes, AllTraits, AllImpls, AllFuncs: TFPList; PascalImports: TStringList);
-var
+          Candidate := DepDir + PathDelim + RelPath + '.aeth';
+          If FileExists(Candidate) Then Exit(Candidate);
+          Candidate := DepDir + PathDelim + 'src' + PathDelim + RelPath +
+                       '.aeth';
+          If FileExists(Candidate) Then Exit(Candidate);
+          Candidate := DepDir + PathDelim + RelPathLower + '.aeth';
+          If FileExists(Candidate) Then Exit(Candidate);
+          Candidate := DepDir + PathDelim + 'src' + PathDelim + RelPathLower +
+                       '.aeth';
+          If FileExists(Candidate) Then Exit(Candidate);
+          Candidate := DepDir + PathDelim + RelPathSnake + '.aeth';
+          If FileExists(Candidate) Then Exit(Candidate);
+          Candidate := DepDir + PathDelim + 'src' + PathDelim + RelPathSnake +
+                       '.aeth';
+          If FileExists(Candidate) Then Exit(Candidate);
+
+          // Cache global (~/.aether/cache/<pkg>)
+          CacheDir := GetAetherCacheDir + PathDelim + ProjConfig.Dependencies[I]
+                      .Name;
+          Candidate := CacheDir + PathDelim + RelPath + '.aeth';
+          If FileExists(Candidate) Then Exit(Candidate);
+          Candidate := CacheDir + PathDelim + 'src' + PathDelim + RelPath +
+                       '.aeth';
+          If FileExists(Candidate) Then Exit(Candidate);
+          Candidate := CacheDir + PathDelim + RelPathLower + '.aeth';
+          If FileExists(Candidate) Then Exit(Candidate);
+          Candidate := CacheDir + PathDelim + 'src' + PathDelim + RelPathLower +
+                       '.aeth';
+          If FileExists(Candidate) Then Exit(Candidate);
+          Candidate := CacheDir + PathDelim + RelPathSnake + '.aeth';
+          If FileExists(Candidate) Then Exit(Candidate);
+          Candidate := CacheDir + PathDelim + 'src' + PathDelim + RelPathSnake +
+                       '.aeth';
+          If FileExists(Candidate) Then Exit(Candidate);
+        End;
+    End;
+End;
+
+Procedure CollectModuleImports(TargetMod: TASTModule; Const BaseDir: String;
+                               Visited: TStringList; AllTypes, AllTraits,
+                               AllImpls, AllFuncs: TFPList; PascalImports:
+                               TStringList);
+
+Var 
   I, J: Integer;
   ModName, ModPath, ModSource: string;
   SubLexer: TAetherLexer;
   SubParser: TAetherParser;
   SubMod: TASTModule;
   ExpectedName, LastSegment: string;
-begin
-  for I := 0 to TargetMod.Imports.Count - 1 do
-  begin
-    ModName := TargetMod.Imports[I];
-    if Visited.IndexOf(LowerCase(ModName)) >= 0 then Continue;
-    Visited.Add(LowerCase(ModName));
+Begin
+  For I := 0 To TargetMod.Imports.Count - 1 Do
+    Begin
+      ModName := TargetMod.Imports[I];
+      If Visited.IndexOf(LowerCase(ModName)) >= 0 Then Continue;
+      Visited.Add(LowerCase(ModName));
 
-    ModPath := FindModuleFile(ModName, BaseDir);
-    if ModPath = '' then
-      raise Exception.CreateFmt('Modulo Aether "%s" nao encontrado. Verifique se o arquivo existe ou se esta em "std/".', [ModName]);
+      ModPath := FindModuleFile(ModName, BaseDir);
+      If ModPath = '' Then
+        raise Exception.CreateFmt(
 
-    ModSource := LoadFileContent(ModPath);
-    SubLexer := TAetherLexer.Create(ModSource);
-    SubParser := TAetherParser.Create(SubLexer);
-    try
-      SubMod := SubParser.ParseModule;
-      try
-        CollectModuleImports(SubMod, ExtractFilePath(ModPath), Visited, AllTypes, AllTraits, AllImpls, AllFuncs, PascalImports);
+'Modulo Aether "%s" nao encontrado. Verifique se o arquivo existe ou se esta em "std/".'
+                                  , [ModName]);
 
-        // Validação Estrita 1:1 de Módulos Importados (Fase 13)
-        ExpectedName := ModName;
-        LastSegment := ExtractLastSegment(ExpectedName);
-        if not SameText(SubMod.Name, ExpectedName) and not SameText(SubMod.Name, LastSegment) then
-          raise Exception.CreateFmt('[Erro de Modulo E0005 em %s]: Nome do modulo declarado "%s" difere do esperado "%s". Em Aether, o nome do modulo deve corresponder ao nome do arquivo.', [ExtractFileName(ModPath), SubMod.Name, ExpectedName]);
+      ModSource := LoadFileContent(ModPath);
+      SubLexer := TAetherLexer.Create(ModSource);
+      SubParser := TAetherParser.Create(SubLexer);
+      Try
+        SubMod := SubParser.ParseModule;
+        Try
+          CollectModuleImports(SubMod, ExtractFilePath(ModPath), Visited,
+          AllTypes, AllTraits, AllImpls, AllFuncs, PascalImports);
 
-        for J := 0 to SubMod.PascalImports.Count - 1 do
-          if PascalImports.IndexOf(SubMod.PascalImports[J]) < 0 then
-            PascalImports.Add(SubMod.PascalImports[J]);
+          // Validação Estrita 1:1 de Módulos Importados (Fase 13)
+          ExpectedName := ModName;
+          LastSegment := ExtractLastSegment(ExpectedName);
+          If Not SameText(SubMod.Name, ExpectedName) And Not SameText(SubMod.
+             Name, LastSegment) Then
+            raise Exception.CreateFmt(
 
-        while SubMod.Types.Count > 0 do
-          AllTypes.Add(SubMod.Types.Extract(SubMod.Types[0]));
+'[Erro de Modulo E0005 em %s]: Nome do modulo declarado "%s" difere do esperado "%s". Em Aether, o nome do modulo deve corresponder ao nome do arquivo.'
+                                      , [ExtractFileName(ModPath), SubMod.Name,
+            ExpectedName]);
 
-        while SubMod.Traits.Count > 0 do
-          AllTraits.Add(SubMod.Traits.Extract(SubMod.Traits[0]));
+          For J := 0 To SubMod.PascalImports.Count - 1 Do
+            If PascalImports.IndexOf(SubMod.PascalImports[J]) < 0 Then
+              PascalImports.Add(SubMod.PascalImports[J]);
 
-        while SubMod.Impls.Count > 0 do
-          AllImpls.Add(SubMod.Impls.Extract(SubMod.Impls[0]));
+          While SubMod.Types.Count > 0 Do
+            AllTypes.Add(SubMod.Types.Extract(SubMod.Types[0]));
 
-        while SubMod.Functions.Count > 0 do
-          AllFuncs.Add(SubMod.Functions.Extract(SubMod.Functions[0]));
-      finally
-        SubMod.Free;
-      end;
-    finally
-      SubParser.Free;
-      SubLexer.Free;
-    end;
-  end;
-end;
+          While SubMod.Traits.Count > 0 Do
+            AllTraits.Add(SubMod.Traits.Extract(SubMod.Traits[0]));
 
-procedure ResolveModuleImports(TargetMod: TASTModule; const BaseDir: string; Visited: TStringList);
-var
+          While SubMod.Impls.Count > 0 Do
+            AllImpls.Add(SubMod.Impls.Extract(SubMod.Impls[0]));
+
+          While SubMod.Functions.Count > 0 Do
+            AllFuncs.Add(SubMod.Functions.Extract(SubMod.Functions[0]));
+        Finally
+          SubMod.Free;
+    End;
+Finally
+  SubParser.Free;
+  SubLexer.Free;
+End;
+End;
+End;
+
+Procedure ResolveModuleImports(TargetMod: TASTModule; Const BaseDir: String;
+                               Visited: TStringList);
+
+Var 
   AllTypes, AllTraits, AllImpls, AllFuncs: TFPList;
   I: Integer;
-begin
+Begin
   AllTypes := TFPList.Create;
   AllTraits := TFPList.Create;
   AllImpls := TFPList.Create;
   AllFuncs := TFPList.Create;
-  try
-    CollectModuleImports(TargetMod, BaseDir, Visited, AllTypes, AllTraits, AllImpls, AllFuncs, TargetMod.PascalImports);
-    for I := AllTypes.Count - 1 downto 0 do
+  Try
+    CollectModuleImports(TargetMod, BaseDir, Visited, AllTypes, AllTraits,
+                         AllImpls, AllFuncs, TargetMod.PascalImports);
+    For I := AllTypes.Count - 1 Downto 0 Do
       TargetMod.Types.Insert(0, TASTNode(AllTypes[I]));
-    for I := AllTraits.Count - 1 downto 0 do
+    For I := AllTraits.Count - 1 Downto 0 Do
       TargetMod.Traits.Insert(0, TASTNode(AllTraits[I]));
-    for I := AllImpls.Count - 1 downto 0 do
+    For I := AllImpls.Count - 1 Downto 0 Do
       TargetMod.Impls.Insert(0, TASTNode(AllImpls[I]));
-    for I := AllFuncs.Count - 1 downto 0 do
+    For I := AllFuncs.Count - 1 Downto 0 Do
       TargetMod.Functions.Insert(0, TASTFunction(AllFuncs[I]));
-  finally
+  Finally
     AllTypes.Free;
     AllTraits.Free;
     AllImpls.Free;
     AllFuncs.Free;
-  end;
-end;
+End;
+End;
 
-procedure CompileFile(const SourceFile: string; TargetPascal: Boolean; CheckOnly, DumpASTOnly: Boolean; const OutputExeName: string; SilentBanner: Boolean);
-var
+Procedure CompileFile(Const SourceFile: String; TargetPascal: Boolean; CheckOnly
+                      , DumpASTOnly: Boolean; Const OutputExeName: String;
+                      SilentBanner: Boolean);
+
+Var 
   Source: string;
   Lexer: TAetherLexer;
   Parser: TAetherParser;
@@ -317,179 +395,194 @@ var
   Visited: TStringList;
   FileBase, CleanBase, CleanMod: string;
   P: Integer;
-begin
+Begin
   Source := LoadFileContent(SourceFile);
   Lexer := TAetherLexer.Create(Source);
   Parser := TAetherParser.Create(Lexer);
-  try
+  Try
     ModuleNode := Parser.ParseModule;
 
     // Validação Estrita 1:1 de Módulo no arquivo raiz (Fase 13)
     FileBase := ChangeFileExt(ExtractFileName(SourceFile), '');
     CleanBase := FileBase;
     P := 1;
-    while (P <= Length(CleanBase)) and (CleanBase[P] in ['0'..'9', '_']) do Inc(P);
-    if P <= Length(CleanBase) then
+    While (P <= Length(CleanBase)) And (CleanBase[P] In ['0'..'9', '_']) Do
+      Inc(P);
+    If P <= Length(CleanBase) Then
       CleanBase := Copy(CleanBase, P, Length(CleanBase));
     CleanBase := StringReplace(CleanBase, '_', '', [rfReplaceAll]);
     CleanMod := StringReplace(ModuleNode.Name, '_', '', [rfReplaceAll]);
 
-    if not SameText(FileBase, ModuleNode.Name) and not SameText(CleanBase, CleanMod) then
-      raise Exception.CreateFmt('[Erro de Modulo E0005 em %s]: Nome do modulo declarado "%s" difere do nome do arquivo "%s.aeth". Em Aether, o nome do modulo deve corresponder ao nome do arquivo.', [ExtractFileName(SourceFile), ModuleNode.Name, FileBase]);
+    If Not SameText(FileBase, ModuleNode.Name) And Not SameText(CleanBase,
+       CleanMod) Then
+      raise Exception.CreateFmt(
 
-    try
+'[Erro de Modulo E0005 em %s]: Nome do modulo declarado "%s" difere do nome do arquivo "%s.aeth". Em Aether, o nome do modulo deve corresponder ao nome do arquivo.'
+                                , [ExtractFileName(SourceFile), ModuleNode.Name,
+      FileBase]);
+
+    Try
       Visited := TStringList.Create;
-      try
-        ResolveModuleImports(ModuleNode, ExtractFilePath(ExpandFileName(SourceFile)), Visited);
-      finally
+      Try
+        ResolveModuleImports(ModuleNode, ExtractFilePath(ExpandFileName(
+                             SourceFile)), Visited);
+      Finally
         Visited.Free;
-      end;
-      if DumpASTOnly then
-      begin
-        WriteLn(Format('--- Arvore Sintatica Abstrata (AST) de: %s ---', [SourceFile]));
-        WriteLn(ModuleNode.Dump(0));
-        Exit;
-      end;
+End;
+If DumpASTOnly Then
+  Begin
+    WriteLn(Format('--- Arvore Sintatica Abstrata (AST) de: %s ---', [SourceFile
+            ]));
+    WriteLn(ModuleNode.Dump(0));
+    Exit;
+  End;
 
-      if not SilentBanner then
-        WriteLn(Format('[1/4] Analise Sintatica de "%s": OK', [ExtractFileName(SourceFile)]));
+If Not SilentBanner Then
+  WriteLn(Format('[1/4] Analise Sintatica de "%s": OK', [ExtractFileName(
+          SourceFile)]));
 
-      // 2. Verificacao de Tipos e Semantica
-      TypeChecker := TAetherTypeChecker.Create;
-      try
-        TypeChecker.CheckModule(ModuleNode);
-        if not SilentBanner then
-          WriteLn('[2/4] Verificacao de Tipos: OK (0 erros)');
+// 2. Verificacao de Tipos e Semantica
+TypeChecker := TAetherTypeChecker.Create;
+Try
+  TypeChecker.CheckModule(ModuleNode);
+  If Not SilentBanner Then
+    WriteLn('[2/4] Verificacao de Tipos: OK (0 erros)');
 
-        // 3. Verificacao de Posse (Borrow Checker)
-        BorrowChecker := TAetherBorrowChecker.Create(TypeChecker.Symbols);
-        try
-          BorrowChecker.CheckModule(ModuleNode);
-          if not SilentBanner then
-            WriteLn('[3/4] Verificacao de Posse (Borrow Checker): OK (0 erros)');
-        finally
-          BorrowChecker.Free;
-        end;
-      finally
-        TypeChecker.Free;
-      end;
+  // 3. Verificacao de Posse (Borrow Checker)
+  BorrowChecker := TAetherBorrowChecker.Create(TypeChecker.Symbols);
+  Try
+    BorrowChecker.CheckModule(ModuleNode);
+    If Not SilentBanner Then
+      WriteLn('[3/4] Verificacao de Posse (Borrow Checker): OK (0 erros)');
+  Finally
+    BorrowChecker.Free;
+End;
+Finally
+  TypeChecker.Free;
+End;
 
-      if CheckOnly then
-      begin
-        if not SilentBanner then
-          WriteLn('Modo --check-only finalizado com sucesso.');
-        Exit;
-      end;
+If CheckOnly Then
+  Begin
+    If Not SilentBanner Then
+      WriteLn('Modo --check-only finalizado com sucesso.');
+    Exit;
+  End;
 
-      // 4. Emissao de Codigo e Geracao do Executavel
-      GenDir := ExtractFilePath(ParamStr(0)) + 'generated';
-      if not DirectoryExists(GenDir) then
-        CreateDir(GenDir);
+// 4. Emissao de Codigo e Geracao do Executavel
+GenDir := ExtractFilePath(ParamStr(0)) + 'generated';
+If Not DirectoryExists(GenDir) Then
+  CreateDir(GenDir);
 
-      if OutputExeName <> '' then
-        FinalExe := OutputExeName
-      else
-        FinalExe := ExtractFilePath(ParamStr(0)) + ChangeFileExt(ExtractFileName(SourceFile), '.exe');
+If OutputExeName <> '' Then
+  FinalExe := OutputExeName
+Else
+  FinalExe := ExtractFilePath(ParamStr(0)) + ChangeFileExt(ExtractFileName(
+              SourceFile), '.exe');
 
-      ForceDirectories(ExtractFileDir(FinalExe));
+ForceDirectories(ExtractFileDir(FinalExe));
 
-      if TargetPascal then
-      begin
-        IntermediateFile := GenDir + PathDelim + ChangeFileExt(ExtractFileName(SourceFile), '.pas');
-        EmitterPas := TAetherEmitterPascal.Create;
-        try
-          GeneratedCode := EmitterPas.Generate(ModuleNode);
-        finally
-          EmitterPas.Free;
-        end;
+If TargetPascal Then
+  Begin
+    IntermediateFile := GenDir + PathDelim + ChangeFileExt(ExtractFileName(
+                        SourceFile), '.pas');
+    EmitterPas := TAetherEmitterPascal.Create;
+    Try
+      GeneratedCode := EmitterPas.Generate(ModuleNode);
+    Finally
+      EmitterPas.Free;
+  End;
 
-        CodeFile := TStringList.Create;
-        try
-          CodeFile.Text := GeneratedCode;
-          CodeFile.SaveToFile(IntermediateFile);
-        finally
-          CodeFile.Free;
-        end;
+CodeFile := TStringList.Create;
+Try
+  CodeFile.Text := GeneratedCode;
+  CodeFile.SaveToFile(IntermediateFile);
+Finally
+  CodeFile.Free;
+End;
 
-        if not SilentBanner then
-        begin
-          WriteLn(Format('[4/4] Transpilando para Object Pascal -> "%s"', [ExtractFileName(IntermediateFile)]));
-          WriteLn('      Invocando Free Pascal (fpc)...');
-        end;
+If Not SilentBanner Then
+  Begin
+    WriteLn(Format('[4/4] Transpilando para Object Pascal -> "%s"', [
+            ExtractFileName(IntermediateFile)]));
+    WriteLn('      Invocando Free Pascal (fpc)...');
+  End;
 
-        CompileLog := '';
-        Success := CompileWithFPC(IntermediateFile, FinalExe, CompileLog);
-        if Success then
-        begin
-          if not SilentBanner then
-          begin
-            WriteLn('');
-            WriteLn('SUCESSO! Executavel nativo gerado:');
-            WriteLn('  --> ' + FinalExe);
-          end;
-        end
-        else
-        begin
-          WriteLn(ErrOutput, 'Falha na compilacao com FPC:');
-          WriteLn(ErrOutput, CompileLog);
-          Halt(1);
-        end;
-      end
-      else
-      begin
-        // Target C (MSYS2 GCC no Windows / GCC no Linux/macOS)
-        IntermediateFile := GenDir + PathDelim + ChangeFileExt(ExtractFileName(SourceFile), '.c');
-        EmitterC := TAetherEmitterC.Create;
-        try
-          GeneratedCode := EmitterC.Generate(ModuleNode);
-        finally
-          EmitterC.Free;
-        end;
+CompileLog := '';
+Success := CompileWithFPC(IntermediateFile, FinalExe, CompileLog);
+If Success Then
+  Begin
+    If Not SilentBanner Then
+      Begin
+        WriteLn('');
+        WriteLn('SUCESSO! Executavel nativo gerado:');
+        WriteLn('  --> ' + FinalExe);
+      End;
+  End
+Else
+  Begin
+    WriteLn(ErrOutput, 'Falha na compilacao com FPC:');
+    WriteLn(ErrOutput, CompileLog);
+    Halt(1);
+  End;
+End
+Else
+  Begin
+    // Target C (MSYS2 GCC no Windows / GCC no Linux/macOS)
+    IntermediateFile := GenDir + PathDelim + ChangeFileExt(ExtractFileName(
+                        SourceFile), '.c');
+    EmitterC := TAetherEmitterC.Create;
+    Try
+      GeneratedCode := EmitterC.Generate(ModuleNode);
+    Finally
+      EmitterC.Free;
+  End;
 
-        CodeFile := TStringList.Create;
-        try
-          CodeFile.Text := GeneratedCode;
-          CodeFile.SaveToFile(IntermediateFile);
-        finally
-          CodeFile.Free;
-        end;
+CodeFile := TStringList.Create;
+Try
+  CodeFile.Text := GeneratedCode;
+  CodeFile.SaveToFile(IntermediateFile);
+Finally
+  CodeFile.Free;
+End;
 
-        if not SilentBanner then
-        begin
-          WriteLn(Format('[4/4] Transpilando para C99 -> "%s"', [ExtractFileName(IntermediateFile)]));
-          WriteLn('      Invocando GCC...');
-        end;
+If Not SilentBanner Then
+  Begin
+    WriteLn(Format('[4/4] Transpilando para C99 -> "%s"', [ExtractFileName(
+            IntermediateFile)]));
+    WriteLn('      Invocando GCC...');
+  End;
 
-        CompileLog := '';
-        Success := CompileWithGCC(IntermediateFile, FinalExe, CompileLog);
-        if Success then
-        begin
-          if not SilentBanner then
-          begin
-            WriteLn('');
-            WriteLn('SUCESSO! Executavel nativo gerado via GCC:');
-            WriteLn('  --> ' + FinalExe);
-          end;
-        end
-        else
-        begin
-          WriteLn(ErrOutput, 'Falha na compilacao com GCC:');
-          WriteLn(ErrOutput, CompileLog);
-          Halt(1);
-        end;
-      end;
+CompileLog := '';
+Success := CompileWithGCC(IntermediateFile, FinalExe, CompileLog);
+If Success Then
+  Begin
+    If Not SilentBanner Then
+      Begin
+        WriteLn('');
+        WriteLn('SUCESSO! Executavel nativo gerado via GCC:');
+        WriteLn('  --> ' + FinalExe);
+      End;
+  End
+Else
+  Begin
+    WriteLn(ErrOutput, 'Falha na compilacao com GCC:');
+    WriteLn(ErrOutput, CompileLog);
+    Halt(1);
+  End;
+End;
 
-    finally
-      ModuleNode.Free;
-    end;
-  finally
-    Parser.Free;
-    Lexer.Free;
-  end;
-end;
+Finally
+  ModuleNode.Free;
+End;
+Finally
+  Parser.Free;
+  Lexer.Free;
+End;
+End;
 
-procedure HandleProjectTest(const Filter: string; TargetPascal: Boolean);
-var
+Procedure HandleProjectTest(Const Filter: String; TargetPascal: Boolean);
+
+Var 
   ProjConfig: TAetherProjectConfig;
   TestsDir, TestFile, TestExe: string;
   SearchRec: TSearchRec;
@@ -499,46 +592,58 @@ var
   StartTime, ElapsedTime: TDateTime;
   ElapsedMs: Int64;
   BackendName: string;
-begin
-  if not LoadProjectConfig(ProjConfig) then
-  begin
-    WriteLn(ErrOutput, 'Erro: Nenhum projeto Aether ("aether.json") encontrado no diretorio atual.');
-    Halt(1);
-  end;
+Begin
+  If Not LoadProjectConfig(ProjConfig) Then
+    Begin
+      WriteLn(ErrOutput,
+
+    'Erro: Nenhum projeto Aether ("aether.json") encontrado no diretorio atual.'
+      );
+      Halt(1);
+    End;
+
+  RestoreProjectDependencies(ProjConfig);
 
   TestsDir := ProjConfig.RootDir + PathDelim + 'tests';
-  if not DirectoryExists(TestsDir) then
-  begin
-    WriteLn(Format('Aviso: Diretorio de testes "%s" nao encontrado.', [TestsDir]));
-    Halt(0);
-  end;
+  If Not DirectoryExists(TestsDir) Then
+    Begin
+      WriteLn(Format('Aviso: Diretorio de testes "%s" nao encontrado.', [
+              TestsDir]));
+      Halt(0);
+    End;
 
   TestFiles := TStringList.Create;
-  try
-    if FindFirst(TestsDir + PathDelim + '*.aeth', faAnyFile, SearchRec) = 0 then
-    begin
-      repeat
-        if (SearchRec.Attr and faDirectory) = 0 then
-        begin
-          if (Filter = '') or (Pos(LowerCase(Filter), LowerCase(SearchRec.Name)) > 0) then
-            TestFiles.Add(TestsDir + PathDelim + SearchRec.Name);
-        end;
-      until FindNext(SearchRec) <> 0;
-      FindClose(SearchRec);
-    end;
+  Try
+    If FindFirst(TestsDir + PathDelim + '*.aeth', faAnyFile, SearchRec) = 0 Then
+      Begin
+        Repeat
+          If (SearchRec.Attr And faDirectory) = 0 Then
+            Begin
+              If (Filter = '') Or (Pos(LowerCase(Filter), LowerCase(SearchRec.
+                 Name)) > 0) Then
+                TestFiles.Add(TestsDir + PathDelim + SearchRec.Name);
+            End;
+        Until FindNext(SearchRec) <> 0;
+        FindClose(SearchRec);
+      End;
 
-    if TestFiles.Count = 0 then
-    begin
-      if Filter <> '' then
-        WriteLn(Format('Nenhum teste encontrado correspondendo ao filtro "%s".', [Filter]))
-      else
-        WriteLn('Nenhum arquivo de teste (*.aeth) encontrado no diretorio "tests/".');
-      Exit;
-    end;
+    If TestFiles.Count = 0 Then
+      Begin
+        If Filter <> '' Then
+          WriteLn(Format(
+                  'Nenhum teste encontrado correspondendo ao filtro "%s".', [
+                  Filter]))
+        Else
+          WriteLn(
 
-    if TargetPascal then
+            'Nenhum arquivo de teste (*.aeth) encontrado no diretorio "tests/".'
+          );
+        Exit;
+      End;
+
+    If TargetPascal Then
       BackendName := 'Free Pascal'
-    else
+    Else
       BackendName := 'GCC C99';
 
     WriteLn('========================================================');
@@ -549,57 +654,60 @@ begin
     PassedCount := 0;
     FailedCount := 0;
 
-    for I := 0 to TestFiles.Count - 1 do
-    begin
-      TestFile := TestFiles[I];
-      TestExe := ProjConfig.RootDir + PathDelim + 'bin' + PathDelim + 'tests' + PathDelim + ChangeFileExt(ExtractFileName(TestFile), '.exe');
-      ForceDirectories(ExtractFileDir(TestExe));
+    For I := 0 To TestFiles.Count - 1 Do
+      Begin
+        TestFile := TestFiles[I];
+        TestExe := ProjConfig.RootDir + PathDelim + 'bin' + PathDelim + 'tests'
+                   + PathDelim + ChangeFileExt(ExtractFileName(TestFile), '.exe'
+                   );
+        ForceDirectories(ExtractFileDir(TestExe));
 
-      Write(Format('  [TEST] %s ... ', [ExtractFileName(TestFile)]));
+        Write(Format('  [TEST] %s ... ', [ExtractFileName(TestFile)]));
 
-      try
-        // 1. Compila o teste de forma silenciosa
-        CompileFile(TestFile, TargetPascal, False, False, TestExe, True);
+        Try
+          // 1. Compila o teste de forma silenciosa
+          CompileFile(TestFile, TargetPascal, False, False, TestExe, True);
 
-        // 2. Executa o teste medindo tempo
-        StartTime := Now;
-        ExitCode := ExecuteProcess(TestExe, '');
-        ElapsedTime := Now - StartTime;
-        ElapsedMs := Round(ElapsedTime * 86400 * 1000);
+          // 2. Executa o teste medindo tempo
+          StartTime := Now;
+          ExitCode := ExecuteProcess(TestExe, '');
+          ElapsedTime := Now - StartTime;
+          ElapsedMs := Round(ElapsedTime * 86400 * 1000);
 
-        if ExitCode = 0 then
-        begin
-          Inc(PassedCount);
-          WriteLn(Format('PASS (%d ms)', [ElapsedMs]));
-        end
-        else
-        begin
-          Inc(FailedCount);
-          WriteLn(Format('FAIL! (ExitCode: %d)', [ExitCode]));
-        end;
-      except
-        on E: Exception do
-        begin
-          Inc(FailedCount);
-          WriteLn('ERRO DE COMPILACAO: ' + E.Message);
-        end;
-      end;
-    end;
+          If ExitCode = 0 Then
+            Begin
+              Inc(PassedCount);
+              WriteLn(Format('PASS (%d ms)', [ElapsedMs]));
+            End
+          Else
+            Begin
+              Inc(FailedCount);
+              WriteLn(Format('FAIL! (ExitCode: %d)', [ExitCode]));
+            End;
+        Except
+          on E: Exception Do
+                Begin
+                  Inc(FailedCount);
+                  WriteLn('ERRO DE COMPILACAO: ' + E.Message);
+                End;
+      End;
+End;
 
-    WriteLn('--------------------------------------------------------');
-    WriteLn(Format('  Resultados: %d executados | %d passaram | %d falharam', [TestFiles.Count, PassedCount, FailedCount]));
-    WriteLn('========================================================');
+WriteLn('--------------------------------------------------------');
+WriteLn(Format('  Resultados: %d executados | %d passaram | %d falharam', [
+        TestFiles.Count, PassedCount, FailedCount]));
+WriteLn('========================================================');
 
-    if FailedCount > 0 then
-      Halt(1)
-    else
-      Halt(0);
-  finally
-    TestFiles.Free;
-  end;
-end;
+If FailedCount > 0 Then
+  Halt(1)
+Else
+  Halt(0);
+Finally
+  TestFiles.Free;
+End;
+End;
 
-var
+Var 
   InputFile: string;
   OutputExe: string;
   OptionDumpTokens: Boolean;
@@ -612,7 +720,7 @@ var
   I: Integer;
   Arg: string;
   PkgName, OptPath, OptGit, OptVer, FilterName: string;
-begin
+Begin
   InputFile := '';
   OutputExe := '';
   OptionDumpTokens := False;
@@ -623,282 +731,318 @@ begin
   IsRunCommand := False;
 
   // 1. Checa comandos de projeto: init / new
-  if (ParamCount >= 1) and ((LowerCase(ParamStr(1)) = 'init') or (LowerCase(ParamStr(1)) = 'new')) then
-  begin
-    PrintBanner;
-    Arg := '';
-    if ParamCount >= 2 then Arg := ParamStr(2);
-    try
-      HandleProjectInit(Arg);
-      Halt(0);
-    except
-      on E: Exception do
-      begin
-        WriteLn(ErrOutput, 'Erro ao inicializar projeto: ', E.Message);
-        Halt(1);
-      end;
-    end;
-  end;
+  If (ParamCount >= 1) And ((LowerCase(ParamStr(1)) = 'init') Or (LowerCase(
+     ParamStr(1)) = 'new')) Then
+    Begin
+      PrintBanner;
+      Arg := '';
+      If ParamCount >= 2 Then Arg := ParamStr(2);
+      Try
+        HandleProjectInit(Arg);
+        Halt(0);
+      Except
+        on E: Exception Do
+              Begin
+                WriteLn(ErrOutput, 'Erro ao inicializar projeto: ', E.Message);
+                Halt(1);
+              End;
+    End;
+End;
 
-  // 2. Checa comando de pacotes: add
-  if (ParamCount >= 1) and (LowerCase(ParamStr(1)) = 'add') then
-  begin
+// 2. Checa comando de pacotes: add
+If (ParamCount >= 1) And (LowerCase(ParamStr(1)) = 'add') Then
+  Begin
     PrintBanner;
     PkgName := '';
     OptPath := '';
     OptGit := '';
     OptVer := '';
     I := 2;
-    while I <= ParamCount do
-    begin
-      Arg := ParamStr(I);
-      if Pos('--path=', Arg) = 1 then
-        OptPath := Copy(Arg, 8, Length(Arg))
-      else if Pos('--git=', Arg) = 1 then
-        OptGit := Copy(Arg, 7, Length(Arg))
-      else if Pos('--version=', Arg) = 1 then
-        OptVer := Copy(Arg, 11, Length(Arg))
-      else if PkgName = '' then
-        PkgName := Arg;
-      Inc(I);
-    end;
-    try
+    While I <= ParamCount Do
+      Begin
+        Arg := ParamStr(I);
+        If Pos('--path=', Arg) = 1 Then
+          OptPath := Copy(Arg, 8, Length(Arg))
+        Else If Pos('--git=', Arg) = 1 Then
+               OptGit := Copy(Arg, 7, Length(Arg))
+        Else If Pos('--version=', Arg) = 1 Then
+               OptVer := Copy(Arg, 11, Length(Arg))
+        Else If Pos('--branch=', Arg) = 1 Then
+               OptVer := Copy(Arg, 10, Length(Arg))
+        Else If Pos('--tag=', Arg) = 1 Then
+               OptVer := Copy(Arg, 7, Length(Arg))
+        Else If PkgName = '' Then
+               PkgName := Arg;
+        Inc(I);
+      End;
+    Try
       HandleProjectAdd(PkgName, OptPath, OptGit, OptVer);
       Halt(0);
-    except
-      on E: Exception do
-      begin
-        WriteLn(ErrOutput, 'Erro ao adicionar pacote: ', E.Message);
-        Halt(1);
-      end;
-    end;
-  end;
+    Except
+      on E: Exception Do
+            Begin
+              WriteLn(ErrOutput, 'Erro ao adicionar pacote: ', E.Message);
+              Halt(1);
+            End;
+  End;
+End;
 
-  // 3. Checa comando de testes: test
-  if (ParamCount >= 1) and (LowerCase(ParamStr(1)) = 'test') then
-  begin
+// 3. Checa comando de testes: test
+If (ParamCount >= 1) And (LowerCase(ParamStr(1)) = 'test') Then
+  Begin
     PrintBanner;
     FilterName := '';
     OptionTargetPascal := True;
     I := 2;
-    while I <= ParamCount do
-    begin
-      Arg := ParamStr(I);
-      if Arg = '--target=pascal' then OptionTargetPascal := True
-      else if Arg = '--target=c' then OptionTargetPascal := False
-      else if FilterName = '' then FilterName := Arg;
-      Inc(I);
-    end;
-    try
+    While I <= ParamCount Do
+      Begin
+        Arg := ParamStr(I);
+        If Arg = '--target=pascal' Then OptionTargetPascal := True
+        Else If Arg = '--target=c' Then OptionTargetPascal := False
+        Else If FilterName = '' Then FilterName := Arg;
+        Inc(I);
+      End;
+    Try
       HandleProjectTest(FilterName, OptionTargetPascal);
-    except
-      on E: Exception do
-      begin
-        WriteLn(ErrOutput, 'Erro durante execucao dos testes: ', E.Message);
-        Halt(1);
-      end;
-    end;
-  end;
+    Except
+      on E: Exception Do
+            Begin
+              WriteLn(ErrOutput, 'Erro durante execucao dos testes: ', E.Message
+              );
+              Halt(1);
+            End;
+  End;
+End;
 
-  // 2. Checa comandos de projeto: build / run
-  if (ParamCount >= 1) and ((LowerCase(ParamStr(1)) = 'build') or (LowerCase(ParamStr(1)) = 'run')) then
-  begin
+// 2. Checa comandos de projeto: build / run
+If (ParamCount >= 1) And ((LowerCase(ParamStr(1)) = 'build') Or (LowerCase(
+   ParamStr(1)) = 'run')) Then
+  Begin
     IsRunCommand := LowerCase(ParamStr(1)) = 'run';
-    if not LoadProjectConfig(ProjConfig) then
-    begin
-      PrintBanner;
-      WriteLn(ErrOutput, 'Erro: Nenhum arquivo "aether.json" foi encontrado no diretorio atual ou pastas superiores.');
-      WriteLn(ErrOutput, 'Dica: Execute "aetherc init" para inicializar um novo projeto Aether.');
-      Halt(1);
-    end;
+    If Not LoadProjectConfig(ProjConfig) Then
+      Begin
+        PrintBanner;
+        WriteLn(ErrOutput,
 
-    InputFile := ProjConfig.RootDir + PathDelim + StringReplace(ProjConfig.Entry, '/', PathDelim, [rfReplaceAll]);
-    OutputExe := ProjConfig.RootDir + PathDelim + StringReplace(ProjConfig.Output, '/', PathDelim, [rfReplaceAll]);
+'Erro: Nenhum arquivo "aether.json" foi encontrado no diretorio atual ou pastas superiores.'
+        );
+        WriteLn(ErrOutput,
+
+         'Dica: Execute "aetherc init" para inicializar um novo projeto Aether.'
+        );
+        Halt(1);
+      End;
+
+    InputFile := ProjConfig.RootDir + PathDelim + StringReplace(ProjConfig.Entry
+                 , '/', PathDelim, [rfReplaceAll]);
+    OutputExe := ProjConfig.RootDir + PathDelim + StringReplace(ProjConfig.
+                 Output, '/', PathDelim, [rfReplaceAll]);
     OptionTargetPascal := ProjConfig.Backend <> 'c';
+    RestoreProjectDependencies(ProjConfig);
 
     // Permite sobrescrever flags como --target=c, -o, etc. na linha de comando
     I := 2;
-    while I <= ParamCount do
-    begin
-      Arg := ParamStr(I);
-      if Arg = '--target=pascal' then OptionTargetPascal := True
-      else if Arg = '--target=c' then OptionTargetPascal := False
-      else if Arg = '--check-only' then OptionCheckOnly := True
-      else if (Arg = '--emit-json-diag') or (Arg = '--emit-json-diagnostics') then OptionJSONDiag := True
-      else if Arg = '-o' then
-      begin
+    While I <= ParamCount Do
+      Begin
+        Arg := ParamStr(I);
+        If Arg = '--target=pascal' Then OptionTargetPascal := True
+        Else If Arg = '--target=c' Then OptionTargetPascal := False
+        Else If Arg = '--check-only' Then OptionCheckOnly := True
+        Else If (Arg = '--emit-json-diag') Or (Arg = '--emit-json-diagnostics')
+               Then OptionJSONDiag := True
+        Else If Arg = '-o' Then
+               Begin
+                 Inc(I);
+                 If I <= ParamCount Then OutputExe := ParamStr(I);
+               End;
         Inc(I);
-        if I <= ParamCount then OutputExe := ParamStr(I);
-      end;
-      Inc(I);
-    end;
+      End;
 
-    if not OptionJSONDiag then
+    If Not OptionJSONDiag Then
       PrintBanner;
 
-    try
-      CompileFile(InputFile, OptionTargetPascal, OptionCheckOnly, False, OutputExe, OptionJSONDiag);
-      if IsRunCommand and not OptionCheckOnly then
-      begin
-        WriteLn('');
-        WriteLn('--------------------------------------------------------');
-        WriteLn(' Executando: ' + ExtractFileName(OutputExe));
-        WriteLn('--------------------------------------------------------');
-        ExecuteProcess(OutputExe, '');
-      end;
+    Try
+      CompileFile(InputFile, OptionTargetPascal, OptionCheckOnly, False,
+                  OutputExe, OptionJSONDiag);
+      If IsRunCommand And Not OptionCheckOnly Then
+        Begin
+          WriteLn('');
+          WriteLn('--------------------------------------------------------');
+          WriteLn(' Executando: ' + ExtractFileName(OutputExe));
+          WriteLn('--------------------------------------------------------');
+          ExecuteProcess(OutputExe, '');
+        End;
       Halt(0);
-    except
-      on E: EAetherBorrowError do
-      begin
-        if OptionJSONDiag then
-          WriteLn(GenerateJSONDiagnostic(InputFile, 'Error', E.Code, E.Message, E.Line, E.Col, E.MovedLine, E.MovedCol,
-            'borrow_instead_of_move', 'Altere a chamada para "borrow" se a transferencia de posse nao for necessaria.', 'borrow'))
-        else
-          WriteLn(ErrOutput, 'Erro de Compilacao: ', E.Message);
-        Halt(1);
-      end;
-      on E: EAetherTypeError do
-      begin
-        if OptionJSONDiag then
-          WriteLn(GenerateJSONDiagnostic(InputFile, 'Error', E.Code, E.Message, E.Line, E.Col))
-        else
-          WriteLn(ErrOutput, 'Erro de Compilacao: ', E.Message);
-        Halt(1);
-      end;
-      on E: EAetherParserError do
-      begin
-        if OptionJSONDiag then
-          WriteLn(GenerateJSONDiagnostic(InputFile, 'Error', 'E0001', E.Message, E.Line, E.Col))
-        else
-          WriteLn(ErrOutput, 'Erro de Compilacao: ', E.Message);
-        Halt(1);
-      end;
-      on E: EAetherLexerError do
-      begin
-        if OptionJSONDiag then
-          WriteLn(GenerateJSONDiagnostic(InputFile, 'Error', 'E0000', E.Message, E.Line, E.Col))
-        else
-          WriteLn(ErrOutput, 'Erro de Compilacao: ', E.Message);
-        Halt(1);
-      end;
-      on E: Exception do
-      begin
-        if OptionJSONDiag then
-          WriteLn(GenerateJSONDiagnostic(InputFile, 'Error', 'E9999', E.Message, 1, 1))
-        else
-          WriteLn(ErrOutput, 'Erro de Compilacao: ', E.Message);
-        Halt(1);
-      end;
-    end;
-  end;
+    Except
+      on E: EAetherBorrowError Do
+            Begin
+              If OptionJSONDiag Then
+                WriteLn(GenerateJSONDiagnostic(InputFile, 'Error', E.Code, E.
+                        Message, E.Line, E.Col, E.MovedLine, E.MovedCol,
+                        'borrow_instead_of_move',
 
-  I := 1;
-  while I <= ParamCount do
-  begin
+'Altere a chamada para "borrow" se a transferencia de posse nao for necessaria.'
+                        , 'borrow'))
+              Else
+                WriteLn(ErrOutput, 'Erro de Compilacao: ', E.Message);
+              Halt(1);
+            End;
+      on E: EAetherTypeError Do
+            Begin
+              If OptionJSONDiag Then
+                WriteLn(GenerateJSONDiagnostic(InputFile, 'Error', E.Code, E.
+                        Message, E.Line, E.Col))
+              Else
+                WriteLn(ErrOutput, 'Erro de Compilacao: ', E.Message);
+              Halt(1);
+            End;
+      on E: EAetherParserError Do
+            Begin
+              If OptionJSONDiag Then
+                WriteLn(GenerateJSONDiagnostic(InputFile, 'Error', 'E0001', E.
+                        Message, E.Line, E.Col))
+              Else
+                WriteLn(ErrOutput, 'Erro de Compilacao: ', E.Message);
+              Halt(1);
+            End;
+      on E: EAetherLexerError Do
+            Begin
+              If OptionJSONDiag Then
+                WriteLn(GenerateJSONDiagnostic(InputFile, 'Error', 'E0000', E.
+                        Message, E.Line, E.Col))
+              Else
+                WriteLn(ErrOutput, 'Erro de Compilacao: ', E.Message);
+              Halt(1);
+            End;
+      on E: Exception Do
+            Begin
+              If OptionJSONDiag Then
+                WriteLn(GenerateJSONDiagnostic(InputFile, 'Error', 'E9999', E.
+                        Message, 1, 1))
+              Else
+                WriteLn(ErrOutput, 'Erro de Compilacao: ', E.Message);
+              Halt(1);
+            End;
+  End;
+End;
+
+I := 1;
+While I <= ParamCount Do
+  Begin
     Arg := ParamStr(I);
-    if (Arg = '-h') or (Arg = '--help') then
-    begin
-      PrintBanner;
-      PrintUsage;
-      Halt(0);
-    end
-    else if Arg = '--doctor' then
-    begin
-      PrintBanner;
-      PrintDoctorReport;
-      Halt(0);
-    end
-    else if (Arg = '--lsp') or (Arg = 'lsp') then
-    begin
-      RunAetherLSP;
-      Halt(0);
-    end
-    else if Arg = '--dump-tokens' then
-      OptionDumpTokens := True
-    else if Arg = '--dump-ast' then
-      OptionDumpAST := True
-    else if Arg = '--check-only' then
-      OptionCheckOnly := True
-    else if Arg = '--target=pascal' then
-      OptionTargetPascal := True
-    else if Arg = '--target=c' then
-      OptionTargetPascal := False
-    else if (Arg = '--emit-json-diag') or (Arg = '--emit-json-diagnostics') then
-      OptionJSONDiag := True
-    else if Arg = '-o' then
-    begin
-      Inc(I);
-      if I <= ParamCount then OutputExe := ParamStr(I);
-    end
-    else if (Length(Arg) > 0) and (Arg[1] <> '-') then
-    begin
-      InputFile := Arg;
-    end;
+    If (Arg = '-h') Or (Arg = '--help') Then
+      Begin
+        PrintBanner;
+        PrintUsage;
+        Halt(0);
+      End
+    Else If Arg = '--doctor' Then
+           Begin
+             PrintBanner;
+             PrintDoctorReport;
+             Halt(0);
+           End
+    Else If (Arg = '--lsp') Or (Arg = 'lsp') Then
+           Begin
+             RunAetherLSP;
+             Halt(0);
+           End
+    Else If Arg = '--dump-tokens' Then
+           OptionDumpTokens := True
+    Else If Arg = '--dump-ast' Then
+           OptionDumpAST := True
+    Else If Arg = '--check-only' Then
+           OptionCheckOnly := True
+    Else If Arg = '--target=pascal' Then
+           OptionTargetPascal := True
+    Else If Arg = '--target=c' Then
+           OptionTargetPascal := False
+    Else If (Arg = '--emit-json-diag') Or (Arg = '--emit-json-diagnostics') Then
+           OptionJSONDiag := True
+    Else If Arg = '-o' Then
+           Begin
+             Inc(I);
+             If I <= ParamCount Then OutputExe := ParamStr(I);
+           End
+    Else If (Length(Arg) > 0) And (Arg[1] <> '-') Then
+           Begin
+             InputFile := Arg;
+           End;
     Inc(I);
-  end;
+  End;
 
-  if not OptionJSONDiag then
-    PrintBanner;
+If Not OptionJSONDiag Then
+  PrintBanner;
 
-  if InputFile = '' then
-  begin
-    if OptionJSONDiag then
-      WriteLn(GenerateJSONDiagnostic('', 'Error', 'E0001', 'Nenhum arquivo fonte .aeth especificado.', 0, 0))
-    else
-    begin
-      WriteLn('Erro: Nenhum arquivo fonte .aeth foi especificado.');
-      WriteLn('');
-      PrintUsage;
-    end;
+If InputFile = '' Then
+  Begin
+    If OptionJSONDiag Then
+      WriteLn(GenerateJSONDiagnostic('', 'Error', 'E0001',
+              'Nenhum arquivo fonte .aeth especificado.', 0, 0))
+    Else
+      Begin
+        WriteLn('Erro: Nenhum arquivo fonte .aeth foi especificado.');
+        WriteLn('');
+        PrintUsage;
+      End;
     Halt(1);
-  end;
+  End;
 
-  try
-    if OptionDumpTokens then
-      DumpTokens(InputFile);
+Try
+  If OptionDumpTokens Then
+    DumpTokens(InputFile);
 
-    CompileFile(InputFile, OptionTargetPascal, OptionCheckOnly, OptionDumpAST, OutputExe, OptionJSONDiag);
-  except
-    on E: EAetherBorrowError do
-    begin
-      if OptionJSONDiag then
-        WriteLn(GenerateJSONDiagnostic(InputFile, 'Error', E.Code, E.Message, E.Line, E.Col, E.MovedLine, E.MovedCol,
-          'borrow_instead_of_move', 'Altere a chamada para "borrow" se a transferencia de posse nao for necessaria.', 'borrow'))
-      else
-        WriteLn(ErrOutput, 'Erro de Compilacao: ', E.Message);
-      Halt(1);
-    end;
-    on E: EAetherTypeError do
-    begin
-      if OptionJSONDiag then
-        WriteLn(GenerateJSONDiagnostic(InputFile, 'Error', E.Code, E.Message, E.Line, E.Col))
-      else
-        WriteLn(ErrOutput, 'Erro de Compilacao: ', E.Message);
-      Halt(1);
-    end;
-    on E: EAetherParserError do
-    begin
-      if OptionJSONDiag then
-        WriteLn(GenerateJSONDiagnostic(InputFile, 'Error', 'E0001', E.Message, E.Line, E.Col))
-      else
-        WriteLn(ErrOutput, 'Erro de Compilacao: ', E.Message);
-      Halt(1);
-    end;
-    on E: EAetherLexerError do
-    begin
-      if OptionJSONDiag then
-        WriteLn(GenerateJSONDiagnostic(InputFile, 'Error', 'E0000', E.Message, E.Line, E.Col))
-      else
-        WriteLn(ErrOutput, 'Erro de Compilacao: ', E.Message);
-      Halt(1);
-    end;
-    on E: Exception do
-    begin
-      if OptionJSONDiag then
-        WriteLn(GenerateJSONDiagnostic(InputFile, 'Error', 'E9999', E.Message, 1, 1))
-      else
-        WriteLn(ErrOutput, 'Erro de Compilacao: ', E.Message);
-      Halt(1);
-    end;
-  end;
-end.
+  CompileFile(InputFile, OptionTargetPascal, OptionCheckOnly, OptionDumpAST,
+              OutputExe, OptionJSONDiag);
+Except
+  on E: EAetherBorrowError Do
+        Begin
+          If OptionJSONDiag Then
+            WriteLn(GenerateJSONDiagnostic(InputFile, 'Error', E.Code, E.Message
+                    , E.Line, E.Col, E.MovedLine, E.MovedCol,
+                    'borrow_instead_of_move',
+
+'Altere a chamada para "borrow" se a transferencia de posse nao for necessaria.'
+                    , 'borrow'))
+          Else
+            WriteLn(ErrOutput, 'Erro de Compilacao: ', E.Message);
+          Halt(1);
+        End;
+  on E: EAetherTypeError Do
+        Begin
+          If OptionJSONDiag Then
+            WriteLn(GenerateJSONDiagnostic(InputFile, 'Error', E.Code, E.Message
+                    , E.Line, E.Col))
+          Else
+            WriteLn(ErrOutput, 'Erro de Compilacao: ', E.Message);
+          Halt(1);
+        End;
+  on E: EAetherParserError Do
+        Begin
+          If OptionJSONDiag Then
+            WriteLn(GenerateJSONDiagnostic(InputFile, 'Error', 'E0001', E.
+                    Message, E.Line, E.Col))
+          Else
+            WriteLn(ErrOutput, 'Erro de Compilacao: ', E.Message);
+          Halt(1);
+        End;
+  on E: EAetherLexerError Do
+        Begin
+          If OptionJSONDiag Then
+            WriteLn(GenerateJSONDiagnostic(InputFile, 'Error', 'E0000', E.
+                    Message, E.Line, E.Col))
+          Else
+            WriteLn(ErrOutput, 'Erro de Compilacao: ', E.Message);
+          Halt(1);
+        End;
+  on E: Exception Do
+        Begin
+          If OptionJSONDiag Then
+            WriteLn(GenerateJSONDiagnostic(InputFile, 'Error', 'E9999', E.
+                    Message, 1, 1))
+          Else
+            WriteLn(ErrOutput, 'Erro de Compilacao: ', E.Message);
+          Halt(1);
+        End;
+End;
+End.

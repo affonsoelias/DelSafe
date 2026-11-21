@@ -177,7 +177,10 @@ Este documento traça o status oficial de desenvolvimento do compilador e as pr�
   - Código da extensão (`src/extension.ts` e `out/extension.js`) com integração ao Language Client via stdio e comandos de compilação (`Pascal` / `C99`), execução de testes e reinicialização do LSP.
   - Documentação de uso e instalação local (`ide/vscode/README.md`).
 
-### ⏳ Fase 19: Suporte a Dependências Git no `aether add`
-- [ ] **Download e Cache Automático via Git**:
-  - `aetherc add <url-git> [--branch=... / --tag=...]` executando clone ou checkout automático para o cache global (`~/.aether/cache/<pkg>`).
-  - Resolução transparente de dependências aninhadas e versionamento semântico de pacotes remotos.
+### 🎯 Fase 19: Suporte a Dependências Git no `aether add`
+- [x] **Download e Cache Automático via Git**:
+  - `aetherc add <url-git> [--branch=... / --tag=... / --version=...]` com extração automática do nome do pacote da URL (`ExtractPackageNameFromGitUrl`).
+  - Clonagem e sincronização automática via Git (`SyncGitPackage`) com armazenamento seguro no cache global (`~/.aether/cache/<pkg>`) e replicação para `.aether/deps/<pkg>`.
+  - Resolução recursiva de dependências aninhadas a partir de `aether.json` de subpacotes com proteção contra dependências circulares.
+  - Restauração automática de dependências (`RestoreProjectDependencies`) nos comandos `aetherc build`, `aetherc run` e `aetherc test`.
+  - Validação completa com repositório Git real testado em ambos os backends (**Free Pascal** e **GCC C99**).
