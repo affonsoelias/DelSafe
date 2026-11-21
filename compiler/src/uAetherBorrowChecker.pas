@@ -277,7 +277,7 @@ begin
   if Expr is TASTMemberAccessExpr then
   begin
     MemAcc := TASTMemberAccessExpr(Expr);
-    CheckExpr(MemAcc.Target, Access);
+    CheckExpr(MemAcc.Target, accRead);
     Exit;
   end;
 

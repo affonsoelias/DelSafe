@@ -6,6 +6,11 @@ type
         count: UInt32;
     end;
 
+    StringBuilder = record
+        buffer: String;
+        length: UInt32;
+    end;
+
 function NewBuffer(borrow cap: UInt32): FixedBuffer
 begin
     return FixedBuffer(capacity: cap, count: 0);
@@ -33,4 +38,20 @@ begin
     else
         return false;
     end;
+end;
+
+function NewStringBuilder(): StringBuilder
+begin
+    return StringBuilder(buffer: "", length: 0);
+end;
+
+function Append(mut borrow sb: StringBuilder; borrow text: String): Void
+begin
+    sb.buffer := sb.buffer + text;
+    sb.length := sb.length + Length(borrow text);
+end;
+
+function ToString(borrow sb: StringBuilder): String
+begin
+    return sb.buffer;
 end;

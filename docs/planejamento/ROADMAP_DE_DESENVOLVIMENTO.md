@@ -77,10 +77,17 @@ Este documento traça o status oficial de desenvolvimento do compilador e as pr�
 
 ## 🚀 Próximas Fases e Metas
 
-### 🎯 Fase 11: Maturidade de Linguagem para Auto-Hospedagem (Self-Hosting)
-- [ ] Suporte a `Box<T>` (ponteiro inteligente com posse única para estruturas de dados recursivas como árvores de AST).
-- [ ] Coleções dinâmicas na biblioteca padrão (`std/collections.List<T>` ou `Vec<T>`).
-- [ ] I/O avançado na biblioteca padrão (`std/io.ReadFileToString`, `std/io.WriteStringToFile`).
+### ✅ Fase 11: Maturidade de Linguagem para Auto-Hospedagem (Self-Hosting) (Concluído)
+- [x] Suporte a `Box<T>` e `Option<Box<T>>`: ponteiro no heap com posse estrita para estruturas recursivas (nós de AST, árvores e listas).
+- [x] Auto-dereferenciamento inteligente nos emissores Pascal (`^.` / `^`) e C99 (`->` / `*`) com detecção automática de alvos ponteiro.
+- [x] Manipulação nativa de Strings: concatenação (`+`), comparação (`=`, `<>`), `Length(s)`, `CharAt(s, idx)` e `Substring(s, start, len)`.
+- [x] I/O avançado na biblioteca padrão (`std/io.aeth`): `FileExists`, `ReadFile` e `WriteFile` com emissores nativos em FPC e GCC.
+- [x] Coleções e construtores de strings (`std/collections.aeth`): `StringBuilder` (`NewStringBuilder`, `Append`, `ToString`) e buffers dinâmicos.
+- [x] Validação completa de estruturas recursivas e I/O com os exemplos `08_box_and_recursion.aeth` e `09_std_io_and_collections.aeth`.
+
+---
+
+## 🚀 Próximas Fases e Metas
 
 ### 🎯 Fase 12: O Compilador Aether Auto-Hospedado (`aetherc-core`)
 - [ ] Lexer escrito nativamente em Aether (`compiler/aeth/lexer.aeth`).

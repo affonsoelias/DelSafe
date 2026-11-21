@@ -199,6 +199,12 @@ begin
   FGlobalScope.Define(TSymbol.Create('Err', skFunction, 'Result', 0, 0));
   FGlobalScope.Define(TSymbol.Create('Some', skFunction, 'Option', 0, 0));
   FGlobalScope.Define(TSymbol.Create('None', skFunction, 'Option', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('Length', skFunction, 'UInt32', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('CharAt', skFunction, 'String', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('Substring', skFunction, 'String', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('FileExists', skFunction, 'Bool', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('ReadFile', skFunction, 'String', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('WriteFile', skFunction, 'Bool', 0, 0));
 end;
 
 procedure TSymbolTable.EnterScope;
@@ -239,7 +245,7 @@ begin
   if P > 0 then
     CleanName := Copy(CleanName, 1, P - 1);
 
-  if (CleanName = 'Result') or (CleanName = 'Option') then
+  if (CleanName = 'Result') or (CleanName = 'Option') or (CleanName = 'Box') then
     Exit(True);
 
   Sym := Resolve(CleanName);

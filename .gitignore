@@ -1,7 +1,6 @@
 # Compilador e executáveis gerados
-bin/*.exe
-bin/*.a
-bin/generated/
+bin/*
+!bin/.gitkeep
 *.exe
 *.o
 *.a

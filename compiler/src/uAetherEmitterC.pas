@@ -15,6 +15,7 @@ type
     FIndent: Integer;
     FModule: TASTModule;
     FCurrentFunc: TASTFunction;
+    FProgramBlock: TASTProgramBlock;
 
     procedure Emit(const Line: string = '');
     procedure IncIndent;
@@ -25,6 +26,8 @@ type
     function IsMutBorrowParam(const AName: string): Boolean;
     function FindFunction(const AName: string): TASTFunction;
     function EscapeCString(const S: string): string;
+    function GetExprTypeName(Expr: TASTExpr): string;
+    function IsPointerTarget(Expr: TASTExpr): Boolean;
 
     function EmitTypeRef(const AType: string): string;
     function EmitExpr(Expr: TASTExpr): string;
@@ -133,7 +136,105 @@ begin
   Result := Result + '"';
 end;
 
+function TAetherEmitterC.GetExprTypeName(Expr: TASTExpr): string;
+var
+  Id: TASTIdentifierExpr;
+  Acc: TASTMemberAccessExpr;
+  Call: TASTCallExpr;
+  TargetType, CleanTarget: string;
+  I, J, P1, P2: Integer;
+  Rec: TASTRecordDecl;
+  V: TASTVarDecl;
+  P: TASTParam;
+begin
+  Result := '';
+  if not Assigned(Expr) then Exit;
+
+  if Expr is TASTIdentifierExpr then
+  begin
+    Id := TASTIdentifierExpr(Expr);
+    if Assigned(FCurrentFunc) then
+    begin
+      for I := 0 to FCurrentFunc.LocalVars.Count - 1 do
+      begin
+        V := TASTVarDecl(FCurrentFunc.LocalVars[I]);
+        if SameText(V.Name, Id.Name) then Exit(V.TypeName);
+      end;
+      for I := 0 to FCurrentFunc.Params.Count - 1 do
+      begin
+        P := TASTParam(FCurrentFunc.Params[I]);
+        if SameText(P.Name, Id.Name) then Exit(P.TypeName);
+      end;
+    end;
+    if Assigned(FProgramBlock) then
+    begin
+      for I := 0 to FProgramBlock.LocalVars.Count - 1 do
+      begin
+        V := TASTVarDecl(FProgramBlock.LocalVars[I]);
+        if SameText(V.Name, Id.Name) then Exit(V.TypeName);
+      end;
+    end;
+  end
+  else if Expr is TASTMemberAccessExpr then
+  begin
+    Acc := TASTMemberAccessExpr(Expr);
+    TargetType := GetExprTypeName(Acc.Target);
+    if Pos('Box<', TargetType) > 0 then
+    begin
+      P1 := Pos('Box<', TargetType);
+      CleanTarget := Copy(TargetType, P1 + 4, Length(TargetType));
+      P2 := Pos('>', CleanTarget);
+      if P2 > 0 then CleanTarget := Copy(CleanTarget, 1, P2 - 1);
+    end
+    else if Pos('Option<', TargetType) = 1 then
+    begin
+      P1 := Pos('<', TargetType);
+      CleanTarget := Copy(TargetType, P1 + 1, Length(TargetType) - P1 - 1);
+      if Pos('Box<', CleanTarget) = 1 then
+        CleanTarget := Copy(CleanTarget, 5, Length(CleanTarget) - 5);
+    end
+    else
+      CleanTarget := TargetType;
+
+    if Assigned(FModule) then
+    begin
+      for I := 0 to FModule.Types.Count - 1 do
+      begin
+        if (FModule.Types[I] is TASTRecordDecl) and SameText(TASTRecordDecl(FModule.Types[I]).Name, CleanTarget) then
+        begin
+          Rec := TASTRecordDecl(FModule.Types[I]);
+          for J := 0 to Rec.Fields.Count - 1 do
+          begin
+            if SameText(TASTRecordField(Rec.Fields[J]).Name, Acc.Member) then
+              Exit(TASTRecordField(Rec.Fields[J]).TypeName);
+          end;
+        end;
+      end;
+    end;
+  end
+  else if Expr is TASTCallExpr then
+  begin
+    Call := TASTCallExpr(Expr);
+    if Call.Callee = 'Box' then Exit('Box');
+    if Call.Callee = 'Some' then Exit('Option');
+    if (Call.Callee = 'ReadFile') or (Call.Callee = 'CharAt') or (Call.Callee = 'Substring') or (Call.Callee = 'ToString') then Exit('String');
+    if (Call.Callee = 'Length') then Exit('UInt32');
+    if (Call.Callee = 'FileExists') or (Call.Callee = 'WriteFile') then Exit('Bool');
+  end;
+end;
+
+function TAetherEmitterC.IsPointerTarget(Expr: TASTExpr): Boolean;
+var
+  T: string;
+begin
+  T := GetExprTypeName(Expr);
+  Result := (Pos('Box<', T) > 0) or (Pos('Pointer', T) > 0) or (T = 'Box');
+end;
+
 function TAetherEmitterC.EmitTypeRef(const AType: string): string;
+var
+  Inner: string;
+  P1, P2: Integer;
 begin
   if AType = 'Bool' then Result := 'bool'
   else if AType = 'Int8' then Result := 'int8_t'
@@ -149,6 +250,19 @@ begin
   else if AType = 'String' then Result := 'const char*'
   else if AType = 'Void' then Result := 'void'
   else if Pos('Result', AType) = 1 then Result := 'AetherResult'
+  else if Pos('Box<', AType) > 0 then
+  begin
+    P1 := Pos('Box<', AType);
+    Inner := Copy(AType, P1 + 4, Length(AType));
+    P2 := Pos('>', Inner);
+    if P2 > 0 then Inner := Copy(Inner, 1, P2 - 1);
+    Result := 'P' + EmitTypeRef(Inner);
+  end
+  else if Pos('Option<', AType) = 1 then
+  begin
+    Inner := Copy(AType, 8, Length(AType) - 8);
+    Result := EmitTypeRef(Inner);
+  end
   else Result := 'T' + AType;
 end;
 
@@ -166,6 +280,7 @@ var
   ArgVal: string;
   I: Integer;
   OpStr: string;
+  TargetStr: string;
 begin
   if not Assigned(Expr) then Exit('');
 
@@ -185,22 +300,32 @@ begin
   if Expr is TASTIdentifierExpr then
   begin
     Id := TASTIdentifierExpr(Expr);
-    Result := Id.Name;
+    if Id.Name = 'None' then
+      Result := 'NULL'
+    else
+      Result := Id.Name;
     Exit;
   end;
 
   if Expr is TASTMemberAccessExpr then
   begin
     Acc := TASTMemberAccessExpr(Expr);
+    TargetStr := EmitExpr(Acc.Target);
     if (Acc.Target is TASTIdentifierExpr) and IsEnumName(TASTIdentifierExpr(Acc.Target).Name) then
       Result := TASTIdentifierExpr(Acc.Target).Name + '_' + Acc.Member
-    else
+    else if Acc.Member = 'is_some' then
+      Result := '(' + TargetStr + ' != NULL)'
+    else if Acc.Member = 'is_none' then
+      Result := '(' + TargetStr + ' == NULL)'
+    else if IsPointerTarget(Acc.Target) or ((Acc.Target is TASTIdentifierExpr) and IsMutBorrowParam(TASTIdentifierExpr(Acc.Target).Name)) then
     begin
-      if (Acc.Target is TASTIdentifierExpr) and IsMutBorrowParam(TASTIdentifierExpr(Acc.Target).Name) then
-        Result := EmitExpr(Acc.Target) + '->' + Acc.Member
+      if Acc.Member = 'value' then
+        Result := '(*' + TargetStr + ')'
       else
-        Result := EmitExpr(Acc.Target) + '.' + Acc.Member;
-    end;
+        Result := TargetStr + '->' + Acc.Member;
+    end
+    else
+      Result := TargetStr + '.' + Acc.Member;
     Exit;
   end;
 
@@ -208,8 +333,25 @@ begin
   begin
     Bin := TASTBinaryExpr(Expr);
     OpStr := Bin.Op;
-    if OpStr = '=' then OpStr := '=='
-    else if OpStr = '<>' then OpStr := '!='
+    if OpStr = '=' then
+    begin
+      if (GetExprTypeName(Bin.Left) = 'String') or (GetExprTypeName(Bin.Right) = 'String') then
+        Exit(Format('(strcmp(%s, %s) == 0)', [EmitExpr(Bin.Left), EmitExpr(Bin.Right)]))
+      else
+        OpStr := '==';
+    end
+    else if OpStr = '<>' then
+    begin
+      if (GetExprTypeName(Bin.Left) = 'String') or (GetExprTypeName(Bin.Right) = 'String') then
+        Exit(Format('(strcmp(%s, %s) != 0)', [EmitExpr(Bin.Left), EmitExpr(Bin.Right)]))
+      else
+        OpStr := '!=';
+    end
+    else if OpStr = '+' then
+    begin
+      if (GetExprTypeName(Bin.Left) = 'String') or (GetExprTypeName(Bin.Right) = 'String') then
+        Exit(Format('AetherStringConcat(%s, %s)', [EmitExpr(Bin.Left), EmitExpr(Bin.Right)]));
+    end
     else if OpStr = 'and' then OpStr := '&&'
     else if OpStr = 'or' then OpStr := '||'
     else if OpStr = 'implies' then
@@ -259,6 +401,57 @@ begin
     if Call.Callee = 'Err' then
     begin
       Result := '(AetherResult){ .is_ok = false, .is_err = true, .error = ' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + ' }';
+      Exit;
+    end;
+
+    if Call.Callee = 'Some' then
+    begin
+      Result := EmitExpr(TASTCallArg(Call.Args[0]).Expr);
+      Exit;
+    end;
+
+    if Call.Callee = 'Box' then
+    begin
+      CalleeName := GetExprTypeName(TASTCallArg(Call.Args[0]).Expr);
+      if (CalleeName = '') and (TASTCallArg(Call.Args[0]).Expr is TASTCallExpr) then
+        CalleeName := TASTCallExpr(TASTCallArg(Call.Args[0]).Expr).Callee;
+      Result := 'AetherBox_T' + CalleeName + '(' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + ')';
+      Exit;
+    end;
+
+    if Call.Callee = 'Length' then
+    begin
+      Result := '(uint32_t)strlen(' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + ')';
+      Exit;
+    end;
+
+    if Call.Callee = 'CharAt' then
+    begin
+      Result := 'AetherCharAt(' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + ', ' + EmitExpr(TASTCallArg(Call.Args[1]).Expr) + ')';
+      Exit;
+    end;
+
+    if Call.Callee = 'Substring' then
+    begin
+      Result := 'AetherSubstring(' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + ', ' + EmitExpr(TASTCallArg(Call.Args[1]).Expr) + ', ' + EmitExpr(TASTCallArg(Call.Args[2]).Expr) + ')';
+      Exit;
+    end;
+
+    if Call.Callee = 'FileExists' then
+    begin
+      Result := 'AetherFileExists(' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + ')';
+      Exit;
+    end;
+
+    if Call.Callee = 'ReadFile' then
+    begin
+      Result := 'AetherReadFile(' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + ')';
+      Exit;
+    end;
+
+    if Call.Callee = 'WriteFile' then
+    begin
+      Result := 'AetherWriteFile(' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + ', ' + EmitExpr(TASTCallArg(Call.Args[1]).Expr) + ')';
       Exit;
     end;
 
@@ -393,7 +586,7 @@ var
   Field: TASTRecordField;
   CtorParams, CtorInit: string;
 begin
-  Emit(Format('typedef struct {', []));
+  Emit(Format('struct T%s {', [Rec.Name]));
   IncIndent;
   for I := 0 to Rec.Fields.Count - 1 do
   begin
@@ -401,7 +594,7 @@ begin
     Emit(Format('%s %s;', [EmitTypeRef(Field.TypeName), Field.Name]));
   end;
   DecIndent;
-  Emit(Format('} T%s;', [Rec.Name]));
+  Emit('};');
   Emit('');
 
   // Construtor estilo DataBuffer(id, size)
@@ -518,6 +711,8 @@ var
   I: Integer;
   VarDecl: TASTVarDecl;
 begin
+  FCurrentFunc := nil;
+  FProgramBlock := Prog;
   Emit('int main(int argc, char* argv[]) {');
   IncIndent;
   for I := 0 to Prog.LocalVars.Count - 1 do
@@ -548,8 +743,70 @@ begin
   Emit('#include <stdlib.h>');
   Emit('#include <stdint.h>');
   Emit('#include <stdbool.h>');
+  Emit('#include <string.h>');
   Emit('#include <assert.h>');
   Emit('#include <math.h>');
+  Emit('');
+
+  // Helpers de Runtime do Aether
+  Emit('static inline char* AetherStringConcat(const char* a, const char* b) {');
+  Emit('    size_t la = a ? strlen(a) : 0;');
+  Emit('    size_t lb = b ? strlen(b) : 0;');
+  Emit('    char* res = (char*)malloc(la + lb + 1);');
+  Emit('    if (la) memcpy(res, a, la);');
+  Emit('    if (lb) memcpy(res + la, b, lb);');
+  Emit('    res[la + lb] = ''\0'';');
+  Emit('    return res;');
+  Emit('}');
+  Emit('');
+  Emit('static inline char* AetherCharAt(const char* s, uint32_t index) {');
+  Emit('    uint32_t slen = s ? (uint32_t)strlen(s) : 0;');
+  Emit('    char* res = (char*)malloc(2);');
+  Emit('    if (index < slen) { res[0] = s[index]; res[1] = ''\0''; }');
+  Emit('    else { res[0] = ''\0''; }');
+  Emit('    return res;');
+  Emit('}');
+  Emit('');
+  Emit('static inline char* AetherSubstring(const char* s, uint32_t start, uint32_t len) {');
+  Emit('    uint32_t slen = s ? (uint32_t)strlen(s) : 0;');
+  Emit('    if (start >= slen) {');
+  Emit('        char* empty = (char*)malloc(1);');
+  Emit('        empty[0] = ''\0'';');
+  Emit('        return empty;');
+  Emit('    }');
+  Emit('    if (start + len > slen) len = slen - start;');
+  Emit('    char* res = (char*)malloc(len + 1);');
+  Emit('    memcpy(res, s + start, len);');
+  Emit('    res[len] = ''\0'';');
+  Emit('    return res;');
+  Emit('}');
+  Emit('');
+  Emit('static inline bool AetherFileExists(const char* path) {');
+  Emit('    FILE* f = fopen(path, "rb");');
+  Emit('    if (f) { fclose(f); return true; }');
+  Emit('    return false;');
+  Emit('}');
+  Emit('');
+  Emit('static inline char* AetherReadFile(const char* path) {');
+  Emit('    FILE* f = fopen(path, "rb");');
+  Emit('    if (!f) { char* empty = (char*)malloc(1); empty[0] = ''\0''; return empty; }');
+  Emit('    fseek(f, 0, SEEK_END);');
+  Emit('    long sz = ftell(f);');
+  Emit('    fseek(f, 0, SEEK_SET);');
+  Emit('    char* buf = (char*)malloc(sz + 1);');
+  Emit('    size_t read_bytes = fread(buf, 1, sz, f);');
+  Emit('    buf[read_bytes] = ''\0'';');
+  Emit('    fclose(f);');
+  Emit('    return buf;');
+  Emit('}');
+  Emit('');
+  Emit('static inline bool AetherWriteFile(const char* path, const char* content) {');
+  Emit('    FILE* f = fopen(path, "wb");');
+  Emit('    if (!f) return false;');
+  Emit('    if (content) fputs(content, f);');
+  Emit('    fclose(f);');
+  Emit('    return true;');
+  Emit('}');
   Emit('');
 
   // Estrutura Result para C
@@ -561,6 +818,17 @@ begin
   Emit('} AetherResult;');
   Emit('');
 
+  // Typedefs antecipados para permitir records recursivos
+  for I := 0 to AModule.Types.Count - 1 do
+  begin
+    if AModule.Types[I] is TASTRecordDecl then
+    begin
+      Emit(Format('typedef struct T%s T%s;', [TASTRecordDecl(AModule.Types[I]).Name, TASTRecordDecl(AModule.Types[I]).Name]));
+      Emit(Format('typedef T%s* PT%s;', [TASTRecordDecl(AModule.Types[I]).Name, TASTRecordDecl(AModule.Types[I]).Name]));
+    end;
+  end;
+  Emit('');
+
   // Tipos
   for I := 0 to AModule.Types.Count - 1 do
   begin
@@ -568,6 +836,21 @@ begin
       EmitRecordDecl(TASTRecordDecl(AModule.Types[I]))
     else if AModule.Types[I] is TASTEnumDecl then
       EmitEnumDecl(TASTEnumDecl(AModule.Types[I]));
+  end;
+  Emit('');
+
+  // Construtores AetherBox para Records
+  for I := 0 to AModule.Types.Count - 1 do
+  begin
+    if AModule.Types[I] is TASTRecordDecl then
+    begin
+      Emit(Format('static inline PT%s AetherBox_T%s(T%s V) {', [TASTRecordDecl(AModule.Types[I]).Name, TASTRecordDecl(AModule.Types[I]).Name, TASTRecordDecl(AModule.Types[I]).Name]));
+      Emit(Format('    PT%s p = (PT%s)malloc(sizeof(T%s));', [TASTRecordDecl(AModule.Types[I]).Name, TASTRecordDecl(AModule.Types[I]).Name, TASTRecordDecl(AModule.Types[I]).Name]));
+      Emit('    *p = V;');
+      Emit('    return p;');
+      Emit('}');
+      Emit('');
+    end;
   end;
 
   // Funções

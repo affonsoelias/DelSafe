@@ -24,3 +24,18 @@ function PrintMessage(borrow prefix: String; borrow msg: String): Void
 begin
     PrintLn("[%s] %s", prefix, msg);
 end;
+
+function Tamanho(borrow s: String): UInt32
+begin
+    return Length(borrow s);
+end;
+
+function Caractere(borrow s: String; borrow pos: UInt32): String
+begin
+    return CharAt(borrow s, borrow pos);
+end;
+
+function Fatia(borrow s: String; borrow inicio: UInt32; borrow qtd: UInt32): String
+begin
+    return Substring(borrow s, borrow inicio, borrow qtd);
+end;

@@ -1,0 +1,78 @@
+module BoxRecursionDemo;
+
+type
+    // No de arvore de expressao binaria recursiva
+    ExprNode = record
+        kind: UInt32;        // 1 = Valor literal, 2 = Adicao
+        val: Int64;
+        left: Option<Box<ExprNode>>;
+        right: Option<Box<ExprNode>>;
+    end;
+
+function CriarValor(borrow v: Int64): ExprNode
+begin
+    return ExprNode(
+        kind: 1,
+        val: v,
+        left: None,
+        right: None
+    );
+end;
+
+function CriarSoma(take l: ExprNode; take r: ExprNode): ExprNode
+begin
+    return ExprNode(
+        kind: 2,
+        val: 0,
+        left: Some(Box(l)),
+        right: Some(Box(r))
+    );
+end;
+
+function Avaliar(borrow no: ExprNode): Int64
+var
+    val_esq: Int64;
+    val_dir: Int64;
+begin
+    if no.kind = 1 then
+        return no.val;
+    else
+        val_esq := 0;
+        val_dir := 0;
+
+        if no.left.is_some then
+            val_esq := Avaliar(borrow no.left.value);
+        end;
+
+        if no.right.is_some then
+            val_dir := Avaliar(borrow no.right.value);
+        end;
+
+        return val_esq + val_dir;
+    end;
+end;
+
+program Main;
+var
+    n1: ExprNode;
+    n2: ExprNode;
+    arvore: ExprNode;
+    resultado: Int64;
+begin
+    PrintLn("=== TESTE DE ESTRUTURA RECURSIVA COM BOX E OPTION (FASE 11) ===");
+
+    n1 := CriarValor(borrow 25);
+    n2 := CriarValor(borrow 17);
+
+    // Cria a arvore binaria combinando os dois nos no heap via Box
+    arvore := CriarSoma(take n1, take n2);
+
+    resultado := Avaliar(borrow arvore);
+    PrintLn("Avaliacao da Arvore de Expressao (25 + 17): %d", resultado);
+
+    if resultado = 42 then
+        PrintLn("SUCESSO! Arvore recursiva com Box avaliada perfeitamente!");
+    else
+        PrintLn("FALHA na avaliacao da arvore.");
+    end;
+end.

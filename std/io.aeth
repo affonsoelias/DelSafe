@@ -11,3 +11,18 @@ function Informar(borrow mensagem: String): Void
 begin
     PrintLn("[IO]: %s", mensagem);
 end;
+
+function ExisteArquivo(borrow path: String): Bool
+begin
+    return FileExists(borrow path);
+end;
+
+function LerArquivo(borrow path: String): String
+begin
+    return ReadFile(borrow path);
+end;
+
+function GravarArquivo(borrow path: String; borrow conteudo: String): Bool
+begin
+    return WriteFile(borrow path, borrow conteudo);
+end;

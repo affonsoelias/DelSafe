@@ -25,6 +25,7 @@ type
 
     procedure Error(const ACode, AMsg: string; ALine, ACol: Integer);
     function IsNumericType(const AType: string): Boolean;
+    function IsIntegerType(const AType: string): Boolean;
     function TypesAreCompatible(const TargetType, SourceType: string): Boolean;
 
     function CheckExpr(Expr: TASTExpr): string;
@@ -88,6 +89,13 @@ begin
             (AType = 'Float32') or (AType = 'Float64');
 end;
 
+function TAetherTypeChecker.IsIntegerType(const AType: string): Boolean;
+begin
+  Result := (AType = 'Int8') or (AType = 'Int16') or (AType = 'Int32') or (AType = 'Int64') or
+            (AType = 'UInt8') or (AType = 'UInt16') or (AType = 'UInt32') or (AType = 'UInt64') or
+            (AType = 'IntLiteral');
+end;
+
 function TAetherTypeChecker.TypesAreCompatible(const TargetType, SourceType: string): Boolean;
 begin
   if TargetType = SourceType then Exit(True);
@@ -95,9 +103,11 @@ begin
   if (SourceType = 'IntLiteral') and (Pos('Int', TargetType) > 0) then Exit(True);
   // Literais float genericos sao compativeis com Float32 ou Float64
   if (SourceType = 'FloatLiteral') and (Pos('Float', TargetType) > 0) then Exit(True);
-  // Genericos Result / Option
+  // Genericos Result / Option / Box
   if (Pos('Result', TargetType) = 1) and (Pos('Result', SourceType) = 1) then Exit(True);
-  if (Pos('Option', TargetType) = 1) and (Pos('Option', SourceType) = 1) then Exit(True);
+  if (Pos('Option', TargetType) = 1) and ((Pos('Option', SourceType) = 1) or (SourceType = 'Option<GenericNone>')) then Exit(True);
+  if (Pos('Box', TargetType) = 1) and (Pos('Box', SourceType) = 1) then Exit(True);
+  if (Pos('Option<Box<', TargetType) = 1) and ((Pos('Box<', SourceType) = 1) or (SourceType = 'Option<GenericNone>')) then Exit(True);
   Result := False;
 end;
 
@@ -118,6 +128,10 @@ function TAetherTypeChecker.CheckIdentifier(Id: TASTIdentifierExpr): string;
 var
   Sym: TSymbol;
 begin
+  // Caso especial: 'None' (Option vazio)
+  if SameText(Id.Name, 'None') then
+    Exit('Option<GenericNone>');
+
   // Caso especial: 'result' dentro de contratos
   if SameText(Id.Name, 'result') and Assigned(FCurrentFunction) then
     Exit(FCurrentFunction.ReturnType);
@@ -133,10 +147,11 @@ function TAetherTypeChecker.CheckMemberAccess(Acc: TASTMemberAccessExpr): string
 var
   TargetType: string;
   Sym: TSymbol;
-  I: Integer;
+  I, P1, P2: Integer;
   RecDecl: TASTRecordDecl;
   EnumDecl: TASTEnumDecl;
   Field: TASTRecordField;
+  InnerRecName: string;
 begin
   // Se o alvo for um Identificador, pode ser um tipo (Enum) ou uma variavel
   if Acc.Target is TASTIdentifierExpr then
@@ -167,6 +182,30 @@ begin
   // Propriedades intrinsecas de Option (ex: opt.is_some)
   if (Pos('Option', TargetType) = 1) and (SameText(Acc.Member, 'is_some') or SameText(Acc.Member, 'is_none')) then
     Exit('Bool');
+
+  // Auto-deref de Box<Record> ou Option<Box<Record>>
+  if Pos('Box<', TargetType) > 0 then
+  begin
+    P1 := Pos('Box<', TargetType);
+    InnerRecName := Copy(TargetType, P1 + 4, Length(TargetType));
+    P2 := Pos('>', InnerRecName);
+    if P2 > 0 then InnerRecName := Copy(InnerRecName, 1, P2 - 1);
+
+    if SameText(Acc.Member, 'value') then
+      Exit(InnerRecName);
+
+    Sym := FSymbols.Resolve(InnerRecName);
+    if Assigned(Sym) and (Sym.Node is TASTRecordDecl) then
+    begin
+      RecDecl := TASTRecordDecl(Sym.Node);
+      for I := 0 to RecDecl.Fields.Count - 1 do
+      begin
+        Field := TASTRecordField(RecDecl.Fields[I]);
+        if SameText(Field.Name, Acc.Member) then
+          Exit(Field.TypeName);
+      end;
+    end;
+  end;
 
   // Membro de Record
   Sym := FSymbols.Resolve(TargetType);
@@ -279,6 +318,22 @@ begin
     Exit('Result<GenericValue, ' + ArgType + '>');
   end;
 
+  if Call.Callee = 'Some' then
+  begin
+    if Call.Args.Count <> 1 then
+      Error('E0061', 'Some() exige exatamente 1 argumento', Call.Line, Call.Col);
+    ArgType := CheckExpr(TASTCallArg(Call.Args[0]).Expr);
+    Exit('Option<' + ArgType + '>');
+  end;
+
+  if Call.Callee = 'Box' then
+  begin
+    if Call.Args.Count <> 1 then
+      Error('E0061', 'Box() exige exatamente 1 argumento', Call.Line, Call.Col);
+    ArgType := CheckExpr(TASTCallArg(Call.Args[0]).Expr);
+    Exit('Box<' + ArgType + '>');
+  end;
+
   Sym := FSymbols.Resolve(Call.Callee);
   if not Assigned(Sym) then
     Error('E0425', Format('Funcao ou tipo nao encontrado: "%s"', [Call.Callee]), Call.Line, Call.Col);
@@ -312,6 +367,78 @@ begin
       for I := 0 to Call.Args.Count - 1 do
         CheckExpr(TASTCallArg(Call.Args[I]).Expr);
       Exit('Void');
+    end;
+
+    if Call.Callee = 'Length' then
+    begin
+      if Call.Args.Count <> 1 then
+        Error('E0061', 'Funcao "Length" espera 1 argumento (String)', Call.Line, Call.Col);
+      ArgType := CheckExpr(TASTCallArg(Call.Args[0]).Expr);
+      if ArgType <> 'String' then
+        Error('E0308', Format('Funcao "Length" espera String, recebeu: "%s"', [ArgType]), Call.Line, Call.Col);
+      Exit('UInt32');
+    end;
+
+    if Call.Callee = 'CharAt' then
+    begin
+      if Call.Args.Count <> 2 then
+        Error('E0061', 'Funcao "CharAt" espera 2 argumentos (String, UInt32)', Call.Line, Call.Col);
+      ArgType := CheckExpr(TASTCallArg(Call.Args[0]).Expr);
+      if ArgType <> 'String' then
+        Error('E0308', Format('Primeiro argumento de "CharAt" deve ser String, recebido: "%s"', [ArgType]), Call.Line, Call.Col);
+      ArgType := CheckExpr(TASTCallArg(Call.Args[1]).Expr);
+      if not IsIntegerType(ArgType) and (ArgType <> 'IntLiteral') then
+        Error('E0308', Format('Segundo argumento de "CharAt" deve ser inteiro, recebido: "%s"', [ArgType]), Call.Line, Call.Col);
+      Exit('String');
+    end;
+
+    if Call.Callee = 'Substring' then
+    begin
+      if Call.Args.Count <> 3 then
+        Error('E0061', 'Funcao "Substring" espera 3 argumentos (String, UInt32, UInt32)', Call.Line, Call.Col);
+      ArgType := CheckExpr(TASTCallArg(Call.Args[0]).Expr);
+      if ArgType <> 'String' then
+        Error('E0308', Format('Primeiro argumento de "Substring" deve ser String, recebido: "%s"', [ArgType]), Call.Line, Call.Col);
+      ArgType := CheckExpr(TASTCallArg(Call.Args[1]).Expr);
+      if not IsIntegerType(ArgType) and (ArgType <> 'IntLiteral') then
+        Error('E0308', Format('Segundo argumento (start) de "Substring" deve ser inteiro, recebido: "%s"', [ArgType]), Call.Line, Call.Col);
+      ArgType := CheckExpr(TASTCallArg(Call.Args[2]).Expr);
+      if not IsIntegerType(ArgType) and (ArgType <> 'IntLiteral') then
+        Error('E0308', Format('Terceiro argumento (len) de "Substring" deve ser inteiro, recebido: "%s"', [ArgType]), Call.Line, Call.Col);
+      Exit('String');
+    end;
+
+    if Call.Callee = 'FileExists' then
+    begin
+      if Call.Args.Count <> 1 then
+        Error('E0061', 'Funcao "FileExists" espera 1 argumento (String)', Call.Line, Call.Col);
+      ArgType := CheckExpr(TASTCallArg(Call.Args[0]).Expr);
+      if ArgType <> 'String' then
+        Error('E0308', Format('Funcao "FileExists" espera String, recebeu: "%s"', [ArgType]), Call.Line, Call.Col);
+      Exit('Bool');
+    end;
+
+    if Call.Callee = 'ReadFile' then
+    begin
+      if Call.Args.Count <> 1 then
+        Error('E0061', 'Funcao "ReadFile" espera 1 argumento (String)', Call.Line, Call.Col);
+      ArgType := CheckExpr(TASTCallArg(Call.Args[0]).Expr);
+      if ArgType <> 'String' then
+        Error('E0308', Format('Funcao "ReadFile" espera String, recebeu: "%s"', [ArgType]), Call.Line, Call.Col);
+      Exit('String');
+    end;
+
+    if Call.Callee = 'WriteFile' then
+    begin
+      if Call.Args.Count <> 2 then
+        Error('E0061', 'Funcao "WriteFile" espera 2 argumentos (String, String)', Call.Line, Call.Col);
+      ArgType := CheckExpr(TASTCallArg(Call.Args[0]).Expr);
+      if ArgType <> 'String' then
+        Error('E0308', Format('Primeiro argumento de "WriteFile" deve ser String, recebido: "%s"', [ArgType]), Call.Line, Call.Col);
+      ArgType := CheckExpr(TASTCallArg(Call.Args[1]).Expr);
+      if ArgType <> 'String' then
+        Error('E0308', Format('Segundo argumento de "WriteFile" deve ser String, recebido: "%s"', [ArgType]), Call.Line, Call.Col);
+      Exit('Bool');
     end;
 
     if Assigned(Sym.Node) and (Sym.Node is TASTFunction) then

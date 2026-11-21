@@ -1,0 +1,63 @@
+module IoAndCollectionsDemo;
+
+import IO;
+import Strings;
+import Collections;
+
+program Main;
+var
+    sb: StringBuilder;
+    str_final: String;
+    caminho: String;
+    conteudo_lido: String;
+    ok_escrita: Bool;
+    existe: Bool;
+    tam: UInt32;
+    primeiro_char: String;
+    pedaco: String;
+begin
+    PrintLn("=== TESTE DE STD I/O, STRINGS E COLLECTIONS (FASE 11) ===");
+
+    // 1. Teste de StringBuilder
+    sb := NewStringBuilder();
+    sb.Append(borrow "Aether ");
+    sb.Append(borrow "Self-Hosting ");
+    sb.Append(borrow "Ready!");
+
+    str_final := sb.ToString();
+    PrintLn("Texto montado pelo StringBuilder: \"%s\"", str_final);
+    PrintLn("Comprimento rastreado pelo StringBuilder: %d", sb.length);
+
+    // 2. Teste de operacoes com Strings
+    tam := Length(borrow str_final);
+    PrintLn("Comprimento medido via Length(): %d", tam);
+
+    primeiro_char := CharAt(borrow str_final, 0);
+    PrintLn("Primeiro caractere via CharAt(0): \"%s\"", primeiro_char);
+
+    pedaco := Substring(borrow str_final, 7, 12);
+    PrintLn("Fatia via Substring(7, 12): \"%s\"", pedaco);
+
+    // 3. Teste de I/O de Arquivo
+    caminho := "bin/teste_fase11.txt";
+    PrintLn("\nGravando arquivo \"%s\"...", caminho);
+    ok_escrita := WriteFile(borrow caminho, borrow str_final);
+
+    if ok_escrita then
+        PrintLn("[PASS] Arquivo gravado com sucesso!");
+    else
+        PrintLn("[FAIL] Falha ao gravar arquivo.");
+    end;
+
+    existe := FileExists(borrow caminho);
+    if existe then
+        PrintLn("[PASS] FileExists() confirmou que o arquivo existe!");
+    else
+        PrintLn("[FAIL] FileExists() informou que o arquivo nao existe.");
+    end;
+
+    conteudo_lido := ReadFile(borrow caminho);
+    PrintLn("Conteudo lido do arquivo:\n--> %s", conteudo_lido);
+
+    PrintLn("\nSUCESSO! Fase 11 - I/O, Strings e Collections validados com exito!");
+end.
