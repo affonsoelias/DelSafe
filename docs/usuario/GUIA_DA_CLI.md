@@ -165,6 +165,60 @@ aetherc new meu_projeto
 aetherc new .
 ```
 
+### Configuração de Caminhos e Interop (`paths` no `aether.json`)
+No manifesto `aether.json`, a seção `"paths"` permite organizar módulos, subpastas, código C (`.c`/`.h`), units Free Pascal (`.pas`) e cópia automática de bibliotecas compartilhadas (`.dll`/`.so`):
+
+```json
+{
+  "name": "meu_projeto",
+  "version": "0.1.0",
+  "backend": "pascal",
+  "entry": "src/main.aeth",
+  "output": "bin/meu_projeto.exe",
+  "paths": {
+    "aether": [
+      "src",
+      "libs/minha_lib_aether"
+    ],
+    "c_includes": [
+      "include"
+    ],
+    "c_sources": [
+      "c_src/auxiliar.c"
+    ],
+    "pascal_units": [
+      "pascal_src"
+    ],
+    "lib_dirs": [
+      "lib"
+    ],
+    "libs": [
+      "raylib"
+    ],
+    "shared_libs": [
+      "lib/raylib.dll"
+    ]
+  }
+}
+```
+
+- **`aether`**: Diretórios extras para resolução de módulos `.aeth` importados (`import arvores.carvalho;`).
+- **`c_includes`**: Pastas com headers C (`.h`), repassadas automaticamente como `-I"caminho"` ao GCC.
+- **`c_sources`**: Arquivos `.c` adicionais compilados e linkados diretamente no executável final.
+- **`pascal_units`**: Pastas com units Free Pascal (`.pas`/`.ppu`), repassadas como `-Fu"caminho"` ao FPC (ideal para integração com BlaiseVue).
+- **`lib_dirs`**: Pastas com bibliotecas estáticas ou dinâmicas, repassadas como `-L` ao GCC e `-Fl` ao FPC.
+- **`libs`**: Nomes de bibliotecas para linkagem final (ex: `-lraylib`, `-lsqlite3`).
+- **`shared_libs`**: Bibliotecas dinâmicas (`.dll` no Windows ou `.so` no Linux) que são **automaticamente copiadas para a pasta do binário** (`bin/`) durante o build ou run.
+
+### Flags de Caminhos e Interop na Linha de Comando (CLI)
+Você também pode passar essas configurações diretamente na linha de comando:
+- `-I <dir>`: Adiciona diretório de busca para módulos Aether e headers C.
+- `-Fu <dir>`: Adiciona diretório de busca para units do Free Pascal (`.pas`/`.ppu`).
+- `-L <dir>`: Adiciona diretório de bibliotecas nativas (`-L` GCC e `-Fl` FPC).
+- `-l <lib>`: Linka com biblioteca do sistema (ex: `-lraylib`, `-lws2_32`).
+- `--c-source <arquivo.c>`: Compila arquivo C adicional junto ao executável final.
+- `--shared-lib <arquivo.dll/.so>`: Copia biblioteca compartilhada para a pasta do executável gerado.
+
 ### `aetherc pkg <subcomando>`
 Gerenciador nativo de pacotes do Aether:
 - `aetherc pkg add <pacote>`: Adiciona dependência Git ou local ao `aether.json` e `aether.lock`.

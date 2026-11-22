@@ -112,6 +112,12 @@ Begin
  '  --lsp             Inicia o servidor de linguagem (Language Server Protocol)'
   );
   WriteLn('  -o <arquivo.exe>  Especifica o nome do executavel de saida');
+  WriteLn('  -I <dir>          Adiciona diretorio de busca para modulos Aether e headers C');
+  WriteLn('  -Fu <dir>         Adiciona diretorio de busca para units do Free Pascal (.pas/.ppu)');
+  WriteLn('  -L <dir>          Adiciona diretorio de busca de bibliotecas nativas (.a/.lib)');
+  WriteLn('  -l <lib>          Linka com biblioteca C/sistema (ex: -lraylib, -lsqlite3)');
+  WriteLn('  --c-source <.c>   Compila arquivo C adicional junto ao executavel final');
+  WriteLn('  --shared-lib <.dll> Copia biblioteca compartilhada (.dll/.so) para a pasta do executavel');
   WriteLn('  -h, --help        Exibe esta mensagem de ajuda');
 End;
 
@@ -187,6 +193,106 @@ Begin
     End;
 End;
 
+Var
+  GlobalIncludePaths: TStringList = nil;
+  GlobalPascalUnitPaths: TStringList = nil;
+  GlobalCSources: TStringList = nil;
+  GlobalLibDirs: TStringList = nil;
+  GlobalLibs: TStringList = nil;
+  GlobalSharedLibs: TStringList = nil;
+
+Procedure InitGlobalPaths;
+Begin
+  If GlobalIncludePaths = nil Then GlobalIncludePaths := TStringList.Create;
+  If GlobalPascalUnitPaths = nil Then GlobalPascalUnitPaths := TStringList.Create;
+  If GlobalCSources = nil Then GlobalCSources := TStringList.Create;
+  If GlobalLibDirs = nil Then GlobalLibDirs := TStringList.Create;
+  If GlobalLibs = nil Then GlobalLibs := TStringList.Create;
+  If GlobalSharedLibs = nil Then GlobalSharedLibs := TStringList.Create;
+End;
+
+Procedure FreeGlobalPaths;
+Begin
+  FreeAndNil(GlobalIncludePaths);
+  FreeAndNil(GlobalPascalUnitPaths);
+  FreeAndNil(GlobalCSources);
+  FreeAndNil(GlobalLibDirs);
+  FreeAndNil(GlobalLibs);
+  FreeAndNil(GlobalSharedLibs);
+End;
+
+Function ParsePathFlag(Const Arg: String; Var I: Integer): Boolean;
+Var
+  Val: string;
+Begin
+  Result := True;
+  InitGlobalPaths;
+  If (Arg = '-I') Then
+  Begin
+    Inc(I);
+    If I <= ParamCount Then GlobalIncludePaths.Add(ParamStr(I));
+  End
+  Else If (Copy(Arg, 1, 2) = '-I') And (Length(Arg) > 2) Then
+  Begin
+    Val := Copy(Arg, 3, Length(Arg));
+    If (Length(Val) > 0) And (Val[1] = '=') Then Val := Copy(Val, 2, Length(Val));
+    GlobalIncludePaths.Add(Val);
+  End
+  Else If (Arg = '-Fu') Then
+  Begin
+    Inc(I);
+    If I <= ParamCount Then GlobalPascalUnitPaths.Add(ParamStr(I));
+  End
+  Else If (Copy(Arg, 1, 3) = '-Fu') And (Length(Arg) > 3) Then
+  Begin
+    Val := Copy(Arg, 4, Length(Arg));
+    If (Length(Val) > 0) And (Val[1] = '=') Then Val := Copy(Val, 2, Length(Val));
+    GlobalPascalUnitPaths.Add(Val);
+  End
+  Else If (Arg = '-L') Then
+  Begin
+    Inc(I);
+    If I <= ParamCount Then GlobalLibDirs.Add(ParamStr(I));
+  End
+  Else If (Copy(Arg, 1, 2) = '-L') And (Length(Arg) > 2) Then
+  Begin
+    Val := Copy(Arg, 3, Length(Arg));
+    If (Length(Val) > 0) And (Val[1] = '=') Then Val := Copy(Val, 2, Length(Val));
+    GlobalLibDirs.Add(Val);
+  End
+  Else If (Arg = '-l') Then
+  Begin
+    Inc(I);
+    If I <= ParamCount Then GlobalLibs.Add(ParamStr(I));
+  End
+  Else If (Copy(Arg, 1, 2) = '-l') And (Length(Arg) > 2) Then
+  Begin
+    Val := Copy(Arg, 3, Length(Arg));
+    If (Length(Val) > 0) And (Val[1] = '=') Then Val := Copy(Val, 2, Length(Val));
+    GlobalLibs.Add(Val);
+  End
+  Else If (Arg = '--c-source') Then
+  Begin
+    Inc(I);
+    If I <= ParamCount Then GlobalCSources.Add(ParamStr(I));
+  End
+  Else If Pos('--c-source=', Arg) = 1 Then
+  Begin
+    GlobalCSources.Add(Copy(Arg, 12, Length(Arg)));
+  End
+  Else If (Arg = '--shared-lib') Then
+  Begin
+    Inc(I);
+    If I <= ParamCount Then GlobalSharedLibs.Add(ParamStr(I));
+  End
+  Else If Pos('--shared-lib=', Arg) = 1 Then
+  Begin
+    GlobalSharedLibs.Add(Copy(Arg, 14, Length(Arg)));
+  End
+  Else
+    Result := False;
+End;
+
 Function FindModuleFile(Const ModName, BaseDir: String): string;
 
 Var 
@@ -220,6 +326,20 @@ Begin
   If FileExists(Candidate) Then Exit(Candidate);
   Candidate := BaseDir + RelPathSnake + '.aeth';
   If FileExists(Candidate) Then Exit(Candidate);
+
+  // 1b. Diretórios customizados de include (-I e paths.aether)
+  If Assigned(GlobalIncludePaths) Then
+  Begin
+    For I := 0 To GlobalIncludePaths.Count - 1 Do
+    Begin
+      Candidate := IncludeTrailingPathDelimiter(GlobalIncludePaths[I]) + RelPath + '.aeth';
+      If FileExists(Candidate) Then Exit(Candidate);
+      Candidate := IncludeTrailingPathDelimiter(GlobalIncludePaths[I]) + RelPathLower + '.aeth';
+      If FileExists(Candidate) Then Exit(Candidate);
+      Candidate := IncludeTrailingPathDelimiter(GlobalIncludePaths[I]) + RelPathSnake + '.aeth';
+      If FileExists(Candidate) Then Exit(Candidate);
+    End;
+  End;
 
   // 2. Subpasta std/ relativa ao diretório do arquivo fonte
   Candidate := BaseDir + 'std' + PathDelim + CleanRelPath + '.aeth';
@@ -490,6 +610,7 @@ Begin
 
           If CacheUpToDate And FileExists(FinalExe) And (SHA256File(FinalExe) = BuildCache.OutputExeHash) Then
           Begin
+            CopySharedLibraries(BaseProjDir, FinalExe, GlobalSharedLibs);
             If Not SilentBanner Then
             Begin
               WriteLn(Format('[INCREMENTAL] Nenhuma alteracao detectada em "%s" ou em suas %d dependencias.', [ExtractFileName(SourceFile), BuildCache.Files.Count - 1]));
@@ -643,9 +764,10 @@ If Not SilentBanner Then
   End;
 
 CompileLog := '';
-Success := CompileWithFPC(IntermediateFile, FinalExe, CompileLog, ReleaseMode);
+Success := CompileWithFPC(IntermediateFile, FinalExe, CompileLog, ReleaseMode, GlobalPascalUnitPaths, GlobalLibDirs);
 If Success Then
   Begin
+    CopySharedLibraries(BaseProjDir, FinalExe, GlobalSharedLibs);
     If Incremental Then
       SaveBuildCache(BaseProjDir, SourceFile, TargetBackendStr, FinalExe, DependencyFiles);
     If Not SilentBanner Then
@@ -693,9 +815,10 @@ If Not SilentBanner Then
   End;
 
 CompileLog := '';
-Success := CompileWithGCC(IntermediateFile, FinalExe, CompileLog, ReleaseMode);
+Success := CompileWithGCC(IntermediateFile, FinalExe, CompileLog, ReleaseMode, GlobalIncludePaths, GlobalCSources, GlobalLibDirs, GlobalLibs);
 If Success Then
   Begin
+    CopySharedLibraries(BaseProjDir, FinalExe, GlobalSharedLibs);
     If Incremental Then
       SaveBuildCache(BaseProjDir, SourceFile, TargetBackendStr, FinalExe, DependencyFiles);
     If Not SilentBanner Then
@@ -1148,12 +1271,13 @@ Var
   OptionOptimize: Boolean;
   IsRunCommand: Boolean;
   ProjConfig: TAetherProjectConfig;
-  I: Integer;
+  I, J: Integer;
   Arg: string;
   PkgName, OptPath, OptGit, OptVer, FilterName, SubCmd: string;
   EmitTargetPascal, EmitToStdout, HasTargetSpecified, EmitAsUnit, EmitSilent, EmitWatch: Boolean;
   EmitSource, EmitOut, EmitOutDir: string;
 Begin
+  InitGlobalPaths;
   InputFile := '';
   OutputExe := '';
   OptionDumpTokens := False;
@@ -1607,12 +1731,37 @@ If (ParamCount >= 1) And ((LowerCase(ParamStr(1)) = 'build') Or (LowerCase(
     OptionIncremental := True; // Habilitado por padrão para projetos aether.json
     RestoreProjectDependencies(ProjConfig);
 
-    // Permite sobrescrever flags como --target=c, -o, etc. na linha de comando
+    // Carrega caminhos declarados na secao 'paths' do aether.json
+    For J := 0 To High(ProjConfig.PathsAether) Do
+      If ProjConfig.PathsAether[J] <> '' Then
+        GlobalIncludePaths.Add(ExpandFileName(ProjConfig.RootDir + PathDelim + ProjConfig.PathsAether[J]));
+    For J := 0 To High(ProjConfig.PathsCIncludes) Do
+      If ProjConfig.PathsCIncludes[J] <> '' Then
+        GlobalIncludePaths.Add(ExpandFileName(ProjConfig.RootDir + PathDelim + ProjConfig.PathsCIncludes[J]));
+    For J := 0 To High(ProjConfig.PathsCSources) Do
+      If ProjConfig.PathsCSources[J] <> '' Then
+        GlobalCSources.Add(ExpandFileName(ProjConfig.RootDir + PathDelim + ProjConfig.PathsCSources[J]));
+    For J := 0 To High(ProjConfig.PathsPascalUnits) Do
+      If ProjConfig.PathsPascalUnits[J] <> '' Then
+        GlobalPascalUnitPaths.Add(ExpandFileName(ProjConfig.RootDir + PathDelim + ProjConfig.PathsPascalUnits[J]));
+    For J := 0 To High(ProjConfig.PathsLibDirs) Do
+      If ProjConfig.PathsLibDirs[J] <> '' Then
+        GlobalLibDirs.Add(ExpandFileName(ProjConfig.RootDir + PathDelim + ProjConfig.PathsLibDirs[J]));
+    For J := 0 To High(ProjConfig.PathsLibs) Do
+      If ProjConfig.PathsLibs[J] <> '' Then
+        GlobalLibs.Add(ProjConfig.PathsLibs[J]);
+    For J := 0 To High(ProjConfig.PathsSharedLibs) Do
+      If ProjConfig.PathsSharedLibs[J] <> '' Then
+        GlobalSharedLibs.Add(ExpandFileName(ProjConfig.RootDir + PathDelim + ProjConfig.PathsSharedLibs[J]));
+
+    // Permite sobrescrever flags como --target=c, -o, -I, -Fu, etc. na linha de comando
     I := 2;
     While I <= ParamCount Do
       Begin
         Arg := ParamStr(I);
-        If Arg = '--target=pascal' Then OptionTargetPascal := True
+        If ParsePathFlag(Arg, I) Then
+          // Consumido pela flag de path
+        Else If Arg = '--target=pascal' Then OptionTargetPascal := True
         Else If Arg = '--target=c' Then OptionTargetPascal := False
         Else If Arg = '--check-only' Then OptionCheckOnly := True
         Else If Arg = '--incremental' Then OptionIncremental := True
@@ -1707,7 +1856,9 @@ I := 1;
 While I <= ParamCount Do
   Begin
     Arg := ParamStr(I);
-    If (Arg = '-h') Or (Arg = '--help') Then
+    If ParsePathFlag(Arg, I) Then
+      // Consumido pela flag de path (-I, -Fu, -L, -l, --c-source, --shared-lib)
+    Else If (Arg = '-h') Or (Arg = '--help') Then
       Begin
         PrintBanner;
         PrintUsage;

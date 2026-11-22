@@ -157,7 +157,7 @@ begin
     IsLink := True;
   end;
 
-  if IsC or IsLink then
+  if IsC or IsLink or IsPascal then
   begin
     if Check(tokStringLiteral) then
       ImportName := Expect(tokStringLiteral).Value
@@ -169,8 +169,7 @@ begin
     ImportName := Expect(tokIdentifier, 'Esperado nome do modulo importado').Value;
     while Match(tokDot) do
       ImportName := ImportName + '.' + Expect(tokIdentifier, 'Esperado identificador apos "." no nome do modulo importado').Value;
-    if (not IsPascal) and Match(tokAs) then
-      ImportName := ImportName + ' as ' + Expect(tokIdentifier).Value;
+    Match(tokAs);
   end;
   Expect(tokSemicolon);
 

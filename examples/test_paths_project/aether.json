@@ -1,0 +1,29 @@
+{
+  "name": "teste_paths_pascal",
+  "version": "0.1.0",
+  "description": "Projeto de teste para caminhos customizados, subpastas e interop",
+  "backend": "pascal",
+  "entry": "src/main_pascal.aeth",
+  "output": "bin/teste_paths_pascal.exe",
+  "paths": {
+    "aether": [
+      "src"
+    ],
+    "c_includes": [
+      "include"
+    ],
+    "c_sources": [
+      "c_src/auxiliar.c"
+    ],
+    "pascal_units": [
+      "pascal_src"
+    ],
+    "lib_dirs": [
+      "lib"
+    ],
+    "libs": [],
+    "shared_libs": [
+      "lib/minha_lib.dll"
+    ]
+  }
+}

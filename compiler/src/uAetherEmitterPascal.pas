@@ -971,6 +971,9 @@ var
 begin
   if Func.IsExtern then
   begin
+    if (Func.ExternAbi = 'pascal') or (Func.ExternLib = 'pascal') or (LowerCase(Func.ExternLib) = 'unit') then
+      Exit('');
+
     if (Func.ExternLib = '') and ((Func.Name = 'sin') or (Func.Name = 'cos') or (Func.Name = 'sqrt')) then
       Exit('');
 

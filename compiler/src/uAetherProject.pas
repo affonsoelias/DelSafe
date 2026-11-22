@@ -16,6 +16,8 @@ type
     Version: string;
   end;
 
+  TStringArray = array of string;
+
   TAetherProjectConfig = record
     Name: string;
     Version: string;
@@ -26,10 +28,19 @@ type
     RootDir: string;
     ConfigFile: string;
     Dependencies: array of TAetherDependency;
+    PathsAether: TStringArray;
+    PathsCIncludes: TStringArray;
+    PathsCSources: TStringArray;
+    PathsPascalUnits: TStringArray;
+    PathsLibDirs: TStringArray;
+    PathsLibs: TStringArray;
+    PathsSharedLibs: TStringArray;
   end;
 
 function FindProjectRoot(out RootDir, ConfigFile: string): Boolean;
 function LoadProjectConfig(out Config: TAetherProjectConfig): Boolean;
+procedure CopySharedLibraries(const RootDir, OutExe: string; const SharedLibs: TStringArray);
+procedure CopySharedLibraries(const RootDir, OutExe: string; SharedLibsList: TStrings);
 function GetAetherCacheDir: string;
 function ExtractPackageNameFromGitUrl(const Url: string): string;
 function SyncGitPackage(const PkgName, GitUrl, Version: string; out CacheDir: string; Visited: TStringList = nil): Boolean;
@@ -503,17 +514,108 @@ begin
   end;
 end;
 
+procedure ReadJsonStringArray(ParentObj: TJSONObject; const PropName: string; out Dest: TStringArray);
+var
+  Data: TJSONData;
+  Arr: TJSONArray;
+  I: Integer;
+begin
+  SetLength(Dest, 0);
+  if not Assigned(ParentObj) then Exit;
+  Data := ParentObj.Find(PropName);
+  if Assigned(Data) and (Data is TJSONArray) then
+  begin
+    Arr := TJSONArray(Data);
+    SetLength(Dest, Arr.Count);
+    for I := 0 to Arr.Count - 1 do
+      Dest[I] := Arr.Strings[I];
+  end;
+end;
+
+function SafeCopyFile(const Src, Dst: string): Boolean;
+var
+  FSrc, FDst: TFileStream;
+begin
+  Result := False;
+  try
+    FSrc := TFileStream.Create(Src, fmOpenRead or fmShareDenyWrite);
+    try
+      FDst := TFileStream.Create(Dst, fmCreate);
+      try
+        FDst.CopyFrom(FSrc, FSrc.Size);
+        Result := True;
+      finally
+        FDst.Free;
+      end;
+    finally
+      FSrc.Free;
+    end;
+  except
+    Result := False;
+  end;
+end;
+
+procedure CopySharedLibraries(const RootDir, OutExe: string; const SharedLibs: TStringArray);
+var
+  I: Integer;
+  SrcLib, DestDir, DestLib: string;
+begin
+  DestDir := ExtractFileDir(OutExe);
+  if DestDir = '' then DestDir := '.';
+  ForceDirectories(DestDir);
+  for I := 0 to High(SharedLibs) do
+  begin
+    if Trim(SharedLibs[I]) = '' then Continue;
+    SrcLib := Trim(SharedLibs[I]);
+    if not ((Length(SrcLib) >= 2) and (SrcLib[2] = ':')) and not (Pos(PathDelim, SrcLib) = 1) and not (Pos('/', SrcLib) = 1) then
+      SrcLib := RootDir + PathDelim + SrcLib;
+    SrcLib := ExpandFileName(SrcLib);
+    if FileExists(SrcLib) then
+    begin
+      DestLib := DestDir + PathDelim + ExtractFileName(SrcLib);
+      if (not FileExists(DestLib)) or (FileAge(SrcLib) > FileAge(DestLib)) then
+      begin
+        if SafeCopyFile(SrcLib, DestLib) then
+          WriteLn(Format('   [DEPLOY] Biblioteca compartilhada copiada: %s -> %s', [ExtractFileName(SrcLib), DestDir]))
+        else
+          WriteLn(Format('   [AVISO] Falha ao copiar biblioteca compartilhada: %s', [SrcLib]));
+      end;
+    end
+    else
+      WriteLn(Format('   [AVISO] Biblioteca em shared_libs nao encontrada: "%s"', [SharedLibs[I]]));
+  end;
+end;
+
+procedure CopySharedLibraries(const RootDir, OutExe: string; SharedLibsList: TStrings);
+var
+  Arr: array of string;
+  I: Integer;
+begin
+  if not Assigned(SharedLibsList) or (SharedLibsList.Count = 0) then Exit;
+  SetLength(Arr, SharedLibsList.Count);
+  for I := 0 to SharedLibsList.Count - 1 do
+    Arr[I] := SharedLibsList[I];
+  CopySharedLibraries(RootDir, OutExe, Arr);
+end;
+
 function LoadProjectConfig(out Config: TAetherProjectConfig): Boolean;
 var
   RootDir, ConfigFile, JsonStr: string;
   FileStream: TFileStream;
   StringStream: TStringStream;
-  JSON, DepsData, ItemData: TJSONData;
-  Obj, DepsObj, ItemObj: TJSONObject;
+  JSON, DepsData, ItemData, PathsData: TJSONData;
+  Obj, DepsObj, ItemObj, PathsObj: TJSONObject;
   I: Integer;
 begin
   Result := False;
   SetLength(Config.Dependencies, 0);
+  SetLength(Config.PathsAether, 0);
+  SetLength(Config.PathsCIncludes, 0);
+  SetLength(Config.PathsCSources, 0);
+  SetLength(Config.PathsPascalUnits, 0);
+  SetLength(Config.PathsLibDirs, 0);
+  SetLength(Config.PathsLibs, 0);
+  SetLength(Config.PathsSharedLibs, 0);
   if not FindProjectRoot(RootDir, ConfigFile) then
     Exit(False);
 
@@ -570,6 +672,19 @@ begin
           end;
         end;
 
+        PathsData := Obj.Find('paths');
+        if Assigned(PathsData) and (PathsData is TJSONObject) then
+        begin
+          PathsObj := TJSONObject(PathsData);
+          ReadJsonStringArray(PathsObj, 'aether', Config.PathsAether);
+          ReadJsonStringArray(PathsObj, 'c_includes', Config.PathsCIncludes);
+          ReadJsonStringArray(PathsObj, 'c_sources', Config.PathsCSources);
+          ReadJsonStringArray(PathsObj, 'pascal_units', Config.PathsPascalUnits);
+          ReadJsonStringArray(PathsObj, 'lib_dirs', Config.PathsLibDirs);
+          ReadJsonStringArray(PathsObj, 'libs', Config.PathsLibs);
+          ReadJsonStringArray(PathsObj, 'shared_libs', Config.PathsSharedLibs);
+        end;
+
         Result := True;
       end;
     finally
@@ -586,7 +701,8 @@ var
   TargetDir, EffectiveName: string;
   SrcDir, TestsDir, BinDir: string;
   ConfigFile, MainFile, TestFile, GitignoreFile, ReadmeFile: string;
-  ConfigObj: TJSONObject;
+  ConfigObj, PathsObj: TJSONObject;
+  ArrAether: TJSONArray;
 begin
   if (ProjectName <> '') and (ProjectName <> '.') then
   begin
@@ -627,6 +743,20 @@ begin
     ConfigObj.Add('backend', 'pascal');
     ConfigObj.Add('entry', 'src/main.aeth');
     ConfigObj.Add('output', 'bin/' + EffectiveName + '.exe');
+
+    // Seção 'paths' para organização de código e interop C / Pascal / DLLs
+    PathsObj := TJSONObject.Create;
+    ArrAether := TJSONArray.Create;
+    ArrAether.Add('src');
+    PathsObj.Add('aether', ArrAether);
+    PathsObj.Add('c_includes', TJSONArray.Create);
+    PathsObj.Add('c_sources', TJSONArray.Create);
+    PathsObj.Add('pascal_units', TJSONArray.Create);
+    PathsObj.Add('lib_dirs', TJSONArray.Create);
+    PathsObj.Add('libs', TJSONArray.Create);
+    PathsObj.Add('shared_libs', TJSONArray.Create);
+    ConfigObj.Add('paths', PathsObj);
+
     WriteStringToFile(ConfigFile, ConfigObj.FormatJSON);
   finally
     ConfigObj.Free;

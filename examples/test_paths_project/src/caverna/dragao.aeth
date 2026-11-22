@@ -1,0 +1,6 @@
+module Dragao;
+
+function Rugir(): Void
+begin
+    PrintLn("O dragao da caverna acordou com sucesso!");
+end;

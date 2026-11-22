@@ -1,0 +1,28 @@
+module Main;
+
+import arvores.carvalho;
+import caverna.dragao;
+import c "auxiliar.h";
+
+extern function MultiplicarC(a: Int32, b: Int32): Int32;
+
+program Main;
+var
+    minha_arvore: Arvore;
+    res_c: Int32;
+begin
+    PrintLn("=== Teste de Paths, Subpastas e Interop C (Aether / C / DLLs) ===");
+    
+    // 1. Testa subpasta arvores/
+    minha_arvore := CriarCarvalho(15, 60);
+    PrintLn("Carvalho criado: altura = %d m, idade = %d anos", minha_arvore.altura, minha_arvore.idade);
+
+    // 2. Testa subpasta caverna/
+    Rugir();
+
+    // 3. Testa interop C (c_sources e c_includes via paths)
+    res_c := MultiplicarC(6, 7);
+    PrintLn("MultiplicarC(6, 7) retornou: %d", res_c);
+
+    PrintLn("=== SUCESSO: Todos os modulos, subpastas e interop operacionais! ===");
+end.

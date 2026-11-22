@@ -1,0 +1,12 @@
+module Carvalho;
+
+type
+    Arvore = record
+        altura: Int32;
+        idade: Int32;
+    end;
+
+function CriarCarvalho(h: Int32, anos: Int32): Arvore
+begin
+    return Arvore(altura: h, idade: anos);
+end;

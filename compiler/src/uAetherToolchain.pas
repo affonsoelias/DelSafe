@@ -26,8 +26,11 @@ type
 function DetectToolchain: TToolchainInfo;
 procedure PrintDoctorReport;
 function RunCommandCapture(const ExePath, Params: string; const ExtraPathDir: string; var OutText: string): Integer;
-function CompileWithFPC(const PascalSource, OutExe: string; var OutputLog: string; ReleaseMode: Boolean = False): Boolean;
-function CompileWithGCC(const CSource, OutExe: string; var OutputLog: string; ReleaseMode: Boolean = False): Boolean;
+function CompileWithFPC(const PascalSource, OutExe: string; var OutputLog: string; ReleaseMode: Boolean = False;
+                        UnitPaths: TStrings = nil; LibDirs: TStrings = nil): Boolean;
+function CompileWithGCC(const CSource, OutExe: string; var OutputLog: string; ReleaseMode: Boolean = False;
+                        IncludePaths: TStrings = nil; ExtraCSources: TStrings = nil;
+                        LibDirs: TStrings = nil; Libs: TStrings = nil): Boolean;
 
 implementation
 
@@ -235,11 +238,12 @@ begin
   WriteLn('--------------------------------------------------------');
 end;
 
-function CompileWithFPC(const PascalSource, OutExe: string; var OutputLog: string; ReleaseMode: Boolean = False): Boolean;
+function CompileWithFPC(const PascalSource, OutExe: string; var OutputLog: string; ReleaseMode: Boolean = False;
+                        UnitPaths: TStrings = nil; LibDirs: TStrings = nil): Boolean;
 var
   Info: TToolchainInfo;
-  Params: string;
-  Code: Integer;
+  Params, ExtraFlags: string;
+  Code, I: Integer;
 begin
   Info := DetectToolchain;
   if not Info.FPCFound then
@@ -248,20 +252,37 @@ begin
     Exit(False);
   end;
 
+  ExtraFlags := '';
+  if Assigned(UnitPaths) then
+  begin
+    for I := 0 to UnitPaths.Count - 1 do
+      if Trim(UnitPaths[I]) <> '' then
+        ExtraFlags := ExtraFlags + Format(' -Fu"%s"', [Trim(UnitPaths[I])]);
+  end;
+
+  if Assigned(LibDirs) then
+  begin
+    for I := 0 to LibDirs.Count - 1 do
+      if Trim(LibDirs[I]) <> '' then
+        ExtraFlags := ExtraFlags + Format(' -Fl"%s"', [Trim(LibDirs[I])]);
+  end;
+
   if ReleaseMode then
-    Params := Format('-O3 -XX -Xs -FE"%s" -o"%s" "%s"', [ExtractFileDir(OutExe), ExtractFileName(OutExe), PascalSource])
+    Params := Format('-O3 -XX -Xs -FE"%s" -o"%s"%s "%s"', [ExtractFileDir(OutExe), ExtractFileName(OutExe), ExtraFlags, PascalSource])
   else
-    Params := Format('-O2 -FE"%s" -o"%s" "%s"', [ExtractFileDir(OutExe), ExtractFileName(OutExe), PascalSource]);
+    Params := Format('-O2 -FE"%s" -o"%s"%s "%s"', [ExtractFileDir(OutExe), ExtractFileName(OutExe), ExtraFlags, PascalSource]);
 
   Code := RunCommandCapture(Info.FPCPath, Params, '', OutputLog);
   Result := (Code = 0) and FileExists(OutExe);
 end;
 
-function CompileWithGCC(const CSource, OutExe: string; var OutputLog: string; ReleaseMode: Boolean = False): Boolean;
+function CompileWithGCC(const CSource, OutExe: string; var OutputLog: string; ReleaseMode: Boolean = False;
+                        IncludePaths: TStrings = nil; ExtraCSources: TStrings = nil;
+                        LibDirs: TStrings = nil; Libs: TStrings = nil): Boolean;
 var
   Info: TToolchainInfo;
-  Params: string;
-  Code: Integer;
+  Params, ExtraIncludes, ExtraSources, ExtraLibs: string;
+  Code, I: Integer;
 begin
   Info := DetectToolchain;
   if not Info.GCCFound then
@@ -270,20 +291,51 @@ begin
     Exit(False);
   end;
 
+  ExtraIncludes := '';
+  if Assigned(IncludePaths) then
+  begin
+    for I := 0 to IncludePaths.Count - 1 do
+      if Trim(IncludePaths[I]) <> '' then
+        ExtraIncludes := ExtraIncludes + Format(' -I"%s"', [Trim(IncludePaths[I])]);
+  end;
+
+  ExtraSources := '';
+  if Assigned(ExtraCSources) then
+  begin
+    for I := 0 to ExtraCSources.Count - 1 do
+      if Trim(ExtraCSources[I]) <> '' then
+        ExtraSources := ExtraSources + Format(' "%s"', [Trim(ExtraCSources[I])]);
+  end;
+
+  ExtraLibs := '';
+  if Assigned(LibDirs) then
+  begin
+    for I := 0 to LibDirs.Count - 1 do
+      if Trim(LibDirs[I]) <> '' then
+        ExtraLibs := ExtraLibs + Format(' -L"%s"', [Trim(LibDirs[I])]);
+  end;
+
+  if Assigned(Libs) then
+  begin
+    for I := 0 to Libs.Count - 1 do
+      if Trim(Libs[I]) <> '' then
+        ExtraLibs := ExtraLibs + Format(' -l%s', [Trim(Libs[I])]);
+  end;
+
   if ReleaseMode then
   begin
     {$IFDEF MSWINDOWS}
-    Params := Format('-O3 -flto -s "%s" -o "%s" -lws2_32 -lm', [CSource, OutExe]);
+    Params := Format('-O3 -flto -s%s "%s"%s -o "%s"%s -lws2_32 -lm', [ExtraIncludes, CSource, ExtraSources, OutExe, ExtraLibs]);
     {$ELSE}
-    Params := Format('-O3 -flto -s "%s" -o "%s" -lm', [CSource, OutExe]);
+    Params := Format('-O3 -flto -s%s "%s"%s -o "%s"%s -lm', [ExtraIncludes, CSource, ExtraSources, OutExe, ExtraLibs]);
     {$ENDIF}
   end
   else
   begin
     {$IFDEF MSWINDOWS}
-    Params := Format('-O2 "%s" -o "%s" -lws2_32 -lm', [CSource, OutExe]);
+    Params := Format('-O2%s "%s"%s -o "%s"%s -lws2_32 -lm', [ExtraIncludes, CSource, ExtraSources, OutExe, ExtraLibs]);
     {$ELSE}
-    Params := Format('-O2 "%s" -o "%s" -lm', [CSource, OutExe]);
+    Params := Format('-O2%s "%s"%s -o "%s"%s -lm', [ExtraIncludes, CSource, ExtraSources, OutExe, ExtraLibs]);
     {$ENDIF}
   end;
   Code := RunCommandCapture(Info.GCCPath, Params, Info.MSYS2BinDir, OutputLog);
