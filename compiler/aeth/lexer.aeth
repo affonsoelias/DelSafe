@@ -184,6 +184,9 @@ begin
         if txt = "borrow" then return NewToken(TokenKind.tkBorrow, txt, token_line, token_col); end;
         if txt = "mut" then return NewToken(TokenKind.tkMut, txt, token_line, token_col); end;
         if txt = "take" then return NewToken(TokenKind.tkTake, txt, token_line, token_col); end;
+        if txt = "type" then return NewToken(TokenKind.tkType, txt, token_line, token_col); end;
+        if txt = "record" then return NewToken(TokenKind.tkRecord, txt, token_line, token_col); end;
+        if txt = "struct" then return NewToken(TokenKind.tkStruct, txt, token_line, token_col); end;
 
         return NewToken(TokenKind.tkIdentifier, txt, token_line, token_col);
     end;

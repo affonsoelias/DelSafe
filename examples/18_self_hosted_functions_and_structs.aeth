@@ -1,0 +1,36 @@
+module ExemploFuncoesEStructs;
+
+type
+    Ponto = record
+        x: Int32;
+        y: Int32;
+    end;
+
+function Dobro(val: Int32): Int32
+begin
+    return val * 2;
+end;
+
+function Somar(a: Int32, b: Int32): Int32
+begin
+    return a + b;
+end;
+
+program ExemploFuncoesEStructs;
+var
+    n1: Int32;
+    n2: Int32;
+    resultado: Int32;
+begin
+    PrintLn("--- Demonstracao Fase 23: Funcoes e Structs Auto-Hospedadas ---");
+    n1 := 15;
+    n2 := 25;
+    resultado := Somar(n1, n2);
+    PrintLn("Resultado da soma de 15 e 25:");
+    if resultado = 40 then
+        PrintLn("Soma calculada com sucesso: 40!");
+    end;
+    resultado := Dobro(resultado);
+    PrintLn("Dobro do resultado calculado com sucesso!");
+    PrintLn("--- Fim da Execucao! ---");
+end.

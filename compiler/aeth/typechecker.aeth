@@ -123,7 +123,15 @@ begin
     end;
 
     if expr.kind = ASTExprKind.ekCall then
-        return "Void";
+        found := LookupSymbol(borrow table, borrow expr.str_val, mut borrow sym);
+        if found then
+            return sym.type_name;
+        else
+            if expr.str_val = "PrintLn" then
+                return "Void";
+            end;
+            return "Int32";
+        end;
     end;
 
     return "Desconhecido";
@@ -203,13 +211,29 @@ begin
     end;
 end;
 
-function TypeCheckAST(borrow first_stmt: ASTStmtNode): UInt32
+function RegisterFunctions(mut borrow table: SymbolTable; borrow funcs_opt: Option<Box<ASTFunctionNode>>): Void
+begin
+    if funcs_opt.is_some then
+        DefineSymbol(mut borrow table, borrow funcs_opt.value.name, borrow funcs_opt.value.return_type, SymbolKind.skFunction, false);
+        if funcs_opt.value.next.is_some then
+            RegisterFunctions(mut borrow table, borrow funcs_opt.value.next);
+        end;
+    end;
+end;
+
+function TypeCheckProgram(borrow funcs_opt: Option<Box<ASTFunctionNode>>; borrow first_stmt: ASTStmtNode): UInt32
 var
     table: SymbolTable;
     err_count: UInt32;
 begin
     table := NewSymbolTable();
     err_count := 0;
+    RegisterFunctions(mut borrow table, borrow funcs_opt);
     CheckStmt(mut borrow table, borrow first_stmt, mut borrow err_count);
     return err_count;
+end;
+
+function TypeCheckAST(borrow first_stmt: ASTStmtNode): UInt32
+begin
+    return TypeCheckProgram(None, borrow first_stmt);
 end;

@@ -37,6 +37,33 @@ type
         next: Option<Box<ASTStmtNode>>;
     end;
 
+    ASTParamNode = record
+        name: String;
+        type_name: String;
+        next: Option<Box<ASTParamNode>>;
+    end;
+
+    ASTFunctionNode = record
+        name: String;
+        return_type: String;
+        params: Option<Box<ASTParamNode>>;
+        var_decls: Option<Box<ASTStmtNode>>;
+        body: Option<Box<ASTStmtNode>>;
+        next: Option<Box<ASTFunctionNode>>;
+    end;
+
+    ASTFieldNode = record
+        name: String;
+        type_name: String;
+        next: Option<Box<ASTFieldNode>>;
+    end;
+
+    ASTStructNode = record
+        name: String;
+        fields: Option<Box<ASTFieldNode>>;
+        next: Option<Box<ASTStructNode>>;
+    end;
+
 function NewIntExpr(borrow s: String): ASTExprNode
 begin
     return ASTExprNode(kind: ASTExprKind.ekIntLiteral, str_val: s, op: "", left: None, right: None);
@@ -95,4 +122,24 @@ end;
 function NewReturnStmt(take e: ASTExprNode): ASTStmtNode
 begin
     return ASTStmtNode(kind: ASTStmtKind.skReturn, name: "return", type_name: "", expr: Some(Box(e)), then_branch: None, else_branch: None, next: None);
+end;
+
+function NewParamNode(borrow pname: String; borrow ptname: String): ASTParamNode
+begin
+    return ASTParamNode(name: pname, type_name: ptname, next: None);
+end;
+
+function NewFunctionNode(borrow fname: String; borrow rtype: String): ASTFunctionNode
+begin
+    return ASTFunctionNode(name: fname, return_type: rtype, params: None, var_decls: None, body: None, next: None);
+end;
+
+function NewFieldNode(borrow fname: String; borrow ftname: String): ASTFieldNode
+begin
+    return ASTFieldNode(name: fname, type_name: ftname, next: None);
+end;
+
+function NewStructNode(borrow sname: String): ASTStructNode
+begin
+    return ASTStructNode(name: sname, fields: None, next: None);
 end;

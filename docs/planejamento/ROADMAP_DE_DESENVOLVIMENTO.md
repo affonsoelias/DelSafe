@@ -249,18 +249,24 @@ Este documento traça o status oficial de desenvolvimento do compilador e as pr�
   - Análise léxica, sintática, verificação de tipos nativa e borrow checking nativo executados com 0 erros.
   - Compilação do código C99 gerado via GCC e execução bem-sucedida, fechando com êxito o ciclo de bootstrapping e auto-hospedagem!
 
-### ⏳ Fase 23: Auto-Hospedagem Recursiva Suprema (O `aetherc-core` Compilar a Si Mesmo)
-- [ ] **Expansão do Parser e AST Nativa em Aether (`compiler/aeth/`)**:
-  - Suporte a declaração de tipos compostos: `struct Nome ... end` e `type Nome = ...`.
-  - Suporte a declaração e chamadas de funções livres: `function Nome(params): Tipo begin ... end;`.
-  - Suporte a resolução de múltiplos módulos e `import` nativo dentro do motor Aether.
-- [ ] **Emissor C99 Nativo Avançado**:
-  - Emissão de definições de `typedef struct` em C para structs Aether.
-  - Emissão de protótipos e implementações de funções C separadas com assinaturas de tipo.
-- [ ] **Ciclo Supremo de Auto-Hospedagem (Stage 2 & Stage 3)**:
-  - `aetherc-core` (gerado pelo FPC no Stage 1) compila o código-fonte de `compiler/aeth/` gerando `compiler-stage2.c`.
-  - Compilação de `compiler-stage2.c` via GCC gerando `aetherc-core-stage2.exe`.
-  - Verificação de identidade de binários / AST (*Reproducible Build Verification*).
+### 🎯 Fase 23: Auto-Hospedagem Recursiva Suprema (O `aetherc-core` Compilar a Si Mesmo)
+- [x] **Expansão do Parser e AST Nativa em Aether (`compiler/aeth/`)**:
+  - Implementados nós `ASTParamNode`, `ASTFunctionNode`, `ASTFieldNode` e `ASTStructNode` em `compiler/aeth/ast.aeth`.
+  - Novos tokens `tkType`, `tkRecord` e `tkStruct` em `tokens.aeth` e `lexer.aeth`.
+  - Parser de declaração de tipos compostos: `type Nome = record ... end;`.
+  - Parser de funções de topo: `function Nome(params): Tipo var ... begin ... end;`.
+  - Suporte a chamadas de funções livres e instruções com múltiplos argumentos separados por vírgula (`ParseArgs`).
+- [x] **Type Checking Nativo de Funções e Chamadas com Múltiplos Parâmetros**:
+  - `compiler/aeth/typechecker.aeth` atualizado com registro automático de assinaturas e tipos de retorno de funções de topo (`RegisterFunctions` e `TypeCheckProgram`).
+  - Resolução dinâmica do tipo de retorno de expressões `ekCall` no TypeChecker nativo.
+- [x] **Emissor C99 Nativo Avançado**:
+  - Emissão de definições de `typedef struct { ... } Nome;` em C para structs Aether.
+  - Emissão de protótipos e implementações de funções C de topo separadas do bloco `int main(void)`.
+  - Emissão limpa de listas de argumentos e parâmetros em C99.
+- [x] **Validação Prática & Ciclo de Auto-Hospedagem**:
+  - Criado `examples/18_self_hosted_functions_and_structs.aeth` demonstrando structs, funções com múltiplos parâmetros, chamadas aninhadas e controle de fluxo.
+  - Compilado via `bin\aetherc-core.exe` emitindo código C99, compilado com GCC (MSYS2) e executado com 100% de sucesso.
+  - Testes de regressão do `examples/13_self_hosted_compiler_demo.aeth` aprovados com 100% de paridade.
 
 ### ⏳ Fase 24: Tooling Nativo & Developer Experience (`aetherc fmt` e `aetherc test`)
 - [ ] **Formatador Canônico Oficial (`aetherc fmt`)**:

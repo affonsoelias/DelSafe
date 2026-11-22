@@ -40,11 +40,27 @@ begin
     end;
 end;
 
+function ParseArgs(mut borrow p: ParserState): Option<Box<ASTExprNode>>
+var
+    arg: ASTExprNode;
+    rest: Option<Box<ASTExprNode>>;
+begin
+    if p.current.kind = TokenKind.tkRParen then
+        return None;
+    end;
+    arg := ParseExpr(mut borrow p);
+    if MatchToken(mut borrow p, TokenKind.tkComma) then
+        rest := ParseArgs(mut borrow p);
+        arg.right := rest;
+    end;
+    return Some(Box(arg));
+end;
+
 function ParsePrimary(mut borrow p: ParserState): ASTExprNode
 var
     tok: Token;
     callee: String;
-    arg: ASTExprNode;
+    args_opt: Option<Box<ASTExprNode>>;
     inner: ASTExprNode;
 begin
     tok := p.current;
@@ -74,11 +90,10 @@ begin
     if tok.kind = TokenKind.tkIdentifier then
         callee := tok.text;
         AdvanceParser(mut borrow p);
-        if p.current.kind = TokenKind.tkLParen then
-            AdvanceParser(mut borrow p);
-            arg := ParseExpr(mut borrow p);
+        if MatchToken(mut borrow p, TokenKind.tkLParen) then
+            args_opt := ParseArgs(mut borrow p);
             MatchToken(mut borrow p, TokenKind.tkRParen);
-            return NewCallExpr(borrow callee, take arg);
+            return ASTExprNode(kind: ASTExprKind.ekCall, str_val: callee, op: "", left: args_opt, right: None);
         else
             return NewIdentExpr(borrow callee);
         end;
@@ -214,7 +229,7 @@ begin
         return NewReturnStmt(take ret_expr);
     end;
 
-    // 6. Atribuicao: vname := expr;
+    // 6. Atribuicao: vname := expr; ou Chamada: vname(args);
     if tok.kind = TokenKind.tkIdentifier then
         vname := tok.text;
         AdvanceParser(mut borrow p);
@@ -222,6 +237,12 @@ begin
             val_expr := ParseExpr(mut borrow p);
             MatchToken(mut borrow p, TokenKind.tkSemi);
             return NewAssignStmt(borrow vname, take val_expr);
+        end;
+        if MatchToken(mut borrow p, TokenKind.tkLParen) then
+            call_expr := ASTExprNode(kind: ASTExprKind.ekCall, str_val: vname, op: "", left: ParseArgs(mut borrow p), right: None);
+            MatchToken(mut borrow p, TokenKind.tkRParen);
+            MatchToken(mut borrow p, TokenKind.tkSemi);
+            return NewPrintLnStmt(take call_expr);
         end;
     end;
 
@@ -287,5 +308,168 @@ begin
             first.next := Some(Box(second));
             return first;
         end;
+    end;
+end;
+
+function ParseParams(mut borrow p: ParserState): Option<Box<ASTParamNode>>
+var
+    param_name: String;
+    param_type: String;
+    node: ASTParamNode;
+    rest: Option<Box<ASTParamNode>>;
+begin
+    if p.current.kind = TokenKind.tkRParen then
+        return None;
+    end;
+    if (p.current.kind = TokenKind.tkBorrow) or (p.current.kind = TokenKind.tkMut) or (p.current.kind = TokenKind.tkTake) then
+        AdvanceParser(mut borrow p);
+        if p.current.kind = TokenKind.tkMut then
+            AdvanceParser(mut borrow p);
+        end;
+    end;
+    if p.current.kind = TokenKind.tkIdentifier then
+        param_name := p.current.text;
+        AdvanceParser(mut borrow p);
+        MatchToken(mut borrow p, TokenKind.tkColon);
+        param_type := p.current.text;
+        AdvanceParser(mut borrow p);
+        node := NewParamNode(borrow param_name, borrow param_type);
+        if MatchToken(mut borrow p, TokenKind.tkComma) or MatchToken(mut borrow p, TokenKind.tkSemi) then
+            rest := ParseParams(mut borrow p);
+            node.next := rest;
+        end;
+        return Some(Box(node));
+    else
+        return None;
+    end;
+end;
+
+function ParseFunction(mut borrow p: ParserState): ASTFunctionNode
+var
+    fname: String;
+    rtype: String;
+    params_opt: Option<Box<ASTParamNode>>;
+    var_decls: ASTStmtNode;
+    body_stmts: ASTStmtNode;
+    fn_node: ASTFunctionNode;
+begin
+    AdvanceParser(mut borrow p); // consome 'function'
+    fname := p.current.text;
+    AdvanceParser(mut borrow p);
+    MatchToken(mut borrow p, TokenKind.tkLParen);
+    params_opt := ParseParams(mut borrow p);
+    MatchToken(mut borrow p, TokenKind.tkRParen);
+    rtype := "Void";
+    if MatchToken(mut borrow p, TokenKind.tkColon) then
+        rtype := p.current.text;
+        AdvanceParser(mut borrow p);
+    end;
+    MatchToken(mut borrow p, TokenKind.tkSemi);
+
+    var_decls := NewVarDeclStmt(borrow "", borrow "");
+    if p.current.kind = TokenKind.tkVar then
+        AdvanceParser(mut borrow p);
+        var_decls := ParseVarSection(mut borrow p);
+    end;
+
+    MatchToken(mut borrow p, TokenKind.tkBegin);
+    body_stmts := ParseBlock(mut borrow p);
+    MatchToken(mut borrow p, TokenKind.tkEnd);
+    MatchToken(mut borrow p, TokenKind.tkSemi);
+
+    fn_node := NewFunctionNode(borrow fname, borrow rtype);
+    fn_node.params := params_opt;
+    fn_node.var_decls := Some(Box(var_decls));
+    fn_node.body := Some(Box(body_stmts));
+    return fn_node;
+end;
+
+function ParseFunctions(mut borrow p: ParserState): Option<Box<ASTFunctionNode>>
+var
+    fn_node: ASTFunctionNode;
+    rest: Option<Box<ASTFunctionNode>>;
+begin
+    if (IsAtEnd(borrow p.lexer)) or (p.current.kind = TokenKind.tkProgram) or (p.current.kind = TokenKind.tkBegin) or (p.current.kind = TokenKind.tkEOF) then
+        return None;
+    end;
+    if p.current.kind = TokenKind.tkFunction then
+        fn_node := ParseFunction(mut borrow p);
+        rest := ParseFunctions(mut borrow p);
+        fn_node.next := rest;
+        return Some(Box(fn_node));
+    else
+        AdvanceParser(mut borrow p);
+        return ParseFunctions(mut borrow p);
+    end;
+end;
+
+function ParseFieldList(mut borrow p: ParserState): Option<Box<ASTFieldNode>>
+var
+    fname: String;
+    ftype: String;
+    node: ASTFieldNode;
+    rest: Option<Box<ASTFieldNode>>;
+begin
+    if (p.current.kind = TokenKind.tkEnd) or (IsAtEnd(borrow p.lexer)) then
+        return None;
+    end;
+    if p.current.kind = TokenKind.tkIdentifier then
+        fname := p.current.text;
+        AdvanceParser(mut borrow p);
+        MatchToken(mut borrow p, TokenKind.tkColon);
+        ftype := p.current.text;
+        AdvanceParser(mut borrow p);
+        MatchToken(mut borrow p, TokenKind.tkSemi);
+        node := NewFieldNode(borrow fname, borrow ftype);
+        rest := ParseFieldList(mut borrow p);
+        node.next := rest;
+        return Some(Box(node));
+    else
+        AdvanceParser(mut borrow p);
+        return ParseFieldList(mut borrow p);
+    end;
+end;
+
+function ParseStruct(mut borrow p: ParserState): ASTStructNode
+var
+    sname: String;
+    fields_opt: Option<Box<ASTFieldNode>>;
+    st_node: ASTStructNode;
+begin
+    if p.current.kind = TokenKind.tkType then
+        AdvanceParser(mut borrow p);
+    end;
+    sname := p.current.text;
+    AdvanceParser(mut borrow p);
+    if MatchToken(mut borrow p, TokenKind.tkEqual) then
+    end;
+    if (p.current.kind = TokenKind.tkRecord) or (p.current.kind = TokenKind.tkStruct) then
+        AdvanceParser(mut borrow p);
+    end;
+    fields_opt := ParseFieldList(mut borrow p);
+    MatchToken(mut borrow p, TokenKind.tkEnd);
+    MatchToken(mut borrow p, TokenKind.tkSemi);
+
+    st_node := NewStructNode(borrow sname);
+    st_node.fields := fields_opt;
+    return st_node;
+end;
+
+function ParseStructs(mut borrow p: ParserState): Option<Box<ASTStructNode>>
+var
+    st_node: ASTStructNode;
+    rest: Option<Box<ASTStructNode>>;
+begin
+    if (IsAtEnd(borrow p.lexer)) or (p.current.kind = TokenKind.tkFunction) or (p.current.kind = TokenKind.tkProgram) or (p.current.kind = TokenKind.tkBegin) or (p.current.kind = TokenKind.tkEOF) then
+        return None;
+    end;
+    if (p.current.kind = TokenKind.tkType) or (p.current.kind = TokenKind.tkStruct) then
+        st_node := ParseStruct(mut borrow p);
+        rest := ParseStructs(mut borrow p);
+        st_node.next := rest;
+        return Some(Box(st_node));
+    else
+        AdvanceParser(mut borrow p);
+        return ParseStructs(mut borrow p);
     end;
 end;

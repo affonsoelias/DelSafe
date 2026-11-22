@@ -24,6 +24,9 @@ type
         tkBorrow,
         tkMut,
         tkTake,
+        tkType,
+        tkRecord,
+        tkStruct,
         tkColon,
         tkSemi,
         tkComma,
@@ -79,6 +82,9 @@ begin
     if k = TokenKind.tkBorrow then return "borrow"; end;
     if k = TokenKind.tkMut then return "mut"; end;
     if k = TokenKind.tkTake then return "take"; end;
+    if k = TokenKind.tkType then return "type"; end;
+    if k = TokenKind.tkRecord then return "record"; end;
+    if k = TokenKind.tkStruct then return "struct"; end;
     if k = TokenKind.tkColon then return ":"; end;
     if k = TokenKind.tkSemi then return ";"; end;
     if k = TokenKind.tkComma then return ","; end;

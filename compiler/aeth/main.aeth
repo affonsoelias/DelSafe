@@ -18,6 +18,8 @@ var
     codigo_fonte: String;
     parser: ParserState;
     sb: StringBuilder;
+    structs_opt: Option<Box<ASTStructNode>>;
+    funcs_opt: Option<Box<ASTFunctionNode>>;
     var_decls: ASTStmtNode;
     body_stmts: ASTStmtNode;
     root_stmt: ASTStmtNode;
@@ -27,7 +29,7 @@ var
     erros_posse: UInt32;
 begin
     PrintLn("====================================================================");
-    PrintLn("  AetherLang Self-Hosted Compiler (aetherc-core) - Fase 22          ");
+    PrintLn("  AetherLang Self-Hosted Compiler (aetherc-core) - Fase 23          ");
     PrintLn("  Compilador Aether 100% Autônomo escrito na linguagem Aether!      ");
     PrintLn("====================================================================");
     PrintLn("");
@@ -62,9 +64,29 @@ begin
         PrintLn("      Fonte lido com sucesso (%d bytes).", Length(borrow codigo_fonte));
 
         parser := NewParser(borrow codigo_fonte);
+        structs_opt := None;
+        funcs_opt := None;
         var_decls := NewVarDeclStmt(borrow "", borrow "");
 
-        // 1. Procura secao 'var' ou 'begin'
+        // 1. Procura secao 'type' para structs
+        while (not IsAtEnd(borrow parser.lexer)) and (parser.current.kind <> TokenKind.tkType) and (parser.current.kind <> TokenKind.tkFunction) and (parser.current.kind <> TokenKind.tkVar) and (parser.current.kind <> TokenKind.tkBegin) do
+            AdvanceParser(mut borrow parser);
+        end;
+
+        if parser.current.kind = TokenKind.tkType then
+            structs_opt := ParseStructs(mut borrow parser);
+        end;
+
+        // 2. Procura secao 'function' para funcoes de topo
+        while (not IsAtEnd(borrow parser.lexer)) and (parser.current.kind <> TokenKind.tkFunction) and (parser.current.kind <> TokenKind.tkVar) and (parser.current.kind <> TokenKind.tkBegin) do
+            AdvanceParser(mut borrow parser);
+        end;
+
+        if parser.current.kind = TokenKind.tkFunction then
+            funcs_opt := ParseFunctions(mut borrow parser);
+        end;
+
+        // 3. Procura secao 'var' ou 'begin' do programa
         while (not IsAtEnd(borrow parser.lexer)) and (parser.current.kind <> TokenKind.tkVar) and (parser.current.kind <> TokenKind.tkBegin) do
             AdvanceParser(mut borrow parser);
         end;
@@ -74,7 +96,7 @@ begin
             var_decls := ParseVarSection(mut borrow parser);
         end;
 
-        // 2. Procura 'begin'
+        // 4. Procura 'begin' do programa
         while (not IsAtEnd(borrow parser.lexer)) and (parser.current.kind <> TokenKind.tkBegin) do
             AdvanceParser(mut borrow parser);
         end;
@@ -89,7 +111,7 @@ begin
 
         // [2/4] Verificacao de Tipos (Type Checker Nativo)
         PrintLn("[2/4] Verificacao de Tipos: Executando Type Checker nativo...");
-        erros_tipo := TypeCheckAST(borrow root_stmt);
+        erros_tipo := TypeCheckProgram(borrow funcs_opt, borrow root_stmt);
         if erros_tipo = 0 then
             PrintLn("      Verificacao de Tipos: OK (0 erros)");
         else
@@ -109,10 +131,19 @@ begin
             // [4/4] Emissao de Codigo C99
             PrintLn("[4/4] Emissao de Codigo C99...");
             sb := NewStringBuilder();
-            sb.Append(borrow "// Gerado pelo Compilador Auto-Hospedado Aether (aetherc-core)\n");
+            sb.Append(borrow "// Gerado pelo Compilador Auto-Hospedado Aether (aetherc-core) - Fase 23\n");
             sb.Append(borrow "#include <stdio.h>\n");
             sb.Append(borrow "#include <stdint.h>\n");
             sb.Append(borrow "#include <stdbool.h>\n\n");
+
+            if structs_opt.is_some then
+                sb.Append(borrow EmitStructsC(borrow structs_opt));
+            end;
+
+            if funcs_opt.is_some then
+                sb.Append(borrow EmitFunctionsC(borrow funcs_opt));
+            end;
+
             sb.Append(borrow "int main(void) {\n");
 
             codigo_c := EmitBlockC(borrow root_stmt);
