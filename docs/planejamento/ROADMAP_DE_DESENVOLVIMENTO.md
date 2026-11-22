@@ -409,3 +409,21 @@ Este documento traça o status oficial de desenvolvimento do compilador e as pr�
 - [ ] **Comandos de Publicação e Descoberta**:
   - Subcomandos na CLI: `aetherc pkg publish` e `aetherc pkg search <termo>`.
   - Sincronização automatizada de dependências e resolução de conflitos semânticos (SemVer).
+
+### ⏳ Fase 34: Integração de Primeira Classe com BlaiseVue (SFC `<script lang="aether">` & Wasm por Convenção)
+- [ ] **Arquitetura Modular Não-Invasiva**:
+  - Preservação do core do BlaiseVue (`core/*.pas` e `bin/bv.pas`) em Object Pascal puro, garantindo estabilidade operacional, sem dependências circulares e sem necessidade de dois compiladores para desenvolver o framework.
+  - O Aether atua como linguagem de desenvolvimento de primeira classe para o desenvolvedor de aplicações.
+- [ ] **Frontend Reativo com Aether em Componentes `.bv` (`<script lang="aether">`)**:
+  - Detecção no parser de SFC do `bv` de blocos `<script lang="aether">`.
+  - Pipeline de pré-processador: extração do script para arquivo `.aeth` temporário e invocação transparente de `aetherc emit pascal --unit` na pasta `generated/`.
+  - Validação estática de posse (Borrow Checker) e checagem de tipos em tempo de compilação antes de entregar a unit Pascal para o `pas2js`.
+  - Compatibilidade retroativa total: blocos `<script>` sem atributo continuam rodando Object Pascal puro.
+- [ ] **WebAssembly de Alta Performance por Convenção 1:1 (Abordagem A)**:
+  - Suporte a `<script lang="aether" target="wasm">` em componentes de computação pesada (gráficos, física, IA local, processamento de dados).
+  - O `bv` invoca `aetherc --target=wasm` gerando `dist/wasm/<NomeComponente>.wasm` via Clang wasm32.
+  - Resolução automática em runtime: o `bv` gera o código de carregamento inicial automático no ciclo `mounted` via `TBVWasm.LoadFromUrl('<NomeComponente>', '/wasm/<NomeComponente>.wasm')` utilizando o motor `core/BVWasm.pas` já existente no BlaiseVue.
+  - Despacho direto de métodos exportados do Wasm no template (`@click="executar"`) sem necessidade de bindings manuais.
+- [ ] **Backend e Serviços de Negócio com mORMot 2**:
+  - Suporte a serviços em `.aeth` (`backend/services/*.aeth`) transpilados para units Pascal consumidas diretamente pelos endpoints e controllers do Synopse mORMot 2.
+  - Blindagem das regras de negócio contra data races e vazamento de memória via Borrow Checker.
