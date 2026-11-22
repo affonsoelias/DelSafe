@@ -421,15 +421,15 @@ Este documento traça o status oficial de desenvolvimento do compilador e as pr�
   - Sincronização automatizada de dependências e resolução de compatibilidade semântica (SemVer `^`, `~`, `*` e exata).
   - Integração transparente com `aetherc add <pacote>` e `RestoreProjectDependencies` gravando integridade no `aether.lock`.
 
-### ⏳ Fase 34: Integração de Primeira Classe com BlaiseVue (SFC `<script lang="aether">`, Wasm & Backend Nativo em `vendor/`)
-- [ ] **Módulo Backend Aether Nativo Embutido em `vendor/`**:
-  - Implementação do servidor backend Aether como módulo nativo do BlaiseVue dentro do diretório `vendor/` (`vendor/aether-backend/`), eliminando a necessidade de repositório externo ou submódulos adicionais.
+### ⏳ Fase 34: Integração de Primeira Classe com BlaiseVue (SFC `<script lang="aether">`, Wasm & Backend Nativo Zephyr em `vendor/zephyr`)
+- [ ] **Módulo Backend Nativo Zephyr Embutido em `vendor/zephyr`**:
+  - Implementação do servidor backend **Zephyr** escrito em Aether como módulo nativo do BlaiseVue dentro do diretório `vendor/zephyr`, eliminando a necessidade de repositório externo ou submódulos adicionais.
   - **Simples como Express/FastAPI, Poderoso como mORMot**:
-    - Roteamento declarativo simples (`server.Get("/api/endpoint", handler)`), tipagem estática e serialização instantânea via `[derive(JSON)]`.
+    - Roteamento declarativo limpo (`server.Get("/api/endpoint", handler)`), tipagem estática e serialização instantânea via `[derive(JSON)]`.
     - Performance de ponta equiparável ou superior ao mORMot via sockets de kernel (`std/net.aeth`), buffers zero-copy garantidos pelo Borrow Checker e corrotinas cooperativas assíncronas (`Task<T>`).
-  - **Alvo de Compilação Duplo (Pascal ou C)**:
-    - **Binário Pascal (Padrão para Dev & FPC Toolchain)**: Compilado nativamente com o Free Pascal (`aetherc --target=pascal`), garantindo perfeita depuração, integração nativa com o ecossistema BlaiseVue e sem dependência de toolchains externas.
-    - **Binário C (Modo Produção de Máxima Performance)**: Compilado via GCC C99 (`aetherc --target=c`) com otimizações LTO (`-O3 -flto -s`), gerando binários ultra-compactos e o mais alto throughput de requisições por segundo.
+  - **Alvo de Compilação Duplo (Binário C ou Pascal)**:
+    - **Binário C via GCC (Modo Padrão de Produção & Máxima Performance)**: O Aether compila o Zephyr para C99 e o GCC gera um binário executável nativo ultra-compacto com otimizações LTO (`-O3 -flto -s`), alcançando o mais alto throughput de requisições por segundo e baixíssimo footprint de RAM.
+    - **Binário Pascal via FPC (Modo Desenvolvimento & Debug)**: O Aether compila para Object Pascal puro e o Free Pascal gera o binário nativo com integração e stack traces familiares do ecossistema FPC.
 - [ ] **Arquitetura Modular Não-Invasiva**:
   - Preservação do core do BlaiseVue (`core/*.pas` e `bin/bv.pas`) em Object Pascal puro, garantindo estabilidade operacional, sem dependências circulares e sem necessidade de dois compiladores para desenvolver o framework.
   - O Aether atua como linguagem de desenvolvimento de primeira classe para o desenvolvedor de aplicações.

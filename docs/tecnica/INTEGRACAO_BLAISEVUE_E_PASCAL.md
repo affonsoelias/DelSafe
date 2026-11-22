@@ -150,3 +150,18 @@ Quando a CLI do BlaiseVue invocar o compilador Aether em background, utilize `--
 aetherc emit pascal src/UserStore.aeth --unit --out-dir=.blaisevue/generated --silent
 ```
 Se a compilação tiver sucesso, o comando finaliza silenciosamente com **código de saída 0**. Se houver erro de tipos ou borrow checker, retorna **código de saída 1** e exibe a mensagem de erro formatada.
+
+---
+
+## 5. Zephyr: O Backend Nativo do BlaiseVue (`vendor/zephyr`)
+
+O **Zephyr** é o motor de backend de alto desempenho do BlaiseVue construído em Aether. Ele fica alocado diretamente na pasta `vendor/zephyr` do repositório do BlaiseVue, sem necessidade de repositórios externos.
+
+### 5.1 Características Principais
+1. **Simples e Declarativo**: Roteamento limpo no estilo Express/FastAPI, com suporte a handlers tipados e injeção de requisições/respostas.
+2. **Serialização Instantânea**: Utiliza a metaprogramação `[derive(JSON)]` do Aether para converter structs de domínio em JSON estrito sem código repetitivo.
+3. **Poder e Velocidade de Kernel**: Opera sobre os sockets de sistema operacional do Aether (`std/net.aeth`) com suporte a buffers zero-copy (assegurados pelo Borrow Checker) e corrotinas assíncronas `Task<T>`.
+
+### 5.2 Compilação Nativa Dupla (C ou Pascal)
+- **Produção (Binário C via GCC)**: O código Aether do Zephyr é compilado com `--target=c -O3 -flto -s`, gerando um executável nativo em C com o mais alto throughput de requisições por segundo e footprint de memória minúsculo (~20 KB a 50 KB).
+- **Desenvolvimento (Binário Pascal via FPC)**: Compilado com `--target=pascal`, oferecendo depuração rápida com FPC e perfeita integração com units Object Pascal legadas.
