@@ -421,7 +421,7 @@ Este documento traça o status oficial de desenvolvimento do compilador e as pr�
   - Sincronização automatizada de dependências e resolução de compatibilidade semântica (SemVer `^`, `~`, `*` e exata).
   - Integração transparente com `aetherc add <pacote>` e `RestoreProjectDependencies` gravando integridade no `aether.lock`.
 
-### ⏳ Fase 34: Integração de Primeira Classe com BlaiseVue (SFC `<script lang="aether">` & Wasm por Convenção)
+### ⏳ Fase 34: Integração de Primeira Classe com BlaiseVue (SFC `<script lang="aether">` & Wasm por Convenção) [Pausada]
 - [ ] **Arquitetura Modular Não-Invasiva**:
   - Preservação do core do BlaiseVue (`core/*.pas` e `bin/bv.pas`) em Object Pascal puro, garantindo estabilidade operacional, sem dependências circulares e sem necessidade de dois compiladores para desenvolver o framework.
   - O Aether atua como linguagem de desenvolvimento de primeira classe para o desenvolvedor de aplicações.
@@ -438,3 +438,49 @@ Este documento traça o status oficial de desenvolvimento do compilador e as pr�
 - [ ] **Backend e Serviços de Negócio com mORMot 2**:
   - Suporte a serviços em `.aeth` (`backend/services/*.aeth`) transpilados para units Pascal consumidas diretamente pelos endpoints e controllers do Synopse mORMot 2.
   - Blindagem das regras de negócio contra data races e vazamento de memória via Borrow Checker.
+
+---
+
+### ⏳ Fase 35: Exportação de Bibliotecas Nativas Compartilhadas (`.dll` / `.so` / `.dylib`) & Gerador de Headers C (`.h`)
+- [ ] **Compilação de Shared Libraries (`cdylib` / `--lib`)**:
+  - Configuração no manifesto `aether.json` (`"type": "cdylib"` ou `"type": "lib"`) e flags de linha de comando (`aetherc build --lib`, `--shared`).
+  - Suporte de backend duplo:
+    - **Free Pascal**: Emissão de arquivo `library <Nome>; ... exports ... end.` compilando para `.dll` (Windows), `.so` (Linux) ou `.dylib` (macOS).
+    - **C99 (GCC / Clang)**: Emissão com decoradores de exportação (`__declspec(dllexport)` no Windows, `__attribute__((visibility("default")))` no Linux) e compilação com `-shared -fPIC`.
+  - Anotação/palavra-chave `export function` com convenção de chamada explícita (`cdecl` / `stdcall`).
+- [ ] **Gerador Canônico de Cabeçalhos C (`.h`)**:
+  - Subcomando `aetherc emit-header [arquivo] [opcoes]` ou flag `aetherc build --emit-header`.
+  - Geração automática de arquivo `.h` compatível com C99 e C++ (`#ifdef __cplusplus extern "C" { #endif`).
+  - Mapeamento estrito de tipos: inteiros (`int32_t`, `int64_t`, `uint32_t`), floats (`float`, `double`), booleanos (`bool`), records exportados (`typedef struct { ... } Nome_t;`) e ponteiros com checagem de posse.
+- [ ] **Interoperabilidade Externa Validada**:
+  - Validação prática de consumo da DLL/SO compilada em Aether a partir de outras linguagens:
+    - Script em Python via `ctypes`.
+    - Executável C puro consumindo o `.h` gerado.
+    - Programa Object Pascal nativo via `external`.
+
+---
+
+### ⏳ Fase 36: Suíte Canônica de Benchmarking (`aetherc bench`) & Relatórios de Performance
+- [ ] **Harness de Benchmark Integrado na CLI**:
+  - Comando canônico `aetherc bench [filtro] [opcoes]`.
+  - Suporte a declaração de benchmarks via anotação `@bench` ou diretório padronizado `benches/*_bench.aeth`.
+  - Execução com repetições configuráveis (warm-up runs + medições de precisão em nanosegundos).
+  - Cálculo estatístico automático: tempo médio por iteração, desvio padrão, mediana e operações por segundo (ops/sec).
+- [ ] **Comparação Multi-Backend & Relatórios**:
+  - Execução comparativa automática entre os backends suportados (`--target=pascal`, `--target=c-gcc`, `--target=c-clang`).
+  - Relatório no terminal com tabelas formatadas em ASCII destacando o backend mais veloz e percentuais de diferença.
+  - Exportação de resultados para JSON (`--format=json`) para integração com pipelines de CI/CD e rastreamento de regressões de performance.
+
+---
+
+### ⏳ Fase 37: Derivação Automática de Metaprogramação (`[derive(Debug, JSON, Clone)]`)
+- [ ] **Sintaxe de Derivação na AST e Parser**:
+  - Suporte à sintaxe de atributos `[derive(Debug, JSON, Clone, Equals)]` aplicável a declarações de `record` e `enum`.
+  - Parser estendido para registrar metadados de derivação na AST (`TASTRecordDecl.Derives`, `TASTEnumDecl.Derives`).
+- [ ] **Geração Automática de Métodos em Tempo de Compilação**:
+  - **`Debug`**: Geração do método `ToString(borrow self): String` formatando o nome do tipo e todos os campos recursivamente no formato `Tipo { campo1: valor1, campo2: valor2 }`.
+  - **`JSON`**: Geração de `ToJSON(borrow self): String` e `FromJSON(json_str: String): Result<Self, String>` com serialização/desserialização segura integrada a `std.json`.
+  - **`Clone`**: Geração de `Clone(borrow self): Self` para duplicação explícita e segura de estruturas que contenham buffers e ponteiros sem violar o Borrow Checker.
+  - **`Equals`**: Implementação automática de operadores de igualdade (`=`, `<>`) comparando todos os membros estruturais.
+- [ ] **Validação com Amostras Reais**:
+  - Exemplo integrado demonstrando serialização JSON instantânea de estruturas complexas com zero código repetitivo.
