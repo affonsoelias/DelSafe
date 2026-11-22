@@ -460,16 +460,19 @@ Este documento traça o status oficial de desenvolvimento do compilador e as pr�
 
 ---
 
-### ⏳ Fase 36: Suíte Canônica de Benchmarking (`aetherc bench`) & Relatórios de Performance
-- [ ] **Harness de Benchmark Integrado na CLI**:
+### ✅ Fase 36: Suíte Canônica de Benchmarking (`aetherc bench`) & Relatórios de Performance (Concluído)
+- [x] **Harness de Benchmark Integrado na CLI**:
   - Comando canônico `aetherc bench [filtro] [opcoes]`.
   - Suporte a declaração de benchmarks via anotação `@bench` ou diretório padronizado `benches/*_bench.aeth`.
   - Execução com repetições configuráveis (warm-up runs + medições de precisão em nanosegundos).
   - Cálculo estatístico automático: tempo médio por iteração, desvio padrão, mediana e operações por segundo (ops/sec).
-- [ ] **Comparação Multi-Backend & Relatórios**:
-  - Execução comparativa automática entre os backends suportados (`--target=pascal`, `--target=c-gcc`, `--target=c-clang`).
-  - Relatório no terminal com tabelas formatadas em ASCII destacando o backend mais veloz e percentuais de diferença.
-  - Exportação de resultados para JSON (`--format=json`) para integração com pipelines de CI/CD e rastreamento de regressões de performance.
+- [x] **Comparação Multi-Backend & Relatórios**:
+  - Execução comparativa automática entre os backends suportados (`--target=pascal`, `--target=c-gcc`).
+  - Relatório no terminal com tabelas formatadas em ASCII destacando o backend mais veloz e percentuais de diferença (`[MAIS RAPIDO - X% faster]`).
+  - Exportação de resultados para JSON (`--format=json` / `--json`) para integração com pipelines de CI/CD e rastreamento de regressões de performance.
+- [x] **Validação Prática com Amostras Reais**:
+  - Microbenchmarks validados com Fibonacci e soma iterativa em `examples/test_fase36_bench/benches/math_bench.aeth`.
+  - Macrobenchmarks validados com programas executáveis autônomos em `examples/test_fase36_bench/benches/prog_bench.aeth`.
 
 ---
 

@@ -1,0 +1,22 @@
+module prog_bench;
+
+function ExecutaCalculo(): Int32;
+var
+    i: Int32;
+    s: Int32;
+begin
+    s := 0;
+    i := 0;
+    while i < 50000 do
+        s := s + (i mod 10);
+        i := i + 1;
+    end;
+    return s;
+end;
+
+program Main;
+var
+    res: Int32;
+begin
+    res := ExecutaCalculo();
+end.

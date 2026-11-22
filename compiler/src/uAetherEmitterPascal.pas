@@ -364,7 +364,11 @@ begin
       Result := Format('((not (%s)) or (%s))', [EmitExpr(Bin.Left), EmitExpr(Bin.Right)])
     else if Bin.Op = '/' then
     begin
-      if IsIntegerType(GetExprTypeName(Bin.Left)) or (Bin.Right is TASTLiteralExpr) then
+      if (Bin.Right is TASTLiteralExpr) and (Pos('.', TASTLiteralExpr(Bin.Right).Value) > 0) then
+        Result := Format('(%s / %s)', [EmitExpr(Bin.Left), EmitExpr(Bin.Right)])
+      else if (Bin.Left is TASTLiteralExpr) and (Pos('.', TASTLiteralExpr(Bin.Left).Value) > 0) then
+        Result := Format('(%s / %s)', [EmitExpr(Bin.Left), EmitExpr(Bin.Right)])
+      else if IsIntegerType(GetExprTypeName(Bin.Left)) and IsIntegerType(GetExprTypeName(Bin.Right)) then
         Result := Format('(%s div %s)', [EmitExpr(Bin.Left), EmitExpr(Bin.Right)])
       else
         Result := Format('(%s / %s)', [EmitExpr(Bin.Left), EmitExpr(Bin.Right)]);
@@ -414,6 +418,18 @@ begin
         ArgsStr := ArgsStr + ']';
         Result := 'WriteLn(Format(' + ArgsStr + '))';
       end;
+      Exit;
+    end;
+
+    if (Call.Callee = 'Float64') and (Call.Args.Count = 1) then
+    begin
+      Result := 'Double(' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + ')';
+      Exit;
+    end;
+
+    if (Call.Callee = 'Float32') and (Call.Args.Count = 1) then
+    begin
+      Result := 'Single(' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + ')';
       Exit;
     end;
 
@@ -1353,6 +1369,8 @@ begin
 
     Emit('// --- Aether Runtime Helpers & Monads ---');
     Emit('type');
+    Emit('  Float64 = Double;');
+    Emit('  Float32 = Single;');
     Emit('  generic TAetherResult<TVal, TErr> = record');
     Emit('    is_ok: Boolean;');
     Emit('    is_err: Boolean;');
@@ -1473,6 +1491,8 @@ begin
 
     Emit('// --- Aether Runtime Helpers ---');
     Emit('type');
+    Emit('  Float64 = Double;');
+    Emit('  Float32 = Single;');
     Emit('  generic TAetherResult<TVal, TErr> = record');
     Emit('    is_ok: Boolean;');
     Emit('    is_err: Boolean;');

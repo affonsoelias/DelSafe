@@ -25,7 +25,8 @@ uAetherOptimizer,
 uAetherBootstrap,
 uAetherDoc,
 uAetherRegistry,
-uAetherHeaderGen;
+uAetherHeaderGen,
+uAetherBenchmark;
 
 Procedure PrintBanner;
 Begin
@@ -43,6 +44,7 @@ Begin
   WriteLn('  build             Compila o projeto atual baseado no manifesto aether.json');
   WriteLn('  run               Compila e executa imediatamente o binario do projeto');
   WriteLn('  test [filtro]     Executa testes unitarios (arquivos individuais ou pasta tests/)');
+  WriteLn('  bench [filtro]    Executa suite de benchmarks (--compare para comparar backends)');
   WriteLn('  fmt [caminho]     Formata codigo Aether segundo as normas canonicas (--check para CI/CD)');
   WriteLn('  doc [caminho]     Gera documentacao canonica do projeto (HTML, Markdown e Doctests)');
   WriteLn('  emit-header <arq> Gera cabecalho C (.h) compativel com ANSI C/C++');
@@ -1613,9 +1615,10 @@ Var
   ProjConfig: TAetherProjectConfig;
   I, J: Integer;
   Arg: string;
-  PkgName, OptPath, OptGit, OptVer, FilterName, SubCmd: string;
+  PkgName, OptPath, OptGit, OptVer, FilterName, SubFilter, SubCmd: string;
   OptRegistry, SearchTerm: string;
-  IsDryRun, TargetIsLib: Boolean;
+  IsDryRun, TargetIsLib, OptionCompare, OptionJSON: Boolean;
+  BenchIters: Integer;
   TargetEntry, TargetOut, TargetBackend, TargetCC: string;
   EmitTargetPascal, EmitToStdout, HasTargetSpecified, EmitAsUnit, EmitSilent, EmitWatch: Boolean;
   EmitSource, EmitOut, EmitOutDir: string;
@@ -2216,6 +2219,42 @@ If (ParamCount >= 1) And (LowerCase(ParamStr(1)) = 'test') Then
             End;
   End;
 End;
+
+// Checa comando de benchmarks: bench [caminho_ou_filtro] [filtro_funcao] [--compare] [--json|--format=json] [--iters=N] [--target=pascal|c]
+If (ParamCount >= 1) And (LowerCase(ParamStr(1)) = 'bench') Then
+  Begin
+    FilterName := '';
+    SubFilter := '';
+    OptionTargetPascal := True;
+    OptionCompare := False;
+    OptionJSON := False;
+    BenchIters := 100;
+    I := 2;
+    While I <= ParamCount Do
+      Begin
+        Arg := ParamStr(I);
+        If Arg = '--target=pascal' Then OptionTargetPascal := True
+        Else If Arg = '--target=c' Then OptionTargetPascal := False
+        Else If (Arg = '--compare') Or (Arg = '--all-targets') Then OptionCompare := True
+        Else If (Arg = '--format=json') Or (Arg = '--json') Then OptionJSON := True
+        Else If Pos('--iters=', Arg) = 1 Then BenchIters := StrToIntDef(Copy(Arg, 9, Length(Arg)), 100)
+        Else If FilterName = '' Then FilterName := Arg
+        Else If SubFilter = '' Then SubFilter := Arg;
+        Inc(I);
+      End;
+    If Not OptionJSON Then
+      PrintBanner;
+    Try
+      HandleProjectBench(FilterName, SubFilter, OptionTargetPascal, OptionCompare, OptionJSON, BenchIters);
+      Halt(0);
+    Except
+      on E: Exception Do
+        Begin
+          WriteLn(ErrOutput, 'Erro durante execucao dos benchmarks: ', E.Message);
+          Halt(1);
+        End;
+    End;
+  End;
 
 // 2. Checa comandos de projeto: build / run
 If (ParamCount >= 1) And ((LowerCase(ParamStr(1)) = 'build') Or (LowerCase(

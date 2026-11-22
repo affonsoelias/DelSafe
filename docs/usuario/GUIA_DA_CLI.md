@@ -71,6 +71,46 @@ Os testes utilizam a instrução nativa de asserção:
 Assert(condicao, "Mensagem descritiva de falha");
 ```
 
+### `aetherc bench [filtro] [filtro_funcao] [opcoes]`
+Executa a suíte canônica de benchmarks do projeto (arquivos na pasta `benches/*_bench.aeth` ou arquivos individuais especificados diretamente):
+
+```bash
+# Executa todos os benchmarks da pasta benches/ com o backend padrao (Free Pascal)
+aetherc bench
+
+# Executa benchmarks com comparacao lado a lado entre backends (Free Pascal vs GCC C99)
+aetherc bench --compare
+
+# Filtra arquivo e/ou funcao de benchmark especifica
+aetherc bench math Fib
+aetherc bench benches/math_bench.aeth --iters=500
+
+# Executa e gera saida estruturada em JSON para pipelines de CI/CD
+aetherc bench --compare --json
+```
+
+**Sintaxe de Benchmarks no Código (`@bench`):**
+```aether
+module math_bench;
+
+function Fibonacci(n: Int32): Int32;
+...
+
+/// @bench
+function BenchFibonacci(): Void;
+var
+    res: Int32;
+begin
+    res := Fibonacci(30);
+end;
+```
+
+Opções de Benchmark:
+- `--compare`, `--all-targets`: Compila e executa os testes em ambos os backends (`Free Pascal` e `GCC C99`), reportando velocidade e destacando o mais rápido com percentual de ganho (`[MAIS RAPIDO - X% faster]`).
+- `--json`, `--format=json`: Saída estruturada em JSON (sem banners) com métricas de iterações, tempo médio (`avg_ms`), desvio padrão (`std_dev_ms`) e operações por segundo (`ops_per_sec`).
+- `--iters=<N>`: Configura o número de iterações do laço de medição (padrão: 100).
+- `--target=<pascal|c>`: Seleciona backend específico para execução individual.
+
 ### `aetherc clean`
 Remove com segurança todos os artefatos de compilação do projeto atual (`bin/`, `generated/` e `.aether/cache/build/`), preservando o código-fonte e o compilador:
 ```bash
