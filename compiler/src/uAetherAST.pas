@@ -179,6 +179,7 @@ type
   TASTForStmt = class(TASTStmt)
   public
     VarName: string;
+    ValVarName: string;
     StartExpr: TASTExpr;
     EndExpr: TASTExpr;
     CollectionExpr: TASTExpr;
@@ -397,6 +398,16 @@ type
     DocComment: string;
     CfgCondition: string;
     constructor Create(ALine, ACol: Integer; const AName, AKeyType, AValType: string);
+    function Dump(Indent: Integer = 0): string; override;
+  end;
+
+  TASTTypeAliasDecl = class(TASTNode)
+  public
+    Name: string;
+    TargetType: string;
+    DocComment: string;
+    CfgCondition: string;
+    constructor Create(ALine, ACol: Integer; const AName, ATargetType: string);
     function Dump(Indent: Integer = 0): string; override;
   end;
 
@@ -947,6 +958,7 @@ constructor TASTForStmt.Create(ALine, ACol: Integer; const AVarName: string; ASt
 begin
   inherited Create(ALine, ACol);
   VarName := AVarName;
+  ValVarName := '';
   StartExpr := AStart;
   EndExpr := AEnd;
   CollectionExpr := nil;
@@ -970,9 +982,14 @@ var
 begin
   if Assigned(CollectionExpr) then
   begin
-    Result := MakeIndent(Indent) + Format('Para (For-In) %s in:', [VarName]) + LineEnding +
-              CollectionExpr.Dump(Indent + 1) + LineEnding +
-              MakeIndent(Indent) + 'Faca (Do):';
+    if ValVarName <> '' then
+      Result := MakeIndent(Indent) + Format('Para (For-In) %s, %s in:', [VarName, ValVarName]) + LineEnding +
+                CollectionExpr.Dump(Indent + 1) + LineEnding +
+                MakeIndent(Indent) + 'Faca (Do):'
+    else
+      Result := MakeIndent(Indent) + Format('Para (For-In) %s in:', [VarName]) + LineEnding +
+                CollectionExpr.Dump(Indent + 1) + LineEnding +
+                MakeIndent(Indent) + 'Faca (Do):';
   end
   else
   begin
@@ -1487,6 +1504,22 @@ begin
   Result := MakeIndent(Indent) + Format('Tipo Mapa: %s = map[%s]%s', [Name, KeyType, ValType]);
 end;
 
+{ TASTTypeAliasDecl }
+
+constructor TASTTypeAliasDecl.Create(ALine, ACol: Integer; const AName, ATargetType: string);
+begin
+  inherited Create(ALine, ACol);
+  Name := AName;
+  TargetType := ATargetType;
+  DocComment := '';
+  CfgCondition := '';
+end;
+
+function TASTTypeAliasDecl.Dump(Indent: Integer): string;
+begin
+  Result := MakeIndent(Indent) + Format('Tipo Alias: %s = %s', [Name, TargetType]);
+end;
+
 { TASTParam }
 
 constructor TASTParam.Create(ALine, ACol: Integer; const AName, AType: string; AOwnership: TOwnershipKind);
@@ -1833,6 +1866,7 @@ begin
                                  TASTForStmt(Node).IsDownTo);
     if Assigned(TASTForStmt(Node).CollectionExpr) then
       TASTForStmt(Result).CollectionExpr := TASTExpr(CloneASTNode(TASTForStmt(Node).CollectionExpr));
+    TASTForStmt(Result).ValVarName := TASTForStmt(Node).ValVarName;
     for I := 0 to TASTForStmt(Node).Body.Count - 1 do
       TASTForStmt(Result).Body.Add(CloneASTNode(TASTForStmt(Node).Body[I]));
     Exit;

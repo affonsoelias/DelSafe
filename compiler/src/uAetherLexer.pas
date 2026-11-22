@@ -560,17 +560,35 @@ begin
     '+':
       begin
         ReadChar;
-        Result := CreateToken(tokPlus, '+', StartLine, StartCol);
+        if PeekChar = '=' then
+        begin
+          ReadChar;
+          Result := CreateToken(tokPlusAssign, '+=', StartLine, StartCol);
+        end
+        else
+          Result := CreateToken(tokPlus, '+', StartLine, StartCol);
       end;
     '-':
       begin
         ReadChar;
-        Result := CreateToken(tokMinus, '-', StartLine, StartCol);
+        if PeekChar = '=' then
+        begin
+          ReadChar;
+          Result := CreateToken(tokMinusAssign, '-=', StartLine, StartCol);
+        end
+        else
+          Result := CreateToken(tokMinus, '-', StartLine, StartCol);
       end;
     '*':
       begin
         ReadChar;
-        Result := CreateToken(tokStar, '*', StartLine, StartCol);
+        if PeekChar = '=' then
+        begin
+          ReadChar;
+          Result := CreateToken(tokStarAssign, '*=', StartLine, StartCol);
+        end
+        else
+          Result := CreateToken(tokStar, '*', StartLine, StartCol);
       end;
     '/':
       begin

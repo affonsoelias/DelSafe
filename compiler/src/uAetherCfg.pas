@@ -156,6 +156,11 @@ begin
     begin
       if (TASTMapDecl(TypeNode).CfgCondition <> '') and not EvaluateCfgCondition(TASTMapDecl(TypeNode).CfgCondition, TargetOS, TargetBackend, IsRelease) then
         AModule.Types.Delete(I);
+    end
+    else if TypeNode is TASTTypeAliasDecl then
+    begin
+      if (TASTTypeAliasDecl(TypeNode).CfgCondition <> '') and not EvaluateCfgCondition(TASTTypeAliasDecl(TypeNode).CfgCondition, TargetOS, TargetBackend, IsRelease) then
+        AModule.Types.Delete(I);
     end;
     Dec(I);
   end;

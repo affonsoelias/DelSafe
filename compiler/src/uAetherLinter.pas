@@ -192,6 +192,8 @@ begin
   begin
     ForStmt := TASTForStmt(Stmt);
     IdentList.Add(ForStmt.VarName);
+    if ForStmt.ValVarName <> '' then
+      IdentList.Add(ForStmt.ValVarName);
     if Assigned(ForStmt.CollectionExpr) then
       CollectIdentifiersInExpr(ForStmt.CollectionExpr, IdentList)
     else

@@ -110,7 +110,18 @@ for ch in "Aether" do
         PrintLn("Found A!");
     end;
 end;
+
+// Iterating keys or key-value pairs in associative maps
+for keyOnly in scores do
+    PrintLn(keyOnly);
+end;
+
+for key, val in scores do
+    total += val;
+end;
 ```
+
+You can also update numeric targets using compound assignment operators (`+=`, `-=`, `*=`) or `Inc(x)` / `Dec(x)` on variables, record fields, array elements, and maps.
 
 ---
 
@@ -327,14 +338,21 @@ match command with
     _:
         PrintLn("Unknown command");
 end;
+
+match optVal with
+    case Some(let v):
+        total += v;
+    case None:
+        total += 0;
+end;
 ```
 
 ---
 
 ## 5. Summary
 1. `if...then...else...end;` provides unambiguous nesting without `begin`.
-2. Loops use `while <cond> do ... end;`, `for` (`to` / `downto` / `in`), and `repeat ... until` with `break` and `continue`.
+2. Loops use `while <cond> do ... end;`, `for` (`to` / `downto` / `in` over arrays, `String`, and `map[K]V`), and `repeat ... until` with `break` and `continue`, plus `+=`/`-=`/`*=` and `Inc`/`Dec`.
 3. `defer` ensures deterministic LIFO cleanup, while `try ... except` and `raise` handle system faults.
-4. Enums are algebraic types, and `match` handles `Enum`, `Option<T>`, `Result<T, E>`, primitives, and `_` wildcards with compile-time exhaustiveness checking.
+4. Enums are algebraic types, and `match` handles `Enum`, value `Option<T>`, typed `Result<T, E>`, primitives, and `_` wildcards with compile-time exhaustiveness checking.
 
 ➡️ **Next:** **[Chapter 04: Functions & Contracts](04_FUNCTIONS_AND_CONTRACTS.md)**

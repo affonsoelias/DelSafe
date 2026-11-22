@@ -111,6 +111,9 @@ type
     tokDot,            // .
     tokDotDot,         // ..
     tokAssign,         // :=
+    tokPlusAssign,     // +=
+    tokMinusAssign,    // -=
+    tokStarAssign,     // *=
     tokEqual,          // =
     tokFatArrow,       // =>
     tokNotEqual,       // <>
@@ -231,6 +234,9 @@ begin
     tokDot:           Result := '.';
     tokDotDot:        Result := '..';
     tokAssign:        Result := ':=';
+    tokPlusAssign:    Result := '+=';
+    tokMinusAssign:   Result := '-=';
+    tokStarAssign:    Result := '*=';
     tokEqual:         Result := '=';
     tokFatArrow:      Result := '=>';
     tokNotEqual:      Result := '<>';

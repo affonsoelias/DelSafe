@@ -227,6 +227,13 @@ begin
   FGlobalScope.Define(TSymbol.Create('Remove', skFunction, 'Void', 0, 0));
   FGlobalScope.Define(TSymbol.Create('SetLength', skFunction, 'Void', 0, 0));
   FGlobalScope.Define(TSymbol.Create('Push', skFunction, 'Void', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('Pop', skFunction, 'Any', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('Clear', skFunction, 'Void', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('Ord', skFunction, 'Int32', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('Chr', skFunction, 'Char', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('SizeOf', skFunction, 'Int32', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('Inc', skFunction, 'Void', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('Dec', skFunction, 'Void', 0, 0));
   FGlobalScope.Define(TSymbol.Create('__InterpToStr', skFunction, 'String', 0, 0));
   FGlobalScope.Define(TSymbol.Create('CharToStr', skFunction, 'String', 0, 0));
   FGlobalScope.Define(TSymbol.Create('CharAt', skFunction, 'String', 0, 0));

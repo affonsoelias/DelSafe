@@ -29,8 +29,14 @@ type
     procedure EmitStmtList(List: TASTNodeList; IsLoopBody: Boolean = False);
 
     function IsEnumName(const AName: string): Boolean;
+    function ResolveAliasType(const AType: string): string;
     function IsSetType(const AName: string): Boolean;
     function IsDynamicArrayType(const AName: string): Boolean;
+    function IsValueOptionType(const AType: string): Boolean;
+    function SplitResultTypes(const AType: string; out ValType, ErrType: string): Boolean;
+    function IsTypeIdentifier(const AName: string): Boolean;
+    function EmitMonadFieldExtract(const ExprStr, FieldType, NumField, StrField: string): string;
+    procedure EmitArrayLiteralAssign(const TargetStr, TargetType: string; SetLit: TASTSetLiteralExpr);
     function IsMapType(const AType: string; out KeyType, ValType: string): Boolean;
     function MapTag(const K, V: string): string;
     function NormalizeIntLit(const Val: string): string;
@@ -59,6 +65,7 @@ type
     procedure EmitSetDecl(SetD: TASTSetDecl);
     procedure EmitSubrangeDecl(SubR: TASTSubrangeDecl);
     procedure EmitMapDecl(MapD: TASTMapDecl);
+    procedure EmitTypeAliasDecl(AliasD: TASTTypeAliasDecl);
     procedure EmitFunction(Func: TASTFunction);
     procedure EmitProgramBlock(Prog: TASTProgramBlock);
   public
@@ -123,33 +130,167 @@ begin
         Exit(True);
 end;
 
+function TAetherEmitterC.ResolveAliasType(const AType: string): string;
+var
+  Cur: string;
+  Hops, I: Integer;
+begin
+  Cur := Trim(AType);
+  Hops := 0;
+  while (Hops < 8) and Assigned(FModule) do
+  begin
+    I := 0;
+    while I < FModule.Types.Count do
+    begin
+      if (FModule.Types[I] is TASTTypeAliasDecl) and SameText(TASTTypeAliasDecl(FModule.Types[I]).Name, Cur) then
+      begin
+        Cur := Trim(TASTTypeAliasDecl(FModule.Types[I]).TargetType);
+        Inc(Hops);
+        Break;
+      end;
+      Inc(I);
+    end;
+    if I >= FModule.Types.Count then Break;
+  end;
+  Result := Cur;
+end;
+
 function TAetherEmitterC.IsSetType(const AName: string): Boolean;
 var
   I: Integer;
+  T: string;
 begin
-  if (Pos('set of', AName) > 0) or (AName = 'SetLiteral') then
+  T := ResolveAliasType(AName);
+  if (Pos('set of', T) > 0) or (T = 'SetLiteral') then
     Exit(True);
   Result := False;
   if Assigned(FModule) then
     for I := 0 to FModule.Types.Count - 1 do
       if (TASTNode(FModule.Types[I]) is TASTSetDecl) and
-         SameText(TASTSetDecl(FModule.Types[I]).Name, AName) then
+         SameText(TASTSetDecl(FModule.Types[I]).Name, T) then
         Exit(True);
 end;
 
 function TAetherEmitterC.IsDynamicArrayType(const AName: string): Boolean;
 var
   I: Integer;
+  T: string;
 begin
-  if Pos('array of ', AName) = 1 then
+  T := ResolveAliasType(AName);
+  if Pos('array of ', T) = 1 then
     Exit(True);
   Result := False;
   if Assigned(FModule) then
     for I := 0 to FModule.Types.Count - 1 do
       if (TASTNode(FModule.Types[I]) is TASTArrayDecl) and
-         SameText(TASTArrayDecl(FModule.Types[I]).Name, AName) and
+         SameText(TASTArrayDecl(FModule.Types[I]).Name, T) and
          (TASTArrayDecl(FModule.Types[I]).Dims.Count = 0) then
         Exit(True);
+end;
+
+function TAetherEmitterC.IsValueOptionType(const AType: string): Boolean;
+var
+  T, Inner: string;
+begin
+  T := ResolveAliasType(AType);
+  if Pos('Option<', T) <> 1 then Exit(False);
+  Inner := ResolveAliasType(Trim(Copy(T, 8, Length(T) - 8)));
+  Result := (Inner <> '') and (Pos('Box<', Inner) <> 1) and (Pos('^', Inner) <> 1) and (Inner <> 'Pointer');
+end;
+
+function TAetherEmitterC.SplitResultTypes(const AType: string; out ValType, ErrType: string): Boolean;
+var
+  T, Inner: string;
+  I, Depth, CommaPos: Integer;
+begin
+  ValType := 'Float64';
+  ErrType := 'Int32';
+  T := ResolveAliasType(AType);
+  if Pos('Result<', T) <> 1 then Exit(False);
+  Inner := Copy(T, 8, Length(T) - 8);
+  Depth := 0;
+  CommaPos := 0;
+  for I := 1 to Length(Inner) do
+  begin
+    if Inner[I] = '<' then Inc(Depth)
+    else if Inner[I] = '>' then Dec(Depth)
+    else if (Inner[I] = ',') and (Depth = 0) then
+    begin
+      CommaPos := I;
+      Break;
+    end;
+  end;
+  if CommaPos > 0 then
+  begin
+    ValType := Trim(Copy(Inner, 1, CommaPos - 1));
+    ErrType := Trim(Copy(Inner, CommaPos + 1, Length(Inner)));
+    Exit(True);
+  end;
+  Result := False;
+end;
+
+function TAetherEmitterC.IsTypeIdentifier(const AName: string): Boolean;
+var
+  I: Integer;
+begin
+  if Assigned(FCurrentFunc) then
+  begin
+    for I := 0 to FCurrentFunc.LocalVars.Count - 1 do
+      if SameText(TASTVarDecl(FCurrentFunc.LocalVars[I]).Name, AName) then Exit(False);
+    for I := 0 to FCurrentFunc.Params.Count - 1 do
+      if SameText(TASTParam(FCurrentFunc.Params[I]).Name, AName) then Exit(False);
+  end;
+  if Assigned(FProgramBlock) then
+    for I := 0 to FProgramBlock.LocalVars.Count - 1 do
+      if SameText(TASTVarDecl(FProgramBlock.LocalVars[I]).Name, AName) then Exit(False);
+  if (AName = 'Int8') or (AName = 'Int16') or (AName = 'Int32') or (AName = 'Int64') or
+     (AName = 'UInt8') or (AName = 'UInt16') or (AName = 'UInt32') or (AName = 'UInt64') or
+     (AName = 'Float32') or (AName = 'Float64') or (AName = 'Bool') or (AName = 'Char') or
+     (AName = 'String') or (AName = 'Pointer') then
+    Exit(True);
+  if Assigned(FModule) then
+  begin
+    for I := 0 to FModule.Types.Count - 1 do
+    begin
+      if ((FModule.Types[I] is TASTRecordDecl) and SameText(TASTRecordDecl(FModule.Types[I]).Name, AName)) or
+         ((FModule.Types[I] is TASTEnumDecl) and SameText(TASTEnumDecl(FModule.Types[I]).Name, AName)) or
+         ((FModule.Types[I] is TASTArrayDecl) and SameText(TASTArrayDecl(FModule.Types[I]).Name, AName)) or
+         ((FModule.Types[I] is TASTSetDecl) and SameText(TASTSetDecl(FModule.Types[I]).Name, AName)) or
+         ((FModule.Types[I] is TASTSubrangeDecl) and SameText(TASTSubrangeDecl(FModule.Types[I]).Name, AName)) or
+         ((FModule.Types[I] is TASTMapDecl) and SameText(TASTMapDecl(FModule.Types[I]).Name, AName)) or
+         ((FModule.Types[I] is TASTTypeAliasDecl) and SameText(TASTTypeAliasDecl(FModule.Types[I]).Name, AName)) then
+        Exit(True);
+    end;
+  end;
+  Result := False;
+end;
+
+function TAetherEmitterC.EmitMonadFieldExtract(const ExprStr, FieldType, NumField, StrField: string): string;
+var
+  R: string;
+begin
+  R := ResolveAliasType(FieldType);
+  if R = 'String' then
+    Result := ExprStr + '.' + StrField
+  else if R = 'Bool' then
+    Result := Format('(%s.%s != 0)', [ExprStr, NumField])
+  else if R = 'Char' then
+    Result := Format('((char)(int)(%s.%s))', [ExprStr, NumField])
+  else if IsIntCType(R) or IsEnumName(R) then
+    Result := Format('((%s)(%s.%s))', [EmitTypeRef(FieldType), ExprStr, NumField])
+  else
+    Result := ExprStr + '.' + NumField;
+end;
+
+procedure TAetherEmitterC.EmitArrayLiteralAssign(const TargetStr, TargetType: string; SetLit: TASTSetLiteralExpr);
+var
+  I: Integer;
+begin
+  if IsDynamicArrayType(TargetType) then
+    Emit(Format('%s = (__typeof__(%s))AetherDynSetLength(%s, sizeof(*(%s)), %d);',
+      [TargetStr, TargetStr, TargetStr, TargetStr, SetLit.Elements.Count]));
+  for I := 0 to SetLit.Elements.Count - 1 do
+    Emit(Format('(%s)[%d] = %s;', [TargetStr, I, EmitExpr(TASTExpr(SetLit.Elements[I]))]));
 end;
 
 function TAetherEmitterC.IsVarModifiedInTry(const AVarName: string; Nodes: TASTNodeList; InTry: Boolean): Boolean;
@@ -251,23 +392,25 @@ function TAetherEmitterC.IsMapType(const AType: string; out KeyType, ValType: st
 var
   PClose, I: Integer;
   MapD: TASTMapDecl;
+  T: string;
 begin
   KeyType := '';
   ValType := '';
-  if Pos('map[', AType) = 1 then
+  T := ResolveAliasType(AType);
+  if Pos('map[', T) = 1 then
   begin
-    PClose := Pos(']', AType);
+    PClose := Pos(']', T);
     if PClose > 4 then
     begin
-      KeyType := Trim(Copy(AType, 5, PClose - 5));
-      ValType := Trim(Copy(AType, PClose + 1, Length(AType)));
+      KeyType := Trim(Copy(T, 5, PClose - 5));
+      ValType := Trim(Copy(T, PClose + 1, Length(T)));
       Exit(True);
     end;
   end;
   if Assigned(FModule) then
   begin
     for I := 0 to FModule.Types.Count - 1 do
-      if (FModule.Types[I] is TASTMapDecl) and SameText(TASTMapDecl(FModule.Types[I]).Name, AType) then
+      if (FModule.Types[I] is TASTMapDecl) and SameText(TASTMapDecl(FModule.Types[I]).Name, T) then
       begin
         MapD := TASTMapDecl(FModule.Types[I]);
         KeyType := MapD.KeyType;
@@ -319,14 +462,16 @@ end;
 function TAetherEmitterC.IsIntCType(const AType: string): Boolean;
 var
   I: Integer;
+  T: string;
 begin
-  Result := (AType = 'Int8') or (AType = 'Int16') or (AType = 'Int32') or (AType = 'Int64') or
-            (AType = 'UInt8') or (AType = 'UInt16') or (AType = 'UInt32') or (AType = 'UInt64') or
-            (AType = 'IntLiteral');
+  T := ResolveAliasType(AType);
+  Result := (T = 'Int8') or (T = 'Int16') or (T = 'Int32') or (T = 'Int64') or
+            (T = 'UInt8') or (T = 'UInt16') or (T = 'UInt32') or (T = 'UInt64') or
+            (T = 'IntLiteral');
   if (not Result) and Assigned(FModule) then
   begin
     for I := 0 to FModule.Types.Count - 1 do
-      if (FModule.Types[I] is TASTSubrangeDecl) and SameText(TASTSubrangeDecl(FModule.Types[I]).Name, AType) then
+      if (FModule.Types[I] is TASTSubrangeDecl) and SameText(TASTSubrangeDecl(FModule.Types[I]).Name, T) then
         Exit(TASTSubrangeDecl(FModule.Types[I]).BaseType <> 'Char');
   end;
 end;
@@ -368,7 +513,7 @@ var
   I, K: Integer;
   S: TASTStmt;
   ForStmt: TASTForStmt;
-  ElemT: string;
+  ElemT, KeyT, ValT, ColT: string;
 
   procedure AddAutoVar(const AName, AType: string);
   var
@@ -391,11 +536,21 @@ begin
       ForStmt := TASTForStmt(S);
       if Assigned(ForStmt.CollectionExpr) then
       begin
-        ElemT := GetCollectionElemType(ForStmt.CollectionExpr);
-        if ElemT <> '' then
-          AddAutoVar(ForStmt.VarName, EmitTypeRef(ElemT))
+        ColT := GetExprTypeName(ForStmt.CollectionExpr);
+        if IsMapType(ColT, KeyT, ValT) then
+        begin
+          AddAutoVar(ForStmt.VarName, EmitTypeRef(KeyT));
+          if ForStmt.ValVarName <> '' then
+            AddAutoVar(ForStmt.ValVarName, EmitTypeRef(ValT));
+        end
         else
-          AddAutoVar(ForStmt.VarName, 'int32_t');
+        begin
+          ElemT := GetCollectionElemType(ForStmt.CollectionExpr);
+          if ElemT <> '' then
+            AddAutoVar(ForStmt.VarName, EmitTypeRef(ElemT))
+          else
+            AddAutoVar(ForStmt.VarName, 'int32_t');
+        end;
       end
       else
         AddAutoVar(ForStmt.VarName, 'int32_t');
@@ -611,7 +766,25 @@ begin
   else if Expr is TASTMemberAccessExpr then
   begin
     Acc := TASTMemberAccessExpr(Expr);
-    TargetType := GetExprTypeName(Acc.Target);
+    TargetType := ResolveAliasType(GetExprTypeName(Acc.Target));
+    if (Pos('Result', TargetType) = 1) then
+    begin
+      if SameText(Acc.Member, 'is_ok') or SameText(Acc.Member, 'is_err') then Exit('Bool');
+      SplitResultTypes(TargetType, KeyType, ValType);
+      if SameText(Acc.Member, 'value') then Exit(KeyType);
+      if SameText(Acc.Member, 'error') then Exit(ValType);
+    end;
+    if (Pos('Option<', TargetType) = 1) then
+    begin
+      if SameText(Acc.Member, 'is_some') or SameText(Acc.Member, 'is_none') then Exit('Bool');
+      if SameText(Acc.Member, 'value') then
+      begin
+        CleanTarget := Trim(Copy(TargetType, 8, Length(TargetType) - 8));
+        if Pos('Box<', CleanTarget) = 1 then
+          CleanTarget := Trim(Copy(CleanTarget, 5, Length(CleanTarget) - 5));
+        Exit(CleanTarget);
+      end;
+    end;
     if Pos('Box<', TargetType) > 0 then
     begin
       P1 := Pos('Box<', TargetType);
@@ -672,8 +845,10 @@ begin
   end
   else if Expr is TASTIndexExpr then
   begin
-    TargetType := GetExprTypeName(TASTIndexExpr(Expr).Target);
-    if IsMapType(TargetType, KeyType, ValType) then
+    TargetType := ResolveAliasType(GetExprTypeName(TASTIndexExpr(Expr).Target));
+    if TargetType = 'String' then
+      Exit('Char')
+    else if IsMapType(TargetType, KeyType, ValType) then
       Exit(ValType)
     else if Pos('array of ', TargetType) = 1 then
       Exit(Trim(Copy(TargetType, 10, Length(TargetType))))
@@ -688,7 +863,7 @@ begin
   end
   else if Expr is TASTUnaryExpr then
   begin
-    TargetType := GetExprTypeName(TASTUnaryExpr(Expr).Expr);
+    TargetType := ResolveAliasType(GetExprTypeName(TASTUnaryExpr(Expr).Expr));
     if TASTUnaryExpr(Expr).Op = '@' then
       Exit('^' + TargetType)
     else if (TASTUnaryExpr(Expr).Op = '^') and (Pos('^', TargetType) = 1) then
@@ -702,12 +877,25 @@ begin
     if Call.Callee = 'Box' then Exit('Box');
     if Call.Callee = 'Some' then Exit('Option');
     if (Call.Callee = 'ReadFile') or (Call.Callee = 'CharAt') or (Call.Callee = 'Substring') or (Call.Callee = 'ToString') or (Call.Callee = 'IntToStr') or (Call.Callee = 'FloatToStr') or (Call.Callee = 'BoolToStr') or (Call.Callee = 'CharToStr') or (Call.Callee = '__InterpToStr') or (Call.Callee = 'SocketRecv') or (Call.Callee = 'ParamStr') then Exit('String');
-    if SameText(Call.Callee, 'Length') or SameText(Call.Callee, 'Count') or (Call.Callee = 'StrToInt') or (Call.Callee = 'SocketCreate') or (Call.Callee = 'SocketListen') or (Call.Callee = 'SocketAccept') or (Call.Callee = 'SocketConnect') or (Call.Callee = 'SocketSend') or (Call.Callee = 'ParamCount') then Exit('Int32');
+    if SameText(Call.Callee, 'Chr') or SameText(Call.Callee, 'Char') then Exit('Char');
+    if SameText(Call.Callee, 'Pop') and (Call.Args.Count = 1) then
+    begin
+      TargetType := ResolveAliasType(GetExprTypeName(TASTCallArg(Call.Args[0]).Expr));
+      if Pos('array of ', TargetType) = 1 then
+        Exit(Trim(Copy(TargetType, 10, Length(TargetType))));
+      if Assigned(FModule) then
+        for I := 0 to FModule.Types.Count - 1 do
+          if (FModule.Types[I] is TASTArrayDecl) and SameText(TASTArrayDecl(FModule.Types[I]).Name, TargetType) then
+            Exit(TASTArrayDecl(FModule.Types[I]).ElemType);
+    end;
+    if SameText(Call.Callee, 'Length') or SameText(Call.Callee, 'Count') or SameText(Call.Callee, 'Ord') or SameText(Call.Callee, 'SizeOf') or
+       (Call.Callee = 'StrToInt') or (Call.Callee = 'SocketCreate') or (Call.Callee = 'SocketListen') or (Call.Callee = 'SocketAccept') or (Call.Callee = 'SocketConnect') or (Call.Callee = 'SocketSend') or (Call.Callee = 'ParamCount') then Exit('Int32');
     if (Call.Callee = 'sin') or (Call.Callee = 'cos') or (Call.Callee = 'tan') or (Call.Callee = 'sqrt') or (Call.Callee = 'Now') then Exit('Float64');
     if (Call.Callee = 'GetTickCount64') or (Call.Callee = 'GetNanoseconds') then Exit('UInt64');
     if (Call.Callee = 'FileSize') then Exit('Int64');
     if SameText(Call.Callee, 'Contains') or (Call.Callee = 'FileExists') or (Call.Callee = 'WriteFile') or (Call.Callee = 'CreateDir') or (Call.Callee = 'RemoveDir') or (Call.Callee = 'DeleteFile') or (Call.Callee = 'DirExists') then Exit('Bool');
-    if SameText(Call.Callee, 'Remove') or (Call.Callee = 'SocketClose') or (Call.Callee = 'Assert') or (Call.Callee = 'SleepMs') then Exit('Void');
+    if SameText(Call.Callee, 'Clear') or SameText(Call.Callee, 'Inc') or SameText(Call.Callee, 'Dec') or SameText(Call.Callee, 'Remove') or (Call.Callee = 'SocketClose') or (Call.Callee = 'Assert') or (Call.Callee = 'SleepMs') then Exit('Void');
+    if IsTypeIdentifier(Call.Callee) then Exit(Call.Callee);
     if Assigned(FModule) then
     begin
       for I := 0 to FModule.Functions.Count - 1 do
@@ -734,7 +922,7 @@ function TAetherEmitterC.IsPointerTarget(Expr: TASTExpr): Boolean;
 var
   T: string;
 begin
-  T := GetExprTypeName(Expr);
+  T := ResolveAliasType(GetExprTypeName(Expr));
   Result := (Pos('Box<', T) > 0) or (Pos('Pointer', T) > 0) or (T = 'Box') or (Pos('^', T) = 1);
 end;
 
@@ -800,8 +988,13 @@ begin
   else if (Copy(AType, 1, 5) = 'Task<') and (AType[Length(AType)] = '>') then Result := 'AetherTask'
   else if Pos('Option<', AType) = 1 then
   begin
-    Inner := Copy(AType, 8, Length(AType) - 8);
-    Result := EmitTypeRef(Inner);
+    if IsValueOptionType(AType) then
+      Result := 'AetherOption'
+    else
+    begin
+      Inner := Copy(AType, 8, Length(AType) - 8);
+      Result := EmitTypeRef(Inner);
+    end;
   end
   else if IsMapType(AType, Inner, Inner2) then
     Result := 'TAetherMap_' + MapTag(Inner, Inner2)
@@ -823,7 +1016,7 @@ var
   ArgsStr: string;
   ArgVal: string;
   I: Integer;
-  OpStr, LType, RType, KeyT, ValT: string;
+  OpStr, LType, RType, KeyT, ValT, TargetT, ValF, ErrF, ArgStr: string;
   TargetStr: string;
   ArgType: string;
   TName: string;
@@ -848,7 +1041,9 @@ begin
   if Expr is TASTIdentifierExpr then
   begin
     Id := TASTIdentifierExpr(Expr);
-    if Id.Name = 'None' then
+    if Id.Name = '__ValueNone' then
+      Result := '((AetherOption){ .is_some = false, .is_none = true, .num_val = 0, .str_val = "" })'
+    else if Id.Name = 'None' then
       Result := 'NULL'
     else if IsMutBorrowParam(Id.Name) then
       Result := '(*' + Id.Name + ')'
@@ -861,8 +1056,41 @@ begin
   begin
     Acc := TASTMemberAccessExpr(Expr);
     TargetStr := EmitExpr(Acc.Target);
+    TargetT := ResolveAliasType(GetExprTypeName(Acc.Target));
     if (Acc.Target is TASTIdentifierExpr) and IsEnumName(TASTIdentifierExpr(Acc.Target).Name) then
       Result := TASTIdentifierExpr(Acc.Target).Name + '_' + Acc.Member
+    else if Pos('Result', TargetT) = 1 then
+    begin
+      if Acc.Member = 'value' then
+      begin
+        SplitResultTypes(TargetT, ValF, ErrF);
+        Result := EmitMonadFieldExtract(TargetStr, ValF, 'value', 'str_val');
+      end
+      else if Acc.Member = 'error' then
+      begin
+        SplitResultTypes(TargetT, ValF, ErrF);
+        if ResolveAliasType(ErrF) = 'String' then
+          Result := TargetStr + '.err_str'
+        else
+          Result := Format('((%s)(%s.error))', [EmitTypeRef(ErrF), TargetStr]);
+      end
+      else
+        Result := TargetStr + '.' + Acc.Member;
+    end
+    else if IsValueOptionType(TargetT) then
+    begin
+      if Acc.Member = 'is_some' then
+        Result := TargetStr + '.is_some'
+      else if Acc.Member = 'is_none' then
+        Result := TargetStr + '.is_none'
+      else if Acc.Member = 'value' then
+      begin
+        ValF := Trim(Copy(TargetT, 8, Length(TargetT) - 8));
+        Result := EmitMonadFieldExtract(TargetStr, ValF, 'num_val', 'str_val');
+      end
+      else
+        Result := TargetStr + '.' + Acc.Member;
+    end
     else if Acc.Member = 'is_some' then
       Result := '(' + TargetStr + ' != NULL)'
     else if Acc.Member = 'is_none' then
@@ -1028,7 +1256,13 @@ begin
   if Expr is TASTIndexExpr then
   begin
     Idx := TASTIndexExpr(Expr);
-    if IsMapType(GetExprTypeName(Idx.Target), KeyT, ValT) then
+    TargetT := ResolveAliasType(GetExprTypeName(Idx.Target));
+    if TargetT = 'String' then
+    begin
+      Result := Format('(%s)[%s]', [EmitExpr(Idx.Target), EmitExpr(TASTExpr(Idx.Indices[0]))]);
+      Exit;
+    end;
+    if IsMapType(TargetT, KeyT, ValT) then
     begin
       Result := Format('AetherMapGet_%s(&(%s), %s)', [MapTag(KeyT, ValT), EmitExpr(Idx.Target), EmitExpr(TASTExpr(Idx.Indices[0]))]);
       Exit;
@@ -1067,7 +1301,7 @@ begin
     begin
       if Call.Args.Count = 1 then
       begin
-        ArgType := GetExprTypeName(TASTCallArg(Call.Args[0]).Expr);
+        ArgType := ResolveAliasType(GetExprTypeName(TASTCallArg(Call.Args[0]).Expr));
         if (ArgType = 'Int32') or (ArgType = 'Int16') or (ArgType = 'Int8') or (ArgType = 'UInt16') or (ArgType = 'UInt8') then
           Result := 'printf("%d\n", ' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + ')'
         else if (ArgType = 'Int64') or (ArgType = 'UInt64') or (ArgType = 'UInt32') then
@@ -1097,19 +1331,39 @@ begin
 
     if Call.Callee = 'Ok' then
     begin
-      Result := '(AetherResult){ .is_ok = true, .is_err = false, .value = ' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + ' }';
+      ArgType := ResolveAliasType(GetExprTypeName(TASTCallArg(Call.Args[0]).Expr));
+      ArgStr := EmitExpr(TASTCallArg(Call.Args[0]).Expr);
+      if ArgType = 'String' then
+        Result := '((AetherResult){ .is_ok = true, .is_err = false, .str_val = ' + ArgStr + ' })'
+      else
+        Result := '((AetherResult){ .is_ok = true, .is_err = false, .value = (double)(' + ArgStr + ') })';
       Exit;
     end;
 
     if Call.Callee = 'Err' then
     begin
-      Result := '(AetherResult){ .is_ok = false, .is_err = true, .error = ' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + ' }';
+      ArgType := ResolveAliasType(GetExprTypeName(TASTCallArg(Call.Args[0]).Expr));
+      ArgStr := EmitExpr(TASTCallArg(Call.Args[0]).Expr);
+      if ArgType = 'String' then
+        Result := '((AetherResult){ .is_ok = false, .is_err = true, .err_str = ' + ArgStr + ' })'
+      else
+        Result := '((AetherResult){ .is_ok = false, .is_err = true, .error = (int)(' + ArgStr + ') })';
       Exit;
     end;
 
     if Call.Callee = 'Some' then
     begin
-      Result := EmitExpr(TASTCallArg(Call.Args[0]).Expr);
+      if IsPointerTarget(TASTCallArg(Call.Args[0]).Expr) then
+        Result := EmitExpr(TASTCallArg(Call.Args[0]).Expr)
+      else
+      begin
+        ArgType := ResolveAliasType(GetExprTypeName(TASTCallArg(Call.Args[0]).Expr));
+        ArgStr := EmitExpr(TASTCallArg(Call.Args[0]).Expr);
+        if ArgType = 'String' then
+          Result := '((AetherOption){ .is_some = true, .is_none = false, .str_val = ' + ArgStr + ' })'
+        else
+          Result := '((AetherOption){ .is_some = true, .is_none = false, .num_val = (double)(' + ArgStr + ') })';
+      end;
       Exit;
     end;
 
@@ -1147,6 +1401,70 @@ begin
       TargetStr := EmitExpr(TASTCallArg(Call.Args[0]).Expr);
       Result := Format('do { %s = (__typeof__(%s))AetherDynSetLength(%s, sizeof(*(%s)), AetherDynLen(%s) + 1); (%s)[AetherDynLen(%s) - 1] = %s; } while (0)',
         [TargetStr, TargetStr, TargetStr, TargetStr, TargetStr, TargetStr, TargetStr, EmitExpr(TASTCallArg(Call.Args[1]).Expr)]);
+      Exit;
+    end;
+
+    if SameText(Call.Callee, 'Pop') then
+    begin
+      TargetStr := EmitExpr(TASTCallArg(Call.Args[0]).Expr);
+      Result := Format('({ __typeof__(*(%s)) _apop = (%s)[AetherDynLen(%s) - 1]; %s = (__typeof__(%s))AetherDynSetLength(%s, sizeof(*(%s)), AetherDynLen(%s) - 1); _apop; })',
+        [TargetStr, TargetStr, TargetStr, TargetStr, TargetStr, TargetStr, TargetStr, TargetStr]);
+      Exit;
+    end;
+
+    if SameText(Call.Callee, 'Clear') then
+    begin
+      TargetStr := EmitExpr(TASTCallArg(Call.Args[0]).Expr);
+      if IsMapType(GetExprTypeName(TASTCallArg(Call.Args[0]).Expr), KeyT, ValT) then
+        Result := Format('(%s).count = 0', [TargetStr])
+      else
+        Result := Format('%s = (__typeof__(%s))AetherDynSetLength(%s, sizeof(*(%s)), 0)',
+          [TargetStr, TargetStr, TargetStr, TargetStr]);
+      Exit;
+    end;
+
+    if SameText(Call.Callee, 'Inc') then
+    begin
+      if Call.Args.Count = 2 then
+        Result := Format('(%s) += (%s)', [EmitExpr(TASTCallArg(Call.Args[0]).Expr), EmitExpr(TASTCallArg(Call.Args[1]).Expr)])
+      else
+        Result := Format('(%s) += 1', [EmitExpr(TASTCallArg(Call.Args[0]).Expr)]);
+      Exit;
+    end;
+
+    if SameText(Call.Callee, 'Dec') then
+    begin
+      if Call.Args.Count = 2 then
+        Result := Format('(%s) -= (%s)', [EmitExpr(TASTCallArg(Call.Args[0]).Expr), EmitExpr(TASTCallArg(Call.Args[1]).Expr)])
+      else
+        Result := Format('(%s) -= 1', [EmitExpr(TASTCallArg(Call.Args[0]).Expr)]);
+      Exit;
+    end;
+
+    if SameText(Call.Callee, 'Ord') then
+    begin
+      Result := '((int32_t)(' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + '))';
+      Exit;
+    end;
+
+    if SameText(Call.Callee, 'Chr') then
+    begin
+      Result := '((char)(' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + '))';
+      Exit;
+    end;
+
+    if SameText(Call.Callee, 'SizeOf') then
+    begin
+      if (TASTCallArg(Call.Args[0]).Expr is TASTIdentifierExpr) and IsTypeIdentifier(TASTIdentifierExpr(TASTCallArg(Call.Args[0]).Expr).Name) then
+        Result := '((int32_t)sizeof(' + EmitTypeRef(TASTIdentifierExpr(TASTCallArg(Call.Args[0]).Expr).Name) + '))'
+      else
+        Result := '((int32_t)sizeof(' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + '))';
+      Exit;
+    end;
+
+    if (Call.Args.Count = 1) and IsTypeIdentifier(Call.Callee) and not IsEnumName(Call.Callee) then
+    begin
+      Result := Format('((%s)(%s))', [EmitTypeRef(Call.Callee), EmitExpr(TASTCallArg(Call.Args[0]).Expr)]);
       Exit;
     end;
 
@@ -1425,12 +1743,15 @@ var
   Lines: TStringList;
   LineStr: string;
   I, J: Integer;
-  PatStr, TName, KeyT, ValT, ColStr, ColType, ElemT, LoopId, MatchedType, ExprStr, Prefix, CondStr, BindStmt: string;
+  PatStr, TName, KeyT, ValT, ColStr, ColType, ElemT, LoopId, MatchedType, ExprStr, Prefix, CondStr, BindStmt, TargetT, ValF, ErrF: string;
 begin
   if Stmt is TASTAssignStmt then
   begin
     Assign := TASTAssignStmt(Stmt);
-    if (Assign.Target is TASTIndexExpr) and IsMapType(GetExprTypeName(TASTIndexExpr(Assign.Target).Target), KeyT, ValT) then
+    TargetT := GetExprTypeName(Assign.Target);
+    if (Assign.Expr is TASTSetLiteralExpr) and (not IsSetType(TargetT)) then
+      EmitArrayLiteralAssign(EmitExpr(Assign.Target), TargetT, TASTSetLiteralExpr(Assign.Expr))
+    else if (Assign.Target is TASTIndexExpr) and IsMapType(GetExprTypeName(TASTIndexExpr(Assign.Target).Target), KeyT, ValT) then
       Emit(Format('AetherMapSet_%s(&(%s), %s, %s);', [
         MapTag(KeyT, ValT),
         EmitExpr(TASTIndexExpr(Assign.Target).Target),
@@ -1479,8 +1800,23 @@ begin
       Inc(FLoopCounter);
       LoopId := IntToStr(FLoopCounter);
       ColStr := EmitExpr(ForStmt.CollectionExpr);
-      ColType := GetExprTypeName(ForStmt.CollectionExpr);
-      if ColType = 'String' then
+      ColType := ResolveAliasType(GetExprTypeName(ForStmt.CollectionExpr));
+      if IsMapType(ColType, KeyT, ValT) then
+      begin
+        Emit('{');
+        IncIndent;
+        Emit(Format('for (int32_t _aether_i_%s = 0; _aether_i_%s < (%s).count; _aether_i_%s++) {', [LoopId, LoopId, ColStr, LoopId]));
+        IncIndent;
+        Emit(Format('%s = (%s).entries[_aether_i_%s].key;', [ForStmt.VarName, ColStr, LoopId]));
+        if ForStmt.ValVarName <> '' then
+          Emit(Format('%s = (%s).entries[_aether_i_%s].val;', [ForStmt.ValVarName, ColStr, LoopId]));
+        EmitStmtList(ForStmt.Body, True);
+        DecIndent;
+        Emit('}');
+        DecIndent;
+        Emit('}');
+      end
+      else if ColType = 'String' then
       begin
         Emit('{');
         IncIndent;
@@ -1674,7 +2010,7 @@ begin
   begin
     MatchStmt := TASTMatchStmt(Stmt);
     ExprStr := EmitExpr(MatchStmt.Expr);
-    MatchedType := GetExprTypeName(MatchStmt.Expr);
+    MatchedType := ResolveAliasType(GetExprTypeName(MatchStmt.Expr));
     Emit('// Match gerado pelo compilador Aether');
     for I := 0 to MatchStmt.Cases.Count - 1 do
     begin
@@ -1701,7 +2037,10 @@ begin
         begin
           CondStr := Format('%s.is_ok', [ExprStr]);
           if CaseNode.Pattern.IsLet and (CaseNode.Pattern.SubPattern <> '') and (CaseNode.Pattern.SubPattern <> '_') then
-            BindStmt := Format('double %s = %s.value;', [CaseNode.Pattern.SubPattern, ExprStr]);
+          begin
+            SplitResultTypes(MatchedType, ValF, ErrF);
+            BindStmt := Format('%s %s = %s;', [EmitTypeRef(ValF), CaseNode.Pattern.SubPattern, EmitMonadFieldExtract(ExprStr, ValF, 'value', 'str_val')]);
+          end;
         end
         else if Pos('Err', PatStr) = 1 then
         begin
@@ -1710,8 +2049,15 @@ begin
             if CaseNode.Pattern.IsLet then
             begin
               CondStr := Format('%s.is_err', [ExprStr]);
-              BindStmt := Format('int %s = %s.error;', [CaseNode.Pattern.SubPattern, ExprStr]);
+              SplitResultTypes(MatchedType, ValF, ErrF);
+              if ResolveAliasType(ErrF) = 'String' then
+                BindStmt := Format('const char* %s = %s.err_str;', [CaseNode.Pattern.SubPattern, ExprStr])
+              else
+                BindStmt := Format('%s %s = ((%s)(%s.error));', [EmitTypeRef(ErrF), CaseNode.Pattern.SubPattern, EmitTypeRef(ErrF), ExprStr]);
             end
+            else if (Length(CaseNode.Pattern.SubPattern) >= 2) and (CaseNode.Pattern.SubPattern[1] = '"') then
+              CondStr := Format('%s.is_err && strcmp(%s.err_str, %s) == 0',
+                [ExprStr, ExprStr, EscapeCString(Copy(CaseNode.Pattern.SubPattern, 2, Length(CaseNode.Pattern.SubPattern) - 2))])
             else
               CondStr := Format('%s.is_err && %s.error == %s',
                 [ExprStr, ExprStr, StringReplace(CaseNode.Pattern.SubPattern, '.', '_', [rfReplaceAll])]);
@@ -1721,17 +2067,34 @@ begin
         end
         else if PatStr = 'Some' then
         begin
-          CondStr := Format('%s != NULL', [ExprStr]);
-          if CaseNode.Pattern.IsLet and (CaseNode.Pattern.SubPattern <> '') and (CaseNode.Pattern.SubPattern <> '_') then
+          if IsValueOptionType(MatchedType) then
           begin
-            if Pos('Option<', MatchedType) = 1 then
-              BindStmt := Format('%s %s = %s;', [EmitTypeRef(Copy(MatchedType, 8, Length(MatchedType) - 8)), CaseNode.Pattern.SubPattern, ExprStr])
-            else
-              BindStmt := Format('void* %s = %s;', [CaseNode.Pattern.SubPattern, ExprStr]);
+            CondStr := Format('%s.is_some', [ExprStr]);
+            if CaseNode.Pattern.IsLet and (CaseNode.Pattern.SubPattern <> '') and (CaseNode.Pattern.SubPattern <> '_') then
+            begin
+              ValF := Trim(Copy(MatchedType, 8, Length(MatchedType) - 8));
+              BindStmt := Format('%s %s = %s;', [EmitTypeRef(ValF), CaseNode.Pattern.SubPattern, EmitMonadFieldExtract(ExprStr, ValF, 'num_val', 'str_val')]);
+            end;
+          end
+          else
+          begin
+            CondStr := Format('%s != NULL', [ExprStr]);
+            if CaseNode.Pattern.IsLet and (CaseNode.Pattern.SubPattern <> '') and (CaseNode.Pattern.SubPattern <> '_') then
+            begin
+              if Pos('Option<', MatchedType) = 1 then
+                BindStmt := Format('%s %s = %s;', [EmitTypeRef(Copy(MatchedType, 8, Length(MatchedType) - 8)), CaseNode.Pattern.SubPattern, ExprStr])
+              else
+                BindStmt := Format('void* %s = %s;', [CaseNode.Pattern.SubPattern, ExprStr]);
+            end;
           end;
         end
         else if PatStr = 'None' then
-          CondStr := Format('%s == NULL', [ExprStr])
+        begin
+          if IsValueOptionType(MatchedType) then
+            CondStr := Format('%s.is_none', [ExprStr])
+          else
+            CondStr := Format('%s == NULL', [ExprStr]);
+        end
         else if (Length(PatStr) >= 2) and (PatStr[1] = '"') then
           CondStr := Format('strcmp(%s, %s) == 0', [ExprStr, EscapeCString(Copy(PatStr, 2, Length(PatStr) - 2))])
         else if (Length(PatStr) >= 2) and (PatStr[1] = '''') then
@@ -1890,6 +2253,13 @@ begin
   Emit('');
 end;
 
+procedure TAetherEmitterC.EmitTypeAliasDecl(AliasD: TASTTypeAliasDecl);
+begin
+  Emit(Format('typedef %s T%s;', [EmitTypeRef(AliasD.TargetType), AliasD.Name]));
+  Emit(Format('typedef T%s %s;', [AliasD.Name, AliasD.Name]));
+  Emit('');
+end;
+
 procedure TAetherEmitterC.EmitFunction(Func: TASTFunction);
 var
   ParamListStr, ExportPrefix: string;
@@ -2018,12 +2388,17 @@ begin
       if IsVarModifiedInTry(VarDecl.Name, Func.Body) then
         VolQual := 'volatile ';
       if (IsDynamicArrayType(VarDecl.TypeName) or (Pos('^', VarDecl.TypeName) = 1) or (VarDecl.TypeName = 'Pointer')) and
-         (not Assigned(VarDecl.InitialExpr)) then
+         ((not Assigned(VarDecl.InitialExpr)) or (VarDecl.InitialExpr is TASTSetLiteralExpr)) then
         Emit(Format('%s %s%s = NULL;', [EmitTypeRef(VarDecl.TypeName), VolQual, VarDecl.Name]))
       else
       begin
         Emit(Format('%s %s%s;', [EmitTypeRef(VarDecl.TypeName), VolQual, VarDecl.Name]));
-        if Assigned(VarDecl.InitialExpr) then
+      end;
+      if Assigned(VarDecl.InitialExpr) then
+      begin
+        if (VarDecl.InitialExpr is TASTSetLiteralExpr) and (not IsSetType(VarDecl.TypeName)) then
+          EmitArrayLiteralAssign(VarDecl.Name, VarDecl.TypeName, TASTSetLiteralExpr(VarDecl.InitialExpr))
+        else if not IsMapType(VarDecl.TypeName, KeyT, ValT) then
           Emit(Format('%s = %s;', [VarDecl.Name, EmitExpr(VarDecl.InitialExpr)]));
       end;
     end;
@@ -2098,12 +2473,17 @@ begin
       if IsVarModifiedInTry(VarDecl.Name, Prog.Body) then
         VolQual := 'volatile ';
       if (IsDynamicArrayType(VarDecl.TypeName) or (Pos('^', VarDecl.TypeName) = 1) or (VarDecl.TypeName = 'Pointer')) and
-         (not Assigned(VarDecl.InitialExpr)) then
+         ((not Assigned(VarDecl.InitialExpr)) or (VarDecl.InitialExpr is TASTSetLiteralExpr)) then
         Emit(Format('%s %s%s = NULL;', [EmitTypeRef(VarDecl.TypeName), VolQual, VarDecl.Name]))
       else
       begin
         Emit(Format('%s %s%s;', [EmitTypeRef(VarDecl.TypeName), VolQual, VarDecl.Name]));
-        if Assigned(VarDecl.InitialExpr) then
+      end;
+      if Assigned(VarDecl.InitialExpr) then
+      begin
+        if (VarDecl.InitialExpr is TASTSetLiteralExpr) and (not IsSetType(VarDecl.TypeName)) then
+          EmitArrayLiteralAssign(VarDecl.Name, VarDecl.TypeName, TASTSetLiteralExpr(VarDecl.InitialExpr))
+        else if not IsMapType(VarDecl.TypeName, KeyT, ValT) then
           Emit(Format('%s = %s;', [VarDecl.Name, EmitExpr(VarDecl.InitialExpr)]));
       end;
     end;
@@ -2655,13 +3035,22 @@ begin
   Emit('#endif // !__wasm__');
   Emit('');
 
-  // Estrutura Result para C
+  // Estrutura Result e Option por Valor para C
   Emit('typedef struct {');
   Emit('    bool is_ok;');
   Emit('    bool is_err;');
   Emit('    double value;');
   Emit('    int error;');
+  Emit('    const char* str_val;');
+  Emit('    const char* err_str;');
   Emit('} AetherResult;');
+  Emit('');
+  Emit('typedef struct {');
+  Emit('    bool is_some;');
+  Emit('    bool is_none;');
+  Emit('    double num_val;');
+  Emit('    const char* str_val;');
+  Emit('} AetherOption;');
   Emit('');
   EmitMapRuntimeDecls(MapTags, MapKeys, MapVals, True);
 
@@ -2699,7 +3088,9 @@ begin
     else if AModule.Types[I] is TASTSetDecl then
       EmitSetDecl(TASTSetDecl(AModule.Types[I]))
     else if AModule.Types[I] is TASTSubrangeDecl then
-      EmitSubrangeDecl(TASTSubrangeDecl(AModule.Types[I]));
+      EmitSubrangeDecl(TASTSubrangeDecl(AModule.Types[I]))
+    else if AModule.Types[I] is TASTTypeAliasDecl then
+      EmitTypeAliasDecl(TASTTypeAliasDecl(AModule.Types[I]));
   end;
   EmitMapRuntimeDecls(MapTags, MapKeys, MapVals, False);
   for I := 0 to AModule.Types.Count - 1 do

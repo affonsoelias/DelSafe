@@ -482,7 +482,11 @@ begin
     EnterScope;
     try
       if Assigned(ForStmt.CollectionExpr) then
+      begin
         FCurrentScope.AddVar(ForStmt.VarName, vsOwned, ForStmt.Line, ForStmt.Col, True);
+        if ForStmt.ValVarName <> '' then
+          FCurrentScope.AddVar(ForStmt.ValVarName, vsOwned, ForStmt.Line, ForStmt.Col, True);
+      end;
       for I := 0 to ForStmt.Body.Count - 1 do
         CheckStmt(TASTStmt(ForStmt.Body[I]));
     finally

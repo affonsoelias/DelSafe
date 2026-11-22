@@ -346,14 +346,34 @@ begin
 end.
 ```
 
+### 5.10 Array Literals (`[...]`), `.Pop()`, `.Clear()`, & `String[i]`
+
+Fixed and dynamic arrays can be initialized directly using `[e1, e2, ...]`, and dynamic arrays infer their element type when initialized with `:=`. Dynamic arrays support `.Push(v)`, `.Pop()`, and `.Clear()`, while `String` supports 0-based character indexing (`s[i]` returning `Char`) alongside `Ord`, `Chr`, `SizeOf`, and explicit numeric/pointer casts:
+
+```aether
+var
+    nums := [10, 20, 30]; // Inferred as array of Int32
+    last: Int32;
+    ch: Char;
+begin
+    last := nums.Pop();   // 30 (nums now has 2 elements)
+    nums.Clear();
+    ch := "Aether"[0];    // 'A' (Ord(ch) = 65, Chr(66) = 'B')
+end.
+```
+
+### 5.11 Simple Type Aliases & Value `Option<T>` / Typed `Result<T, E>`
+
+You can define aliases for primitives and pointers inside `type` (`type UserId = Int64;`, `type IntPtr = ^Int32;`), and use `Option<T>` for value types (`Option<Int32>`, `Option<String>`, `Option<Bool>`) as well as typed `Result<T, E>` with `.is_some`, `.is_none`, `.is_ok`, `.is_err`, `.value`, and `.error`.
+
 ---
 
 ## 6. Summary
 1. Prefer immutable bindings (`let`) where possible; use `var` only for variables that must mutate, and omit redundant types via `:=` inference when initialized.
-2. Integers and floats require explicit casts (`Int32(x)`) to avoid accidental precision truncation, and support `$`/`0x` hex, `%`/`0b` binary literals, and bitwise operators (`shl`, `shr`, `xor`, `and`, `or`, `not`).
-3. Strings are UTF-8, type-safe, and support zero-overhead compile-time interpolation via `$"..."`.
-4. Fixed arrays support $N$-D indexing, dynamic arrays (`array of T`) resize at runtime with `SetLength` and `Push`, and associative maps (`map[K]V`) provide key-value lookup (`Contains`, `Remove`, `Count`/`Length`).
-5. Sets (`set of`) and subranges (`1..31`) provide bitmask collections and strict numerical bounds.
+2. Integers and floats support explicit casts (`Int32(x)`), `Ord`, `Chr`, `SizeOf`, `$`/`0x` hex, `%`/`0b` binary literals, and bitwise operators (`shl`, `shr`, `xor`, `and`, `or`, `not`).
+3. Strings are UTF-8, support 0-based `s[i]` (`Char`) indexing, and provide zero-overhead compile-time interpolation via `$"..."`.
+4. Arrays support `[...]` literals, `.Pop()`/`.Clear()`, `SetLength`/`Push`, while `map[K]V` provides `Contains`, `Remove`, `Clear`, `Count`/`Length`, and `for k, v in map` iteration.
+5. Value `Option<T>`, `Result<T, E>`, sets (`set of`), subranges (`1..31`), and simple type aliases (`type UserId = Int64;`) express rich domain invariants statically.
 6. Raw pointers (`^T`, `@var`, `nil`) require an explicit `unsafe ... end;` block for dereferencing (`ptr^`).
 
 ➡️ **Next:** **[Chapter 03: Control Flow & Pattern Matching](03_CONTROL_FLOW_AND_MATCH.md)**

@@ -738,3 +738,23 @@ Este documento traça o status oficial de desenvolvimento do compilador e as pr�
 - [x] **6. Suíte de Testes Automatizada & Documentação**:
   - Criação de `tests/08_fase46_bitwise_forin_match_var_map_test.aeth` validando todos os recursos nos backends FPC e GCC C99 (`8/8` testes aprovados em ambos os backends e `aetherc lint` limpo).
   - Atualização do Masterclass Course (`docs/course/02_VARIABLES_TYPES_MUTABILITY.md` e `docs/course/03_CONTROL_FLOW_AND_MATCH.md`).
+
+---
+
+### ✅ Fase 47: Literais de Array, Iteração em Mapas, Intrínsecos/Casts & `String[i]`, Atribuição Composta & `Option<T>`/`Result<T, E>` Reais - CONCLUÍDA
+- [x] **1. Literais de Array (`[10, 20, 30]`) e Métodos `.Pop()` / `.Clear()`**:
+  - Inicialização direta de arrays fixos e dinâmicos com `[e1, e2, ...]`, incluindo inferência `var nums := [1, 2, 3];`.
+  - Métodos UFCS `.Pop()` (remove e retorna o último elemento do array dinâmico) e `.Clear()` (zera arrays dinâmicos ou `map[K]V`).
+- [x] **2. Iteração em Mapas (`for k in mapa` e `for k, v in mapa`)**:
+  - Suporte completo nos laços `for..in` sobre `map[K]V` iterando sobre chaves e pares chave/valor em ambos os backends.
+- [x] **3. Intrínsecos de Sistemas, Casts Explícitos e Indexação `String[i]`**:
+  - Casts numéricos e de sistemas (`Int8..Int64`, `UInt8..UInt64`, `Float32`, `Float64`, `Char`, `Bool`, `Pointer`).
+  - Intrínsecos `Ord(x)`, `Chr(codigo)` e `SizeOf(tipoOrExpr)`, além de indexação direta `s[i]` retornando `Char` (0-based no C99 e ajustada `(i)+1` no Free Pascal).
+- [x] **4. Operadores de Atribuição Composta (`+=`, `-=`, `*=`) e `Inc` / `Dec`**:
+  - Suporte a `+=`, `-=`, `*=` em variáveis, campos de `record`, arrays e mapas, mais procedimentos nativos `Inc(x)` / `Dec(x)`.
+- [x] **5. `Option<T>` / `Result<T, E>` Tipados Reais & Type Alias Simples (`type UserId = Int64;`)**:
+  - Suporte a `Option<T>` por valor (`TAetherOption` / `AetherOption`) com `Some(v)`, `None`, `.is_some`, `.is_none`, `.value` e `match`.
+  - Generalização de `Result<T, E>` para valores e erros tipados (`Int32`, `Float64`, `String`, `Bool`, `Enum`) e suporte a type aliases simples na seção `type`.
+- [x] **6. Suíte de Testes Automatizada & Documentação**:
+  - Criação de `tests/09_fase47_arrlit_mapfor_casts_compassign_option_alias_test.aeth` validando todos os recursos nos backends FPC e GCC C99 (`9/9` testes aprovados em ambos os backends e `aetherc lint` limpo).
+  - Atualização do Masterclass Course (`docs/course/02_VARIABLES_TYPES_MUTABILITY.md` e `docs/course/03_CONTROL_FLOW_AND_MATCH.md`).

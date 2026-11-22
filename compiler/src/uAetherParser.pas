@@ -521,7 +521,7 @@ end;
 
 procedure TAetherParser.ParseTypeSection(AModule: TASTModule; var SectionAttrs: TParsedAttributes);
 var
-  TypeName, TypeDoc, EffectiveCfg, LowBound, HighBound, BaseType, KeyType, ValType: string;
+  TypeName, TypeDoc, EffectiveCfg, LowBound, HighBound, BaseType, KeyType, ValType, AliasTarget: string;
   TLine, TCol: Integer;
   RecDecl: TASTRecordDecl;
   EnumDecl: TASTEnumDecl;
@@ -530,6 +530,7 @@ var
   SetDecl: TASTSetDecl;
   SubDecl: TASTSubrangeDecl;
   MapDecl: TASTMapDecl;
+  AliasDecl: TASTTypeAliasDecl;
   CurrentAttrs: TParsedAttributes;
 begin
   Expect(tokType);
@@ -667,7 +668,13 @@ begin
           AModule.Types.Add(EnumDecl);
         end
         else
-          raise EAetherParserError.Create('Esperado "record", "enum", "trait", "array", "set" ou subfaixa na declaracao de tipo', TLine, TCol);
+        begin
+          AliasTarget := ParseTypeRef();
+          AliasDecl := TASTTypeAliasDecl.Create(TLine, TCol, TypeName, AliasTarget);
+          AliasDecl.DocComment := TypeDoc;
+          AliasDecl.CfgCondition := EffectiveCfg;
+          AModule.Types.Add(AliasDecl);
+        end;
 
         ClearAttributes(SectionAttrs);
         Expect(tokSemicolon, 'Esperado ";" apos declaracao de tipo');
@@ -1119,7 +1126,7 @@ end;
 
 function TAetherParser.ParseForStmt: TASTForStmt;
 var
-  VarName: string;
+  VarName, ValVarName: string;
   StartExpr, EndExpr, ColExpr: TASTExpr;
   FLine, FCol: Integer;
   IsDownTo: Boolean;
@@ -1128,12 +1135,16 @@ begin
   FCol := FCurTok.Col;
   Expect(tokFor);
   VarName := Expect(tokIdentifier, 'Esperado nome da variavel contadora do for').Value;
+  ValVarName := '';
+  if Match(tokComma) then
+    ValVarName := Expect(tokIdentifier, 'Esperado identificador de valor apos "," no laco for..in').Value;
 
   if Match(tokIn) then
   begin
     ColExpr := ParseExpr;
     Expect(tokDo, 'Esperado "do" apos colecao do laco for..in');
     Result := TASTForStmt.Create(FLine, FCol, VarName, nil, nil, False);
+    Result.ValVarName := ValVarName;
     Result.CollectionExpr := ColExpr;
     try
       while not Check(tokEnd) and not Check(tokEOF) do
@@ -1148,6 +1159,9 @@ begin
     end;
     Exit;
   end;
+
+  if ValVarName <> '' then
+    raise EAetherParserError.Create('Esperado "in" apos par chave, valor no laco for..in', FCurTok.Line, FCurTok.Col);
 
   Expect(tokAssign, 'Esperado ":=" ou "in" apos nome da variavel no for');
   StartExpr := ParseExpr;
@@ -1408,12 +1422,23 @@ function TAetherParser.ParseAssignOrCallStmt: TASTStmt;
 var
   Expr: TASTExpr;
   TargetExpr: TASTExpr;
+  OpStr: string;
 begin
   Expr := ParseExpr;
   if Match(tokAssign) then
   begin
     TargetExpr := Expr;
     Result := TASTAssignStmt.Create(TargetExpr.Line, TargetExpr.Col, TargetExpr, ParseExpr);
+  end
+  else if Check(tokPlusAssign) or Check(tokMinusAssign) or Check(tokStarAssign) then
+  begin
+    if Check(tokPlusAssign) then OpStr := '+'
+    else if Check(tokMinusAssign) then OpStr := '-'
+    else OpStr := '*';
+    Advance;
+    TargetExpr := Expr;
+    Result := TASTAssignStmt.Create(TargetExpr.Line, TargetExpr.Col, TargetExpr,
+      TASTBinaryExpr.Create(TargetExpr.Line, TargetExpr.Col, TASTExpr(CloneASTNode(TargetExpr)), OpStr, ParseExpr));
   end
   else if Expr is TASTCallExpr then
   begin
