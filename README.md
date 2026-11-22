@@ -63,65 +63,34 @@ O Aether não depende eternamente de harnesses externos: seu núcleo (`compiler/
 ## 🚀 Sintaxe em 60 Segundos
 
 ```pascal
-module ExemploBanco;
-
-import IO;
+module ExemploSimples;
 
 type
-    Conta = record
-        titular: String;
-        saldo: Real;
+    Usuario = record
+        nome: String;
+        pontos: Int32;
     end;
 
-    Operacao = enum
-        Deposito(valor: Real),
-        Saque(valor: Real)
-    end;
-
-trait Processavel
-    function Executar(mut borrow self: Conta, take op: Operacao): Result<Real, String>;
-end;
-
-impl Processavel for Conta
-    function Executar(mut borrow self: Conta, take op: Operacao): Result<Real, String>
-    contract
-        require
-            self.saldo >= 0.0;
-        ensure
-            result.IsOk() implies self.saldo >= 0.0;
-    begin
-        match op do
-            case Operacao.Deposito(let v):
-                self.saldo := self.saldo + v;
-                return Ok(self.saldo);
-
-            case Operacao.Saque(let v):
-                if self.saldo >= v then
-                    self.saldo := self.saldo - v;
-                    return Ok(self.saldo);
-                else
-                    return Err("Saldo insuficiente para o saque");
-                end;
-        end;
-    end;
-end;
-
-function Main()
-var
-    c: Conta;
-    res: Result<Real, String>;
+// Funcao com emprestimo mutavel verificado em tempo de compilacao:
+function GanharPontos(mut borrow u: Usuario; borrow qtd: Int32): Int32
 begin
-    c.titular := "Alice";
-    c.saldo := 1000.0;
-
-    res := c.Executar(Operacao.Saque(250.0));
-    match res do
-        case Result.Ok(let novo_saldo):
-            IO.PrintFmt("Saque efetuado com sucesso! Saldo atual: %.2f\n", novo_saldo);
-        case Result.Err(let motivo):
-            IO.PrintFmt("Erro na transacao: %s\n", motivo);
-    end;
+    u.pontos := u.pontos + qtd;
+    return u.pontos;
 end;
+
+program Main;
+var
+    jogador: Usuario;
+begin
+    jogador := Usuario("Alice", 100);
+
+    PrintLn("Jogador: %s | Pontos iniciais: %d", jogador.nome, jogador.pontos);
+
+    // O compilador garante posse exclusiva durante o emprestimo mutavel:
+    GanharPontos(mut borrow jogador, 50);
+
+    PrintLn("Pontos atualizados: %d", jogador.pontos);
+end.
 ```
 
 ---
@@ -139,7 +108,7 @@ Informa se o compilador Free Pascal (`fpc`) e o GCC (`gcc` via MSYS2 no Windows 
 ### 2. Criar e Executar um Projeto
 ```bash
 # 1. Cria a estrutura do projeto com manifesto aether.json
-aetherc init meu_app
+aetherc new meu_app
 cd meu_app
 
 # 2. Executa a compilação e roda a aplicação imediatamente
@@ -147,18 +116,42 @@ aetherc run
 
 # 3. Compila utilizando o backend C99 nativo
 aetherc run --target=c
+
+# 4. Limpa artefatos temporarios de build (bin/ e generated/)
+aetherc clean
 ```
 
-### 3. Gerenciamento de Pacotes e Dependências
+### 3. Emissão de Código e Integração com BlaiseVue
+```bash
+# Emite codigo Object Pascal organizado em generated/pascal/
+aetherc emit pascal src/main.aeth
+
+# Emite Unit Free Pascal (unit/interface/implementation) para o BlaiseVue
+aetherc emit pascal src/main.aeth --unit
+
+# Emite codigo C99 organizado em generated/c/
+aetherc emit c src/main.aeth
+
+# Modo Hot-Reload (observa alteracoes e regera automaticamente)
+aetherc emit pascal src/main.aeth --unit --watch
+```
+
+### 4. Gerenciamento de Pacotes e Dependências
 ```bash
 # Adiciona uma dependência local ao aether.json
-aetherc add math_extra --path=libs/math_extra
+aetherc pkg add math_extra --path=libs/math_extra
 
 # Adiciona uma dependência remota diretamente via URL Git
-aetherc add https://github.com/exemplo/logger.git --branch=v1.0.0
+aetherc pkg add https://github.com/exemplo/logger.git --branch=v1.0.0
+
+# Audita a integridade criptografica e seguranca TLS
+aetherc pkg audit
+
+# Lista as dependencias do projeto
+aetherc pkg list
 ```
 
-### 4. Execução de Testes Automatizados
+### 5. Execução de Testes Automatizados
 ```bash
 # Roda todos os testes unitários da pasta tests/
 aetherc test
@@ -170,7 +163,7 @@ aetherc test --target=c
 aetherc test banco --target=c
 ```
 
-### 5. Compilar um Arquivo Único
+### 6. Compilar um Arquivo Único
 ```bash
 # Backend Pascal (Padrão)
 aetherc examples/01_hello_world.aeth
