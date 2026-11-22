@@ -1,0 +1,34 @@
+module dirty_test;
+
+import std.math;
+import std.io;
+
+type
+    ponto = record
+        x: Float64;
+        y: Float64;
+    end;
+
+function Calcular(a: Int32; b: Int32): Int32
+var
+    unused_local: Int32;
+begin
+    if a = true then
+        return a;
+    end;
+
+    return a + 10;
+
+    // Dead code apos return:
+    PrintLn("Isto nunca sera executado!");
+end;
+
+program Main;
+var
+    temp: Int32;
+    p: ponto;
+begin
+    p := ponto(1.0, 2.0);
+    PrintLn("X: %f", p.x);
+    PrintLn("Resultado: %d", Calcular(5, 10));
+end.

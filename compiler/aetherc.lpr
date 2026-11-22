@@ -27,7 +27,8 @@ uAetherDoc,
 uAetherRegistry,
 uAetherHeaderGen,
 uAetherBenchmark,
-uAetherDerives;
+uAetherDerives,
+uAetherLinter;
 
 Procedure PrintBanner;
 Begin
@@ -46,6 +47,7 @@ Begin
   WriteLn('  run               Compila e executa imediatamente o binario do projeto');
   WriteLn('  test [filtro]     Executa testes unitarios (arquivos individuais ou pasta tests/)');
   WriteLn('  bench [filtro]    Executa suite de benchmarks (--compare para comparar backends)');
+  WriteLn('  lint [caminho]    Executa analise estatica de qualidade de codigo (--fix para auto-correcao)');
   WriteLn('  fmt [caminho]     Formata codigo Aether segundo as normas canonicas (--check para CI/CD)');
   WriteLn('  doc [caminho]     Gera documentacao canonica do projeto (HTML, Markdown e Doctests)');
   WriteLn('  emit-header <arq> Gera cabecalho C (.h) compativel com ANSI C/C++');
@@ -1570,6 +1572,104 @@ Begin
   End;
 End;
 
+Procedure HandleLintCommand;
+Var
+  I, J: Integer;
+  Arg, TargetPath: string;
+  OptionFix, OptionJSON: Boolean;
+  TotalFiles, CleanFiles, IssueFiles, TotalIssues, TotalFixed: Integer;
+  SingleRes: TLintResult;
+  ResArray: TLintArrayResult;
+Begin
+  TargetPath := '.';
+  OptionFix := False;
+  OptionJSON := False;
+  I := 2;
+  While I <= ParamCount Do
+  Begin
+    Arg := ParamStr(I);
+    If (Arg = '--fix') Or (Arg = '-f') Then
+      OptionFix := True
+    Else If (Arg = '--json') Or (Arg = '--format=json') Then
+      OptionJSON := True
+    Else If (Length(Arg) > 0) And (Arg[1] <> '-') Then
+      TargetPath := Arg;
+    Inc(I);
+  End;
+
+  If Not OptionJSON Then
+  Begin
+    WriteLn('========================================================');
+    WriteLn('  Aether Linter & Code Quality (aetherc lint)           ');
+    If OptionFix Then
+      WriteLn('  Modo: Analise com correcao automatica (--fix)')
+    Else
+      WriteLn('  Modo: Analise estatica de qualidade');
+    WriteLn('========================================================');
+  End;
+
+  TotalFiles := 0;
+  CleanFiles := 0;
+  IssueFiles := 0;
+  TotalIssues := 0;
+  TotalFixed := 0;
+  SetLength(ResArray, 0);
+
+  If FileExists(TargetPath) Then
+  Begin
+    TotalFiles := 1;
+    SingleRes := TAetherLinter.LintFile(TargetPath, OptionFix);
+    SetLength(ResArray, 1);
+    ResArray[0] := SingleRes;
+    TotalIssues := SingleRes.IssueCount;
+    TotalFixed := SingleRes.FixedCount;
+    If TotalIssues = 0 Then CleanFiles := 1 Else IssueFiles := 1;
+  End
+  Else If DirectoryExists(TargetPath) Then
+  Begin
+    TAetherLinter.LintDirectory(TargetPath, OptionFix, TotalFiles, CleanFiles, IssueFiles, TotalIssues, TotalFixed, ResArray);
+  End
+  Else
+  Begin
+    WriteLn(ErrOutput, Format('Erro: Arquivo ou diretorio "%s" nao encontrado.', [TargetPath]));
+    Halt(1);
+  End;
+
+  If OptionJSON Then
+  Begin
+    WriteLn(TAetherLinter.FormatJSON(ResArray));
+    If TotalIssues > 0 Then Halt(1) Else Halt(0);
+  End;
+
+  // Saida formatada no terminal
+  For I := 0 To High(ResArray) Do
+  Begin
+    For J := 0 To ResArray[I].IssueCount - 1 Do
+    Begin
+      WriteLn(TAetherLinter.FormatIssue(ResArray[I].Issues[J]));
+    End;
+  End;
+
+  WriteLn('--------------------------------------------------------');
+  WriteLn(Format('  Resultados: %d arquivo(s) analisado(s) | %d com apontamentos | %d limpo(s)',
+    [TotalFiles, IssueFiles, CleanFiles]));
+  If OptionFix Then
+    WriteLn(Format('  Correcoes aplicadas: %d ocorrencia(s) resolvida(s).', [TotalFixed]));
+
+  If TotalIssues = 0 Then
+  Begin
+    WriteLn('  [SUCESSO] Nenhum problema de qualidade ou code smell encontrado!');
+    WriteLn('========================================================');
+    Halt(0);
+  End
+  Else
+  Begin
+    WriteLn(Format('  Total: %d apontamento(s) de qualidade encontrado(s).', [TotalIssues]));
+    WriteLn('========================================================');
+    Halt(1);
+  End;
+End;
+
 Procedure HandleEmitHeaderCommand(Const SourcePath, OutPath: String);
 Var
   Source, DestPath: string;
@@ -1639,6 +1739,20 @@ Begin
   OptionSharedLib := False;
   OptionEmitHeader := False;
   IsRunCommand := False;
+
+  // Checa comando de lint: lint [caminho] [--fix] [--json]
+  If (ParamCount >= 1) And (LowerCase(ParamStr(1)) = 'lint') Then
+    Begin
+      Try
+        HandleLintCommand;
+      Except
+        on E: Exception Do
+          Begin
+            WriteLn(ErrOutput, 'Erro ao executar linter: ', E.Message);
+            Halt(1);
+          End;
+      End;
+    End;
 
   // Checa comando de formatacao: fmt [caminho] [--check]
   If (ParamCount >= 1) And (LowerCase(ParamStr(1)) = 'fmt') Then

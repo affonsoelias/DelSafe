@@ -98,6 +98,7 @@ Aether powers **Zephyr** (`vendor/zephyr`), the native backend engine for the Bl
 | `aetherc run [file.aeth]` | Compile and execute immediately |
 | `aetherc test [filter]` | Run test suite with pass/fail reports |
 | `aetherc bench [filter]` | Run benchmark harness with multi-backend comparison |
+| `aetherc lint [path]` | Static linter and code quality analysis (`--fix` to auto-repair) |
 | `aetherc doc [path]` | Generate HTML and Markdown documentation |
 | `aetherc emit pascal --unit` | Emit clean Free Pascal unit for external consumption |
 | `aetherc emit-header <file>` | Generate C header (`.h`) for C/C++ FFI |

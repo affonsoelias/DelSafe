@@ -1,0 +1,21 @@
+module clean_test;
+
+type
+    Ponto = record
+        x: Float64;
+        y: Float64;
+    end;
+
+function Dobrar(val: Int32): Int32
+begin
+    return val * 2;
+end;
+
+program Main;
+var
+    p: Ponto;
+begin
+    p := Ponto(3.5, 7.5);
+    PrintLn("Coordenadas: %f, %f", p.x, p.y);
+    PrintLn("Dobro: %d", Dobrar(21));
+end.

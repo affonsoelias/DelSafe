@@ -501,19 +501,20 @@ Este documento traça o status oficial de desenvolvimento do compilador e as pr�
 
 ---
 
-### ⏳ Fase 38: Linter Estático Canônico & Análise de Qualidade de Código (`aetherc lint`)
-- [ ] **Análise Semântica de Boas Práticas e Code Smells**:
-  - Detecção de variáveis declaradas e nunca utilizadas (*Unused Variables*).
-  - Detecção de imports e units externas não referenciadas (*Unused Imports*).
-  - Identificação de código inalcançável (*Unreachable / Dead Code*) após instruções de `return`, `break` ou ramos de `match` exaustivos.
-  - Alerta de parâmetros de funções nunca lidos sem prefixo de descarte (`_`).
-- [ ] **Verificação de Convenções Estilísticas e Redundâncias**:
-  - Validação de nomenclatura padronizada: tipos/records/enums em `PascalCase`, constantes em `SCREAMING_SNAKE_CASE` e variáveis/funções em `camelCase`/`snake_case`.
-  - Simplificação de expressões booleanas redundantes (ex: `if cond = true then`, `not (not x)`).
-- [ ] **Comando CLI e Modo Auto-Fix**:
+### ✅ Fase 38: Linter Estático Canônico & Análise de Qualidade de Código (`aetherc lint`) (Concluído)
+- [x] **Análise Semântica de Boas Práticas e Code Smells**:
+  - Detecção de variáveis declaradas e nunca utilizadas (*Unused Variables* - `L001`).
+  - Detecção de imports e units externas não referenciadas (*Unused Imports* - `L002`).
+  - Identificação de código inalcançável (*Unreachable / Dead Code* - `L003`) após instruções de `return` e desvios incondicionais.
+  - Alerta de parâmetros de funções nunca lidos sem prefixo de descarte (`_`) (*Unused Params* - `L004`).
+- [x] **Verificação de Convenções Estilísticas e Redundâncias**:
+  - Simplificação de expressões booleanas redundantes com literais `true`/`false` (`L005`).
+  - Validação de nomenclatura padronizada: tipos/records/enums em `PascalCase` (`L006`).
+- [x] **Comando CLI e Modo Auto-Fix**:
   - Comando canônico `aetherc lint [arquivo | pasta] [opcoes]`.
-  - Flag `--fix`: remoção automática de imports não usados e aplicação de correções seguras no código-fonte.
-  - Integração com `--emit-json-diagnostics` e saída estruturada para pipelines de CI/CD.
+  - Flag `--fix`: remoção automática de imports não utilizados diretamente no arquivo-fonte.
+  - Flag `--json`: saída estruturada para integração com IDEs e pipelines de CI/CD.
+  - Validação prática com amostras reais em `examples/test_fase38_lint/`.
 
 ---
 
