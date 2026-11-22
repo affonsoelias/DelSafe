@@ -493,3 +493,47 @@ Este documento traça o status oficial de desenvolvimento do compilador e as pr�
 - [x] **Validação com Amostras Reais e Testes Automatizados**:
   - Exemplo integrado em `examples/test_fase37_derives/main.aeth` demonstrando records simples, records aninhados e enums.
   - Teste unitário canônico adicionado em `tests/02_derives_test.aeth` integrado ao `aetherc test`.
+
+---
+
+### ⏳ Fase 38: Linter Estático Canônico & Análise de Qualidade de Código (`aetherc lint`)
+- [ ] **Análise Semântica de Boas Práticas e Code Smells**:
+  - Detecção de variáveis declaradas e nunca utilizadas (*Unused Variables*).
+  - Detecção de imports e units externas não referenciadas (*Unused Imports*).
+  - Identificação de código inalcançável (*Unreachable / Dead Code*) após instruções de `return`, `break` ou ramos de `match` exaustivos.
+  - Alerta de parâmetros de funções nunca lidos sem prefixo de descarte (`_`).
+- [ ] **Verificação de Convenções Estilísticas e Redundâncias**:
+  - Validação de nomenclatura padronizada: tipos/records/enums em `PascalCase`, constantes em `SCREAMING_SNAKE_CASE` e variáveis/funções em `camelCase`/`snake_case`.
+  - Simplificação de expressões booleanas redundantes (ex: `if cond = true then`, `not (not x)`).
+- [ ] **Comando CLI e Modo Auto-Fix**:
+  - Comando canônico `aetherc lint [arquivo | pasta] [opcoes]`.
+  - Flag `--fix`: remoção automática de imports não usados e aplicação de correções seguras no código-fonte.
+  - Integração com `--emit-json-diagnostics` e saída estruturada para pipelines de CI/CD.
+
+---
+
+### ⏳ Fase 39: Suíte de Profiling, Auditoria de Memória & Detecção de Leaks (`aetherc profile`)
+- [ ] **Harness de Profiling Integrado**:
+  - Comando canônico `aetherc profile <arquivo.aeth> [opcoes]`.
+  - Instrumentação automática e medição de tempos de execução por função com precisão de microssegundos/nanossegundos.
+  - Contagem de chamadas e identificação de *hotspots* computacionais da aplicação.
+- [ ] **Auditoria de Memória e Detecção de Leaks em Tempo de Execução**:
+  - **Backend Free Pascal**: Integração transparente com a unit `heaptrc` (`-gh`), auditando blocos de memória dinâmicos, strings e ponteiros com relatório detalhado de vazamentos e pilha de chamadas (*callstack*).
+  - **Backend C99**: Integração transparente com AddressSanitizer (`-fsanitize=address`) em builds de debug para captura de *use-after-free*, estouros de buffer e vazamentos em trechos `unsafe` ou `extern`.
+- [ ] **Relatórios e Visualização**:
+  - Tabela comparativa formatada no terminal com tempos por função, alocações de heap e status de integridade de memória (`0 bytes vazados - 100% LIMPO`).
+  - Exportação de relatório em JSON (`--json`) para rastreamento de métricas de eficiência em CI.
+
+---
+
+### ⏳ Fase 40: Compilação Condicional, Expressões em Tempo de Compilação & Atributos de Otimização (`@cfg`, `comptime`, `@inline`)
+- [ ] **Diretivas de Compilação Condicional Multiplataforma (`@cfg`)**:
+  - Suporte a atributos `@cfg(target_os = "windows" | "linux" | "darwin")` em funções, constantes e tipos.
+  - Suporte a `@cfg(target = "pascal" | "c" | "wasm" | "js")` e `@cfg(debug)` / `@cfg(release)`.
+  - Poda automática na AST de ramificações e funções inativas para a plataforma ou alvo selecionado.
+- [ ] **Avaliação de Expressões em Tempo de Compilação (`comptime` / `const eval`)**:
+  - Avaliação de expressões matemáticas constantes, concatenações de strings e tamanhos de buffers fixos diretamente no TypeChecker do compilador.
+  - Bloqueio imediato de divisões por zero ou estouros em tempo de compilação.
+- [ ] **Atributos de Otimização e Controle de Inlining**:
+  - Atributos `@inline(always)` e `@inline(never)` mapeados para diretivas nativas nos backends (FPC `inline` / GCC `__attribute__((always_inline))`).
+  - Atributo `@cold` para rotinas de tratamento de erro ou caminhos raros de execução, instruindo os compiladores de backend a otimizar o *branch prediction* do processador.
