@@ -566,3 +566,21 @@ Este documento traça o status oficial de desenvolvimento do compilador e as pr�
 - [x] **Auditoria de Higiene do Repositório**:
   - Verificação rigorosa do `.gitignore` garantindo que nenhum binário (`.exe`, `.o`, `.ppu`, `.wasm`) ou arquivo temporário seja rastreado.
   - Licença open-source padrão (`LICENSE`) e guia de contribuição (`CONTRIBUTING.md`).
+
+---
+
+### ✅ Fase 41: Auto-Atualização da Toolchain da Linguagem (`aetherc upgrade`) - CONCLUÍDA
+- [x] **Arquitetura Híbrida de Atualização (Binary Release & Source Build)**:
+  - Detecção automática de repositório Git local ou download de binários pré-compilados oficiais do GitHub Releases.
+  - Suporte à flag `--check` para consulta não invasiva de novas versões e notas de lançamento (Release Notes).
+  - Suporte à flag `--from-source` para sincronização Git (`fetch`, `pull`), compilação nativa via `build.ps1`/`build.sh` e execução da suíte de testes unitários.
+  - Suporte à flag `--binary` para forçar download do artefato empacotado da plataforma.
+  - Suporte a `--version=<tag>` e `--nightly` para transitar entre versões estáveis e experimentais.
+- [x] **Segurança e Validação Criptográfica SHA-256**:
+  - Download e verificação automatizada de somas de verificação SHA-256 antes da extração do arquivo.
+  - Bloqueio imediato (`E9991`) e descarte em caso de divergência ou corrupção do pacote.
+- [x] **Mecanismo de Substituição Atômica & Rollback Instantâneo**:
+  - Contorno nativo para o bloqueio de arquivo em execução no Windows: renomeação do executável ativo para `.bak`, gravação do novo executável e auto-teste de integridade.
+  - Rollback automático caso o novo binário falhe no teste de inicialização.
+  - Comando `aetherc upgrade --rollback` para restauração imediata da versão anterior a qualquer momento.
+  - Modo `--dry-run` para auditoria prévia completa do plano de execução sem modificações em disco.

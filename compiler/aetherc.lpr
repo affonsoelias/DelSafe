@@ -30,7 +30,8 @@ uAetherBenchmark,
 uAetherDerives,
 uAetherLinter,
 uAetherProfiler,
-uAetherCfg;
+uAetherCfg,
+uAetherUpgrade;
 
 Procedure PrintBanner;
 Begin
@@ -54,6 +55,7 @@ Begin
   WriteLn('  fmt [caminho]     Formata codigo Aether segundo as normas canonicas (--check para CI/CD)');
   WriteLn('  doc [caminho]     Gera documentacao canonica do projeto (HTML, Markdown e Doctests)');
   WriteLn('  emit-header <arq> Gera cabecalho C (.h) compativel com ANSI C/C++');
+  WriteLn('  upgrade           Atualiza a toolchain do compilador Aether (--check, --from-source, --binary, --rollback)');
   WriteLn('  clean             Limpa artefatos de build (bin/ e generated/) do projeto');
   WriteLn('  bootstrap         Executa ciclo completo de auto-hospedagem (Stage 1, 2 e 3)');
   WriteLn('');
@@ -1733,6 +1735,7 @@ Var
   TargetEntry, TargetOut, TargetBackend, TargetCC: string;
   EmitTargetPascal, EmitToStdout, HasTargetSpecified, EmitAsUnit, EmitSilent, EmitWatch: Boolean;
   EmitSource, EmitOut, EmitOutDir: string;
+  UpgradeOpts: TUpgradeOptions;
 Begin
   InitGlobalPaths;
   InputFile := '';
@@ -2232,8 +2235,8 @@ If (ParamCount >= 1) And ((LowerCase(ParamStr(1)) = 'remove') Or (LowerCase(Para
   End;
 End;
 
-// Checa comando de pacotes: update / upgrade
-If (ParamCount >= 1) And ((LowerCase(ParamStr(1)) = 'update') Or (LowerCase(ParamStr(1)) = 'upgrade')) Then
+// Checa comando de pacotes: update (atalho para "aetherc pkg update")
+If (ParamCount >= 1) And (LowerCase(ParamStr(1)) = 'update') Then
   Begin
     PrintBanner;
     PkgName := '';
@@ -2249,6 +2252,72 @@ If (ParamCount >= 1) And ((LowerCase(ParamStr(1)) = 'update') Or (LowerCase(Para
             End;
   End;
 End;
+
+// Checa comando de auto-atualizacao da toolchain: upgrade
+If (ParamCount >= 1) And (LowerCase(ParamStr(1)) = 'upgrade') Then
+  Begin
+    PrintBanner;
+    UpgradeOpts.CheckOnly := False;
+    UpgradeOpts.FromSource := False;
+    UpgradeOpts.BinaryMode := False;
+    UpgradeOpts.Rollback := False;
+    UpgradeOpts.DryRun := False;
+    UpgradeOpts.Nightly := False;
+    UpgradeOpts.TargetVersion := '';
+    UpgradeOpts.CustomUrl := '';
+
+    I := 2;
+    While I <= ParamCount Do
+      Begin
+        Arg := ParamStr(I);
+        If (Arg = '--check') Or (Arg = '-c') Then
+          UpgradeOpts.CheckOnly := True
+        Else If (Arg = '--from-source') Or (Arg = '--source') Or (Arg = '-s') Then
+          UpgradeOpts.FromSource := True
+        Else If (Arg = '--binary') Or (Arg = '-b') Then
+          UpgradeOpts.BinaryMode := True
+        Else If (Arg = '--rollback') Or (Arg = '-r') Then
+          UpgradeOpts.Rollback := True
+        Else If (Arg = '--dry-run') Or (Arg = '--dry') Or (Arg = '-d') Then
+          UpgradeOpts.DryRun := True
+        Else If Arg = '--nightly' Then
+          UpgradeOpts.Nightly := True
+        Else If Pos('--version=', Arg) = 1 Then
+          UpgradeOpts.TargetVersion := Copy(Arg, 11, Length(Arg))
+        Else If Pos('-v=', Arg) = 1 Then
+          UpgradeOpts.TargetVersion := Copy(Arg, 4, Length(Arg))
+        Else If Pos('--url=', Arg) = 1 Then
+          UpgradeOpts.CustomUrl := Copy(Arg, 7, Length(Arg))
+        Else If (Arg = '-h') Or (Arg = '--help') Then
+          Begin
+            WriteLn('Uso: aetherc upgrade [opcoes]');
+            WriteLn('');
+            WriteLn('Opcoes de Atualizacao da Toolchain:');
+            WriteLn('  --check, -c         Apenas verifica se ha versoes mais recentes disponiveis');
+            WriteLn('  --from-source, -s   Atualiza compilando a partir do repositorio Git local');
+            WriteLn('  --binary, -b        Forca download e instalacao do binario pre-compilado oficial');
+            WriteLn('  --rollback, -r      Restaura o backup da versao anterior do executavel (.bak)');
+            WriteLn('  --dry-run, -d       Simula todas as etapas do processo sem alterar arquivos');
+            WriteLn('  --version=<tag>     Instala uma versao ou tag especifica (ex: --version=v0.6.0)');
+            WriteLn('  --nightly           Busca pela build de desenvolvimento nightly mais recente');
+            Halt(0);
+          End
+        Else If (Length(Arg) > 0) And (Arg[1] <> '-') And (UpgradeOpts.TargetVersion = '') Then
+          UpgradeOpts.TargetVersion := Arg;
+        Inc(I);
+      End;
+
+    Try
+      TAetherUpgrade.ExecuteUpgrade(UpgradeOpts);
+      Halt(0);
+    Except
+      on E: Exception Do
+            Begin
+              WriteLn(ErrOutput, 'Erro durante atualizacao da toolchain: ', E.Message);
+              Halt(1);
+            End;
+    End;
+  End;
 
 // Checa comando de seguranca: audit
 If (ParamCount >= 1) And (LowerCase(ParamStr(1)) = 'audit') Then

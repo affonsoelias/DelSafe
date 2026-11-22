@@ -117,6 +117,37 @@ Remove com segurança todos os artefatos de compilação do projeto atual (`bin/
 aetherc clean
 ```
 
+### `aetherc upgrade [opcoes]`
+Atualiza a toolchain do compilador AetherLang para a versão mais recente diretamente do repositório oficial ou via código-fonte local:
+```bash
+# Verifica se ha nova versao disponivel sem baixar
+aetherc upgrade --check
+
+# Atualiza a toolchain automaticamente (detecta se esta no repo git ou baixa binario oficial)
+aetherc upgrade
+
+# Forca atualizacao via download do binario pre-compilado oficial
+aetherc upgrade --binary
+
+# Atualiza compilando a partir do codigo-fonte do repositorio Git local
+aetherc upgrade --from-source
+
+# Atualiza para uma versao ou tag especifica
+aetherc upgrade --version=v0.6.0
+
+# Simula o processo de atualizacao sem alterar arquivos em disco
+aetherc upgrade --dry-run
+
+# Reverte imediatamente para a versao anterior em caso de qualquer instabilidade
+aetherc upgrade --rollback
+```
+
+**Principais Recursos do Upgrader:**
+- **Zero Dependências Externas**: Utiliza `curl` e `tar` (bsdtar) nativos das plataformas modernas (Windows 10/11, Linux e macOS).
+- **Substituição Atômica no Windows**: Renomeia o executável em execução para `aetherc.exe.bak`, grava a nova versão no mesmo local e testa a integridade com rollback automático em caso de falha.
+- **Auditoria Criptográfica SHA-256**: Valida o hash SHA-256 do artefato baixado contra a assinatura oficial do release antes de descompactar (Erro `E9991` caso haja divergência).
+- **Rollback Instantâneo**: A flag `--rollback` restaura a versão funcional anterior instantaneamente.
+
 ---
 
 ## 2.1 Compilação Incremental e Sistema de Cache (`--incremental`)

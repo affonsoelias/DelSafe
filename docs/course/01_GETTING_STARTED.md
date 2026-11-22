@@ -66,6 +66,7 @@ The `aetherc` compiler comes equipped with built-in developer tools:
 | `aetherc fmt [path]` | Canonical code formatter according to official style guidelines. |
 | `aetherc profile <file.aeth>` | Compiles with heap instrumentation, profiling memory allocations and certifying zero leaks. |
 | `aetherc emit-header <file.aeth>` | Generates ANSI C/C++ header files (`.h`) for libraries. |
+| `aetherc upgrade` | Self-updates the Aether compiler toolchain with SHA-256 verification and atomic rollback. |
 
 ---
 

@@ -46,6 +46,10 @@ type
     property CompilerVersion: string read FCompilerVersion write FCompilerVersion;
   end;
 
+// Versao oficial da toolchain Aether
+const
+  AETHER_COMPILER_VERSION = '0.5.0';
+
 // Funções criptográficas SHA-256 autônomas e de alta performance
 function SHA256String(const S: string): string;
 function SHA256File(const AFilePath: string): string;
@@ -63,8 +67,6 @@ procedure InvalidateBuildCache(const BaseDir, SourceFile, TargetBackend: string)
 implementation
 
 const
-  AETHER_COMPILER_VERSION = '0.5.0';
-
   K256: array[0..63] of Cardinal = (
     $428a2f98, $71374491, $b5c0fbcf, $e9b5dba5, $3956c25b, $59f111f1, $923f82a4, $ab1c5ed5,
     $d807aa98, $12835b01, $243185be, $550c7dc3, $72be5d74, $80deb1fe, $9bdc06a7, $c19bf174,
