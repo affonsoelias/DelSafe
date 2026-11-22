@@ -1,6 +1,6 @@
 module SelfHostedDemo;
 
-program SelfHostedDemo;
+program Main;
 var
     x: Int32;
     contador: Int32;

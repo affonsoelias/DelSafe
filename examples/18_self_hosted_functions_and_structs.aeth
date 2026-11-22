@@ -16,7 +16,7 @@ begin
     return a + b;
 end;
 
-program ExemploFuncoesEStructs;
+program Main;
 var
     n1: Int32;
     n2: Int32;

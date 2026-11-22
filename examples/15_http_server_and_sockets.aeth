@@ -93,7 +93,7 @@ begin
     PrintLn("==================================================");
 end;
 
-program HttpServerAndSockets;
+program Main;
 begin
     RunDemo();
 end.

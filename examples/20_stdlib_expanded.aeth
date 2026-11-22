@@ -5,7 +5,7 @@ import std.time;
 import std.json;
 import std.http;
 
-program StdlibExpanded;
+program Main;
 var
     test_dir: String;
     test_file: String;

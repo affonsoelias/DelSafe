@@ -10,7 +10,7 @@ begin
     return a * b;
 end;
 
-program SuiteMatematicaTest;
+program Main;
 var
     soma: Int32;
     mult: Int32;

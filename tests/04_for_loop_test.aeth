@@ -24,7 +24,7 @@ begin
     return soma;
 end;
 
-program Test;
+program Main;
 var
     soma_asc: Int32;
     soma_desc: Int32;

@@ -68,7 +68,7 @@ begin
     return largura * altura;
 end;
 
-program test_doc;
+program Main;
 var
     p: Ponto;
 begin

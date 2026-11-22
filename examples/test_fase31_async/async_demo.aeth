@@ -15,7 +15,7 @@ begin
     return "Ola assincrono, " + nome;
 end;
 
-program async_demo_app;
+program Main;
 var
     soma: Int32;
     t1: Task<Int32>;

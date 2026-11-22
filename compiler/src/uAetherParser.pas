@@ -812,8 +812,10 @@ begin
   PLine := FCurTok.Line;
   PCol := FCurTok.Col;
   Expect(tokProgram);
-  ProgName := Expect(tokIdentifier, 'Esperado nome do programa principal').Value;
-  Expect(tokSemicolon, 'Esperado ";" apos declaracao de programa');
+  ProgName := Expect(tokIdentifier, 'Esperado "Main" apos a palavra-chave "program"').Value;
+  if not SameText(ProgName, 'Main') then
+    raise EAetherParserError.CreateFmt('Erro E0002: O bloco executavel deve ser obrigatoriamente "program Main;", mas foi encontrado "program %s;" na linha %d, coluna %d', [ProgName, PLine, PCol]);
+  Expect(tokSemicolon, 'Esperado ";" apos declaracao "program Main"');
 
   Result := TASTProgramBlock.Create(PLine, PCol, ProgName);
   try

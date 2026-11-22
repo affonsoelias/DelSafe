@@ -6,7 +6,7 @@ import pascal "AuxiliarPascal";
 
 extern pascal function TriploPascal(x: Int32): Int32;
 
-program MainPascal;
+program Main;
 var
     minha_arvore: Arvore;
     res_pas: Int32;

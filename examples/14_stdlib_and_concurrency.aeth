@@ -6,7 +6,7 @@ import JSON;
 import Sync;
 import Net;
 
-program StdlibAndConcurrency;
+program Main;
 var
     jb: JsonBuilder;
     doc_json: String;

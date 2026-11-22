@@ -38,7 +38,7 @@ type
     is_linux: Bool;
   end;
 
-program TestFase40;
+program Main;
 var
   info: SystemInfo;
   sum: Int32;

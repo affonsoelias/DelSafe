@@ -1,6 +1,6 @@
 module InlineAssemblyIntel;
 
-program InlineAssemblyIntel;
+program Main;
 var
     mensagem: String;
 begin

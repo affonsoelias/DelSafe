@@ -1,6 +1,6 @@
 module bad_comptime;
 
-program BadComptime;
+program Main;
 var
   x: Int32;
 begin
