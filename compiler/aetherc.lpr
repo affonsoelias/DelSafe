@@ -38,38 +38,29 @@ Begin
 '  init [nome]       Inicializa um novo projeto Aether com manifesto aether.json'
   );
   WriteLn(
-
       '  new <nome>        Cria uma nova pasta com o projeto Aether estruturado'
   );
   WriteLn(
-
-         '  add <pacote>      Adiciona uma dependencia ao manifesto aether.json'
-  );
-  WriteLn(
-
-         '  remove <pacote>   Remove uma dependencia e limpa caches locais (rm)'
-  );
-  WriteLn(
-
-         '  update [pacote]   Atualiza pacotes Git e sincroniza o lockfile (upgrade)'
-  );
-  WriteLn(
-
-         '  audit             Inspeciona a integridade criptografica e seguranca TLS'
+      '  pkg <subcomando>  Gerenciador de pacotes (add, remove, update, audit, list, clean)'
   );
   WriteLn('  test [filtro]     Executa testes unitarios da pasta tests/');
   WriteLn(
-
-  '  build             Compila o projeto atual baseado no manifesto aether.json'
+      '  build             Compila o projeto atual baseado no manifesto aether.json'
   );
   WriteLn(
-
       '  run               Compila e executa imediatamente o binario do projeto'
   );
   WriteLn(
-
- '  lsp               Inicia o servidor de linguagem (Language Server Protocol)'
+      '  lsp               Inicia o servidor de linguagem (Language Server Protocol)'
   );
+  WriteLn('');
+  WriteLn('Subcomandos de "aetherc pkg":');
+  WriteLn('  pkg add <pacote>     Adiciona uma dependencia ao projeto (Git, Local ou Registry)');
+  WriteLn('  pkg remove <pacote>  Remove uma dependencia de aether.json e limpa caches (rm)');
+  WriteLn('  pkg update [pacote]  Atualiza dependencias Git e sincroniza o lockfile (upgrade)');
+  WriteLn('  pkg audit            Inspeciona a integridade criptografica e seguranca TLS');
+  WriteLn('  pkg list             Exibe a lista de dependencias declaradas no projeto (ls)');
+  WriteLn('  pkg clean            Limpa o cache global de pacotes (~/.aether/cache)');
   WriteLn('');
   WriteLn('Opcoes Principais:');
   WriteLn(
@@ -731,7 +722,7 @@ Var
   ProjConfig: TAetherProjectConfig;
   I: Integer;
   Arg: string;
-  PkgName, OptPath, OptGit, OptVer, FilterName: string;
+  PkgName, OptPath, OptGit, OptVer, FilterName, SubCmd: string;
 Begin
   InputFile := '';
   OutputExe := '';
@@ -760,6 +751,126 @@ Begin
               End;
     End;
 End;
+
+// Checa comando unificado de gerenciamento de pacotes: pkg
+If (ParamCount >= 1) And (LowerCase(ParamStr(1)) = 'pkg') Then
+  Begin
+    PrintBanner;
+    SubCmd := '';
+    If ParamCount >= 2 Then SubCmd := LowerCase(ParamStr(2));
+
+    If SubCmd = 'add' Then
+    Begin
+      PkgName := '';
+      OptPath := '';
+      OptGit := '';
+      OptVer := '';
+      I := 3;
+      While I <= ParamCount Do
+      Begin
+        Arg := ParamStr(I);
+        If Pos('--path=', Arg) = 1 Then OptPath := Copy(Arg, 8, Length(Arg))
+        Else If Pos('--git=', Arg) = 1 Then OptGit := Copy(Arg, 7, Length(Arg))
+        Else If Pos('--version=', Arg) = 1 Then OptVer := Copy(Arg, 11, Length(Arg))
+        Else If Pos('--branch=', Arg) = 1 Then OptVer := Copy(Arg, 10, Length(Arg))
+        Else If Pos('--tag=', Arg) = 1 Then OptVer := Copy(Arg, 7, Length(Arg))
+        Else If PkgName = '' Then PkgName := Arg;
+        Inc(I);
+      End;
+      Try
+        HandleProjectAdd(PkgName, OptPath, OptGit, OptVer);
+        Halt(0);
+      Except
+        on E: Exception Do
+        Begin
+          WriteLn(ErrOutput, 'Erro ao adicionar pacote: ', E.Message);
+          Halt(1);
+        End;
+      End;
+    End
+    Else If (SubCmd = 'remove') Or (SubCmd = 'rm') Then
+    Begin
+      PkgName := '';
+      If ParamCount >= 3 Then PkgName := ParamStr(3);
+      Try
+        HandleProjectRemove(PkgName);
+        Halt(0);
+      Except
+        on E: Exception Do
+        Begin
+          WriteLn(ErrOutput, 'Erro ao remover pacote: ', E.Message);
+          Halt(1);
+        End;
+      End;
+    End
+    Else If (SubCmd = 'update') Or (SubCmd = 'upgrade') Then
+    Begin
+      PkgName := '';
+      If ParamCount >= 3 Then PkgName := ParamStr(3);
+      Try
+        HandleProjectUpdate(PkgName);
+        Halt(0);
+      Except
+        on E: Exception Do
+        Begin
+          WriteLn(ErrOutput, 'Erro ao atualizar pacotes: ', E.Message);
+          Halt(1);
+        End;
+      End;
+    End
+    Else If SubCmd = 'audit' Then
+    Begin
+      Try
+        HandleProjectAudit();
+        Halt(0);
+      Except
+        on E: Exception Do
+        Begin
+          WriteLn(ErrOutput, 'Erro durante auditoria de seguranca: ', E.Message);
+          Halt(1);
+        End;
+      End;
+    End
+    Else If (SubCmd = 'list') Or (SubCmd = 'ls') Then
+    Begin
+      Try
+        HandleProjectList();
+        Halt(0);
+      Except
+        on E: Exception Do
+        Begin
+          WriteLn(ErrOutput, 'Erro ao listar dependencias: ', E.Message);
+          Halt(1);
+        End;
+      End;
+    End
+    Else If SubCmd = 'clean' Then
+    Begin
+      Try
+        HandleProjectCleanCache();
+        Halt(0);
+      Except
+        on E: Exception Do
+        Begin
+          WriteLn(ErrOutput, 'Erro ao limpar cache: ', E.Message);
+          Halt(1);
+        End;
+      End;
+    End
+    Else
+    Begin
+      WriteLn('Uso: aetherc pkg <subcomando> [opcoes]');
+      WriteLn('');
+      WriteLn('Subcomandos Disponiveis:');
+      WriteLn('  add <pacote>     Adiciona uma dependencia ao projeto (Git, Local ou Registry)');
+      WriteLn('  remove <pacote>  Remove uma dependencia de aether.json e limpa caches (rm)');
+      WriteLn('  update [pacote]  Atualiza dependencias Git e sincroniza o lockfile (upgrade)');
+      WriteLn('  audit            Inspeciona a integridade criptografica e seguranca TLS');
+      WriteLn('  list             Exibe a lista de todas as dependencias do projeto (ls)');
+      WriteLn('  clean            Limpa o cache global de pacotes (~/.aether/cache)');
+      Halt(0);
+    End;
+  End;
 
 // 2. Checa comando de pacotes: add
 If (ParamCount >= 1) And (LowerCase(ParamStr(1)) = 'add') Then

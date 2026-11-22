@@ -39,6 +39,8 @@ procedure HandleProjectAdd(const PkgName: string; const OptPath, OptGit, OptVer:
 procedure HandleProjectRemove(const PkgName: string);
 procedure HandleProjectUpdate(const PkgName: string);
 procedure HandleProjectAudit();
+procedure HandleProjectList();
+procedure HandleProjectCleanCache();
 
 implementation
 
@@ -1104,6 +1106,62 @@ begin
   finally
     LockObj.Free;
   end;
+end;
+
+procedure HandleProjectList();
+var
+  Config: TAetherProjectConfig;
+  I: Integer;
+  Dep: TAetherDependency;
+  Origem: string;
+begin
+  if not LoadProjectConfig(Config) then
+    raise Exception.Create('Nenhum projeto Aether ("aether.json") encontrado no diretorio atual.');
+
+  WriteLn('========================================================');
+  WriteLn(Format('  Dependencias do Projeto: "%s" (v%s)', [Config.Name, Config.Version]));
+  WriteLn('========================================================');
+  if Length(Config.Dependencies) = 0 then
+  begin
+    WriteLn('  Nenhuma dependencia instalada.');
+    WriteLn('  Dica: Use "aetherc pkg add <pacote>" para adicionar.');
+  end
+  else
+  begin
+    for I := 0 to High(Config.Dependencies) do
+    begin
+      Dep := Config.Dependencies[I];
+      if Dep.GitUrl <> '' then
+        Origem := 'Git: ' + Dep.GitUrl + ' (' + Dep.Version + ')'
+      else if Dep.Path <> '' then
+        Origem := 'Local: ' + Dep.Path
+      else
+        Origem := 'Versao: ' + Dep.Version;
+
+      WriteLn(Format('  • %-18s -> %s', [Dep.Name, Origem]));
+    end;
+  end;
+  WriteLn('========================================================');
+end;
+
+procedure HandleProjectCleanCache();
+var
+  CacheDir: string;
+begin
+  CacheDir := GetAetherCacheDir;
+  WriteLn('========================================================');
+  WriteLn('  Aether Package Manager (aetherc pkg clean)            ');
+  WriteLn('========================================================');
+  WriteLn('Limpando cache global de pacotes em: ' + CacheDir);
+  if DirectoryExists(CacheDir) then
+  begin
+    DeleteDirectoryTree(CacheDir);
+    ForceDirectories(CacheDir);
+    WriteLn('[OK] Cache global limpo com sucesso.');
+  end
+  else
+    WriteLn('[OK] Cache ja estava vazio.');
+  WriteLn('========================================================');
 end;
 
 end.
