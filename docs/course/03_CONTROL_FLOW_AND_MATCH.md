@@ -172,6 +172,54 @@ The compiler strictly verifies that `break` and `continue` only occur inside act
 
 ---
 
+## 2.4 Scoped Resource Cleanup (`defer`)
+
+The `defer` statement schedules a statement to execute deterministically in **LIFO (Last-In, First-Out)** order whenever the enclosing block or function exits — including on early `return` paths:
+
+```aether
+module defer_demo;
+
+function ProcessData(mut borrow log: array of Int32, exitEarly: Bool): Int32
+begin
+    defer log.Push(1); // Runs 2nd
+    defer log.Push(2); // Runs 1st
+
+    if exitEarly then
+        return 0; // Automatically runs log.Push(2), then log.Push(1) before returning
+    end;
+
+    return 1;
+end;
+```
+
+---
+
+## 2.5 System Exception Handling (`try ... except` & `raise`)
+
+While Aether uses `Result<T, E>` and `Option<T>` for expected domain errors, low-level runtime faults and unrecoverable panics can be raised with `raise` and caught cleanly with `try ... except ... end;`:
+
+```aether
+module exceptions_demo;
+
+program Main;
+var
+    recovered: Bool;
+begin
+    recovered := false;
+    try
+        PrintLn("Executing guarded block...");
+        raise "Simulated disk fault";
+        PrintLn("This will not execute");
+    except
+        recovered := true;
+        PrintLn("Fault safely intercepted!");
+    end;
+    assert(recovered = true);
+end.
+```
+
+---
+
 ## 3. Algebraic Enums
 
 Enums in Aether are not just lists of numbers; they are **Algebraic Data Types (ADTs)** that can carry payload data with variants:
@@ -247,7 +295,8 @@ Error: Non-exhaustive match pattern! Missing variant: OrderStatus.Cancelled
 
 ## 5. Summary
 1. `if...then...else...end;` provides unambiguous nesting without `begin`.
-2. Loops use `while <cond> do ... end;`.
-3. Enums are algebraic types, and `match` enforces that every single possibility is handled at compile time.
+2. Loops use `while <cond> do ... end;`, `for`, and `repeat ... until` with `break` and `continue`.
+3. `defer` ensures deterministic LIFO cleanup, while `try ... except` and `raise` handle system faults.
+4. Enums are algebraic types, and `match` enforces that every single possibility is handled at compile time.
 
 ➡️ **Next:** **[Chapter 04: Functions & Contracts](04_FUNCTIONS_AND_CONTRACTS.md)**

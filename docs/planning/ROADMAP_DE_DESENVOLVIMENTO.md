@@ -675,3 +675,45 @@ Este documento traça o status oficial de desenvolvimento do compilador e as pr�
   - Criação de `tests/06_fase44_break_continue_const_test.aeth` (validando `break` e `continue` em `for`, `while`, `repeat`, além de constantes numéricas e strings).
   - 100% de aprovação no test runner FPC e GCC C99 (`aetherc test 06` e `aetherc test 06 --target=c`).
   - Atualização dos capítulos correspondentes no Masterclass Course em `docs/course/02_VARIABLES_TYPES_MUTABILITY.md` e `docs/course/03_CONTROL_FLOW_AND_MATCH.md`.
+
+---
+
+### ✅ Fase 45: Estruturas Dinâmicas, Segurança de Escopo, Ergonomia & Sistemas (`array of T`, `defer`, `$"..."`, `try...except`, `unsafe` e Ponteiros Brutos) - CONCLUÍDA
+- [x] **1. Arrays Dinâmicos Redimensionáveis (`array of T`)**:
+  - **Sintaxe**: `type Lista = array of Int32;` ou `var itens: array of String;`.
+  - **Operações Intrínsecas e UFCS**: `SetLength(arr, n)`, `arr.Length()` / `Length(arr)`, `arr.Push(val)`, indexação `arr[i]`.
+  - **Mapeamento nos Backends**:
+    - *Free Pascal*: `array of T` nativo gerenciado (`TAetherDyn_*` / `SetLength` / `Length`).
+    - *GCC C99*: Estrutura dinâmica de vetor (`AetherDynHeader`: `len`, `cap`) com realocação automática (`realloc`) no `SetLength` e `Push`.
+- [x] **2. Limpeza Garantida de Escopo (`defer`)**:
+  - **Sintaxe**: `defer <instrucao>;` (ex.: `defer CloseFile(f);` ou `defer log.Push(1);`).
+  - **Semântica**: Execução determinística garantida em ordem LIFO (*Last-In, First-Out*) ao sair da função ou bloco (inclusive antes de qualquer `return` antecipado).
+  - **Mapeamento nos Backends**:
+    - *Free Pascal e GCC C99*: Emissão determinística das instruções registradas na pilha de `defer` do escopo ativo antes de `return`, `break`, `continue` e no encerramento do bloco.
+- [x] **3. Interpolação de Strings em Tempo de Compilação (`$"..."`)**:
+  - **Sintaxe**: `$"Usuario {nome} tem {pontos} pontos e status {ativo}"`.
+  - **Semântica**: Desugaring/expansão automática no Frontend (Lexer/Parser/TypeChecker) para concatenações de string tipadas (`IntToStr`, `FloatToStr`, `BoolToStr`, `CharToStr`), com zero overhead de parsing em runtime.
+- [x] **4. Tratamento de Exceções do Sistema (`try ... except` e `raise`)**:
+  - **Sintaxe**:
+    ```aether
+    try
+        instrucaoPerigosa();
+    except
+        tratamentoDeFalha();
+    end;
+    ```
+  - **Mapeamento nos Backends**:
+    - *Free Pascal*: `try ... except ... end;` e `raise Exception.Create(...)` nativos (integrados ao `SysUtils`).
+    - *GCC C99*: Mecanismo de guarda estruturada com `setjmp` / `longjmp` e promoção automática de locais modificados em `try` para `volatile`.
+- [x] **5. Blocos `unsafe ... end;`, Ponteiros Brutos e Endereçamento para Sistemas/FFI (`^T`, `@var`, `nil`)**:
+  - **Bloco de Fronteira Insegura (`unsafe ... end;`)**:
+    - Token `tokUnsafe` e nó na AST `TASTUnsafeStmt` (`unsafe ... end;`).
+    - Validação semântica estrita no TypeChecker (`E0312`): desreferência de ponteiros brutos (`ptr^`) e manipulação de baixo nível são bloqueadas fora de blocos `unsafe ... end;`, preservando as garantias de memória do Borrow Checker no código seguro padrão.
+  - **Ponteiros Brutos e Endereçamento**:
+    - Sintaxe: Tipo ponteiro `^Int32` (ou `^T`), operador de endereço `@variavel`, desreferência `ptr^` e literal nulo `nil`.
+  - **Mapeamento Transparente nos Backends** (zero custo em runtime para `unsafe`):
+    - *Free Pascal*: `PAetherPtr_*` / `^T`, `@x`, `ptr^`, `nil`.
+    - *GCC C99*: `T*`, `&(x)`, `*(ptr)`, `NULL`.
+- [x] **6. Suíte de Testes Automatizada & Documentação**:
+  - Criação de `tests/07_fase45_dynarray_defer_interp_try_ptr_test.aeth` validando todos os recursos nos backends FPC e GCC C99 (7/7 testes aprovados em ambos os backends).
+  - Atualização dos capítulos correspondentes do Masterclass Course em `docs/course/02_VARIABLES_TYPES_MUTABILITY.md` e `docs/course/03_CONTROL_FLOW_AND_MATCH.md`.

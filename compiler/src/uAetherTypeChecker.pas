@@ -33,11 +33,13 @@ type
     FModule: TASTModule;
     FTraitImpls: TFPList;
     FLoopDepth: Integer;
+    FUnsafeDepth: Integer;
 
     procedure Error(const ACode, AMsg: string; ALine, ACol: Integer);
     function IsNumericType(const AType: string): Boolean;
     function IsIntegerType(const AType: string): Boolean;
     function IsSetType(const AType: string): Boolean;
+    function IsDynamicArrayType(const AType: string; out ElemType: string): Boolean;
     function TypesAreCompatible(const TargetType, SourceType: string): Boolean;
 
     function CheckExpr(Expr: TASTExpr): string;
@@ -100,6 +102,7 @@ begin
   FModule := nil;
   FTraitImpls := TFPList.Create;
   FLoopDepth := 0;
+  FUnsafeDepth := 0;
 end;
 
 destructor TAetherTypeChecker.Destroy;
@@ -147,9 +150,47 @@ begin
   Result := False;
 end;
 
+function TAetherTypeChecker.IsDynamicArrayType(const AType: string; out ElemType: string): Boolean;
+var
+  Sym: TSymbol;
+  ArrDecl: TASTArrayDecl;
+begin
+  ElemType := '';
+  if Pos('array of ', AType) = 1 then
+  begin
+    ElemType := Trim(Copy(AType, 10, Length(AType)));
+    Exit(True);
+  end;
+  if Assigned(FSymbols) then
+  begin
+    Sym := FSymbols.Resolve(AType);
+    if (Sym <> nil) and (Sym.Kind = skType) and (Sym.Node is TASTArrayDecl) then
+    begin
+      ArrDecl := TASTArrayDecl(Sym.Node);
+      if ArrDecl.Dims.Count = 0 then
+      begin
+        ElemType := ArrDecl.ElemType;
+        Exit(True);
+      end;
+    end;
+  end;
+  Result := False;
+end;
+
 function TAetherTypeChecker.TypesAreCompatible(const TargetType, SourceType: string): Boolean;
+var
+  TargetElem, SourceElem: string;
 begin
   if TargetType = SourceType then Exit(True);
+  // Ponteiros e nil
+  if (SourceType = 'NilLiteral') and ((Pos('^', TargetType) = 1) or (TargetType = 'Pointer')) then Exit(True);
+  if (TargetType = 'NilLiteral') and ((Pos('^', SourceType) = 1) or (SourceType = 'Pointer')) then Exit(True);
+  if ((TargetType = 'Pointer') and (Pos('^', SourceType) = 1)) or ((SourceType = 'Pointer') and (Pos('^', TargetType) = 1)) then Exit(True);
+  if (Pos('^', TargetType) = 1) and (Pos('^', SourceType) = 1) then
+    Exit(TypesAreCompatible(Copy(TargetType, 2, Length(TargetType)), Copy(SourceType, 2, Length(SourceType))));
+  // Arrays dinamicos
+  if IsDynamicArrayType(TargetType, TargetElem) and IsDynamicArrayType(SourceType, SourceElem) then
+    Exit(TypesAreCompatible(TargetElem, SourceElem));
   // Literais inteiros genericos sao compativeis com qualquer tipo inteiro
   if (SourceType = 'IntLiteral') and (Pos('Int', TargetType) > 0) then Exit(True);
   // Compatibilidade entre tipos inteiros (Int32, UInt32, etc.)
@@ -189,6 +230,7 @@ begin
     lkString: Result := 'String';
     lkChar:   Result := 'Char';
     lkBool:   Result := 'Bool';
+    lkNil:    Result := 'NilLiteral';
   else
     Result := 'Unknown';
   end;
@@ -392,6 +434,21 @@ function TAetherTypeChecker.CheckUnary(Un: TASTUnaryExpr): string;
 var
   OperandType: string;
 begin
+  if Un.Op = '@' then
+  begin
+    OperandType := CheckExpr(Un.Expr);
+    Exit('^' + OperandType);
+  end
+  else if Un.Op = '^' then
+  begin
+    if FUnsafeDepth <= 0 then
+      Error('E0312', 'Desreferencia de ponteiro bruto ("^") exige um bloco "unsafe ... end;"', Un.Line, Un.Col);
+    OperandType := CheckExpr(Un.Expr);
+    if Pos('^', OperandType) = 1 then
+      Exit(Copy(OperandType, 2, Length(OperandType)));
+    Error('E0308', Format('Nao e possivel desreferenciar tipo nao-ponteiro: "%s"', [OperandType]), Un.Line, Un.Col);
+  end;
+
   OperandType := CheckExpr(Un.Expr);
   if Un.Op = '-' then
   begin
@@ -469,10 +526,38 @@ var
   Sym, SymMono, TypeSym: TSymbol;
   FuncNode, MonoFunc: TASTFunction;
   RecDecl: TASTRecordDecl;
+  SubSym: TSymbol;
   I: Integer;
   Arg: TASTCallArg;
-  ArgType, ExpectedType, Mangled, MonomorphedName: string;
+  ArgType, ExpectedType, Mangled, MonomorphedName, ElemType: string;
 begin
+  if Call.Callee = '__InterpToStr' then
+  begin
+    if Call.Args.Count <> 1 then
+      Error('E0061', 'Interpolacao espera 1 expressao por bloco "{...}"', Call.Line, Call.Col);
+    ArgType := CheckExpr(TASTCallArg(Call.Args[0]).Expr);
+    SubSym := FSymbols.Resolve(ArgType);
+    if IsIntegerType(ArgType) or
+       (Assigned(SubSym) and (SubSym.Node is TASTSubrangeDecl) and (TASTSubrangeDecl(SubSym.Node).BaseType <> 'Char')) then
+      Call.Callee := 'IntToStr'
+    else if (ArgType = 'Float32') or (ArgType = 'Float64') or (ArgType = 'FloatLiteral') then
+      Call.Callee := 'FloatToStr'
+    else if ArgType = 'Bool' then
+      Call.Callee := 'BoolToStr'
+    else if (ArgType = 'Char') or
+            (Assigned(SubSym) and (SubSym.Node is TASTSubrangeDecl) and (TASTSubrangeDecl(SubSym.Node).BaseType = 'Char')) then
+      Call.Callee := 'CharToStr';
+    Exit('String');
+  end;
+
+  if Call.Callee = 'CharToStr' then
+  begin
+    if Call.Args.Count <> 1 then
+      Error('E0061', 'Funcao "CharToStr" espera 1 argumento (Char)', Call.Line, Call.Col);
+    CheckExpr(TASTCallArg(Call.Args[0]).Expr);
+    Exit('String');
+  end;
+
   // Atalhos embutidos Ok() e Err()
   if Call.Callee = 'Ok' then
   begin
@@ -632,14 +717,56 @@ begin
       Exit('Void');
     end;
 
-    if Call.Callee = 'Length' then
+    if SameText(Call.Callee, 'Length') then
     begin
       if Call.Args.Count <> 1 then
-        Error('E0061', 'Funcao "Length" espera 1 argumento (String)', Call.Line, Call.Col);
+        Error('E0061', 'Funcao "Length" espera 1 argumento (String ou Array)', Call.Line, Call.Col);
       ArgType := CheckExpr(TASTCallArg(Call.Args[0]).Expr);
-      if ArgType <> 'String' then
-        Error('E0308', Format('Funcao "Length" espera String, recebeu: "%s"', [ArgType]), Call.Line, Call.Col);
-      Exit('UInt32');
+      if ArgType = 'String' then
+        Exit('UInt32')
+      else if IsDynamicArrayType(ArgType, ElemType) or (Pos('array[', ArgType) = 1) or
+              (Assigned(FSymbols.Resolve(ArgType)) and (FSymbols.Resolve(ArgType).Node is TASTArrayDecl)) then
+        Exit('Int32')
+      else
+        Error('E0308', Format('Funcao "Length" espera String ou Array, recebeu: "%s"', [ArgType]), Call.Line, Call.Col);
+    end;
+
+    if SameText(Call.Callee, 'SetLength') then
+    begin
+      if Call.Args.Count <> 2 then
+        Error('E0061', 'Funcao "SetLength" espera 2 argumentos (ArrayDinamico, Tamanho)', Call.Line, Call.Col);
+      if TASTCallArg(Call.Args[0]).Expr is TASTIdentifierExpr then
+      begin
+        SubSym := FSymbols.Resolve(TASTIdentifierExpr(TASTCallArg(Call.Args[0]).Expr).Name);
+        if Assigned(SubSym) and (not SubSym.IsMutable) then
+          Error('E0384', Format('Nao e possivel redimensionar array imutavel (declarado com "let"): "%s"', [SubSym.Name]), Call.Line, Call.Col);
+      end;
+      ArgType := CheckExpr(TASTCallArg(Call.Args[0]).Expr);
+      if not IsDynamicArrayType(ArgType, ElemType) and (ArgType <> 'String') then
+        Error('E0308', Format('Primeiro argumento de "SetLength" deve ser Array Dinamico, recebeu: "%s"', [ArgType]), Call.Line, Call.Col);
+      ArgType := CheckExpr(TASTCallArg(Call.Args[1]).Expr);
+      if not IsIntegerType(ArgType) then
+        Error('E0308', Format('Segundo argumento de "SetLength" deve ser inteiro, recebeu: "%s"', [ArgType]), Call.Line, Call.Col);
+      Exit('Void');
+    end;
+
+    if SameText(Call.Callee, 'Push') then
+    begin
+      if Call.Args.Count <> 2 then
+        Error('E0061', 'Funcao "Push" espera 2 argumentos (ArrayDinamico, Elemento)', Call.Line, Call.Col);
+      if TASTCallArg(Call.Args[0]).Expr is TASTIdentifierExpr then
+      begin
+        SubSym := FSymbols.Resolve(TASTIdentifierExpr(TASTCallArg(Call.Args[0]).Expr).Name);
+        if Assigned(SubSym) and (not SubSym.IsMutable) then
+          Error('E0384', Format('Nao e possivel adicionar elemento em array imutavel (declarado com "let"): "%s"', [SubSym.Name]), Call.Line, Call.Col);
+      end;
+      ArgType := CheckExpr(TASTCallArg(Call.Args[0]).Expr);
+      if not IsDynamicArrayType(ArgType, ElemType) then
+        Error('E0308', Format('Primeiro argumento de "Push" deve ser Array Dinamico, recebeu: "%s"', [ArgType]), Call.Line, Call.Col);
+      ArgType := CheckExpr(TASTCallArg(Call.Args[1]).Expr);
+      if not TypesAreCompatible(ElemType, ArgType) then
+        Error('E0308', Format('Tipo do elemento em "Push" incompativel: esperado "%s", recebeu "%s"', [ElemType, ArgType]), Call.Line, Call.Col);
+      Exit('Void');
     end;
 
     if Call.Callee = 'CharAt' then
@@ -928,6 +1055,8 @@ begin
 
   if Assigned(ArrDecl) then
     ElemType := ArrDecl.ElemType
+  else if Pos('array of ', TargetType) = 1 then
+    ElemType := Trim(Copy(TargetType, 10, Length(TargetType)))
   else if Pos('array[', TargetType) = 1 then
   begin
     P1 := Pos('] of ', TargetType);
@@ -1193,6 +1322,8 @@ begin
 end;
 
 procedure TAetherTypeChecker.CheckStmt(Stmt: TASTStmt);
+var
+  I: Integer;
 begin
   if Stmt is TASTAssignStmt then
     CheckAssign(TASTAssignStmt(Stmt))
@@ -1216,7 +1347,36 @@ begin
     CheckMatch(TASTMatchStmt(Stmt))
   else if Stmt is TASTAsmStmt then
     // Bloco assembly de baixo nivel: aceito sem verificacao semantica de tipos
-    ;
+  else if Stmt is TASTDeferStmt then
+  begin
+    if Assigned(TASTDeferStmt(Stmt).Stmt) then
+      CheckStmt(TASTDeferStmt(Stmt).Stmt);
+  end
+  else if Stmt is TASTTryStmt then
+  begin
+    for I := 0 to TASTTryStmt(Stmt).TryBody.Count - 1 do
+      CheckStmt(TASTStmt(TASTTryStmt(Stmt).TryBody[I]));
+    for I := 0 to TASTTryStmt(Stmt).ExceptBody.Count - 1 do
+      CheckStmt(TASTStmt(TASTTryStmt(Stmt).ExceptBody[I]));
+  end
+  else if Stmt is TASTRaiseStmt then
+  begin
+    if Assigned(TASTRaiseStmt(Stmt).Expr) then
+    begin
+      if CheckExpr(TASTRaiseStmt(Stmt).Expr) <> 'String' then
+        Error('E0308', 'Instrucao "raise" espera mensagem do tipo String', Stmt.Line, Stmt.Col);
+    end;
+  end
+  else if Stmt is TASTUnsafeStmt then
+  begin
+    Inc(FUnsafeDepth);
+    try
+      for I := 0 to TASTUnsafeStmt(Stmt).Body.Count - 1 do
+        CheckStmt(TASTStmt(TASTUnsafeStmt(Stmt).Body[I]));
+    finally
+      Dec(FUnsafeDepth);
+    end;
+  end;
 end;
 
 procedure TAetherTypeChecker.CheckRepeat(RepeatStmt: TASTRepeatStmt);

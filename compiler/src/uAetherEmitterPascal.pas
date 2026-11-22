@@ -16,11 +16,15 @@ type
     FModule: TASTModule;
     FCurrentFunc: TASTFunction;
     FProgramBlock: TASTProgramBlock;
+    FActiveDefers: TFPList;
+    FLoopDeferBase: Integer;
 
     procedure Emit(const Line: string = '');
     procedure IncIndent;
     procedure DecIndent;
     function IndentStr: string;
+    procedure EmitActiveDefers(DownToIndex: Integer = 0);
+    procedure EmitStmtList(List: TASTNodeList; IsLoopBody: Boolean = False);
 
     function IsEnumName(const AName: string): Boolean;
     function EscapePascalString(const S: string): string;
@@ -56,10 +60,13 @@ begin
   inherited Create;
   FOutput := TStringList.Create;
   FIndent := 0;
+  FActiveDefers := TFPList.Create;
+  FLoopDeferBase := 0;
 end;
 
 destructor TAetherEmitterPascal.Destroy;
 begin
+  FActiveDefers.Free;
   FOutput.Free;
   inherited Destroy;
 end;
@@ -222,12 +229,34 @@ begin
     if (Bin.Op = '+') and ((GetExprTypeName(Bin.Left) = 'String') or (GetExprTypeName(Bin.Right) = 'String')) then
       Exit('String');
   end
+  else if Expr is TASTIndexExpr then
+  begin
+    TargetType := GetExprTypeName(TASTIndexExpr(Expr).Target);
+    if Pos('array of ', TargetType) = 1 then
+      Exit(Trim(Copy(TargetType, 10, Length(TargetType))))
+    else if Pos('] of ', TargetType) > 0 then
+      Exit(Trim(Copy(TargetType, Pos('] of ', TargetType) + 5, Length(TargetType))))
+    else if Assigned(FModule) then
+    begin
+      for I := 0 to FModule.Types.Count - 1 do
+        if (FModule.Types[I] is TASTArrayDecl) and SameText(TASTArrayDecl(FModule.Types[I]).Name, TargetType) then
+          Exit(TASTArrayDecl(FModule.Types[I]).ElemType);
+    end;
+  end
+  else if Expr is TASTUnaryExpr then
+  begin
+    TargetType := GetExprTypeName(TASTUnaryExpr(Expr).Expr);
+    if TASTUnaryExpr(Expr).Op = '@' then
+      Exit('^' + TargetType)
+    else if (TASTUnaryExpr(Expr).Op = '^') and (Pos('^', TargetType) = 1) then
+      Exit(Copy(TargetType, 2, Length(TargetType)));
+  end
   else if Expr is TASTCallExpr then
   begin
     Call := TASTCallExpr(Expr);
     if Call.Callee = 'Box' then Exit('Box');
     if Call.Callee = 'Some' then Exit('Option');
-    if (Call.Callee = 'ReadFile') or (Call.Callee = 'CharAt') or (Call.Callee = 'Substring') or (Call.Callee = 'ToString') or (Call.Callee = 'IntToStr') or (Call.Callee = 'SocketRecv') or (Call.Callee = 'ParamStr') then Exit('String');
+    if (Call.Callee = 'ReadFile') or (Call.Callee = 'CharAt') or (Call.Callee = 'Substring') or (Call.Callee = 'ToString') or (Call.Callee = 'IntToStr') or (Call.Callee = 'FloatToStr') or (Call.Callee = 'BoolToStr') or (Call.Callee = 'CharToStr') or (Call.Callee = '__InterpToStr') or (Call.Callee = 'SocketRecv') or (Call.Callee = 'ParamStr') then Exit('String');
     if (Call.Callee = 'Length') or (Call.Callee = 'StrToInt') or (Call.Callee = 'SocketCreate') or (Call.Callee = 'SocketListen') or (Call.Callee = 'SocketAccept') or (Call.Callee = 'SocketConnect') or (Call.Callee = 'SocketSend') or (Call.Callee = 'ParamCount') then Exit('Int32');
     if (Call.Callee = 'sin') or (Call.Callee = 'cos') or (Call.Callee = 'tan') or (Call.Callee = 'sqrt') or (Call.Callee = 'Now') then Exit('Float64');
     if (Call.Callee = 'GetTickCount64') or (Call.Callee = 'GetNanoseconds') then Exit('UInt64');
@@ -295,6 +324,28 @@ begin
           (AType = 'UInt8') or (AType = 'UInt16') or (AType = 'UInt32') or (AType = 'UInt64') or
           (AType = 'Char') or (AType = 'String') or (AType = 'Pointer') then
     Result := AType
+  else if Pos('^', AType) = 1 then
+  begin
+    Inner := Trim(Copy(AType, 2, Length(AType)));
+    if (Inner = 'Int8') or (Inner = 'Int16') or (Inner = 'Int32') or (Inner = 'Int64') or
+       (Inner = 'UInt8') or (Inner = 'UInt16') or (Inner = 'UInt32') or (Inner = 'UInt64') or
+       (Inner = 'Float32') or (Inner = 'Float64') or (Inner = 'Bool') or (Inner = 'Char') or
+       (Inner = 'String') then
+      Result := 'PAetherPtr_' + Inner
+    else
+      Result := '^' + EmitTypeRef(Inner);
+  end
+  else if Pos('array of ', AType) = 1 then
+  begin
+    Inner := Trim(Copy(AType, 10, Length(AType)));
+    if (Inner = 'Int8') or (Inner = 'Int16') or (Inner = 'Int32') or (Inner = 'Int64') or
+       (Inner = 'UInt8') or (Inner = 'UInt16') or (Inner = 'UInt32') or (Inner = 'UInt64') or
+       (Inner = 'Float32') or (Inner = 'Float64') or (Inner = 'Bool') or (Inner = 'Char') or
+       (Inner = 'String') or (Inner = 'Pointer') then
+      Result := 'TAetherDyn_' + Inner
+    else
+      Result := 'array of ' + EmitTypeRef(Inner);
+  end
   else if Pos('Result', AType) = 1 then
     Result := 'TResultDoubleError'
   else if Pos('array[', AType) = 1 then
@@ -353,6 +404,7 @@ begin
       lkString: Result := EscapePascalString(Lit.Value);
       lkChar:   Result := '''' + Lit.Value + '''';
       lkBool:   Result := LowerCase(Lit.Value);
+      lkNil:    Result := 'nil';
     else
       Result := Lit.Value;
     end;
@@ -421,7 +473,12 @@ begin
   if Expr is TASTUnaryExpr then
   begin
     Un := TASTUnaryExpr(Expr);
-    Result := Format('(%s %s)', [Un.Op, EmitExpr(Un.Expr)]);
+    if Un.Op = '@' then
+      Result := '(@' + EmitExpr(Un.Expr) + ')'
+    else if Un.Op = '^' then
+      Result := EmitExpr(Un.Expr) + '^'
+    else
+      Result := Format('(%s %s)', [Un.Op, EmitExpr(Un.Expr)]);
     Exit;
   end;
 
@@ -525,9 +582,36 @@ begin
       Exit;
     end;
 
-    if Call.Callee = 'Length' then
+    if Call.Callee = '__InterpToStr' then
     begin
-      Result := 'UInt32(Length(' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + '))';
+      Result := EmitExpr(TASTCallArg(Call.Args[0]).Expr);
+      Exit;
+    end;
+
+    if Call.Callee = 'CharToStr' then
+    begin
+      Result := 'String(' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + ')';
+      Exit;
+    end;
+
+    if SameText(Call.Callee, 'Length') then
+    begin
+      TargetStr := EmitExpr(TASTCallArg(Call.Args[0]).Expr);
+      Result := 'Int32(Length(' + TargetStr + '))';
+      Exit;
+    end;
+
+    if SameText(Call.Callee, 'SetLength') then
+    begin
+      Result := Format('SetLength(%s, %s)', [EmitExpr(TASTCallArg(Call.Args[0]).Expr), EmitExpr(TASTCallArg(Call.Args[1]).Expr)]);
+      Exit;
+    end;
+
+    if SameText(Call.Callee, 'Push') then
+    begin
+      TargetStr := EmitExpr(TASTCallArg(Call.Args[0]).Expr);
+      Result := Format('begin SetLength(%s, Length(%s) + 1); %s[High(%s)] := %s; end',
+        [TargetStr, TargetStr, TargetStr, TargetStr, EmitExpr(TASTCallArg(Call.Args[1]).Expr)]);
       Exit;
     end;
 
@@ -705,6 +789,34 @@ begin
   Result := '';
 end;
 
+procedure TAetherEmitterPascal.EmitActiveDefers(DownToIndex: Integer);
+var
+  I: Integer;
+begin
+  for I := FActiveDefers.Count - 1 downto DownToIndex do
+    EmitStmt(TASTStmt(FActiveDefers[I]));
+end;
+
+procedure TAetherEmitterPascal.EmitStmtList(List: TASTNodeList; IsLoopBody: Boolean);
+var
+  I, SavedBase, OldLoopBase: Integer;
+begin
+  SavedBase := FActiveDefers.Count;
+  OldLoopBase := FLoopDeferBase;
+  if IsLoopBody then
+    FLoopDeferBase := SavedBase;
+  try
+    for I := 0 to List.Count - 1 do
+      EmitStmt(TASTStmt(List[I]));
+    if (List.Count = 0) or not (List[List.Count - 1] is TASTReturnStmt) then
+      EmitActiveDefers(SavedBase);
+  finally
+    FLoopDeferBase := OldLoopBase;
+    while FActiveDefers.Count > SavedBase do
+      FActiveDefers.Delete(FActiveDefers.Count - 1);
+  end;
+end;
+
 procedure TAetherEmitterPascal.EmitStmt(Stmt: TASTStmt);
 var
   Assign: TASTAssignStmt;
@@ -737,8 +849,7 @@ begin
     Emit(Format('if %s then', [EmitExpr(IfStmt.Condition)]));
     Emit('begin');
     IncIndent;
-    for I := 0 to IfStmt.ThenBranch.Count - 1 do
-      EmitStmt(TASTStmt(IfStmt.ThenBranch[I]));
+    EmitStmtList(IfStmt.ThenBranch);
     DecIndent;
     if IfStmt.ElseBranch.Count > 0 then
     begin
@@ -746,8 +857,7 @@ begin
       Emit('else');
       Emit('begin');
       IncIndent;
-      for I := 0 to IfStmt.ElseBranch.Count - 1 do
-        EmitStmt(TASTStmt(IfStmt.ElseBranch[I]));
+      EmitStmtList(IfStmt.ElseBranch);
       DecIndent;
     end;
     Emit('end;');
@@ -758,8 +868,7 @@ begin
     Emit(Format('while %s do', [EmitExpr(WhileStmt.Condition)]));
     Emit('begin');
     IncIndent;
-    for I := 0 to WhileStmt.Body.Count - 1 do
-      EmitStmt(TASTStmt(WhileStmt.Body[I]));
+    EmitStmtList(WhileStmt.Body, True);
     DecIndent;
     Emit('end;');
   end
@@ -772,8 +881,7 @@ begin
       Emit(Format('for %s := %s to %s do', [ForStmt.VarName, EmitExpr(ForStmt.StartExpr), EmitExpr(ForStmt.EndExpr)]));
     Emit('begin');
     IncIndent;
-    for I := 0 to ForStmt.Body.Count - 1 do
-      EmitStmt(TASTStmt(ForStmt.Body[I]));
+    EmitStmtList(ForStmt.Body, True);
     DecIndent;
     Emit('end;');
   end
@@ -782,27 +890,84 @@ begin
     RepeatStmt := TASTRepeatStmt(Stmt);
     Emit('repeat');
     IncIndent;
-    for I := 0 to RepeatStmt.Body.Count - 1 do
-      EmitStmt(TASTStmt(RepeatStmt.Body[I]));
+    EmitStmtList(RepeatStmt.Body, True);
     DecIndent;
     Emit(Format('until %s;', [EmitExpr(RepeatStmt.Condition)]));
   end
   else if Stmt is TASTBreakStmt then
-    Emit('break;')
+  begin
+    if FActiveDefers.Count > FLoopDeferBase then
+      EmitActiveDefers(FLoopDeferBase);
+    Emit('break;');
+  end
   else if Stmt is TASTContinueStmt then
-    Emit('continue;')
+  begin
+    if FActiveDefers.Count > FLoopDeferBase then
+      EmitActiveDefers(FLoopDeferBase);
+    Emit('continue;');
+  end
+  else if Stmt is TASTDeferStmt then
+  begin
+    if Assigned(TASTDeferStmt(Stmt).Stmt) then
+      FActiveDefers.Add(TASTDeferStmt(Stmt).Stmt);
+  end
+  else if Stmt is TASTTryStmt then
+  begin
+    Emit('try');
+    IncIndent;
+    EmitStmtList(TASTTryStmt(Stmt).TryBody);
+    DecIndent;
+    Emit('except');
+    IncIndent;
+    EmitStmtList(TASTTryStmt(Stmt).ExceptBody);
+    DecIndent;
+    Emit('end;');
+  end
+  else if Stmt is TASTRaiseStmt then
+  begin
+    Emit(Format('raise Exception.Create(%s);', [EmitExpr(TASTRaiseStmt(Stmt).Expr)]));
+  end
+  else if Stmt is TASTUnsafeStmt then
+  begin
+    Emit('// unsafe block');
+    Emit('begin');
+    IncIndent;
+    EmitStmtList(TASTUnsafeStmt(Stmt).Body);
+    DecIndent;
+    Emit('end;');
+  end
   else if Stmt is TASTReturnStmt then
   begin
     Ret := TASTReturnStmt(Stmt);
-    if Assigned(Ret.Expr) then
+    if FActiveDefers.Count > 0 then
     begin
-      if Assigned(FCurrentFunc) and FCurrentFunc.IsAsync then
-        Emit(Format('begin Result.is_completed := True; Result.value := %s; Exit(Result); end;', [EmitExpr(Ret.Expr)]))
+      if Assigned(Ret.Expr) then
+      begin
+        if Assigned(FCurrentFunc) and FCurrentFunc.IsAsync then
+          Emit(Format('Result.is_completed := True; Result.value := %s;', [EmitExpr(Ret.Expr)]))
+        else
+          Emit(Format('Result := %s;', [EmitExpr(Ret.Expr)]));
+        EmitActiveDefers(0);
+        Emit('Exit(Result);');
+      end
       else
-        Emit(Format('Exit(%s);', [EmitExpr(Ret.Expr)]));
+      begin
+        EmitActiveDefers(0);
+        Emit('Exit;');
+      end;
     end
     else
-      Emit('Exit;');
+    begin
+      if Assigned(Ret.Expr) then
+      begin
+        if Assigned(FCurrentFunc) and FCurrentFunc.IsAsync then
+          Emit(Format('begin Result.is_completed := True; Result.value := %s; Exit(Result); end;', [EmitExpr(Ret.Expr)]))
+        else
+          Emit(Format('Exit(%s);', [EmitExpr(Ret.Expr)]));
+      end
+      else
+        Emit('Exit;');
+    end;
   end
   else if Stmt is TASTAsmStmt then
   begin
@@ -950,6 +1115,13 @@ var
   I, DimVal: Integer;
   DimsStr: string;
 begin
+  if Arr.Dims.Count = 0 then
+  begin
+    Emit(Format('T%s = %s;', [Arr.Name, EmitTypeRef('array of ' + Arr.ElemType)]));
+    Emit(Format('%s = T%s;', [Arr.Name, Arr.Name]));
+    Emit('');
+    Exit;
+  end;
   DimsStr := '';
   for I := 0 to Arr.Dims.Count - 1 do
   begin
@@ -1138,8 +1310,10 @@ begin
   end;
 
   // Corpo
-  for I := 0 to Func.Body.Count - 1 do
-    EmitStmt(TASTStmt(Func.Body[I]));
+  FActiveDefers.Clear;
+  FLoopDeferBase := 0;
+  EmitStmtList(Func.Body);
+  FActiveDefers.Clear;
 
   DecIndent;
   Emit('end;');
@@ -1238,8 +1412,10 @@ begin
     if Assigned(VarDecl.InitialExpr) then
       Emit(Format('%s := %s;', [VarDecl.Name, EmitExpr(VarDecl.InitialExpr)]));
   end;
-  for I := 0 to Prog.Body.Count - 1 do
-    EmitStmt(TASTStmt(Prog.Body[I]));
+  FActiveDefers.Clear;
+  FLoopDeferBase := 0;
+  EmitStmtList(Prog.Body);
+  FActiveDefers.Clear;
   DecIndent;
   Emit('end.');
 end;
@@ -1622,6 +1798,13 @@ begin
     Emit('type');
     Emit('  Float64 = Double;');
     Emit('  Float32 = Single;');
+    Emit('  PAetherPtr_Int8 = ^Int8; PAetherPtr_Int16 = ^Int16; PAetherPtr_Int32 = ^Int32; PAetherPtr_Int64 = ^Int64;');
+    Emit('  PAetherPtr_UInt8 = ^UInt8; PAetherPtr_UInt16 = ^UInt16; PAetherPtr_UInt32 = ^UInt32; PAetherPtr_UInt64 = ^UInt64;');
+    Emit('  PAetherPtr_Float32 = ^Single; PAetherPtr_Float64 = ^Double; PAetherPtr_Bool = ^Boolean; PAetherPtr_Char = ^Char; PAetherPtr_String = ^String;');
+    Emit('  TAetherDyn_Int8 = array of Int8; TAetherDyn_Int16 = array of Int16; TAetherDyn_Int32 = array of Int32; TAetherDyn_Int64 = array of Int64;');
+    Emit('  TAetherDyn_UInt8 = array of UInt8; TAetherDyn_UInt16 = array of UInt16; TAetherDyn_UInt32 = array of UInt32; TAetherDyn_UInt64 = array of UInt64;');
+    Emit('  TAetherDyn_Float32 = array of Single; TAetherDyn_Float64 = array of Double; TAetherDyn_Bool = array of Boolean; TAetherDyn_Char = array of Char;');
+    Emit('  TAetherDyn_String = array of String; TAetherDyn_Pointer = array of Pointer;');
     Emit('  generic TAetherResult<TVal, TErr> = record');
     Emit('    is_ok: Boolean;');
     Emit('    is_err: Boolean;');
@@ -1766,6 +1949,13 @@ begin
     Emit('type');
     Emit('  Float64 = Double;');
     Emit('  Float32 = Single;');
+    Emit('  PAetherPtr_Int8 = ^Int8; PAetherPtr_Int16 = ^Int16; PAetherPtr_Int32 = ^Int32; PAetherPtr_Int64 = ^Int64;');
+    Emit('  PAetherPtr_UInt8 = ^UInt8; PAetherPtr_UInt16 = ^UInt16; PAetherPtr_UInt32 = ^UInt32; PAetherPtr_UInt64 = ^UInt64;');
+    Emit('  PAetherPtr_Float32 = ^Single; PAetherPtr_Float64 = ^Double; PAetherPtr_Bool = ^Boolean; PAetherPtr_Char = ^Char; PAetherPtr_String = ^String;');
+    Emit('  TAetherDyn_Int8 = array of Int8; TAetherDyn_Int16 = array of Int16; TAetherDyn_Int32 = array of Int32; TAetherDyn_Int64 = array of Int64;');
+    Emit('  TAetherDyn_UInt8 = array of UInt8; TAetherDyn_UInt16 = array of UInt16; TAetherDyn_UInt32 = array of UInt32; TAetherDyn_UInt64 = array of UInt64;');
+    Emit('  TAetherDyn_Float32 = array of Single; TAetherDyn_Float64 = array of Double; TAetherDyn_Bool = array of Boolean; TAetherDyn_Char = array of Char;');
+    Emit('  TAetherDyn_String = array of String; TAetherDyn_Pointer = array of Pointer;');
     Emit('  generic TAetherResult<TVal, TErr> = record');
     Emit('    is_ok: Boolean;');
     Emit('    is_err: Boolean;');

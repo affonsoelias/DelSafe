@@ -222,6 +222,10 @@ begin
   FGlobalScope.Define(TSymbol.Create('Some', skFunction, 'Option', 0, 0));
   FGlobalScope.Define(TSymbol.Create('None', skFunction, 'Option', 0, 0));
   FGlobalScope.Define(TSymbol.Create('Length', skFunction, 'UInt32', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('SetLength', skFunction, 'Void', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('Push', skFunction, 'Void', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('__InterpToStr', skFunction, 'String', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('CharToStr', skFunction, 'String', 0, 0));
   FGlobalScope.Define(TSymbol.Create('CharAt', skFunction, 'String', 0, 0));
   FGlobalScope.Define(TSymbol.Create('Substring', skFunction, 'String', 0, 0));
   FGlobalScope.Define(TSymbol.Create('FileExists', skFunction, 'Bool', 0, 0));
@@ -302,8 +306,11 @@ begin
   if P > 0 then
     CleanName := Copy(CleanName, 1, P - 1);
 
+  if (Length(CleanName) > 1) and (CleanName[1] = '^') then
+    Exit(ResolveType(Copy(CleanName, 2, Length(CleanName))));
+
   if (CleanName = 'Result') or (CleanName = 'Option') or (CleanName = 'Box') or (CleanName = 'Task') or
-     (Pos('array[', CleanName) = 1) or (Pos('set of', CleanName) = 1) then
+     (Pos('array[', CleanName) = 1) or (Pos('array of ', CleanName) = 1) or (Pos('set of', CleanName) = 1) then
     Exit(True);
 
   Sym := ResolveTypeSymbol(CleanName);

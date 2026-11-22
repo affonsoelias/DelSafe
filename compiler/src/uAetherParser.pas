@@ -67,6 +67,10 @@ type
     function ParseMatchStmt: TASTMatchStmt;
     function ParseReturnStmt: TASTReturnStmt;
     function ParseAsmStmt: TASTStmt;
+    function ParseDeferStmt: TASTDeferStmt;
+    function ParseTryStmt: TASTTryStmt;
+    function ParseRaiseStmt: TASTRaiseStmt;
+    function ParseUnsafeStmt: TASTUnsafeStmt;
     function ParseAssignOrCallStmt: TASTStmt;
 
     function ParseExpr: TASTExpr;
@@ -76,6 +80,7 @@ type
     function ParseMultiplicativeExpr: TASTExpr;
     function ParseUnaryExpr: TASTExpr;
     function ParsePrimaryExpr: TASTExpr;
+    function ParseInterpolatedString(const RawStr: string; ALine, ACol: Integer): TASTExpr;
   public
     constructor Create(ALexer: TAetherLexer);
     function ParseModule: TASTModule;
@@ -143,8 +148,18 @@ function TAetherParser.ParseTypeRef: string;
 var
   BaseType: string;
 begin
+  if Match(tokCaret) then
+  begin
+    Result := '^' + ParseTypeRef();
+    Exit;
+  end;
   if Match(tokArray) then
   begin
+    if Match(tokOf) then
+    begin
+      Result := 'array of ' + ParseTypeRef();
+      Exit;
+    end;
     Expect(tokLBracket, 'Esperado "[" na especificacao de dimensoes do array');
     BaseType := 'array[';
     BaseType := BaseType + Expect(tokIntLiteral, 'Esperada dimensao inteira do array').Value;
@@ -152,14 +167,14 @@ begin
       BaseType := BaseType + ', ' + Expect(tokIntLiteral, 'Esperada dimensao inteira do array').Value;
     Expect(tokRBracket, 'Esperado "]" ao fechar dimensoes do array');
     Expect(tokOf, 'Esperado "of" apos dimensoes do array');
-    BaseType := BaseType + '] of ' + ParseTypeRef;
+    BaseType := BaseType + '] of ' + ParseTypeRef();
     Result := BaseType;
     Exit;
   end;
   if Match(tokSet) then
   begin
     Expect(tokOf, 'Esperado "of" apos "set"');
-    Result := 'set of ' + ParseTypeRef;
+    Result := 'set of ' + ParseTypeRef();
     Exit;
   end;
 
@@ -556,17 +571,27 @@ begin
         else if Check(tokArray) then
         begin
           Advance; // consome 'array'
-          Expect(tokLBracket, 'Esperado "[" na declaracao de dimensoes do array');
-          ArrDecl := TASTArrayDecl.Create(TLine, TCol, TypeName, '');
-          ArrDecl.Dims.Add(Expect(tokIntLiteral, 'Esperada dimensao inteira do array').Value);
-          while Match(tokComma) do
+          if Match(tokOf) then
+          begin
+            ArrDecl := TASTArrayDecl.Create(TLine, TCol, TypeName, ParseTypeRef);
+            ArrDecl.DocComment := TypeDoc;
+            ArrDecl.CfgCondition := EffectiveCfg;
+            AModule.Types.Add(ArrDecl);
+          end
+          else
+          begin
+            Expect(tokLBracket, 'Esperado "[" na declaracao de dimensoes do array');
+            ArrDecl := TASTArrayDecl.Create(TLine, TCol, TypeName, '');
             ArrDecl.Dims.Add(Expect(tokIntLiteral, 'Esperada dimensao inteira do array').Value);
-          Expect(tokRBracket, 'Esperado "]" apos dimensoes do array');
-          Expect(tokOf, 'Esperado "of" apos dimensoes do array');
-          ArrDecl.ElemType := ParseTypeRef;
-          ArrDecl.DocComment := TypeDoc;
-          ArrDecl.CfgCondition := EffectiveCfg;
-          AModule.Types.Add(ArrDecl);
+            while Match(tokComma) do
+              ArrDecl.Dims.Add(Expect(tokIntLiteral, 'Esperada dimensao inteira do array').Value);
+            Expect(tokRBracket, 'Esperado "]" apos dimensoes do array');
+            Expect(tokOf, 'Esperado "of" apos dimensoes do array');
+            ArrDecl.ElemType := ParseTypeRef;
+            ArrDecl.DocComment := TypeDoc;
+            ArrDecl.CfgCondition := EffectiveCfg;
+            AModule.Types.Add(ArrDecl);
+          end;
         end
         else if Check(tokSet) then
         begin
@@ -1197,6 +1222,74 @@ begin
   Expect(tokEnd, 'Esperado "end" no fechamento do bloco asm');
 end;
 
+function TAetherParser.ParseDeferStmt: TASTDeferStmt;
+var
+  DLine, DCol: Integer;
+begin
+  DLine := FCurTok.Line;
+  DCol := FCurTok.Col;
+  Expect(tokDefer);
+  Result := TASTDeferStmt.Create(DLine, DCol, ParseStatement);
+end;
+
+function TAetherParser.ParseTryStmt: TASTTryStmt;
+var
+  TLine, TCol: Integer;
+begin
+  TLine := FCurTok.Line;
+  TCol := FCurTok.Col;
+  Expect(tokTry);
+  Result := TASTTryStmt.Create(TLine, TCol);
+  try
+    while not Check(tokExcept) and not Check(tokEnd) and not Check(tokEOF) do
+    begin
+      Result.TryBody.Add(ParseStatement);
+      Expect(tokSemicolon, 'Esperado ";" apos instrucao no bloco try');
+    end;
+    Expect(tokExcept, 'Esperado "except" no bloco try..except');
+    while not Check(tokEnd) and not Check(tokEOF) do
+    begin
+      Result.ExceptBody.Add(ParseStatement);
+      Expect(tokSemicolon, 'Esperado ";" apos instrucao no bloco except');
+    end;
+    Expect(tokEnd, 'Esperado "end" no fechamento do bloco try..except');
+  except
+    Result.Free;
+    raise;
+  end;
+end;
+
+function TAetherParser.ParseRaiseStmt: TASTRaiseStmt;
+var
+  RLine, RCol: Integer;
+begin
+  RLine := FCurTok.Line;
+  RCol := FCurTok.Col;
+  Expect(tokRaise);
+  Result := TASTRaiseStmt.Create(RLine, RCol, ParseExpr);
+end;
+
+function TAetherParser.ParseUnsafeStmt: TASTUnsafeStmt;
+var
+  ULine, UCol: Integer;
+begin
+  ULine := FCurTok.Line;
+  UCol := FCurTok.Col;
+  Expect(tokUnsafe);
+  Result := TASTUnsafeStmt.Create(ULine, UCol);
+  try
+    while not Check(tokEnd) and not Check(tokEOF) do
+    begin
+      Result.Body.Add(ParseStatement);
+      Expect(tokSemicolon, 'Esperado ";" apos instrucao no bloco unsafe');
+    end;
+    Expect(tokEnd, 'Esperado "end" no fechamento do bloco unsafe');
+  except
+    Result.Free;
+    raise;
+  end;
+end;
+
 function TAetherParser.ParseAssignOrCallStmt: TASTStmt;
 var
   Expr: TASTExpr;
@@ -1242,8 +1335,104 @@ begin
     Result := ParseReturnStmt
   else if Check(tokAsm) then
     Result := ParseAsmStmt
+  else if Check(tokDefer) then
+    Result := ParseDeferStmt
+  else if Check(tokTry) then
+    Result := ParseTryStmt
+  else if Check(tokRaise) then
+    Result := ParseRaiseStmt
+  else if Check(tokUnsafe) then
+    Result := ParseUnsafeStmt
   else
     Result := ParseAssignOrCallStmt;
+end;
+
+function TAetherParser.ParseInterpolatedString(const RawStr: string; ALine, ACol: Integer): TASTExpr;
+var
+  I, Len, BraceDepth, StartPos: Integer;
+  LiteralBuf, InnerCode: string;
+  InnerExpr: TASTExpr;
+  SubLexer: TAetherLexer;
+  SubParser: TAetherParser;
+  CallExpr: TASTCallExpr;
+
+  procedure AppendPart(Part: TASTExpr);
+  begin
+    if not Assigned(Result) then
+      Result := Part
+    else
+      Result := TASTBinaryExpr.Create(ALine, ACol, Result, '+', Part);
+  end;
+begin
+  Result := nil;
+  LiteralBuf := '';
+  I := 1;
+  Len := Length(RawStr);
+  while I <= Len do
+  begin
+    if (RawStr[I] = '{') and (I + 1 <= Len) and (RawStr[I + 1] = '{') then
+    begin
+      LiteralBuf := LiteralBuf + '{';
+      Inc(I, 2);
+    end
+    else if (RawStr[I] = '}') and (I + 1 <= Len) and (RawStr[I + 1] = '}') then
+    begin
+      LiteralBuf := LiteralBuf + '}';
+      Inc(I, 2);
+    end
+    else if RawStr[I] = '{' then
+    begin
+      if LiteralBuf <> '' then
+      begin
+        AppendPart(TASTLiteralExpr.Create(ALine, ACol, lkString, LiteralBuf));
+        LiteralBuf := '';
+      end;
+      Inc(I);
+      StartPos := I;
+      BraceDepth := 1;
+      while (I <= Len) and (BraceDepth > 0) do
+      begin
+        if RawStr[I] = '{' then Inc(BraceDepth)
+        else if RawStr[I] = '}' then Dec(BraceDepth);
+        if BraceDepth > 0 then Inc(I);
+      end;
+      if BraceDepth > 0 then
+        raise EAetherParserError.Create('Chave "{" nao fechada em string interpolada', ALine, ACol);
+      InnerCode := Trim(Copy(RawStr, StartPos, I - StartPos));
+      Inc(I);
+      if InnerCode = '' then
+        raise EAetherParserError.Create('Expressao vazia dentro de interpolacao "{}"', ALine, ACol);
+
+      SubLexer := TAetherLexer.Create(InnerCode);
+      try
+        SubParser := TAetherParser.Create(SubLexer);
+        try
+          InnerExpr := SubParser.ParseExpr;
+          InnerExpr.Line := ALine;
+          InnerExpr.Col := ACol;
+        finally
+          SubParser.Free;
+        end;
+      finally
+        SubLexer.Free;
+      end;
+
+      CallExpr := TASTCallExpr.Create(ALine, ACol, '__InterpToStr');
+      CallExpr.Args.Add(TASTCallArg.Create(ALine, ACol, owNone, InnerExpr));
+      AppendPart(CallExpr);
+    end
+    else
+    begin
+      LiteralBuf := LiteralBuf + RawStr[I];
+      Inc(I);
+    end;
+  end;
+
+  if LiteralBuf <> '' then
+    AppendPart(TASTLiteralExpr.Create(ALine, ACol, lkString, LiteralBuf));
+
+  if not Assigned(Result) then
+    Result := TASTLiteralExpr.Create(ALine, ACol, lkString, '');
 end;
 
 function TAetherParser.ParsePrimaryExpr: TASTExpr;
@@ -1280,6 +1469,13 @@ begin
     Exit;
   end;
 
+  if Check(tokInterpStringLiteral) then
+  begin
+    Result := ParseInterpolatedString(FCurTok.Value, Line, Col);
+    Advance;
+    Exit;
+  end;
+
   if Check(tokCharLiteral) then
   begin
     Result := TASTLiteralExpr.Create(Line, Col, lkChar, FCurTok.Value);
@@ -1292,6 +1488,9 @@ begin
 
   if Match(tokFalse) then
     Exit(TASTLiteralExpr.Create(Line, Col, lkBool, 'false'));
+
+  if Match(tokNil) then
+    Exit(TASTLiteralExpr.Create(Line, Col, lkNil, 'nil'));
 
   // Literal de Conjunto [elem1, elem2, ...] ou []
   if Match(tokLBracket) then
@@ -1315,7 +1514,7 @@ begin
     Exit;
   end;
 
-  // Identificador ou Chamada de Funcao ou Acesso a Membro / Indexacao
+  // Identificador ou Chamada de Funcao ou Acesso a Membro / Indexacao / Desreferencia
   if Check(tokIdentifier) then
   begin
     Id := Expect(tokIdentifier).Value;
@@ -1357,10 +1556,14 @@ begin
       Result := TASTIdentifierExpr.Create(Line, Col, Id);
     end;
 
-    // Acesso sequencial: membro (obj.campo / UFCS) ou indexacao (arr[i, j] / arr[i][j])
-    while Check(tokDot) or Check(tokLBracket) do
+    // Acesso sequencial: membro (obj.campo / UFCS), indexacao (arr[i]) ou desreferencia (ptr^)
+    while Check(tokDot) or Check(tokLBracket) or Check(tokCaret) do
     begin
-      if Match(tokDot) then
+      if Match(tokCaret) then
+      begin
+        Result := TASTUnaryExpr.Create(Line, Col, '^', Result);
+      end
+      else if Match(tokDot) then
       begin
         Id := Expect(tokIdentifier, 'Esperado identificador apos "."').Value;
         if Match(tokLParen) then
@@ -1423,6 +1626,8 @@ begin
     Result := TASTUnaryExpr.Create(Line, Col, '-', ParseUnaryExpr())
   else if Match(tokNot) then
     Result := TASTUnaryExpr.Create(Line, Col, 'not', ParseUnaryExpr())
+  else if Match(tokAt) then
+    Result := TASTUnaryExpr.Create(Line, Col, '@', ParseUnaryExpr())
   else if Match(tokAwait) then
     Result := TASTAwaitExpr.Create(Line, Col, ParseUnaryExpr())
   else if Match(tokSpawn) then

@@ -18,6 +18,7 @@ type
     tokIntLiteral,
     tokFloatLiteral,
     tokStringLiteral,
+    tokInterpStringLiteral,
     tokCharLiteral,
 
     // Palavras-chave: Estrutura
@@ -77,6 +78,11 @@ type
     tokCase,
     tokReturn,
     tokAsm,
+    tokDefer,
+    tokTry,
+    tokExcept,
+    tokRaise,
+    tokUnsafe,
 
     // Palavras-chave: Posse e Empréstimo (Ownership)
     tokTake,
@@ -90,6 +96,7 @@ type
     tokImplies,
     tokTrue,
     tokFalse,
+    tokNil,
     tokMod,
 
     // Pontuação e Operadores
@@ -114,7 +121,8 @@ type
     tokLBracket,       // [
     tokRBracket,       // ]
     tokUnderscore,     // _
-    tokAt              // @
+    tokAt,             // @
+    tokCaret           // ^
   );
 
   TToken = record
@@ -140,6 +148,7 @@ begin
     tokIntLiteral:    Result := 'IntLiteral';
     tokFloatLiteral:  Result := 'FloatLiteral';
     tokStringLiteral: Result := 'StringLiteral';
+    tokInterpStringLiteral: Result := 'InterpStringLiteral';
     tokCharLiteral:   Result := 'CharLiteral';
 
     tokModule:        Result := 'module';
@@ -184,6 +193,11 @@ begin
     tokCase:          Result := 'case';
     tokReturn:        Result := 'return';
     tokAsm:           Result := 'asm';
+    tokDefer:         Result := 'defer';
+    tokTry:           Result := 'try';
+    tokExcept:        Result := 'except';
+    tokRaise:         Result := 'raise';
+    tokUnsafe:        Result := 'unsafe';
     tokAsync:         Result := 'async';
     tokAwait:         Result := 'await';
     tokSpawn:         Result := 'spawn';
@@ -197,6 +211,7 @@ begin
     tokImplies:       Result := 'implies';
     tokTrue:          Result := 'true';
     tokFalse:         Result := 'false';
+    tokNil:           Result := 'nil';
     tokMod:           Result := 'mod';
 
     tokColon:         Result := ':';
@@ -221,6 +236,7 @@ begin
     tokRBracket:      Result := ']';
     tokUnderscore:    Result := '_';
     tokAt:            Result := '@';
+    tokCaret:         Result := '^';
   else
     Result := 'Desconhecido';
   end;
@@ -273,6 +289,11 @@ begin
   else if Lower = 'case' then Result := tokCase
   else if Lower = 'return' then Result := tokReturn
   else if Lower = 'asm' then Result := tokAsm
+  else if Lower = 'defer' then Result := tokDefer
+  else if Lower = 'try' then Result := tokTry
+  else if Lower = 'except' then Result := tokExcept
+  else if Lower = 'raise' then Result := tokRaise
+  else if Lower = 'unsafe' then Result := tokUnsafe
   else if Lower = 'async' then Result := tokAsync
   else if Lower = 'await' then Result := tokAwait
   else if Lower = 'spawn' then Result := tokSpawn
@@ -286,6 +307,7 @@ begin
   else if Lower = 'implies' then Result := tokImplies
   else if Lower = 'true' then Result := tokTrue
   else if Lower = 'false' then Result := tokFalse
+  else if Lower = 'nil' then Result := tokNil
   else if Lower = 'mod' then Result := tokMod
   else Result := tokIdentifier;
 end;

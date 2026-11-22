@@ -444,6 +444,15 @@ begin
     end;
   end;
 
+  // String interpolada $"..."
+  if (C = '$') and (PeekChar(1) = '"') then
+  begin
+    ReadChar; // Consome '$'
+    Result := ScanString;
+    Result.Kind := tokInterpStringLiteral;
+    Exit;
+  end;
+
   // Digito -> Numero
   if (C in ['0'..'9']) or ((C in ['$', '%']) and (PeekChar(1) in ['0'..'9', 'a'..'f', 'A'..'F'])) then
   begin
@@ -586,6 +595,11 @@ begin
       begin
         ReadChar;
         Result := CreateToken(tokAt, '@', StartLine, StartCol);
+      end;
+    '^':
+      begin
+        ReadChar;
+        Result := CreateToken(tokCaret, '^', StartLine, StartCol);
       end;
   else
     ReadChar;

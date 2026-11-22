@@ -218,7 +218,8 @@ function TAetherBorrowChecker.IsPrimitiveType(const AType: string): Boolean;
 begin
   Result := (AType = 'Int8') or (AType = 'Int16') or (AType = 'Int32') or (AType = 'Int64') or
             (AType = 'UInt8') or (AType = 'UInt16') or (AType = 'UInt32') or (AType = 'UInt64') or
-            (AType = 'Float32') or (AType = 'Float64') or (AType = 'Bool') or (AType = 'Char');
+            (AType = 'Float32') or (AType = 'Float64') or (AType = 'Bool') or (AType = 'Char') or
+            (AType = 'Pointer') or (Pos('^', AType) = 1);
 end;
 
 procedure TAetherBorrowChecker.Error(const ACode, AMsg: string; ALine, ACol: Integer; AMovedLine, AMovedCol: Integer);
@@ -499,6 +500,28 @@ begin
   else if Stmt is TASTAsmStmt then
   begin
     // Bloco assembly: instrucoes de baixo nivel aceitas sem violacao de borrow
+  end
+  else if Stmt is TASTDeferStmt then
+  begin
+    if Assigned(TASTDeferStmt(Stmt).Stmt) then
+      CheckStmt(TASTDeferStmt(Stmt).Stmt);
+  end
+  else if Stmt is TASTTryStmt then
+  begin
+    for I := 0 to TASTTryStmt(Stmt).TryBody.Count - 1 do
+      CheckStmt(TASTStmt(TASTTryStmt(Stmt).TryBody[I]));
+    for I := 0 to TASTTryStmt(Stmt).ExceptBody.Count - 1 do
+      CheckStmt(TASTStmt(TASTTryStmt(Stmt).ExceptBody[I]));
+  end
+  else if Stmt is TASTRaiseStmt then
+  begin
+    if Assigned(TASTRaiseStmt(Stmt).Expr) then
+      CheckExpr(TASTRaiseStmt(Stmt).Expr, accRead);
+  end
+  else if Stmt is TASTUnsafeStmt then
+  begin
+    for I := 0 to TASTUnsafeStmt(Stmt).Body.Count - 1 do
+      CheckStmt(TASTStmt(TASTUnsafeStmt(Stmt).Body[I]));
   end
   else if Stmt is TASTMatchStmt then
   begin

@@ -16,14 +16,21 @@ type
     FModule: TASTModule;
     FCurrentFunc: TASTFunction;
     FProgramBlock: TASTProgramBlock;
+    FActiveDefers: TFPList;
+    FLoopDeferBase: Integer;
+    FTryDepth: Integer;
 
     procedure Emit(const Line: string = '');
     procedure IncIndent;
     procedure DecIndent;
     function IndentStr: string;
+    procedure EmitActiveDefers(DownToIndex: Integer = 0);
+    procedure EmitStmtList(List: TASTNodeList; IsLoopBody: Boolean = False);
 
     function IsEnumName(const AName: string): Boolean;
     function IsSetType(const AName: string): Boolean;
+    function IsDynamicArrayType(const AName: string): Boolean;
+    function IsVarModifiedInTry(const AVarName: string; Nodes: TASTNodeList; InTry: Boolean = False): Boolean;
     function IsMutBorrowParam(const AName: string): Boolean;
     function FindFunction(const AName: string): TASTFunction;
     function EscapeCString(const S: string): string;
@@ -54,10 +61,14 @@ begin
   inherited Create;
   FOutput := TStringList.Create;
   FIndent := 0;
+  FActiveDefers := TFPList.Create;
+  FLoopDeferBase := 0;
+  FTryDepth := 0;
 end;
 
 destructor TAetherEmitterC.Destroy;
 begin
+  FActiveDefers.Free;
   FOutput.Free;
   inherited Destroy;
 end;
@@ -110,6 +121,73 @@ begin
       if (TASTNode(FModule.Types[I]) is TASTSetDecl) and
          SameText(TASTSetDecl(FModule.Types[I]).Name, AName) then
         Exit(True);
+end;
+
+function TAetherEmitterC.IsDynamicArrayType(const AName: string): Boolean;
+var
+  I: Integer;
+begin
+  if Pos('array of ', AName) = 1 then
+    Exit(True);
+  Result := False;
+  if Assigned(FModule) then
+    for I := 0 to FModule.Types.Count - 1 do
+      if (TASTNode(FModule.Types[I]) is TASTArrayDecl) and
+         SameText(TASTArrayDecl(FModule.Types[I]).Name, AName) and
+         (TASTArrayDecl(FModule.Types[I]).Dims.Count = 0) then
+        Exit(True);
+end;
+
+function TAetherEmitterC.IsVarModifiedInTry(const AVarName: string; Nodes: TASTNodeList; InTry: Boolean): Boolean;
+var
+  I, J: Integer;
+  S: TASTStmt;
+begin
+  Result := False;
+  if not Assigned(Nodes) then Exit;
+  for I := 0 to Nodes.Count - 1 do
+  begin
+    if not (Nodes[I] is TASTStmt) then Continue;
+    S := TASTStmt(Nodes[I]);
+    if S is TASTTryStmt then
+    begin
+      if IsVarModifiedInTry(AVarName, TASTTryStmt(S).TryBody, True) or
+         IsVarModifiedInTry(AVarName, TASTTryStmt(S).ExceptBody, InTry) then
+        Exit(True);
+    end
+    else if InTry and (S is TASTAssignStmt) and (TASTAssignStmt(S).Target is TASTIdentifierExpr) and
+            SameText(TASTIdentifierExpr(TASTAssignStmt(S).Target).Name, AVarName) then
+      Exit(True)
+    else if S is TASTIfStmt then
+    begin
+      if IsVarModifiedInTry(AVarName, TASTIfStmt(S).ThenBranch, InTry) or
+         IsVarModifiedInTry(AVarName, TASTIfStmt(S).ElseBranch, InTry) then
+        Exit(True);
+    end
+    else if S is TASTWhileStmt then
+    begin
+      if IsVarModifiedInTry(AVarName, TASTWhileStmt(S).Body, InTry) then Exit(True);
+    end
+    else if S is TASTForStmt then
+    begin
+      if InTry and SameText(TASTForStmt(S).VarName, AVarName) then Exit(True);
+      if IsVarModifiedInTry(AVarName, TASTForStmt(S).Body, InTry) then Exit(True);
+    end
+    else if S is TASTRepeatStmt then
+    begin
+      if IsVarModifiedInTry(AVarName, TASTRepeatStmt(S).Body, InTry) then Exit(True);
+    end
+    else if S is TASTUnsafeStmt then
+    begin
+      if IsVarModifiedInTry(AVarName, TASTUnsafeStmt(S).Body, InTry) then Exit(True);
+    end
+    else if S is TASTMatchStmt then
+    begin
+      for J := 0 to TASTMatchStmt(S).Cases.Count - 1 do
+        if IsVarModifiedInTry(AVarName, TASTMatchCase(TASTMatchStmt(S).Cases[J]).Body, InTry) then
+          Exit(True);
+    end;
+  end;
 end;
 
 function TAetherEmitterC.IsMutBorrowParam(const AName: string): Boolean;
@@ -257,12 +335,34 @@ begin
     if IsSetType(GetExprTypeName(Bin.Left)) then Exit(GetExprTypeName(Bin.Left));
     if IsSetType(GetExprTypeName(Bin.Right)) then Exit(GetExprTypeName(Bin.Right));
   end
+  else if Expr is TASTIndexExpr then
+  begin
+    TargetType := GetExprTypeName(TASTIndexExpr(Expr).Target);
+    if Pos('array of ', TargetType) = 1 then
+      Exit(Trim(Copy(TargetType, 10, Length(TargetType))))
+    else if Pos('] of ', TargetType) > 0 then
+      Exit(Trim(Copy(TargetType, Pos('] of ', TargetType) + 5, Length(TargetType))))
+    else if Assigned(FModule) then
+    begin
+      for I := 0 to FModule.Types.Count - 1 do
+        if (FModule.Types[I] is TASTArrayDecl) and SameText(TASTArrayDecl(FModule.Types[I]).Name, TargetType) then
+          Exit(TASTArrayDecl(FModule.Types[I]).ElemType);
+    end;
+  end
+  else if Expr is TASTUnaryExpr then
+  begin
+    TargetType := GetExprTypeName(TASTUnaryExpr(Expr).Expr);
+    if TASTUnaryExpr(Expr).Op = '@' then
+      Exit('^' + TargetType)
+    else if (TASTUnaryExpr(Expr).Op = '^') and (Pos('^', TargetType) = 1) then
+      Exit(Copy(TargetType, 2, Length(TargetType)));
+  end
   else if Expr is TASTCallExpr then
   begin
     Call := TASTCallExpr(Expr);
     if Call.Callee = 'Box' then Exit('Box');
     if Call.Callee = 'Some' then Exit('Option');
-    if (Call.Callee = 'ReadFile') or (Call.Callee = 'CharAt') or (Call.Callee = 'Substring') or (Call.Callee = 'ToString') or (Call.Callee = 'IntToStr') or (Call.Callee = 'SocketRecv') or (Call.Callee = 'ParamStr') then Exit('String');
+    if (Call.Callee = 'ReadFile') or (Call.Callee = 'CharAt') or (Call.Callee = 'Substring') or (Call.Callee = 'ToString') or (Call.Callee = 'IntToStr') or (Call.Callee = 'FloatToStr') or (Call.Callee = 'BoolToStr') or (Call.Callee = 'CharToStr') or (Call.Callee = '__InterpToStr') or (Call.Callee = 'SocketRecv') or (Call.Callee = 'ParamStr') then Exit('String');
     if (Call.Callee = 'Length') or (Call.Callee = 'StrToInt') or (Call.Callee = 'SocketCreate') or (Call.Callee = 'SocketListen') or (Call.Callee = 'SocketAccept') or (Call.Callee = 'SocketConnect') or (Call.Callee = 'SocketSend') or (Call.Callee = 'ParamCount') then Exit('Int32');
     if (Call.Callee = 'sin') or (Call.Callee = 'cos') or (Call.Callee = 'tan') or (Call.Callee = 'sqrt') or (Call.Callee = 'Now') then Exit('Float64');
     if (Call.Callee = 'GetTickCount64') or (Call.Callee = 'GetNanoseconds') then Exit('UInt64');
@@ -296,7 +396,7 @@ var
   T: string;
 begin
   T := GetExprTypeName(Expr);
-  Result := (Pos('Box<', T) > 0) or (Pos('Pointer', T) > 0) or (T = 'Box');
+  Result := (Pos('Box<', T) > 0) or (Pos('Pointer', T) > 0) or (T = 'Box') or (Pos('^', T) = 1);
 end;
 
 function TAetherEmitterC.FormatCArrayVar(const AType, AName: string): string;
@@ -342,8 +442,12 @@ begin
   else if AType = 'UInt64' then Result := 'uint64_t'
   else if AType = 'Float32' then Result := 'float'
   else if AType = 'Float64' then Result := 'double'
+  else if AType = 'Char' then Result := 'char'
   else if AType = 'String' then Result := 'const char*'
   else if AType = 'Void' then Result := 'void'
+  else if AType = 'Pointer' then Result := 'void*'
+  else if Pos('^', AType) = 1 then Result := EmitTypeRef(Copy(AType, 2, Length(AType))) + '*'
+  else if Pos('array of ', AType) = 1 then Result := EmitTypeRef(Trim(Copy(AType, 10, Length(AType)))) + '*'
   else if Pos('Result', AType) = 1 then Result := 'AetherResult'
   else if Pos('set of', AType) = 1 then Result := 'uint32_t'
   else if Pos('Box<', AType) > 0 then
@@ -392,6 +496,7 @@ begin
       lkString: Result := EscapeCString(Lit.Value);
       lkChar:   Result := '''' + Lit.Value + '''';
       lkBool:   Result := LowerCase(Lit.Value);
+      lkNil:    Result := 'NULL';
     else
       Result := Lit.Value;
     end;
@@ -511,6 +616,16 @@ begin
   begin
     Un := TASTUnaryExpr(Expr);
     OpStr := Un.Op;
+    if OpStr = '@' then
+    begin
+      Result := '(&(' + EmitExpr(Un.Expr) + '))';
+      Exit;
+    end
+    else if OpStr = '^' then
+    begin
+      Result := '(*(' + EmitExpr(Un.Expr) + '))';
+      Exit;
+    end;
     if OpStr = 'not' then OpStr := '!';
     Result := Format('(%s%s)', [OpStr, EmitExpr(Un.Expr)]);
     Exit;
@@ -625,9 +740,44 @@ begin
       Exit;
     end;
 
-    if Call.Callee = 'Length' then
+    if Call.Callee = '__InterpToStr' then
     begin
-      Result := '(uint32_t)strlen(' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + ')';
+      Result := EmitExpr(TASTCallArg(Call.Args[0]).Expr);
+      Exit;
+    end;
+
+    if Call.Callee = 'CharToStr' then
+    begin
+      Result := 'AetherCharToStr(' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + ')';
+      Exit;
+    end;
+
+    if SameText(Call.Callee, 'SetLength') then
+    begin
+      TargetStr := EmitExpr(TASTCallArg(Call.Args[0]).Expr);
+      Result := Format('%s = (__typeof__(%s))AetherDynSetLength(%s, sizeof(*(%s)), (size_t)(%s))',
+        [TargetStr, TargetStr, TargetStr, TargetStr, EmitExpr(TASTCallArg(Call.Args[1]).Expr)]);
+      Exit;
+    end;
+
+    if SameText(Call.Callee, 'Push') then
+    begin
+      TargetStr := EmitExpr(TASTCallArg(Call.Args[0]).Expr);
+      Result := Format('do { %s = (__typeof__(%s))AetherDynSetLength(%s, sizeof(*(%s)), AetherDynLen(%s) + 1); (%s)[AetherDynLen(%s) - 1] = %s; } while (0)',
+        [TargetStr, TargetStr, TargetStr, TargetStr, TargetStr, TargetStr, TargetStr, EmitExpr(TASTCallArg(Call.Args[1]).Expr)]);
+      Exit;
+    end;
+
+    if SameText(Call.Callee, 'Length') then
+    begin
+      ArgType := GetExprTypeName(TASTCallArg(Call.Args[0]).Expr);
+      TargetStr := EmitExpr(TASTCallArg(Call.Args[0]).Expr);
+      if IsDynamicArrayType(ArgType) then
+        Result := '(int32_t)AetherDynLen(' + TargetStr + ')'
+      else if (ArgType = 'String') or (ArgType = '') then
+        Result := '(int32_t)strlen(' + TargetStr + ')'
+      else
+        Result := Format('(int32_t)(sizeof(%s) / sizeof((%s)[0]))', [TargetStr, TargetStr]);
       Exit;
     end;
 
@@ -835,6 +985,34 @@ begin
   Result := '';
 end;
 
+procedure TAetherEmitterC.EmitActiveDefers(DownToIndex: Integer);
+var
+  I: Integer;
+begin
+  for I := FActiveDefers.Count - 1 downto DownToIndex do
+    EmitStmt(TASTStmt(FActiveDefers[I]));
+end;
+
+procedure TAetherEmitterC.EmitStmtList(List: TASTNodeList; IsLoopBody: Boolean);
+var
+  I, SavedBase, OldLoopBase: Integer;
+begin
+  SavedBase := FActiveDefers.Count;
+  OldLoopBase := FLoopDeferBase;
+  if IsLoopBody then
+    FLoopDeferBase := SavedBase;
+  try
+    for I := 0 to List.Count - 1 do
+      EmitStmt(TASTStmt(List[I]));
+    if (List.Count = 0) or not (List[List.Count - 1] is TASTReturnStmt) then
+      EmitActiveDefers(SavedBase);
+  finally
+    FLoopDeferBase := OldLoopBase;
+    while FActiveDefers.Count > SavedBase do
+      FActiveDefers.Delete(FActiveDefers.Count - 1);
+  end;
+end;
+
 procedure TAetherEmitterC.EmitStmt(Stmt: TASTStmt);
 var
   Assign: TASTAssignStmt;
@@ -870,15 +1048,13 @@ begin
     IfStmt := TASTIfStmt(Stmt);
     Emit(Format('if (%s) {', [EmitExpr(IfStmt.Condition)]));
     IncIndent;
-    for I := 0 to IfStmt.ThenBranch.Count - 1 do
-      EmitStmt(TASTStmt(IfStmt.ThenBranch[I]));
+    EmitStmtList(IfStmt.ThenBranch);
     DecIndent;
     if IfStmt.ElseBranch.Count > 0 then
     begin
       Emit('} else {');
       IncIndent;
-      for I := 0 to IfStmt.ElseBranch.Count - 1 do
-        EmitStmt(TASTStmt(IfStmt.ElseBranch[I]));
+      EmitStmtList(IfStmt.ElseBranch);
       DecIndent;
     end;
     Emit('}');
@@ -888,8 +1064,7 @@ begin
     WhileStmt := TASTWhileStmt(Stmt);
     Emit(Format('while (%s) {', [EmitExpr(WhileStmt.Condition)]));
     IncIndent;
-    for I := 0 to WhileStmt.Body.Count - 1 do
-      EmitStmt(TASTStmt(WhileStmt.Body[I]));
+    EmitStmtList(WhileStmt.Body, True);
     DecIndent;
     Emit('}');
   end
@@ -901,8 +1076,7 @@ begin
     else
       Emit(Format('for (%s = %s; %s <= %s; %s++) {', [ForStmt.VarName, EmitExpr(ForStmt.StartExpr), ForStmt.VarName, EmitExpr(ForStmt.EndExpr), ForStmt.VarName]));
     IncIndent;
-    for I := 0 to ForStmt.Body.Count - 1 do
-      EmitStmt(TASTStmt(ForStmt.Body[I]));
+    EmitStmtList(ForStmt.Body, True);
     DecIndent;
     Emit('}');
   end
@@ -911,35 +1085,116 @@ begin
     RepeatStmt := TASTRepeatStmt(Stmt);
     Emit('do {');
     IncIndent;
-    for I := 0 to RepeatStmt.Body.Count - 1 do
-      EmitStmt(TASTStmt(RepeatStmt.Body[I]));
+    EmitStmtList(RepeatStmt.Body, True);
     DecIndent;
     Emit(Format('} while (!(%s));', [EmitExpr(RepeatStmt.Condition)]));
   end
   else if Stmt is TASTBreakStmt then
-    Emit('break;')
+  begin
+    if FActiveDefers.Count > FLoopDeferBase then
+      EmitActiveDefers(FLoopDeferBase);
+    Emit('break;');
+  end
   else if Stmt is TASTContinueStmt then
-    Emit('continue;')
+  begin
+    if FActiveDefers.Count > FLoopDeferBase then
+      EmitActiveDefers(FLoopDeferBase);
+    Emit('continue;');
+  end
+  else if Stmt is TASTDeferStmt then
+  begin
+    if Assigned(TASTDeferStmt(Stmt).Stmt) then
+      FActiveDefers.Add(TASTDeferStmt(Stmt).Stmt);
+  end
+  else if Stmt is TASTTryStmt then
+  begin
+    Emit('g_aether_jmp_top++;');
+    Emit('if (setjmp(g_aether_jmp_stack[g_aether_jmp_top - 1]) == 0) {');
+    IncIndent;
+    Inc(FTryDepth);
+    EmitStmtList(TASTTryStmt(Stmt).TryBody);
+    Dec(FTryDepth);
+    Emit('g_aether_jmp_top--;');
+    DecIndent;
+    Emit('} else {');
+    IncIndent;
+    EmitStmtList(TASTTryStmt(Stmt).ExceptBody);
+    DecIndent;
+    Emit('}');
+  end
+  else if Stmt is TASTRaiseStmt then
+  begin
+    Emit(Format('AetherRaise(%s);', [EmitExpr(TASTRaiseStmt(Stmt).Expr)]));
+  end
+  else if Stmt is TASTUnsafeStmt then
+  begin
+    Emit('// unsafe block');
+    Emit('{');
+    IncIndent;
+    EmitStmtList(TASTUnsafeStmt(Stmt).Body);
+    DecIndent;
+    Emit('}');
+  end
   else if Stmt is TASTReturnStmt then
   begin
     Ret := TASTReturnStmt(Stmt);
-    if Assigned(Ret.Expr) then
+    if FActiveDefers.Count > 0 then
     begin
-      if Assigned(FCurrentFunc) and FCurrentFunc.IsAsync then
+      if Assigned(Ret.Expr) then
       begin
-        TName := GetExprTypeName(Ret.Expr);
-        if (TName = 'Float') or (TName = 'Float32') or (TName = 'Float64') or (TName = 'Double') then
-          Emit(Format('return (AetherTask){ .is_completed = true, .float_val = %s };', [EmitExpr(Ret.Expr)]))
-        else if TName = 'String' then
-          Emit(Format('return (AetherTask){ .is_completed = true, .str_val = %s };', [EmitExpr(Ret.Expr)]))
+        if Assigned(FCurrentFunc) and FCurrentFunc.IsAsync then
+        begin
+          TName := GetExprTypeName(Ret.Expr);
+          if (TName = 'Float') or (TName = 'Float32') or (TName = 'Float64') or (TName = 'Double') then
+            Emit(Format('AetherTask __ret_task = (AetherTask){ .is_completed = true, .float_val = %s };', [EmitExpr(Ret.Expr)]))
+          else if TName = 'String' then
+            Emit(Format('AetherTask __ret_task = (AetherTask){ .is_completed = true, .str_val = %s };', [EmitExpr(Ret.Expr)]))
+          else
+            Emit(Format('AetherTask __ret_task = (AetherTask){ .is_completed = true, .int_val = (int64_t)(%s) };', [EmitExpr(Ret.Expr)]));
+          EmitActiveDefers(0);
+          if FTryDepth > 0 then
+            Emit(Format('g_aether_jmp_top -= %d;', [FTryDepth]));
+          Emit('return __ret_task;');
+        end
         else
-          Emit(Format('return (AetherTask){ .is_completed = true, .int_val = (int64_t)(%s) };', [EmitExpr(Ret.Expr)]));
+        begin
+          Emit(Format('result = %s;', [EmitExpr(Ret.Expr)]));
+          EmitActiveDefers(0);
+          if FTryDepth > 0 then
+            Emit(Format('g_aether_jmp_top -= %d;', [FTryDepth]));
+          Emit('return result;');
+        end;
       end
       else
-        Emit(Format('return %s;', [EmitExpr(Ret.Expr)]));
+      begin
+        EmitActiveDefers(0);
+        if FTryDepth > 0 then
+          Emit(Format('g_aether_jmp_top -= %d;', [FTryDepth]));
+        Emit('return;');
+      end;
     end
     else
-      Emit('return;');
+    begin
+      if FTryDepth > 0 then
+        Emit(Format('g_aether_jmp_top -= %d;', [FTryDepth]));
+      if Assigned(Ret.Expr) then
+      begin
+        if Assigned(FCurrentFunc) and FCurrentFunc.IsAsync then
+        begin
+          TName := GetExprTypeName(Ret.Expr);
+          if (TName = 'Float') or (TName = 'Float32') or (TName = 'Float64') or (TName = 'Double') then
+            Emit(Format('return (AetherTask){ .is_completed = true, .float_val = %s };', [EmitExpr(Ret.Expr)]))
+          else if TName = 'String' then
+            Emit(Format('return (AetherTask){ .is_completed = true, .str_val = %s };', [EmitExpr(Ret.Expr)]))
+          else
+            Emit(Format('return (AetherTask){ .is_completed = true, .int_val = (int64_t)(%s) };', [EmitExpr(Ret.Expr)]));
+        end
+        else
+          Emit(Format('return %s;', [EmitExpr(Ret.Expr)]));
+      end
+      else
+        Emit('return;');
+    end;
   end
   else if Stmt is TASTAsmStmt then
   begin
@@ -1063,6 +1318,13 @@ var
   I: Integer;
   DimsStr: string;
 begin
+  if Arr.Dims.Count = 0 then
+  begin
+    Emit(Format('typedef %s* T%s;', [EmitTypeRef(Arr.ElemType), Arr.Name]));
+    Emit(Format('typedef T%s %s;', [Arr.Name, Arr.Name]));
+    Emit('');
+    Exit;
+  end;
   DimsStr := '';
   for I := 0 to Arr.Dims.Count - 1 do
     DimsStr := DimsStr + Format('[%s]', [Arr.Dims[I]]);
@@ -1121,7 +1383,7 @@ var
   ParamListStr, ExportPrefix: string;
   I, K: Integer;
   Param: TASTParam;
-  ModStr: string;
+  ModStr, VolQual: string;
   VarDecl: TASTVarDecl;
   VarExists: Boolean;
 begin
@@ -1233,9 +1495,18 @@ begin
     end
     else
     begin
-      Emit(Format('%s %s;', [EmitTypeRef(VarDecl.TypeName), VarDecl.Name]));
-      if Assigned(VarDecl.InitialExpr) then
-        Emit(Format('%s = %s;', [VarDecl.Name, EmitExpr(VarDecl.InitialExpr)]));
+      VolQual := '';
+      if IsVarModifiedInTry(VarDecl.Name, Func.Body) then
+        VolQual := 'volatile ';
+      if (IsDynamicArrayType(VarDecl.TypeName) or (Pos('^', VarDecl.TypeName) = 1) or (VarDecl.TypeName = 'Pointer')) and
+         (not Assigned(VarDecl.InitialExpr)) then
+        Emit(Format('%s %s%s = NULL;', [EmitTypeRef(VarDecl.TypeName), VolQual, VarDecl.Name]))
+      else
+      begin
+        Emit(Format('%s %s%s;', [EmitTypeRef(VarDecl.TypeName), VolQual, VarDecl.Name]));
+        if Assigned(VarDecl.InitialExpr) then
+          Emit(Format('%s = %s;', [VarDecl.Name, EmitExpr(VarDecl.InitialExpr)]));
+      end;
     end;
   end;
 
@@ -1254,8 +1525,11 @@ begin
     end;
 
   // Corpo
-  for I := 0 to Func.Body.Count - 1 do
-    EmitStmt(TASTStmt(Func.Body[I]));
+  FActiveDefers.Clear;
+  FLoopDeferBase := 0;
+  FTryDepth := 0;
+  EmitStmtList(Func.Body);
+  FActiveDefers.Clear;
 
   if (Func.ReturnType <> 'Void') and (Func.ReturnType <> '') and (not Func.IsAsync) then
   begin
@@ -1273,6 +1547,7 @@ var
   I, K: Integer;
   VarDecl: TASTVarDecl;
   VarExists: Boolean;
+  VolQual: string;
 begin
   FCurrentFunc := nil;
   FProgramBlock := Prog;
@@ -1290,9 +1565,18 @@ begin
     end
     else
     begin
-      Emit(Format('%s %s;', [EmitTypeRef(VarDecl.TypeName), VarDecl.Name]));
-      if Assigned(VarDecl.InitialExpr) then
-        Emit(Format('%s = %s;', [VarDecl.Name, EmitExpr(VarDecl.InitialExpr)]));
+      VolQual := '';
+      if IsVarModifiedInTry(VarDecl.Name, Prog.Body) then
+        VolQual := 'volatile ';
+      if (IsDynamicArrayType(VarDecl.TypeName) or (Pos('^', VarDecl.TypeName) = 1) or (VarDecl.TypeName = 'Pointer')) and
+         (not Assigned(VarDecl.InitialExpr)) then
+        Emit(Format('%s %s%s = NULL;', [EmitTypeRef(VarDecl.TypeName), VolQual, VarDecl.Name]))
+      else
+      begin
+        Emit(Format('%s %s%s;', [EmitTypeRef(VarDecl.TypeName), VolQual, VarDecl.Name]));
+        if Assigned(VarDecl.InitialExpr) then
+          Emit(Format('%s = %s;', [VarDecl.Name, EmitExpr(VarDecl.InitialExpr)]));
+      end;
     end;
   end;
 
@@ -1310,8 +1594,11 @@ begin
         Emit(Format('int32_t %s;', [TASTForStmt(Prog.Body[I]).VarName]));
     end;
 
-  for I := 0 to Prog.Body.Count - 1 do
-    EmitStmt(TASTStmt(Prog.Body[I]));
+  FActiveDefers.Clear;
+  FLoopDeferBase := 0;
+  FTryDepth := 0;
+  EmitStmtList(Prog.Body);
+  FActiveDefers.Clear;
 
   Emit('return 0;');
   DecIndent;
@@ -1384,6 +1671,7 @@ begin
   Emit('#include <math.h>');
   Emit('#include <time.h>');
   Emit('#include <sys/stat.h>');
+  Emit('#include <setjmp.h>');
   Emit('#ifdef _WIN32');
   Emit('#define WIN32_LEAN_AND_MEAN');
   Emit('#define NOGDI');
@@ -1595,13 +1883,13 @@ begin
   Emit('#endif');
   Emit('}');
   Emit('');
-  Emit('static inline char* AetherIntToStr(int32_t val) {');
+  Emit('static inline char* AetherIntToStr(int64_t val) {');
   Emit('#if defined(__wasm__)');
   Emit('    char* buf = (char*)malloc(32);');
   Emit('    if (!buf) return (char*)"";');
   Emit('    int idx = 0;');
-  Emit('    uint32_t uval;');
-  Emit('    if (val < 0) { buf[idx++] = ''-''; uval = (uint32_t)(-val); } else uval = (uint32_t)val;');
+  Emit('    uint64_t uval;');
+  Emit('    if (val < 0) { buf[idx++] = ''-''; uval = (uint64_t)(-val); } else uval = (uint64_t)val;');
   Emit('    char tmp[32]; int t = 0;');
   Emit('    do { tmp[t++] = ''0'' + (uval % 10); uval /= 10; } while (uval > 0);');
   Emit('    while (t > 0) buf[idx++] = tmp[--t];');
@@ -1609,10 +1897,61 @@ begin
   Emit('    return buf;');
   Emit('#else');
   Emit('    char* buf = (char*)malloc(32);');
-  Emit('    snprintf(buf, 32, "%d", val);');
+  Emit('    snprintf(buf, 32, "%lld", (long long)val);');
   Emit('    return buf;');
   Emit('#endif');
   Emit('}');
+  Emit('');
+  Emit('static inline char* AetherCharToStr(char c) {');
+  Emit('    char* buf = (char*)malloc(2);');
+  Emit('    buf[0] = c; buf[1] = ''\0'';');
+  Emit('    return buf;');
+  Emit('}');
+  Emit('');
+  Emit('typedef struct {');
+  Emit('    size_t len;');
+  Emit('    size_t cap;');
+  Emit('} AetherDynHeader;');
+  Emit('');
+  Emit('static inline size_t AetherDynLen(const void* arr) {');
+  Emit('    if (!arr) return 0;');
+  Emit('    return ((const AetherDynHeader*)arr - 1)->len;');
+  Emit('}');
+  Emit('');
+  Emit('static inline void* AetherDynSetLength(void* arr, size_t elem_size, size_t new_len) {');
+  Emit('    AetherDynHeader* hdr = arr ? ((AetherDynHeader*)arr - 1) : NULL;');
+  Emit('    size_t old_cap = hdr ? hdr->cap : 0;');
+  Emit('    size_t old_len = hdr ? hdr->len : 0;');
+  Emit('    if (new_len > old_cap || !hdr) {');
+  Emit('        size_t new_cap = old_cap == 0 ? 8 : old_cap;');
+  Emit('        while (new_cap < new_len) new_cap *= 2;');
+  Emit('        AetherDynHeader* new_hdr = (AetherDynHeader*)realloc(hdr, sizeof(AetherDynHeader) + new_cap * elem_size);');
+  Emit('        new_hdr->cap = new_cap;');
+  Emit('        hdr = new_hdr;');
+  Emit('    }');
+  Emit('    if (new_len > old_len) {');
+  Emit('        memset((char*)(hdr + 1) + old_len * elem_size, 0, (new_len - old_len) * elem_size);');
+  Emit('    }');
+  Emit('    hdr->len = new_len;');
+  Emit('    return (void*)(hdr + 1);');
+  Emit('}');
+  Emit('');
+  Emit('#if defined(__wasm__)');
+  Emit('static inline void AetherRaise(const char* msg) { (void)msg; }');
+  Emit('#else');
+  Emit('static jmp_buf g_aether_jmp_stack[32];');
+  Emit('static int g_aether_jmp_top = 0;');
+  Emit('static const char* g_aether_last_exception = "";');
+  Emit('static __attribute__((noinline, noreturn)) void AetherRaise(const char* msg) {');
+  Emit('    g_aether_last_exception = msg ? msg : "Exception";');
+  Emit('    if (g_aether_jmp_top > 0) {');
+  Emit('        longjmp(g_aether_jmp_stack[--g_aether_jmp_top], 1);');
+  Emit('    } else {');
+  Emit('        fprintf(stderr, "Unhandled Exception: %s\n", g_aether_last_exception);');
+  Emit('        exit(1);');
+  Emit('    }');
+  Emit('}');
+  Emit('#endif');
   Emit('');
   Emit('static inline char* AetherFloatToStr(double val) {');
   Emit('    char* buf = (char*)malloc(32);');

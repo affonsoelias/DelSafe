@@ -219,6 +219,23 @@ begin
   begin
     ReturnStmt := TASTReturnStmt(Stmt);
     CollectIdentifiersInExpr(ReturnStmt.Expr, IdentList);
+  end
+  else if Stmt is TASTDeferStmt then
+  begin
+    CollectIdentifiersInStmt(TASTDeferStmt(Stmt).Stmt, IdentList);
+  end
+  else if Stmt is TASTTryStmt then
+  begin
+    CollectIdentifiersInNodeList(TASTTryStmt(Stmt).TryBody, IdentList);
+    CollectIdentifiersInNodeList(TASTTryStmt(Stmt).ExceptBody, IdentList);
+  end
+  else if Stmt is TASTRaiseStmt then
+  begin
+    CollectIdentifiersInExpr(TASTRaiseStmt(Stmt).Expr, IdentList);
+  end
+  else if Stmt is TASTUnsafeStmt then
+  begin
+    CollectIdentifiersInNodeList(TASTUnsafeStmt(Stmt).Body, IdentList);
   end;
 end;
 
@@ -390,7 +407,16 @@ var
       else if CurStmt is TASTCallStmt then
         CheckExprForRedundancies(TASTCallStmt(CurStmt).CallExpr)
       else if CurStmt is TASTReturnStmt then
-        CheckExprForRedundancies(TASTReturnStmt(CurStmt).Expr);
+        CheckExprForRedundancies(TASTReturnStmt(CurStmt).Expr)
+      else if CurStmt is TASTTryStmt then
+      begin
+        CheckStmtListForDeadCode(TASTTryStmt(CurStmt).TryBody);
+        CheckStmtListForDeadCode(TASTTryStmt(CurStmt).ExceptBody);
+      end
+      else if CurStmt is TASTUnsafeStmt then
+        CheckStmtListForDeadCode(TASTUnsafeStmt(CurStmt).Body)
+      else if CurStmt is TASTRaiseStmt then
+        CheckExprForRedundancies(TASTRaiseStmt(CurStmt).Expr);
     end;
   end;
 

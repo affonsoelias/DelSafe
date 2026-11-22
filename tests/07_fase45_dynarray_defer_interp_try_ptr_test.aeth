@@ -1,0 +1,138 @@
+module Fase45DynarrayDeferInterpTryPtrTest;
+
+type
+    ListaInt = array of Int32;
+
+function TestDeferOrdem(mut borrow log: ListaInt, cedo: Bool): Int32
+begin
+    defer log.Push(1);
+    defer log.Push(2);
+    if cedo then
+        log.Push(10);
+        return 77;
+    end;
+    log.Push(99);
+    return 88;
+end;
+
+function LancarErro(): Void
+begin
+    raise "Falha na subrotina";
+end;
+
+function LerEscreverPonteiro(p: ^Int32, novoValor: Int32): Int32
+var
+    anterior: Int32;
+begin
+    anterior := 0;
+    unsafe
+        anterior := p^;
+        p^ := novoValor;
+    end;
+    return anterior;
+end;
+
+program Main;
+var
+    lista: ListaInt;
+    nomes: array of String;
+    log: ListaInt;
+    log2: ListaInt;
+    ret: Int32;
+    nome: String;
+    pontos: Int32;
+    nota: Float64;
+    ativo: Bool;
+    msg: String;
+    tentativas: Int32;
+    x: Int32;
+    ant: Int32;
+    ptr: ^Int32;
+begin
+    PrintLn("=== TESTE DA FASE 45: ARRAYS DINAMICOS, DEFER, INTERPOLACAO, TRY/EXCEPT E UNSAFE/PONTEIROS ===");
+
+    // 1. Arrays Dinamicos (array of T)
+    SetLength(lista, 3);
+    lista[0] := 10;
+    lista[1] := 20;
+    lista[2] := 30;
+    assert(Length(lista) = 3);
+    assert(lista.Length() = 3);
+    assert(lista[0] + lista[2] = 40);
+
+    lista.Push(40);
+    lista.Push(50);
+    assert(lista.Length() = 5);
+    assert(lista[3] = 40);
+    assert(lista[4] = 50);
+
+    nomes.Push("Alice");
+    nomes.Push("Bob");
+    assert(nomes.Length() = 2);
+    assert(nomes[0] = "Alice");
+    assert(nomes[1] = "Bob");
+
+    // 2. Garantia de Limpeza de Escopo (defer em LIFO e early return)
+    ret := TestDeferOrdem(mut borrow log, true);
+    assert(ret = 77);
+    assert(log.Length() = 3);
+    assert(log[0] = 10);
+    assert(log[1] = 2);
+    assert(log[2] = 1);
+
+    ret := TestDeferOrdem(mut borrow log2, false);
+    assert(ret = 88);
+    assert(log2.Length() = 3);
+    assert(log2[0] = 99);
+    assert(log2[1] = 2);
+    assert(log2[2] = 1);
+
+    // 3. Interpolacao de Strings ($"...")
+    nome := "Aether";
+    pontos := 42;
+    nota := 9.5;
+    ativo := true;
+    msg := $"Lang: {nome}, Pts: {pontos + 8}, Nota: {nota}, Ativo: {ativo}, Chaves: {{ok}}";
+    assert(msg = "Lang: Aether, Pts: 50, Nota: 9.5, Ativo: true, Chaves: {ok}");
+
+    // 4. Tratamento de Excecoes do Sistema (try ... except e raise)
+    tentativas := 0;
+    try
+        tentativas := 1;
+        raise "Erro simulado";
+        tentativas := 999;
+    except
+        tentativas := tentativas + 10;
+    end;
+    assert(tentativas = 11);
+
+    // Excecao propagada de funcao chamada
+    tentativas := 0;
+    try
+        LancarErro();
+        tentativas := 500;
+    except
+        tentativas := 42;
+    end;
+    assert(tentativas = 42);
+
+    // 5. Blocos unsafe e Ponteiros Brutos (^T, @var, ptr^, nil)
+    ptr := nil;
+    assert(ptr = nil);
+
+    x := 123;
+    ptr := @x;
+    assert(ptr <> nil);
+
+    unsafe
+        assert(ptr^ = 123);
+        ptr^ := 456;
+    end;
+    assert(x = 456);
+
+    ant := LerEscreverPonteiro(ptr, 789);
+    assert(ant = 456);
+    assert(x = 789);
+
+    PrintLn("Fase 45: Todos os testes passaram com sucesso em ambos os backends!");
+end.

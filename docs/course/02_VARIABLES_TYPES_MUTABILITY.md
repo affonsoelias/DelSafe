@@ -218,14 +218,87 @@ begin
 end.
 ```
 
+### 5.4 Dynamic Arrays (`array of T`)
+
+When the number of elements is only known at runtime, use resizable dynamic arrays (`array of T`) with `SetLength`, `Length()`, and `Push()`:
+
+```aether
+module dyn_arrays_demo;
+
+type
+    ScoreList = array of Int32;
+
+program Main;
+var
+    scores: ScoreList;
+    names: array of String;
+begin
+    SetLength(scores, 2);
+    scores[0] := 95;
+    scores[1] := 88;
+    scores.Push(100);
+
+    names.Push("Alice");
+    PrintLn($"Scores count: {scores.Length()}, First user: {names[0]}");
+end.
+```
+
+### 5.5 String Interpolation (`$"..."`)
+
+Rather than manually chaining `+ IntToStr(...)` calls, prefix a string literal with `$` and embed expressions inside `{...}` braces (use `{{` and `}}` to emit literal braces):
+
+```aether
+module interp_demo;
+
+program Main;
+var
+    user: String;
+    level: Int32;
+    active: Bool;
+begin
+    user := "AetherDev";
+    level := 5;
+    active := true;
+
+    // Desugared at compile-time with zero runtime format-parsing overhead
+    PrintLn($"User {user} is at level {level + 1} (active: {active})");
+end.
+```
+
+### 5.6 Raw Pointers (`^T`, `@var`, `nil`) and `unsafe` Blocks
+
+Safe Aether code forbids null dereferences and dangling pointers at compile time. When writing low-level hardware drivers or C FFI code that requires raw pointers, pointers are declared with `^T`, addresses are obtained with `@var`, and pointer dereferencing (`ptr^`) is explicitly gated behind an `unsafe ... end;` block:
+
+```aether
+module unsafe_pointers_demo;
+
+program Main;
+var
+    value: Int32;
+    ptr: ^Int32;
+begin
+    ptr := nil;
+    value := 10;
+    ptr := @value;
+
+    // ptr^ := 99; // Compile Error E0312: Raw pointer dereference requires an 'unsafe' block!
+
+    unsafe
+        ptr^ := 99; // Explicitly demarcated low-level boundary
+    end;
+
+    PrintLn($"Updated value: {value}"); // 99
+end.
+```
+
 ---
 
 ## 6. Summary
 1. Prefer immutable bindings where possible; use `var` only for variables that must mutate.
 2. Integers and floats require explicit casts (`Int32(x)`) to avoid accidental precision truncation.
-3. Strings are UTF-8, type-safe, and concatenate using `+`.
-4. Arrays can have arbitrary dimensions ($N$-D: 1D, 2D, 3D, etc.) with compile-time boundary safety.
-5. Sets (`set of`) provide type-safe bitmask collections with `in`, `+`, `*`, and `-`.
-6. Subranges (`1..31`) enforce strict numerical bounds.
+3. Strings are UTF-8, type-safe, and support zero-overhead compile-time interpolation via `$"..."`.
+4. Fixed arrays support $N$-D indexing, while dynamic arrays (`array of T`) resize at runtime with `SetLength` and `Push`.
+5. Sets (`set of`) and subranges (`1..31`) provide bitmask collections and strict numerical bounds.
+6. Raw pointers (`^T`, `@var`, `nil`) require an explicit `unsafe ... end;` block for dereferencing (`ptr^`).
 
 ➡️ **Next:** **[Chapter 03: Control Flow & Pattern Matching](03_CONTROL_FLOW_AND_MATCH.md)**

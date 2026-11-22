@@ -41,7 +41,7 @@ type
   // --- Expressões ---
   TASTExpr = class(TASTNode);
 
-  TASTLiteralKind = (lkInt, lkFloat, lkString, lkChar, lkBool);
+  TASTLiteralKind = (lkInt, lkFloat, lkString, lkChar, lkBool, lkNil);
 
   TASTLiteralExpr = class(TASTExpr)
   public
@@ -246,6 +246,39 @@ type
   public
     AsmCode: string;
     constructor Create(ALine, ACol: Integer; const ACode: string);
+    function Dump(Indent: Integer = 0): string; override;
+  end;
+
+  TASTDeferStmt = class(TASTStmt)
+  public
+    Stmt: TASTStmt;
+    constructor Create(ALine, ACol: Integer; AStmt: TASTStmt);
+    destructor Destroy; override;
+    function Dump(Indent: Integer = 0): string; override;
+  end;
+
+  TASTTryStmt = class(TASTStmt)
+  public
+    TryBody: TASTNodeList;
+    ExceptBody: TASTNodeList;
+    constructor Create(ALine, ACol: Integer);
+    destructor Destroy; override;
+    function Dump(Indent: Integer = 0): string; override;
+  end;
+
+  TASTRaiseStmt = class(TASTStmt)
+  public
+    Expr: TASTExpr;
+    constructor Create(ALine, ACol: Integer; AExpr: TASTExpr);
+    destructor Destroy; override;
+    function Dump(Indent: Integer = 0): string; override;
+  end;
+
+  TASTUnsafeStmt = class(TASTStmt)
+  public
+    Body: TASTNodeList;
+    constructor Create(ALine, ACol: Integer);
+    destructor Destroy; override;
     function Dump(Indent: Integer = 0): string; override;
   end;
 
@@ -563,6 +596,7 @@ begin
     lkInt:    Result := MakeIndent(Indent) + Format('Literal Int: %s', [Value]);
     lkFloat:  Result := MakeIndent(Indent) + Format('Literal Float: %s', [Value]);
     lkBool:   Result := MakeIndent(Indent) + Format('Literal Bool: %s', [Value]);
+    lkNil:    Result := MakeIndent(Indent) + 'Literal Nil: nil';
   end;
 end;
 
@@ -1080,6 +1114,99 @@ end;
 function TASTAsmStmt.Dump(Indent: Integer): string;
 begin
   Result := MakeIndent(Indent) + 'Asm:' + LineEnding + MakeIndent(Indent + 1) + AsmCode;
+end;
+
+{ TASTDeferStmt }
+
+constructor TASTDeferStmt.Create(ALine, ACol: Integer; AStmt: TASTStmt);
+begin
+  inherited Create(ALine, ACol);
+  Stmt := AStmt;
+end;
+
+destructor TASTDeferStmt.Destroy;
+begin
+  Stmt.Free;
+  inherited Destroy;
+end;
+
+function TASTDeferStmt.Dump(Indent: Integer): string;
+begin
+  Result := MakeIndent(Indent) + 'Defer:';
+  if Assigned(Stmt) then
+    Result := Result + LineEnding + Stmt.Dump(Indent + 1);
+end;
+
+{ TASTTryStmt }
+
+constructor TASTTryStmt.Create(ALine, ACol: Integer);
+begin
+  inherited Create(ALine, ACol);
+  TryBody := TASTNodeList.Create;
+  ExceptBody := TASTNodeList.Create;
+end;
+
+destructor TASTTryStmt.Destroy;
+begin
+  TryBody.Free;
+  ExceptBody.Free;
+  inherited Destroy;
+end;
+
+function TASTTryStmt.Dump(Indent: Integer): string;
+var
+  I: Integer;
+begin
+  Result := MakeIndent(Indent) + 'Try:';
+  for I := 0 to TryBody.Count - 1 do
+    Result := Result + LineEnding + TryBody[I].Dump(Indent + 1);
+  Result := Result + LineEnding + MakeIndent(Indent) + 'Except:';
+  for I := 0 to ExceptBody.Count - 1 do
+    Result := Result + LineEnding + ExceptBody[I].Dump(Indent + 1);
+end;
+
+{ TASTRaiseStmt }
+
+constructor TASTRaiseStmt.Create(ALine, ACol: Integer; AExpr: TASTExpr);
+begin
+  inherited Create(ALine, ACol);
+  Expr := AExpr;
+end;
+
+destructor TASTRaiseStmt.Destroy;
+begin
+  Expr.Free;
+  inherited Destroy;
+end;
+
+function TASTRaiseStmt.Dump(Indent: Integer): string;
+begin
+  Result := MakeIndent(Indent) + 'Raise:';
+  if Assigned(Expr) then
+    Result := Result + LineEnding + Expr.Dump(Indent + 1);
+end;
+
+{ TASTUnsafeStmt }
+
+constructor TASTUnsafeStmt.Create(ALine, ACol: Integer);
+begin
+  inherited Create(ALine, ACol);
+  Body := TASTNodeList.Create;
+end;
+
+destructor TASTUnsafeStmt.Destroy;
+begin
+  Body.Free;
+  inherited Destroy;
+end;
+
+function TASTUnsafeStmt.Dump(Indent: Integer): string;
+var
+  I: Integer;
+begin
+  Result := MakeIndent(Indent) + 'Unsafe:';
+  for I := 0 to Body.Count - 1 do
+    Result := Result + LineEnding + Body[I].Dump(Indent + 1);
 end;
 
 { TASTConstDecl }
@@ -1704,6 +1831,26 @@ begin
   end
   else if Node is TASTAsmStmt then
     Exit(TASTAsmStmt.Create(Node.Line, Node.Col, TASTAsmStmt(Node).AsmCode))
+  else if Node is TASTDeferStmt then
+    Exit(TASTDeferStmt.Create(Node.Line, Node.Col, TASTStmt(CloneASTNode(TASTDeferStmt(Node).Stmt))))
+  else if Node is TASTTryStmt then
+  begin
+    Result := TASTTryStmt.Create(Node.Line, Node.Col);
+    for I := 0 to TASTTryStmt(Node).TryBody.Count - 1 do
+      TASTTryStmt(Result).TryBody.Add(CloneASTNode(TASTTryStmt(Node).TryBody[I]));
+    for I := 0 to TASTTryStmt(Node).ExceptBody.Count - 1 do
+      TASTTryStmt(Result).ExceptBody.Add(CloneASTNode(TASTTryStmt(Node).ExceptBody[I]));
+    Exit;
+  end
+  else if Node is TASTRaiseStmt then
+    Exit(TASTRaiseStmt.Create(Node.Line, Node.Col, TASTExpr(CloneASTNode(TASTRaiseStmt(Node).Expr))))
+  else if Node is TASTUnsafeStmt then
+  begin
+    Result := TASTUnsafeStmt.Create(Node.Line, Node.Col);
+    for I := 0 to TASTUnsafeStmt(Node).Body.Count - 1 do
+      TASTUnsafeStmt(Result).Body.Add(CloneASTNode(TASTUnsafeStmt(Node).Body[I]));
+    Exit;
+  end
   else if Node is TASTParam then
     Exit(TASTParam.Create(Node.Line, Node.Col, TASTParam(Node).Name, TASTParam(Node).TypeName, TASTParam(Node).Ownership))
   else if Node is TASTConstDecl then

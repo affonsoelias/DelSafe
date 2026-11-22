@@ -587,6 +587,28 @@ begin
       OptimizeBlock(RepeatStmt.Body);
     if Assigned(RepeatStmt.Condition) then
       OptimizeExpr(RepeatStmt.Condition);
+  end
+  else if Stmt is TASTDeferStmt then
+  begin
+    if Assigned(TASTDeferStmt(Stmt).Stmt) then
+      OptimizeStmt(TASTDeferStmt(Stmt).Stmt);
+  end
+  else if Stmt is TASTTryStmt then
+  begin
+    if Assigned(TASTTryStmt(Stmt).TryBody) then
+      OptimizeBlock(TASTTryStmt(Stmt).TryBody);
+    if Assigned(TASTTryStmt(Stmt).ExceptBody) then
+      OptimizeBlock(TASTTryStmt(Stmt).ExceptBody);
+  end
+  else if Stmt is TASTRaiseStmt then
+  begin
+    if Assigned(TASTRaiseStmt(Stmt).Expr) then
+      OptimizeExpr(TASTRaiseStmt(Stmt).Expr);
+  end
+  else if Stmt is TASTUnsafeStmt then
+  begin
+    if Assigned(TASTUnsafeStmt(Stmt).Body) then
+      OptimizeBlock(TASTUnsafeStmt(Stmt).Body);
   end;
 end;
 
