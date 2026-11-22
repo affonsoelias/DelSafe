@@ -185,6 +185,7 @@ Var
   Candidate: string;
   ExeDir, StdDir, CacheDir, DepDir: string;
   RelPath, RelPathLower, RelPathSnake: string;
+  CleanRelPath, CleanRelPathLower, CleanRelPathSnake: string;
   ProjConfig: TAetherProjectConfig;
   I: Integer;
 Begin
@@ -193,6 +194,16 @@ Begin
   RelPathLower := LowerCase(RelPath);
   RelPathSnake := StringReplace(CamelToSnake(ModName), '.', PathDelim, [
                   rfReplaceAll]);
+
+  CleanRelPath := RelPath;
+  CleanRelPathLower := RelPathLower;
+  CleanRelPathSnake := RelPathSnake;
+  if (Pos('std' + PathDelim, RelPathLower) = 1) then
+  begin
+    CleanRelPath := Copy(RelPath, 5, Length(RelPath) - 4);
+    CleanRelPathLower := Copy(RelPathLower, 5, Length(RelPathLower) - 4);
+    CleanRelPathSnake := Copy(RelPathSnake, 5, Length(RelPathSnake) - 4);
+  end;
 
   // 1. Diretório do arquivo fonte
   Candidate := BaseDir + RelPath + '.aeth';
@@ -203,21 +214,21 @@ Begin
   If FileExists(Candidate) Then Exit(Candidate);
 
   // 2. Subpasta std/ relativa ao diretório do arquivo fonte
-  Candidate := BaseDir + 'std' + PathDelim + RelPath + '.aeth';
+  Candidate := BaseDir + 'std' + PathDelim + CleanRelPath + '.aeth';
   If FileExists(Candidate) Then Exit(Candidate);
-  Candidate := BaseDir + 'std' + PathDelim + RelPathLower + '.aeth';
+  Candidate := BaseDir + 'std' + PathDelim + CleanRelPathLower + '.aeth';
   If FileExists(Candidate) Then Exit(Candidate);
-  Candidate := BaseDir + 'std' + PathDelim + RelPathSnake + '.aeth';
+  Candidate := BaseDir + 'std' + PathDelim + CleanRelPathSnake + '.aeth';
   If FileExists(Candidate) Then Exit(Candidate);
 
   // 3. Subpasta std/ relativa ao compilador (bin/../std)
   ExeDir := ExtractFilePath(ParamStr(0));
   StdDir := ExpandFileName(ExeDir + '..' + PathDelim + 'std');
-  Candidate := StdDir + PathDelim + RelPath + '.aeth';
+  Candidate := StdDir + PathDelim + CleanRelPath + '.aeth';
   If FileExists(Candidate) Then Exit(Candidate);
-  Candidate := StdDir + PathDelim + RelPathLower + '.aeth';
+  Candidate := StdDir + PathDelim + CleanRelPathLower + '.aeth';
   If FileExists(Candidate) Then Exit(Candidate);
-  Candidate := StdDir + PathDelim + RelPathSnake + '.aeth';
+  Candidate := StdDir + PathDelim + CleanRelPathSnake + '.aeth';
   If FileExists(Candidate) Then Exit(Candidate);
 
   // 4. Diretório de trabalho atual (cwd)
@@ -227,14 +238,11 @@ Begin
   If FileExists(Candidate) Then Exit(Candidate);
   Candidate := GetCurrentDir + PathDelim + RelPathSnake + '.aeth';
   If FileExists(Candidate) Then Exit(Candidate);
-  Candidate := GetCurrentDir + PathDelim + 'std' + PathDelim + RelPath + '.aeth'
-  ;
+  Candidate := GetCurrentDir + PathDelim + 'std' + PathDelim + CleanRelPath + '.aeth';
   If FileExists(Candidate) Then Exit(Candidate);
-  Candidate := GetCurrentDir + PathDelim + 'std' + PathDelim + RelPathLower +
-               '.aeth';
+  Candidate := GetCurrentDir + PathDelim + 'std' + PathDelim + CleanRelPathLower + '.aeth';
   If FileExists(Candidate) Then Exit(Candidate);
-  Candidate := GetCurrentDir + PathDelim + 'std' + PathDelim + RelPathSnake +
-               '.aeth';
+  Candidate := GetCurrentDir + PathDelim + 'std' + PathDelim + CleanRelPathSnake + '.aeth';
   If FileExists(Candidate) Then Exit(Candidate);
 
 
@@ -307,7 +315,6 @@ Begin
     Begin
       ModName := TargetMod.Imports[I];
       If Visited.IndexOf(LowerCase(ModName)) >= 0 Then Continue;
-      Visited.Add(LowerCase(ModName));
 
       ModPath := FindModuleFile(ModName, BaseDir);
       If ModPath = '' Then
@@ -315,6 +322,11 @@ Begin
 
 'Modulo Aether "%s" nao encontrado. Verifique se o arquivo existe ou se esta em "std/".'
                                   , [ModName]);
+
+      If Visited.IndexOf(LowerCase(ModPath)) >= 0 Then Continue;
+      Visited.Add(LowerCase(ModName));
+      Visited.Add(LowerCase(ModPath));
+      Visited.Add(LowerCase(ExtractLastSegment(ModName)));
 
       ModSource := LoadFileContent(ModPath);
       SubLexer := TAetherLexer.Create(ModSource);

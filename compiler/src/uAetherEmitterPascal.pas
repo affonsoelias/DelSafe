@@ -227,9 +227,16 @@ begin
     if (Call.Callee = 'ReadFile') or (Call.Callee = 'CharAt') or (Call.Callee = 'Substring') or (Call.Callee = 'ToString') or (Call.Callee = 'IntToStr') or (Call.Callee = 'SocketRecv') or (Call.Callee = 'ParamStr') then Exit('String');
     if (Call.Callee = 'Length') or (Call.Callee = 'StrToInt') or (Call.Callee = 'SocketCreate') or (Call.Callee = 'SocketListen') or (Call.Callee = 'SocketAccept') or (Call.Callee = 'SocketConnect') or (Call.Callee = 'SocketSend') or (Call.Callee = 'ParamCount') then Exit('Int32');
     if (Call.Callee = 'sin') or (Call.Callee = 'cos') or (Call.Callee = 'tan') or (Call.Callee = 'sqrt') or (Call.Callee = 'Now') then Exit('Float64');
-    if Call.Callee = 'GetTickCount64' then Exit('UInt64');
-    if (Call.Callee = 'FileExists') or (Call.Callee = 'WriteFile') then Exit('Bool');
-    if (Call.Callee = 'SocketClose') or (Call.Callee = 'Assert') then Exit('Void');
+    if (Call.Callee = 'GetTickCount64') or (Call.Callee = 'GetNanoseconds') then Exit('UInt64');
+    if (Call.Callee = 'FileSize') then Exit('Int64');
+    if (Call.Callee = 'FileExists') or (Call.Callee = 'WriteFile') or (Call.Callee = 'CreateDir') or (Call.Callee = 'RemoveDir') or (Call.Callee = 'DeleteFile') or (Call.Callee = 'DirExists') then Exit('Bool');
+    if (Call.Callee = 'SocketClose') or (Call.Callee = 'Assert') or (Call.Callee = 'SleepMs') then Exit('Void');
+    if Assigned(FModule) then
+    begin
+      for I := 0 to FModule.Functions.Count - 1 do
+        if SameText(TASTFunction(FModule.Functions[I]).Name, Call.Callee) then
+          Exit(TASTFunction(FModule.Functions[I]).ReturnType);
+    end;
   end;
 end;
 
@@ -271,6 +278,13 @@ begin
   end
   else
     Result := 'T' + AType;
+end;
+
+function IsIntegerType(const AType: string): Boolean;
+begin
+  Result := (AType = 'Int8') or (AType = 'Int16') or (AType = 'Int32') or (AType = 'Int64') or
+            (AType = 'UInt8') or (AType = 'UInt16') or (AType = 'UInt32') or (AType = 'UInt64') or
+            (AType = 'IntLiteral');
 end;
 
 function TAetherEmitterPascal.EmitExpr(Expr: TASTExpr): string;
@@ -343,6 +357,13 @@ begin
     Bin := TASTBinaryExpr(Expr);
     if Bin.Op = 'implies' then
       Result := Format('((not (%s)) or (%s))', [EmitExpr(Bin.Left), EmitExpr(Bin.Right)])
+    else if Bin.Op = '/' then
+    begin
+      if IsIntegerType(GetExprTypeName(Bin.Left)) or (Bin.Right is TASTLiteralExpr) then
+        Result := Format('(%s div %s)', [EmitExpr(Bin.Left), EmitExpr(Bin.Right)])
+      else
+        Result := Format('(%s / %s)', [EmitExpr(Bin.Left), EmitExpr(Bin.Right)]);
+    end
     else
       Result := Format('(%s %s %s)', [EmitExpr(Bin.Left), Bin.Op, EmitExpr(Bin.Right)]);
     Exit;
@@ -437,6 +458,48 @@ begin
     if Call.Callee = 'WriteFile' then
     begin
       Result := 'AetherWriteFile(' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + ', ' + EmitExpr(TASTCallArg(Call.Args[1]).Expr) + ')';
+      Exit;
+    end;
+
+    if Call.Callee = 'CreateDir' then
+    begin
+      Result := 'AetherCreateDir(' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + ')';
+      Exit;
+    end;
+
+    if Call.Callee = 'RemoveDir' then
+    begin
+      Result := 'AetherRemoveDir(' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + ')';
+      Exit;
+    end;
+
+    if Call.Callee = 'DeleteFile' then
+    begin
+      Result := 'AetherDeleteFile(' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + ')';
+      Exit;
+    end;
+
+    if Call.Callee = 'DirExists' then
+    begin
+      Result := 'AetherDirExists(' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + ')';
+      Exit;
+    end;
+
+    if Call.Callee = 'FileSize' then
+    begin
+      Result := 'AetherFileSize(' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + ')';
+      Exit;
+    end;
+
+    if Call.Callee = 'GetNanoseconds' then
+    begin
+      Result := 'AetherGetNanoseconds()';
+      Exit;
+    end;
+
+    if Call.Callee = 'SleepMs' then
+    begin
+      Result := 'AetherSleepMs(' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + ')';
       Exit;
     end;
 
@@ -988,6 +1051,13 @@ begin
   Emit('function AetherFileExists(const APath: string): Boolean;');
   Emit('function AetherReadFile(const APath: string): string;');
   Emit('function AetherWriteFile(const APath: string; const AContent: string): Boolean;');
+  Emit('function AetherCreateDir(const APath: string): Boolean;');
+  Emit('function AetherRemoveDir(const APath: string): Boolean;');
+  Emit('function AetherDeleteFile(const APath: string): Boolean;');
+  Emit('function AetherDirExists(const APath: string): Boolean;');
+  Emit('function AetherFileSize(const APath: string): Int64;');
+  Emit('function AetherGetNanoseconds: QWord;');
+  Emit('procedure AetherSleepMs(AMs: Cardinal);');
   Emit('function AetherSocketCreate(): LongInt;');
   Emit('function AetherSocketListen(Port: Word; Backlog: LongInt): LongInt;');
   Emit('function AetherSocketAccept(ListenFd: LongInt): LongInt;');
@@ -1047,6 +1117,43 @@ begin
   Emit('  CloseFile(F);');
   Emit('  Result := True;');
   Emit('end;');
+  Emit('');
+  Emit('function AetherCreateDir(const APath: string): Boolean;');
+  Emit('begin Result := SysUtils.CreateDir(APath); end;');
+  Emit('');
+  Emit('function AetherRemoveDir(const APath: string): Boolean;');
+  Emit('begin Result := SysUtils.RemoveDir(APath); end;');
+  Emit('');
+  Emit('function AetherDeleteFile(const APath: string): Boolean;');
+  Emit('begin Result := SysUtils.DeleteFile(APath); end;');
+  Emit('');
+  Emit('function AetherDirExists(const APath: string): Boolean;');
+  Emit('begin Result := SysUtils.DirectoryExists(APath); end;');
+  Emit('');
+  Emit('function AetherFileSize(const APath: string): Int64;');
+  Emit('var H: THandle;');
+  Emit('begin');
+  Emit('  Result := -1;');
+  Emit('  H := FileOpen(APath, fmOpenRead or fmShareDenyNone);');
+  Emit('  if H <> feInvalidHandle then begin Result := FileSeek(H, Int64(0), 2); FileClose(H); end;');
+  Emit('end;');
+  Emit('');
+  Emit('function AetherGetNanoseconds: QWord;');
+  Emit('{$IFDEF WINDOWS}');
+  Emit('var Freq, Count: Int64;');
+  Emit('begin');
+  Emit('  Freq := 0; Count := 0;');
+  Emit('  Windows.QueryPerformanceFrequency(Freq);');
+  Emit('  Windows.QueryPerformanceCounter(Count);');
+  Emit('  if Freq > 0 then Result := QWord((Count * 1000000000) div Freq)');
+  Emit('  else Result := QWord(GetTickCount64 * 1000000);');
+  Emit('end;');
+  Emit('{$ELSE}');
+  Emit('begin Result := QWord(GetTickCount64 * 1000000); end;');
+  Emit('{$ENDIF}');
+  Emit('');
+  Emit('procedure AetherSleepMs(AMs: Cardinal);');
+  Emit('begin SysUtils.Sleep(AMs); end;');
   Emit('');
   Emit('// Sockets Nativos via Sockets FPC');
   Emit('function AetherSocketCreate(): LongInt;');
@@ -1142,7 +1249,7 @@ begin
   FOutput.Clear;
   FIndent := 0;
 
-  UsesClause := '  SysUtils, Sockets, Math';
+  UsesClause := '  SysUtils, Sockets, Math{$IFDEF WINDOWS}, Windows{$ENDIF}';
   for I := 0 to AModule.PascalImports.Count - 1 do
   begin
     if Pos(LowerCase(AModule.PascalImports[I]), LowerCase(UsesClause)) = 0 then

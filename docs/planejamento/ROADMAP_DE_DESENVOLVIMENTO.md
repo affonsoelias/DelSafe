@@ -286,14 +286,21 @@ Este documento traça o status oficial de desenvolvimento do compilador e as pr�
   - Relatório no terminal com status `[ PASS ]` / `[ FAIL ]`, tempos de compilação/execução em milissegundos e código de saída refletindo o sucesso ou falha da asserção.
   - Suíte modelo `tests/01_suite_matematica_test.aeth` criada e aprovada nos backends Free Pascal e GCC C99.
 
-### ⏳ Fase 25: Biblioteca Padrão Canônica Expandida (`std/`)
-
-### ⏳ Fase 25: Biblioteca Padrão Canônica Expandida (`std/`)
-- [ ] **`std.fs` (Sistema de Arquivos & Diretórios)**:
-  - Criação de diretórios (`CreateDir`, `ForceDirectories`), remoção (`DeleteFile`, `RemoveDir`), listagem de arquivos e verificação de metadados (tamanho, datas de modificação).
-- [ ] **`std.time` (Tempo de Alta Resolução & Benchmarking)**:
-  - Medição de tempo monótono de alta precisão (`GetNanoseconds`, `Timer`), formatação de data/hora e utilitários de medição de desempenho para blocos de código.
-- [ ] **`std.json` (Manipulação Rápida de JSON)**:
-  - Parser e gerador JSON nativo em Aether, convertendo estruturas de dados e records em representações JSON estruturadas.
-- [ ] **`std.http` (Cliente e Servidor HTTP Básico)**:
-  - Construído sobre a camada nativa de Sockets (`SocketCreate`, `SocketListen`, `SocketAccept`), permitindo criar endpoints HTTP simples e microserviços em Aether.
+### ✅ Fase 25: Biblioteca Padrão Canônica Expandida (`std/`) (Concluído)
+- [x] **`std.fs` (Sistema de Arquivos & Diretórios)**:
+  - Adicionadas funções nativas embutidas: `CreateDir`, `RemoveDir`, `DeleteFile`, `DirExists` e `FileSize` com paridade dual-backend Free Pascal (`SysUtils`) e GCC C99 (`sys/stat.h`, `direct.h`).
+  - Módulo canônico `std/fs.aeth` com struct `FileInfo`, `CriarDiretorio`, `RemoverDiretorio`, `ApagarArquivo`, `ExisteDiretorio`, `TamanhoArquivo` e `ObterInfo`.
+- [x] **`std.time` (Tempo de Alta Resolução & Benchmarking)**:
+  - Adicionada função intrínseca de alta resolução `GetNanoseconds(): UInt64` (Windows QPC / POSIX `clock_gettime`) e `SleepMs(ms: UInt32)` em ambos os backends.
+  - Módulo canônico `std/time.aeth` com struct `Timer`, `AgoraNanosegundos`, `Dormir`, `NovoTimer`, `Iniciar`, `Parar`, `DecorridoNs` e `DecorridoMs`.
+- [x] **`std.json` (Manipulação Rápida de JSON)**:
+  - Parser e builder nativo em Aether (`std/json.aeth`): `JsonBuilder`, `AddString`, `AddInt`, `AddBool`, `Build`, `ExtractString`, `ExtractInt`, `ExtractBool`, `HasKey` e `Validate`.
+- [x] **`std.http` (Cliente e Servidor HTTP Canônico)**:
+  - Módulo canônico `std/http.aeth` construído sobre `std/net.aeth` e `std/json.aeth`.
+  - Abstrações de alto nível `Client` e `Server` com `NewClient`, `Get`, `Post`, `NewServer`, `AcceptRequest`, `SendResponse` e `StopServer`.
+- [x] **Resolução Unificada de Módulos & Desambiguação de Tipos**:
+  - `FindModuleFile` atualizado para aceitar tanto `import std.modulo;` quanto `import modulo;` com desduplicação canônica de caminhos visitados.
+  - Implementado `ResolveTypeSymbol` no `TSymbolTable` e `TScope` garantindo que parâmetros de funções com o mesmo nome de seus tipos (ex: `client: Client`) não ofusquem a resolução do tipo nem o acesso a campos de records (`E0609`).
+  - Emissor Pascal atualizado para mapear divisão inteira com `div` prevenindo conversões espúrias para `Double`.
+- [x] **Validação Prática Dual-Backend**:
+  - Exemplo integrado criado em `examples/20_stdlib_expanded.aeth`, testado e validado com 100% de sucesso e paridade idêntica nos backends Free Pascal e GCC C99.

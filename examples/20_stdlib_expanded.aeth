@@ -1,0 +1,107 @@
+module StdlibExpanded;
+
+import std.fs;
+import std.time;
+import std.json;
+import std.http;
+
+program StdlibExpanded;
+var
+    test_dir: String;
+    test_file: String;
+    conteudo: String;
+    criou_dir: Bool;
+    gravou: Bool;
+    leu: String;
+    tam: Int64;
+    info: FileInfo;
+    apagou: Bool;
+    removeu_dir: Bool;
+
+    // Time
+    t: Timer;
+    elapsed_ns: UInt64;
+    elapsed_ms: UInt64;
+
+    // JSON
+    jb: JsonBuilder;
+    json_str: String;
+    parsed_nome: String;
+    parsed_idade: Int32;
+    parsed_ativo: Bool;
+    sucesso_nome: Bool;
+    sucesso_idade: Bool;
+    sucesso_ativo: Bool;
+
+    // HTTP
+    cli: Client;
+begin
+    PrintLn("=== 1. Testando std.time ===");
+    t := NovoTimer();
+    Iniciar(mut borrow t);
+    Dormir(20);
+    elapsed_ns := Parar(mut borrow t);
+    elapsed_ms := DecorridoMs(borrow t);
+    PrintLn("Tempo decorrido: %d ms (%d ns)", Int32(elapsed_ms), Int32(elapsed_ns));
+    Assert(elapsed_ns > 0, "Timer deve registrar tempo positivo");
+
+    PrintLn("=== 2. Testando std.fs ===");
+    test_dir := "temp_test_dir";
+    test_file := "temp_test_dir/arquivo_teste.txt";
+    conteudo := "AetherLang - Sistema de Arquivos Seguro e Sem GC!";
+
+    criou_dir := CriarDiretorio(borrow test_dir);
+    PrintLn("Diretorio criado: %s", test_dir);
+    Assert(ExisteDiretorio(borrow test_dir), "Diretorio deve existir");
+
+    gravou := WriteFile(borrow test_file, borrow conteudo);
+    Assert(gravou, "Arquivo deve ser gravado com sucesso");
+    Assert(FileExists(borrow test_file), "Arquivo deve existir");
+
+    tam := TamanhoArquivo(borrow test_file);
+    PrintLn("Tamanho do arquivo: %d bytes", Int32(tam));
+    Assert(tam > 0, "Tamanho deve ser maior que zero");
+
+    leu := ReadFile(borrow test_file);
+    Assert(Length(borrow leu) > 0, "Conteudo lido nao deve ser vazio");
+
+    info := ObterInfo(borrow test_file);
+    Assert(info.exists, "Info: arquivo deve existir");
+    Assert(not info.is_dir, "Info: nao deve ser diretorio");
+
+    apagou := ApagarArquivo(borrow test_file);
+    Assert(apagou, "Arquivo deve ser apagado");
+    Assert(not FileExists(borrow test_file), "Arquivo nao deve mais existir");
+
+    removeu_dir := RemoverDiretorio(borrow test_dir);
+    Assert(removeu_dir, "Diretorio deve ser removido");
+    Assert(not ExisteDiretorio(borrow test_dir), "Diretorio nao deve mais existir");
+    PrintLn("Limpeza de arquivos e diretorios concluida com sucesso.");
+
+    PrintLn("=== 3. Testando std.json ===");
+    jb := NewJsonBuilder();
+    AddString(mut borrow jb, "linguagem", "Aether");
+    AddInt(mut borrow jb, "versao", 1);
+    AddBool(mut borrow jb, "zero_cost", true);
+    json_str := Build(borrow jb);
+    PrintLn("JSON Gerado: %s", json_str);
+    Assert(Validate(borrow json_str), "JSON gerado deve ser valido");
+
+    parsed_nome := "";
+    parsed_idade := 0;
+    parsed_ativo := false;
+    sucesso_nome := ExtractString(borrow json_str, "linguagem", mut borrow parsed_nome);
+    sucesso_idade := ExtractInt(borrow json_str, "versao", mut borrow parsed_idade);
+    sucesso_ativo := ExtractBool(borrow json_str, "zero_cost", mut borrow parsed_ativo);
+
+    Assert(sucesso_nome and (parsed_nome = "Aether"), "Extracao de string JSON");
+    Assert(sucesso_idade and (parsed_idade = 1), "Extracao de int JSON");
+    Assert(sucesso_ativo and parsed_ativo, "Extracao de bool JSON");
+    PrintLn("JSON parseado com sucesso: linguagem=%s, versao=%d, zero_cost=true", parsed_nome, parsed_idade);
+
+    PrintLn("=== 4. Testando std.http ===");
+    cli := NewClient("127.0.0.1", 8080);
+    PrintLn("Cliente HTTP configurado para %s:%d", cli.host, Int32(cli.port));
+
+    PrintLn("=== Todos os testes da Fase 25 foram concluidos com 100% de sucesso! ===");
+end.

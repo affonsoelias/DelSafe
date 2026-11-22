@@ -36,6 +36,7 @@ type
     procedure Define(Sym: TSymbol);
     function Resolve(const AName: string): TSymbol;
     function ResolveLocal(const AName: string): TSymbol;
+    function ResolveType(const AName: string): TSymbol;
     property Parent: TScope read FParent;
   end;
 
@@ -53,6 +54,7 @@ type
     procedure Define(Sym: TSymbol);
     function Resolve(const AName: string): TSymbol;
     function ResolveType(const ATypeName: string): Boolean;
+    function ResolveTypeSymbol(const ATypeName: string): TSymbol;
 
     property CurrentScope: TScope read FCurrentScope;
     property GlobalScope: TScope read FGlobalScope;
@@ -146,6 +148,26 @@ begin
   Result := nil;
 end;
 
+function TScope.ResolveType(const AName: string): TSymbol;
+var
+  Current: TScope;
+  Sym: TSymbol;
+  I: Integer;
+begin
+  Current := Self;
+  while Assigned(Current) do
+  begin
+    for I := 0 to Current.FSymbols.Count - 1 do
+    begin
+      Sym := TSymbol(Current.FSymbols[I]);
+      if (Sym.Kind = skType) and SameText(Sym.Name, AName) then
+        Exit(Sym);
+    end;
+    Current := Current.Parent;
+  end;
+  Result := nil;
+end;
+
 { TSymbolTable }
 
 constructor TSymbolTable.Create;
@@ -205,6 +227,13 @@ begin
   FGlobalScope.Define(TSymbol.Create('FileExists', skFunction, 'Bool', 0, 0));
   FGlobalScope.Define(TSymbol.Create('ReadFile', skFunction, 'String', 0, 0));
   FGlobalScope.Define(TSymbol.Create('WriteFile', skFunction, 'Bool', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('CreateDir', skFunction, 'Bool', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('RemoveDir', skFunction, 'Bool', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('DeleteFile', skFunction, 'Bool', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('DirExists', skFunction, 'Bool', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('FileSize', skFunction, 'Int64', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('GetNanoseconds', skFunction, 'UInt64', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('SleepMs', skFunction, 'Void', 0, 0));
   FGlobalScope.Define(TSymbol.Create('IntToStr', skFunction, 'String', 0, 0));
   FGlobalScope.Define(TSymbol.Create('StrToInt', skFunction, 'Int32', 0, 0));
   FGlobalScope.Define(TSymbol.Create('ParamCount', skFunction, 'Int32', 0, 0));
@@ -248,6 +277,18 @@ begin
   Result := FCurrentScope.Resolve(AName);
 end;
 
+function TSymbolTable.ResolveTypeSymbol(const ATypeName: string): TSymbol;
+var
+  CleanName: string;
+  P: Integer;
+begin
+  CleanName := ATypeName;
+  P := Pos('<', CleanName);
+  if P > 0 then
+    CleanName := Copy(CleanName, 1, P - 1);
+  Result := FCurrentScope.ResolveType(CleanName);
+end;
+
 function TSymbolTable.ResolveType(const ATypeName: string): Boolean;
 var
   CleanName: string;
@@ -262,7 +303,7 @@ begin
   if (CleanName = 'Result') or (CleanName = 'Option') or (CleanName = 'Box') then
     Exit(True);
 
-  Sym := Resolve(CleanName);
+  Sym := ResolveTypeSymbol(CleanName);
   Result := Assigned(Sym) and (Sym.Kind = skType);
 end;
 

@@ -1,0 +1,50 @@
+module FS;
+
+type
+    FileInfo = record
+    path: String;
+    size_bytes: Int64;
+    exists: Bool;
+    is_dir: Bool;
+end;
+
+function CriarDiretorio(borrow path: String): Bool
+begin
+    return CreateDir(borrow path);
+end;
+
+function RemoverDiretorio(borrow path: String): Bool
+begin
+    return RemoveDir(borrow path);
+end;
+
+function ApagarArquivo(borrow path: String): Bool
+begin
+    return DeleteFile(borrow path);
+end;
+
+function ExisteDiretorio(borrow path: String): Bool
+begin
+    return DirExists(borrow path);
+end;
+
+function TamanhoArquivo(borrow path: String): Int64
+begin
+    return FileSize(borrow path);
+end;
+
+function ObterInfo(borrow path: String): FileInfo
+var
+    ex: Bool;
+    is_d: Bool;
+    sz: Int64;
+begin
+    is_d := DirExists(borrow path);
+    ex := is_d or FileExists(borrow path);
+    if is_d then
+    sz := 0;
+else
+    sz := FileSize(borrow path);
+end;
+return FileInfo(path: path, size_bytes: sz, exists: ex, is_dir: is_d);
+end;

@@ -227,9 +227,10 @@ begin
     if (Call.Callee = 'ReadFile') or (Call.Callee = 'CharAt') or (Call.Callee = 'Substring') or (Call.Callee = 'ToString') or (Call.Callee = 'IntToStr') or (Call.Callee = 'SocketRecv') or (Call.Callee = 'ParamStr') then Exit('String');
     if (Call.Callee = 'Length') or (Call.Callee = 'StrToInt') or (Call.Callee = 'SocketCreate') or (Call.Callee = 'SocketListen') or (Call.Callee = 'SocketAccept') or (Call.Callee = 'SocketConnect') or (Call.Callee = 'SocketSend') or (Call.Callee = 'ParamCount') then Exit('Int32');
     if (Call.Callee = 'sin') or (Call.Callee = 'cos') or (Call.Callee = 'tan') or (Call.Callee = 'sqrt') or (Call.Callee = 'Now') then Exit('Float64');
-    if Call.Callee = 'GetTickCount64' then Exit('UInt64');
-    if (Call.Callee = 'FileExists') or (Call.Callee = 'WriteFile') then Exit('Bool');
-    if (Call.Callee = 'SocketClose') or (Call.Callee = 'Assert') then Exit('Void');
+    if (Call.Callee = 'GetTickCount64') or (Call.Callee = 'GetNanoseconds') then Exit('UInt64');
+    if (Call.Callee = 'FileSize') then Exit('Int64');
+    if (Call.Callee = 'FileExists') or (Call.Callee = 'WriteFile') or (Call.Callee = 'CreateDir') or (Call.Callee = 'RemoveDir') or (Call.Callee = 'DeleteFile') or (Call.Callee = 'DirExists') then Exit('Bool');
+    if (Call.Callee = 'SocketClose') or (Call.Callee = 'Assert') or (Call.Callee = 'SleepMs') then Exit('Void');
     if Assigned(FModule) then
     begin
       for I := 0 to FModule.Functions.Count - 1 do
@@ -504,6 +505,48 @@ begin
     if Call.Callee = 'WriteFile' then
     begin
       Result := 'AetherWriteFile(' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + ', ' + EmitExpr(TASTCallArg(Call.Args[1]).Expr) + ')';
+      Exit;
+    end;
+
+    if Call.Callee = 'CreateDir' then
+    begin
+      Result := 'AetherCreateDir(' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + ')';
+      Exit;
+    end;
+
+    if Call.Callee = 'RemoveDir' then
+    begin
+      Result := 'AetherRemoveDir(' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + ')';
+      Exit;
+    end;
+
+    if Call.Callee = 'DeleteFile' then
+    begin
+      Result := 'AetherDeleteFile(' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + ')';
+      Exit;
+    end;
+
+    if Call.Callee = 'DirExists' then
+    begin
+      Result := 'AetherDirExists(' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + ')';
+      Exit;
+    end;
+
+    if Call.Callee = 'FileSize' then
+    begin
+      Result := 'AetherFileSize(' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + ')';
+      Exit;
+    end;
+
+    if Call.Callee = 'GetNanoseconds' then
+    begin
+      Result := 'AetherGetNanoseconds()';
+      Exit;
+    end;
+
+    if Call.Callee = 'SleepMs' then
+    begin
+      Result := 'AetherSleepMs(' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + ')';
       Exit;
     end;
 
@@ -949,12 +992,15 @@ begin
   Emit('#include <assert.h>');
   Emit('#include <math.h>');
   Emit('#include <time.h>');
+  Emit('#include <sys/stat.h>');
   Emit('#ifdef _WIN32');
   Emit('#define WIN32_LEAN_AND_MEAN');
   Emit('#define NOGDI');
   Emit('#include <winsock2.h>');
   Emit('#include <ws2tcpip.h>');
   Emit('#include <windows.h>');
+  Emit('#include <direct.h>');
+  Emit('#include <io.h>');
   Emit('#undef Rectangle');
   Emit('typedef int socklen_t;');
   Emit('#else');
@@ -1052,6 +1098,73 @@ begin
   Emit('    if (content) fputs(content, f);');
   Emit('    fclose(f);');
   Emit('    return true;');
+  Emit('}');
+  Emit('');
+  Emit('static inline bool AetherCreateDir(const char* path) {');
+  Emit('#ifdef _WIN32');
+  Emit('    return _mkdir(path) == 0;');
+  Emit('#else');
+  Emit('    return mkdir(path, 0755) == 0;');
+  Emit('#endif');
+  Emit('}');
+  Emit('');
+  Emit('static inline bool AetherRemoveDir(const char* path) {');
+  Emit('#ifdef _WIN32');
+  Emit('    return _rmdir(path) == 0;');
+  Emit('#else');
+  Emit('    return rmdir(path) == 0;');
+  Emit('#endif');
+  Emit('}');
+  Emit('');
+  Emit('static inline bool AetherDeleteFile(const char* path) {');
+  Emit('    return remove(path) == 0;');
+  Emit('}');
+  Emit('');
+  Emit('static inline bool AetherDirExists(const char* path) {');
+  Emit('#ifdef _WIN32');
+  Emit('    DWORD attr = GetFileAttributesA(path);');
+  Emit('    return (attr != INVALID_FILE_ATTRIBUTES) && ((attr & FILE_ATTRIBUTE_DIRECTORY) != 0);');
+  Emit('#else');
+  Emit('    struct stat st;');
+  Emit('    if (stat(path, &st) == 0 && S_ISDIR(st.st_mode)) return true;');
+  Emit('    return false;');
+  Emit('#endif');
+  Emit('}');
+  Emit('');
+  Emit('static inline int64_t AetherFileSize(const char* path) {');
+  Emit('#ifdef _WIN32');
+  Emit('    struct _stat64 st;');
+  Emit('    if (_stat64(path, &st) == 0) return (int64_t)st.st_size;');
+  Emit('    return -1;');
+  Emit('#else');
+  Emit('    struct stat st;');
+  Emit('    if (stat(path, &st) == 0) return (int64_t)st.st_size;');
+  Emit('    return -1;');
+  Emit('#endif');
+  Emit('}');
+  Emit('');
+  Emit('static inline uint64_t AetherGetNanoseconds(void) {');
+  Emit('#ifdef _WIN32');
+  Emit('    LARGE_INTEGER freq, count;');
+  Emit('    QueryPerformanceFrequency(&freq);');
+  Emit('    QueryPerformanceCounter(&count);');
+  Emit('    if (freq.QuadPart > 0) {');
+  Emit('        return (uint64_t)((count.QuadPart * 1000000000ULL) / freq.QuadPart);');
+  Emit('    }');
+  Emit('    return (uint64_t)GetTickCount64() * 1000000ULL;');
+  Emit('#else');
+  Emit('    struct timespec ts;');
+  Emit('    clock_gettime(CLOCK_MONOTONIC, &ts);');
+  Emit('    return (uint64_t)ts.tv_sec * 1000000000ULL + (uint64_t)ts.tv_nsec;');
+  Emit('#endif');
+  Emit('}');
+  Emit('');
+  Emit('static inline void AetherSleepMs(uint32_t ms) {');
+  Emit('#ifdef _WIN32');
+  Emit('    Sleep(ms);');
+  Emit('#else');
+  Emit('    usleep((useconds_t)ms * 1000);');
+  Emit('#endif');
   Emit('}');
   Emit('');
   Emit('static inline char* AetherIntToStr(int32_t val) {');

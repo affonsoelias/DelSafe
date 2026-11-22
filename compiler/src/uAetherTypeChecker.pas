@@ -239,7 +239,7 @@ begin
     if SameText(Acc.Member, 'value') then
       Exit(InnerRecName);
 
-    Sym := FSymbols.Resolve(InnerRecName);
+    Sym := FSymbols.ResolveTypeSymbol(InnerRecName);
     if Assigned(Sym) and (Sym.Node is TASTRecordDecl) then
     begin
       RecDecl := TASTRecordDecl(Sym.Node);
@@ -253,7 +253,7 @@ begin
   end;
 
   // Membro de Record
-  Sym := FSymbols.Resolve(TargetType);
+  Sym := FSymbols.ResolveTypeSymbol(TargetType);
   if Assigned(Sym) and (Sym.Node is TASTRecordDecl) then
   begin
     RecDecl := TASTRecordDecl(Sym.Node);
@@ -373,7 +373,7 @@ end;
 
 function TAetherTypeChecker.CheckCall(Call: TASTCallExpr): string;
 var
-  Sym, SymMono: TSymbol;
+  Sym, SymMono, TypeSym: TSymbol;
   FuncNode, MonoFunc: TASTFunction;
   RecDecl: TASTRecordDecl;
   I: Integer;
@@ -414,6 +414,13 @@ begin
   end;
 
   Sym := FSymbols.Resolve(Call.Callee);
+  if (not Assigned(Sym)) or (Sym.Kind = skVariable) then
+  begin
+    TypeSym := FSymbols.ResolveTypeSymbol(Call.Callee);
+    if Assigned(TypeSym) then
+      Sym := TypeSym;
+  end;
+
   if not Assigned(Sym) then
   begin
     // Resolução de método de Trait via primeiro argumento (UFCS)
@@ -600,6 +607,43 @@ begin
       if ArgType <> 'String' then
         Error('E0308', Format('Segundo argumento de "WriteFile" deve ser String, recebido: "%s"', [ArgType]), Call.Line, Call.Col);
       Exit('Bool');
+    end;
+
+    if (Call.Callee = 'CreateDir') or (Call.Callee = 'RemoveDir') or (Call.Callee = 'DeleteFile') or (Call.Callee = 'DirExists') then
+    begin
+      if Call.Args.Count <> 1 then
+        Error('E0061', Format('Funcao "%s" espera 1 argumento (String)', [Call.Callee]), Call.Line, Call.Col);
+      ArgType := CheckExpr(TASTCallArg(Call.Args[0]).Expr);
+      if ArgType <> 'String' then
+        Error('E0308', Format('Funcao "%s" espera String, recebeu: "%s"', [Call.Callee, ArgType]), Call.Line, Call.Col);
+      Exit('Bool');
+    end;
+
+    if Call.Callee = 'FileSize' then
+    begin
+      if Call.Args.Count <> 1 then
+        Error('E0061', 'Funcao "FileSize" espera 1 argumento (String)', Call.Line, Call.Col);
+      ArgType := CheckExpr(TASTCallArg(Call.Args[0]).Expr);
+      if ArgType <> 'String' then
+        Error('E0308', Format('Funcao "FileSize" espera String, recebeu: "%s"', [ArgType]), Call.Line, Call.Col);
+      Exit('Int64');
+    end;
+
+    if Call.Callee = 'GetNanoseconds' then
+    begin
+      if Call.Args.Count <> 0 then
+        Error('E0061', 'Funcao "GetNanoseconds" nao espera argumentos', Call.Line, Call.Col);
+      Exit('UInt64');
+    end;
+
+    if Call.Callee = 'SleepMs' then
+    begin
+      if Call.Args.Count <> 1 then
+        Error('E0061', 'Funcao "SleepMs" espera 1 argumento (UInt32)', Call.Line, Call.Col);
+      ArgType := CheckExpr(TASTCallArg(Call.Args[0]).Expr);
+      if not IsIntegerType(ArgType) and (ArgType <> 'IntLiteral') then
+        Error('E0308', Format('Funcao "SleepMs" espera tipo inteiro, recebeu: "%s"', [ArgType]), Call.Line, Call.Col);
+      Exit('Void');
     end;
 
     if Call.Callee = 'IntToStr' then

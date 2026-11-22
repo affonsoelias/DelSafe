@@ -1,0 +1,51 @@
+module Time;
+
+type
+    Timer = record
+    start_ns: UInt64;
+    stop_ns: UInt64;
+    is_running: Bool;
+end;
+
+function AgoraNanosegundos(): UInt64
+begin
+    return GetNanoseconds();
+end;
+
+function Dormir(ms: UInt32): Void
+begin
+    SleepMs(ms);
+end;
+
+function NovoTimer(): Timer
+begin
+    return Timer(start_ns: 0, stop_ns: 0, is_running: false);
+end;
+
+function Iniciar(mut borrow t: Timer): Void
+begin
+    t.start_ns := GetNanoseconds();
+    t.stop_ns := 0;
+    t.is_running := true;
+end;
+
+function Parar(mut borrow t: Timer): UInt64
+begin
+    t.stop_ns := GetNanoseconds();
+    t.is_running := false;
+    return t.stop_ns - t.start_ns;
+end;
+
+function DecorridoNs(borrow t: Timer): UInt64
+begin
+    if t.is_running then
+    return GetNanoseconds() - t.start_ns;
+else
+    return t.stop_ns - t.start_ns;
+end;
+end;
+
+function DecorridoMs(borrow t: Timer): UInt64
+begin
+    return DecorridoNs(borrow t) / 1000000;
+end;
