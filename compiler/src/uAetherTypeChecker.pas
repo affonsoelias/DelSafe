@@ -384,7 +384,7 @@ begin
   if (LowName = 'gettickcount64') or (LowName = 'gettickcount') then
     Exit('UInt64');
 
-  if (LowName = 'inttostr') or (LowName = 'floattostr') or
+  if (LowName = 'inttostr') or (LowName = 'floattostr') or (LowName = 'booltostr') or
      (LowName = 'timetostr') or (LowName = 'datetostr') or
      (LowName = 'formatdatetime') then
     Exit('String');
@@ -439,11 +439,13 @@ begin
   end;
 
   Sym := FSymbols.Resolve(Call.Callee);
-  if (not Assigned(Sym)) or (Sym.Kind = skVariable) then
+  if (not Assigned(Sym)) or (Sym.Kind = skVariable) or (Sym.Kind = skTrait) then
   begin
     TypeSym := FSymbols.ResolveTypeSymbol(Call.Callee);
-    if Assigned(TypeSym) then
-      Sym := TypeSym;
+    if Assigned(TypeSym) and (TypeSym.Kind <> skTrait) then
+      Sym := TypeSym
+    else
+      Sym := nil;
   end;
 
   if not Assigned(Sym) then
@@ -678,6 +680,26 @@ begin
       ArgType := CheckExpr(TASTCallArg(Call.Args[0]).Expr);
       if not IsIntegerType(ArgType) and (ArgType <> 'IntLiteral') then
         Error('E0308', Format('Funcao "IntToStr" espera tipo inteiro, recebeu: "%s"', [ArgType]), Call.Line, Call.Col);
+      Exit('String');
+    end;
+
+    if Call.Callee = 'FloatToStr' then
+    begin
+      if Call.Args.Count <> 1 then
+        Error('E0061', 'Funcao "FloatToStr" espera 1 argumento (Float64)', Call.Line, Call.Col);
+      ArgType := CheckExpr(TASTCallArg(Call.Args[0]).Expr);
+      if not IsNumericType(ArgType) and (ArgType <> 'FloatLiteral') and (ArgType <> 'IntLiteral') then
+        Error('E0308', Format('Funcao "FloatToStr" espera tipo numerico, recebeu: "%s"', [ArgType]), Call.Line, Call.Col);
+      Exit('String');
+    end;
+
+    if Call.Callee = 'BoolToStr' then
+    begin
+      if Call.Args.Count <> 1 then
+        Error('E0061', 'Funcao "BoolToStr" espera 1 argumento (Bool)', Call.Line, Call.Col);
+      ArgType := CheckExpr(TASTCallArg(Call.Args[0]).Expr);
+      if (ArgType <> 'Bool') then
+        Error('E0308', Format('Funcao "BoolToStr" espera Bool, recebeu: "%s"', [ArgType]), Call.Line, Call.Col);
       Exit('String');
     end;
 
@@ -1171,7 +1193,7 @@ var
   TraitDecl: TASTTraitDecl;
   TraitMethod, ImplMethod: TASTFunction;
   Found: Boolean;
-  ExpectedParamType: string;
+  ExpectedParamType, ExpectedRetType: string;
   MangledName: string;
   Info: PTraitImplInfo;
 begin
@@ -1229,9 +1251,13 @@ begin
             [ImplMethod.Name, Impl.TargetTypeName, Impl.TraitName, TraitMethod.Params.Count, ImplMethod.Params.Count]), ImplMethod.Line, ImplMethod.Col);
 
         // Verifica tipo de retorno
-        if not SameText(ImplMethod.ReturnType, TraitMethod.ReturnType) then
+        ExpectedRetType := TraitMethod.ReturnType;
+        if SameText(ExpectedRetType, 'Self') then
+          ExpectedRetType := Impl.TargetTypeName;
+
+        if not SameText(ImplMethod.ReturnType, ExpectedRetType) then
           Error('E0053', Format('A assinatura do metodo "%s" em "%s" diverge da definicao da trait "%s" (tipo de retorno incompativel: esperado "%s", recebido "%s")',
-            [ImplMethod.Name, Impl.TargetTypeName, Impl.TraitName, TraitMethod.ReturnType, ImplMethod.ReturnType]), ImplMethod.Line, ImplMethod.Col);
+            [ImplMethod.Name, Impl.TargetTypeName, Impl.TraitName, ExpectedRetType, ImplMethod.ReturnType]), ImplMethod.Line, ImplMethod.Col);
 
         for P := 0 to TraitMethod.Params.Count - 1 do
         begin

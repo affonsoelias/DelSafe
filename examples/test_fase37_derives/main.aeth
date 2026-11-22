@@ -1,0 +1,84 @@
+module main;
+
+type
+    [derive(Debug, JSON, Clone, Equals)]
+    Ponto = record
+        x: Float64;
+        y: Float64;
+    end;
+
+    [derive(Debug, JSON, Clone, Equals)]
+    Usuario = record
+        id: Int32;
+        nome: String;
+        ativo: Bool;
+        posicao: Ponto;
+    end;
+
+    [derive(Debug, JSON, Clone, Equals)]
+    Status = enum
+        Pendente,
+        Processando,
+        Concluido
+    end;
+
+program Main;
+var
+    p1: Ponto;
+    p2: Ponto;
+    p3: Ponto;
+    u1: Usuario;
+    u2: Usuario;
+    s1: Status;
+    s2: Status;
+    debug_p: String;
+    json_p: String;
+    debug_u: String;
+    json_u: String;
+    debug_s: String;
+    json_s: String;
+    is_eq: Bool;
+begin
+    PrintLn("=== Teste de Derivacoes Automaticas (Fase 37) ===");
+
+    // 1. Teste de Record Simples (Ponto)
+    p1 := Ponto(10.5, 20.25);
+    debug_p := p1.ToString();
+    json_p := p1.ToJSON();
+    PrintLn("Ponto Debug: %s", debug_p);
+    PrintLn("Ponto JSON:  %s", json_p);
+    Assert(debug_p = "Ponto { x: 10.5, y: 20.25 }", "ToString de Ponto incorreto");
+    Assert(json_p = "{\"x\": 10.5, \"y\": 20.25}", "ToJSON de Ponto incorreto");
+
+    // Teste de Clone e Equals
+    p2 := p1.Clone();
+    p3 := Ponto(99.0, 99.0);
+    Assert(p1.Equals(borrow p2), "p1 deve ser igual a p2 (clone)");
+    Assert(not p1.Equals(borrow p3), "p1 deve ser diferente de p3");
+
+    // 2. Teste de Record Aninhado (Usuario com Ponto)
+    u1 := Usuario(101, "Alice", true, p1);
+    debug_u := u1.ToString();
+    json_u := u1.ToJSON();
+    PrintLn("Usuario Debug: %s", debug_u);
+    PrintLn("Usuario JSON:  %s", json_u);
+    Assert(debug_u = "Usuario { id: 101, nome: \"Alice\", ativo: true, posicao: Ponto { x: 10.5, y: 20.25 } }", "ToString de Usuario incorreto");
+    Assert(json_u = "{\"id\": 101, \"nome\": \"Alice\", \"ativo\": true, \"posicao\": {\"x\": 10.5, \"y\": 20.25}}", "ToJSON de Usuario incorreto");
+
+    u2 := u1.Clone();
+    Assert(u1.Equals(borrow u2), "u1 deve ser igual ao clone u2");
+
+    // 3. Teste de Enum (Status)
+    s1 := Status.Concluido;
+    debug_s := s1.ToString();
+    json_s := s1.ToJSON();
+    PrintLn("Status Debug: %s", debug_s);
+    PrintLn("Status JSON:  %s", json_s);
+    Assert(debug_s = "Status.Concluido", "ToString de Status incorreto");
+    Assert(json_s = "\"Concluido\"", "ToJSON de Status incorreto");
+
+    s2 := s1.Clone();
+    Assert(s1.Equals(borrow s2), "s1 deve ser igual a s2");
+
+    PrintLn("Todos os testes de [derive(Debug, JSON, Clone, Equals)] passaram com sucesso!");
+end.

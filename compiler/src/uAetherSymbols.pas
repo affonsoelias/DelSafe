@@ -235,6 +235,8 @@ begin
   FGlobalScope.Define(TSymbol.Create('GetNanoseconds', skFunction, 'UInt64', 0, 0));
   FGlobalScope.Define(TSymbol.Create('SleepMs', skFunction, 'Void', 0, 0));
   FGlobalScope.Define(TSymbol.Create('IntToStr', skFunction, 'String', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('FloatToStr', skFunction, 'String', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('BoolToStr', skFunction, 'String', 0, 0));
   FGlobalScope.Define(TSymbol.Create('StrToInt', skFunction, 'Int32', 0, 0));
   FGlobalScope.Define(TSymbol.Create('ParamCount', skFunction, 'Int32', 0, 0));
   FGlobalScope.Define(TSymbol.Create('ParamStr', skFunction, 'String', 0, 0));

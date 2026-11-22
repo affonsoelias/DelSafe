@@ -476,14 +476,20 @@ Este documento traça o status oficial de desenvolvimento do compilador e as pr�
 
 ---
 
-### ⏳ Fase 37: Derivação Automática de Metaprogramação (`[derive(Debug, JSON, Clone)]`)
-- [ ] **Sintaxe de Derivação na AST e Parser**:
+### ✅ Fase 37: Derivação Automática de Metaprogramação (`[derive(Debug, JSON, Clone, Equals)]`) (Concluído)
+- [x] **Sintaxe de Derivação na AST e Parser**:
   - Suporte à sintaxe de atributos `[derive(Debug, JSON, Clone, Equals)]` aplicável a declarações de `record` e `enum`.
   - Parser estendido para registrar metadados de derivação na AST (`TASTRecordDecl.Derives`, `TASTEnumDecl.Derives`).
-- [ ] **Geração Automática de Métodos em Tempo de Compilação**:
-  - **`Debug`**: Geração do método `ToString(borrow self): String` formatando o nome do tipo e todos os campos recursivamente no formato `Tipo { campo1: valor1, campo2: valor2 }`.
-  - **`JSON`**: Geração de `ToJSON(borrow self): String` e `FromJSON(json_str: String): Result<Self, String>` com serialização/desserialização segura integrada a `std.json`.
-  - **`Clone`**: Geração de `Clone(borrow self): Self` para duplicação explícita e segura de estruturas que contenham buffers e ponteiros sem violar o Borrow Checker.
-  - **`Equals`**: Implementação automática de operadores de igualdade (`=`, `<>`) comparando todos os membros estruturais.
-- [ ] **Validação com Amostras Reais**:
-  - Exemplo integrado demonstrando serialização JSON instantânea de estruturas complexas com zero código repetitivo.
+  - Módulo dedicado de expansão de metaprogramação sintática (`compiler/src/uAetherDerives.pas`).
+- [x] **Geração Automática de Métodos em Tempo de Compilação**:
+  - **`Debug`**: Geração do método `ToString(borrow self): String` formatando o nome do tipo e todos os campos recursivamente no formato `Tipo { campo1: valor1, campo2: valor2 }` para records e `Enum.Variante` para enums.
+  - **`JSON`**: Geração de `ToJSON(borrow self): String` com serialização JSON em conformidade estrita (invariante de locale com ponto decimal em floats e suporte a records aninhados e enums).
+  - **`Clone`**: Geração de `Clone(borrow self): Self` para duplicação explícita e segura de estruturas sem violar as regras de empréstimo do Borrow Checker.
+  - **`Equals`**: Geração de `Equals(borrow self, other: borrow Self): Bool` comparando recursivamente todos os membros estruturais de records e variantes de enums.
+- [x] **Compatibilidade Multi-Backend e Integração ao TypeChecker**:
+  - Suporte completo em ambos os backends de produção: Free Pascal (`--target=pascal`) e GCC C99 (`--target=c`).
+  - Funções intrínsecas de conversão com formatação invariante (`AetherFloatToStr`, `AetherBoolToStr`).
+  - Resolução por método UFCS integrado com Traits padrão (`Debug`, `JSON`, `Clone`, `Equals`).
+- [x] **Validação com Amostras Reais e Testes Automatizados**:
+  - Exemplo integrado em `examples/test_fase37_derives/main.aeth` demonstrando records simples, records aninhados e enums.
+  - Teste unitário canônico adicionado em `tests/02_derives_test.aeth` integrado ao `aetherc test`.

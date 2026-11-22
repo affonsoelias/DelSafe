@@ -323,3 +323,52 @@ end;
   ```
 - **Zero Incompatibilidade:** O mesmo código assembly é compilado sem modificações tanto pelo FPC quanto pelo GCC.
 - **Segurança e Isolamento:** Instruções assembly são aceitas dentro de blocos de funções ou programas, permitindo otimizações SIMD/AVX, leitura de contadores de ciclo de CPU (`rdtsc`) e chamadas de interrupções de baixo nível.
+
+---
+
+## 10. Derivação Automática de Metaprogramação (`[derive(...)]`)
+
+O Aether oferece síntese automática de código para tipos de dados (`record` e `enum`) através de atributos de metaprogramação no formato `[derive(...)]`:
+
+```aether
+type
+    [derive(Debug, JSON, Clone, Equals)]
+    Ponto = record
+        x: Float64;
+        y: Float64;
+    end;
+
+    [derive(Debug, JSON, Clone, Equals)]
+    Status = enum
+        Pendente,
+        Processando,
+        Concluido
+    end;
+```
+
+### 10.1 Traits Sintetizados Automaticamente
+- **`Debug`**:
+  - Gera `ToString(borrow self): String`.
+  - Records: formata recursivamente no padrão `Tipo { campo1: valor1, campo2: valor2 }`.
+  - Enums: formata no padrão `Enum.Variante`.
+- **`JSON`**:
+  - Gera `ToJSON(borrow self): String`.
+  - Produz JSON em conformidade estrita (delimitadores de string, invariância de separador decimal para floats, records aninhados e enums).
+- **`Clone`**:
+  - Gera `Clone(borrow self): Self`.
+  - Duplicação explícita sem violar as regras de posse do Borrow Checker.
+- **`Equals`**:
+  - Gera `Equals(borrow self, other: borrow Self): Bool`.
+  - Comparação estrutural profunda recursiva de campos primitivos e compostos.
+
+Os métodos gerados são invocados de forma natural através de UFCS:
+```aether
+var p1: Ponto;
+var p2: Ponto;
+p1 := Ponto(10.5, 20.25);
+PrintLn("%s", p1.ToString()); // "Ponto { x: 10.5, y: 20.25 }"
+PrintLn("%s", p1.ToJSON());   // "{"x": 10.5, "y": 20.25}"
+p2 := p1.Clone();
+if p1.Equals(borrow p2) then
+    PrintLn("Iguais!");
+```

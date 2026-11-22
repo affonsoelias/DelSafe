@@ -26,7 +26,8 @@ uAetherBootstrap,
 uAetherDoc,
 uAetherRegistry,
 uAetherHeaderGen,
-uAetherBenchmark;
+uAetherBenchmark,
+uAetherDerives;
 
 Procedure PrintBanner;
 Begin

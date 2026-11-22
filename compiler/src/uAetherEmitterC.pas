@@ -614,6 +614,18 @@ begin
       Exit;
     end;
 
+    if Call.Callee = 'FloatToStr' then
+    begin
+      Result := 'AetherFloatToStr(' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + ')';
+      Exit;
+    end;
+
+    if Call.Callee = 'BoolToStr' then
+    begin
+      Result := 'AetherBoolToStr(' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + ')';
+      Exit;
+    end;
+
     if Call.Callee = 'StrToInt' then
     begin
       Result := 'AetherStrToInt(' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + ')';
@@ -1356,6 +1368,16 @@ begin
   Emit('    snprintf(buf, 32, "%d", val);');
   Emit('    return buf;');
   Emit('#endif');
+  Emit('}');
+  Emit('');
+  Emit('static inline char* AetherFloatToStr(double val) {');
+  Emit('    char* buf = (char*)malloc(32);');
+  Emit('    snprintf(buf, 32, "%g", val);');
+  Emit('    return buf;');
+  Emit('}');
+  Emit('');
+  Emit('static inline char* AetherBoolToStr(bool val) {');
+  Emit('    return val ? (char*)"true" : (char*)"false";');
   Emit('}');
   Emit('');
   Emit('static inline int32_t AetherStrToInt(const char* s) {');

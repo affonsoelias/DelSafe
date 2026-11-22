@@ -542,6 +542,18 @@ begin
       Exit;
     end;
 
+    if Call.Callee = 'FloatToStr' then
+    begin
+      Result := 'AetherFloatToStr(' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + ')';
+      Exit;
+    end;
+
+    if Call.Callee = 'BoolToStr' then
+    begin
+      Result := 'AetherBoolToStr(' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + ')';
+      Exit;
+    end;
+
     if Call.Callee = 'StrToInt' then
     begin
       Result := 'StrToIntDef(' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + ', 0)';
@@ -1109,6 +1121,8 @@ begin
   Emit('function AetherDeleteFile(const APath: string): Boolean;');
   Emit('function AetherDirExists(const APath: string): Boolean;');
   Emit('function AetherFileSize(const APath: string): {$IFDEF PAS2JS}NativeInt{$ELSE}Int64{$ENDIF};');
+  Emit('function AetherBoolToStr(B: Boolean): string;');
+  Emit('function AetherFloatToStr(AVal: Double): string;');
   Emit('function AetherGetNanoseconds: {$IFDEF PAS2JS}Double{$ELSE}QWord{$ENDIF};');
   Emit('procedure AetherSleepMs(AMs: Cardinal);');
   Emit('function AetherSocketCreate(): LongInt;');
@@ -1201,6 +1215,17 @@ begin
   Emit('function AetherDirExists(const APath: string): Boolean; begin Result := False; end;');
   Emit('function AetherFileSize(const APath: string): {$IFDEF PAS2JS}NativeInt{$ELSE}Int64{$ENDIF}; begin Result := -1; end;');
   Emit('{$ENDIF}');
+  Emit('');
+  Emit('function AetherBoolToStr(B: Boolean): string;');
+  Emit('begin if B then Result := ''true'' else Result := ''false''; end;');
+  Emit('');
+  Emit('function AetherFloatToStr(AVal: Double): string;');
+  Emit('var FS: TFormatSettings;');
+  Emit('begin');
+  Emit('  FS := DefaultFormatSettings;');
+  Emit('  FS.DecimalSeparator := ''.'';');
+  Emit('  Result := FloatToStr(AVal, FS);');
+  Emit('end;');
   Emit('');
   Emit('function AetherGetNanoseconds: {$IFDEF PAS2JS}Double{$ELSE}QWord{$ENDIF};');
   Emit('{$IFDEF PAS2JS}');

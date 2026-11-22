@@ -227,8 +227,10 @@ type
     Name: string;
     DocComment: string;
     Fields: TASTNodeList; // TASTRecordField
+    Derives: TStringList;
     constructor Create(ALine, ACol: Integer; const AName: string);
     destructor Destroy; override;
+    function HasDerive(const ADerive: string): Boolean;
     function Dump(Indent: Integer = 0): string; override;
   end;
 
@@ -247,8 +249,10 @@ type
     Name: string;
     DocComment: string;
     Variants: TASTNodeList; // TASTEnumVariant
+    Derives: TStringList;
     constructor Create(ALine, ACol: Integer; const AName: string);
     destructor Destroy; override;
+    function HasDerive(const ADerive: string): Boolean;
     function Dump(Indent: Integer = 0): string; override;
   end;
 
@@ -892,19 +896,34 @@ begin
   inherited Create(ALine, ACol);
   Name := AName;
   Fields := TASTNodeList.Create;
+  Derives := TStringList.Create;
 end;
 
 destructor TASTRecordDecl.Destroy;
 begin
+  Derives.Free;
   Fields.Free;
   inherited Destroy;
+end;
+
+function TASTRecordDecl.HasDerive(const ADerive: string): Boolean;
+var
+  I: Integer;
+begin
+  Result := False;
+  for I := 0 to Derives.Count - 1 do
+    if SameText(Derives[I], ADerive) then
+      Exit(True);
 end;
 
 function TASTRecordDecl.Dump(Indent: Integer): string;
 var
   I: Integer;
 begin
-  Result := MakeIndent(Indent) + Format('Tipo Record: %s', [Name]);
+  if Derives.Count > 0 then
+    Result := MakeIndent(Indent) + Format('Tipo Record: %s [derive(%s)]', [Name, Derives.CommaText])
+  else
+    Result := MakeIndent(Indent) + Format('Tipo Record: %s', [Name]);
   for I := 0 to Fields.Count - 1 do
     Result := Result + LineEnding + Fields[I].Dump(Indent + 1);
 end;
@@ -940,19 +959,34 @@ begin
   inherited Create(ALine, ACol);
   Name := AName;
   Variants := TASTNodeList.Create;
+  Derives := TStringList.Create;
 end;
 
 destructor TASTEnumDecl.Destroy;
 begin
+  Derives.Free;
   Variants.Free;
   inherited Destroy;
+end;
+
+function TASTEnumDecl.HasDerive(const ADerive: string): Boolean;
+var
+  I: Integer;
+begin
+  Result := False;
+  for I := 0 to Derives.Count - 1 do
+    if SameText(Derives[I], ADerive) then
+      Exit(True);
 end;
 
 function TASTEnumDecl.Dump(Indent: Integer): string;
 var
   I: Integer;
 begin
-  Result := MakeIndent(Indent) + Format('Tipo Enum: %s', [Name]);
+  if Derives.Count > 0 then
+    Result := MakeIndent(Indent) + Format('Tipo Enum: %s [derive(%s)]', [Name, Derives.CommaText])
+  else
+    Result := MakeIndent(Indent) + Format('Tipo Enum: %s', [Name]);
   for I := 0 to Variants.Count - 1 do
     Result := Result + LineEnding + Variants[I].Dump(Indent + 1);
 end;

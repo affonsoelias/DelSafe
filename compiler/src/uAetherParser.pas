@@ -8,7 +8,8 @@ uses
   SysUtils, Classes,
   uAetherTokens,
   uAetherLexer,
-  uAetherAST;
+  uAetherAST,
+  uAetherDerives;
 
 type
   EAetherParserError = class(Exception)
@@ -30,6 +31,7 @@ type
     function Expect(Kind: TTokenKind; const Msg: string = ''): TToken;
 
     function ParseTypeRef: string;
+    procedure ParseAttribute(ADerives: TStringList);
     procedure ParseImport(AModule: TASTModule);
     procedure ParseTypeSection(AModule: TASTModule);
     function ParseRecordDecl(const AName: string; ALine, ACol: Integer): TASTRecordDecl;
@@ -256,6 +258,30 @@ begin
   end;
 end;
 
+procedure TAetherParser.ParseAttribute(ADerives: TStringList);
+var
+  AttrId, DeriveItem: string;
+begin
+  Expect(tokLBracket);
+  AttrId := Expect(tokIdentifier, 'Esperado identificador do atributo (ex: derive)').Value;
+  if SameText(AttrId, 'derive') then
+  begin
+    Expect(tokLParen, 'Esperado "(" apos derive');
+    repeat
+      DeriveItem := Expect(tokIdentifier, 'Esperado nome da trait a derivar (ex: Debug, JSON, Clone, Equals)').Value;
+      if ADerives.IndexOf(DeriveItem) < 0 then
+        ADerives.Add(DeriveItem);
+    until not Match(tokComma);
+    Expect(tokRParen, 'Esperado ")" ao fechar derive');
+  end
+  else
+  begin
+    while not Check(tokRBracket) and not Check(tokEOF) do
+      Advance;
+  end;
+  Expect(tokRBracket, 'Esperado "]" ao fechar atributo');
+end;
+
 procedure TAetherParser.ParseTypeSection(AModule: TASTModule);
 var
   TypeName, TypeDoc: string;
@@ -263,38 +289,53 @@ var
   RecDecl: TASTRecordDecl;
   EnumDecl: TASTEnumDecl;
   TraitDecl: TASTTraitDecl;
+  CurrentDerives: TStringList;
 begin
   Expect(tokType);
-  while Check(tokIdentifier) do
-  begin
-    TLine := FCurTok.Line;
-    TCol := FCurTok.Col;
-    TypeDoc := FCurTok.DocComment;
-    TypeName := Expect(tokIdentifier).Value;
-    Expect(tokEqual, 'Esperado "=" na declaracao de tipo');
+  CurrentDerives := TStringList.Create;
+  try
+    while Check(tokIdentifier) or Check(tokLBracket) do
+    begin
+      CurrentDerives.Clear;
+      while Check(tokLBracket) do
+        ParseAttribute(CurrentDerives);
 
-    if Check(tokRecord) then
-    begin
-      RecDecl := ParseRecordDecl(TypeName, TLine, TCol);
-      RecDecl.DocComment := TypeDoc;
-      AModule.Types.Add(RecDecl);
-    end
-    else if Check(tokEnum) then
-    begin
-      EnumDecl := ParseEnumDecl(TypeName, TLine, TCol);
-      EnumDecl.DocComment := TypeDoc;
-      AModule.Types.Add(EnumDecl);
-    end
-    else if Check(tokTrait) then
-    begin
-      TraitDecl := ParseTraitDecl(TypeName, TLine, TCol);
-      TraitDecl.DocComment := TypeDoc;
-      AModule.Traits.Add(TraitDecl);
-    end
-    else
-      raise EAetherParserError.Create('Esperado "record", "enum" ou "trait" na declaracao de tipo', TLine, TCol);
+      if not Check(tokIdentifier) then
+        Break;
 
-    Expect(tokSemicolon, 'Esperado ";" apos declaracao de tipo');
+      TLine := FCurTok.Line;
+      TCol := FCurTok.Col;
+      TypeDoc := FCurTok.DocComment;
+      TypeName := Expect(tokIdentifier).Value;
+      Expect(tokEqual, 'Esperado "=" na declaracao de tipo');
+
+      if Check(tokRecord) then
+      begin
+        RecDecl := ParseRecordDecl(TypeName, TLine, TCol);
+        RecDecl.DocComment := TypeDoc;
+        RecDecl.Derives.AddStrings(CurrentDerives);
+        AModule.Types.Add(RecDecl);
+      end
+      else if Check(tokEnum) then
+      begin
+        EnumDecl := ParseEnumDecl(TypeName, TLine, TCol);
+        EnumDecl.DocComment := TypeDoc;
+        EnumDecl.Derives.AddStrings(CurrentDerives);
+        AModule.Types.Add(EnumDecl);
+      end
+      else if Check(tokTrait) then
+      begin
+        TraitDecl := ParseTraitDecl(TypeName, TLine, TCol);
+        TraitDecl.DocComment := TypeDoc;
+        AModule.Traits.Add(TraitDecl);
+      end
+      else
+        raise EAetherParserError.Create('Esperado "record", "enum" ou "trait" na declaracao de tipo', TLine, TCol);
+
+      Expect(tokSemicolon, 'Esperado ";" apos declaracao de tipo');
+    end;
+  finally
+    CurrentDerives.Free;
   end;
 end;
 
@@ -1038,7 +1079,12 @@ end;
 function TAetherParser.ParseModule: TASTModule;
 var
   ModName, ModDoc: string;
-  MLine, MCol: Integer;
+  MLine, MCol, TLine, TCol: Integer;
+  PendingDerives: TStringList;
+  RecDecl: TASTRecordDecl;
+  EnumDecl: TASTEnumDecl;
+  TraitDecl: TASTTraitDecl;
+  TypeDoc, TypeName: string;
 begin
   MLine := FCurTok.Line;
   MCol := FCurTok.Col;
@@ -1049,6 +1095,7 @@ begin
 
   Result := TASTModule.Create(MLine, MCol, ModName);
   Result.DocComment := ModDoc;
+  PendingDerives := TStringList.Create;
   try
     // Imports
     while Check(tokImport) do
@@ -1057,7 +1104,58 @@ begin
     // Tipos, Traits, Impls, Funcoes e Programa Principal
     while not Check(tokEOF) do
     begin
-      if Check(tokType) then
+      if Check(tokLBracket) then
+      begin
+        PendingDerives.Clear;
+        while Check(tokLBracket) do
+          ParseAttribute(PendingDerives);
+
+        if Check(tokType) then
+        begin
+          Advance; // consome 'type'
+          while Check(tokIdentifier) or Check(tokLBracket) do
+          begin
+            while Check(tokLBracket) do
+              ParseAttribute(PendingDerives);
+
+            if not Check(tokIdentifier) then Break;
+            TLine := FCurTok.Line;
+            TCol := FCurTok.Col;
+            TypeDoc := FCurTok.DocComment;
+            TypeName := Expect(tokIdentifier).Value;
+            Expect(tokEqual, 'Esperado "=" na declaracao de tipo');
+
+            if Check(tokRecord) then
+            begin
+              RecDecl := ParseRecordDecl(TypeName, TLine, TCol);
+              RecDecl.DocComment := TypeDoc;
+              RecDecl.Derives.AddStrings(PendingDerives);
+              Result.Types.Add(RecDecl);
+            end
+            else if Check(tokEnum) then
+            begin
+              EnumDecl := ParseEnumDecl(TypeName, TLine, TCol);
+              EnumDecl.DocComment := TypeDoc;
+              EnumDecl.Derives.AddStrings(PendingDerives);
+              Result.Types.Add(EnumDecl);
+            end
+            else if Check(tokTrait) then
+            begin
+              TraitDecl := ParseTraitDecl(TypeName, TLine, TCol);
+              TraitDecl.DocComment := TypeDoc;
+              Result.Traits.Add(TraitDecl);
+            end
+            else
+              raise EAetherParserError.Create('Esperado "record", "enum" ou "trait" na declaracao de tipo', TLine, TCol);
+
+            Expect(tokSemicolon, 'Esperado ";" apos declaracao de tipo');
+            PendingDerives.Clear;
+          end;
+        end
+        else
+          raise EAetherParserError.Create('Atributo inesperado no modulo (deve preceder declaracao de tipo)', FCurTok.Line, FCurTok.Col);
+      end
+      else if Check(tokType) then
         ParseTypeSection(Result)
       else if Check(tokTrait) then
         Result.Traits.Add(ParseTraitDecl('', FCurTok.Line, FCurTok.Col))
@@ -1073,10 +1171,15 @@ begin
       else
         raise EAetherParserError.Create(Format('Declaracao inesperada no modulo: "%s"', [FCurTok.Value]), FCurTok.Line, FCurTok.Col);
     end;
+
+    // Expande derivacoes automaticas (Debug, JSON, Clone, Equals)
+    ExpandDerives(Result);
   except
+    PendingDerives.Free;
     Result.Free;
     raise;
   end;
+  PendingDerives.Free;
 end;
 
 end.
