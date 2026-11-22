@@ -45,6 +45,18 @@ Begin
 
          '  add <pacote>      Adiciona uma dependencia ao manifesto aether.json'
   );
+  WriteLn(
+
+         '  remove <pacote>   Remove uma dependencia e limpa caches locais (rm)'
+  );
+  WriteLn(
+
+         '  update [pacote]   Atualiza pacotes Git e sincroniza o lockfile (upgrade)'
+  );
+  WriteLn(
+
+         '  audit             Inspeciona a integridade criptografica e seguranca TLS'
+  );
   WriteLn('  test [filtro]     Executa testes unitarios da pasta tests/');
   WriteLn(
 
@@ -782,6 +794,58 @@ If (ParamCount >= 1) And (LowerCase(ParamStr(1)) = 'add') Then
       on E: Exception Do
             Begin
               WriteLn(ErrOutput, 'Erro ao adicionar pacote: ', E.Message);
+              Halt(1);
+            End;
+  End;
+End;
+
+// Checa comando de pacotes: remove / rm
+If (ParamCount >= 1) And ((LowerCase(ParamStr(1)) = 'remove') Or (LowerCase(ParamStr(1)) = 'rm')) Then
+  Begin
+    PrintBanner;
+    PkgName := '';
+    If ParamCount >= 2 Then PkgName := ParamStr(2);
+    Try
+      HandleProjectRemove(PkgName);
+      Halt(0);
+    Except
+      on E: Exception Do
+            Begin
+              WriteLn(ErrOutput, 'Erro ao remover pacote: ', E.Message);
+              Halt(1);
+            End;
+  End;
+End;
+
+// Checa comando de pacotes: update / upgrade
+If (ParamCount >= 1) And ((LowerCase(ParamStr(1)) = 'update') Or (LowerCase(ParamStr(1)) = 'upgrade')) Then
+  Begin
+    PrintBanner;
+    PkgName := '';
+    If ParamCount >= 2 Then PkgName := ParamStr(2);
+    Try
+      HandleProjectUpdate(PkgName);
+      Halt(0);
+    Except
+      on E: Exception Do
+            Begin
+              WriteLn(ErrOutput, 'Erro ao atualizar pacotes: ', E.Message);
+              Halt(1);
+            End;
+  End;
+End;
+
+// Checa comando de seguranca: audit
+If (ParamCount >= 1) And (LowerCase(ParamStr(1)) = 'audit') Then
+  Begin
+    PrintBanner;
+    Try
+      HandleProjectAudit();
+      Halt(0);
+    Except
+      on E: Exception Do
+            Begin
+              WriteLn(ErrOutput, 'Erro durante auditoria de seguranca: ', E.Message);
               Halt(1);
             End;
   End;

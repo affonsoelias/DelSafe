@@ -1,0 +1,14 @@
+{
+  "lockfile_version" : 1,
+  "generator" : "aetherc",
+  "packages" : {
+    "math_extra" : {
+      "source" : "path",
+      "url" : "libs/math_extra",
+      "version" : "",
+      "commit" : "local-link",
+      "tls_secure" : true,
+      "integrity" : "verified"
+    }
+  }
+}

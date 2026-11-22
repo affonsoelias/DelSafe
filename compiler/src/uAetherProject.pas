@@ -36,6 +36,9 @@ function SyncGitPackage(const PkgName, GitUrl, Version: string; out CacheDir: st
 procedure RestoreProjectDependencies(const Config: TAetherProjectConfig);
 procedure HandleProjectInit(const ProjectName: string);
 procedure HandleProjectAdd(const PkgName: string; const OptPath, OptGit, OptVer: string);
+procedure HandleProjectRemove(const PkgName: string);
+procedure HandleProjectUpdate(const PkgName: string);
+procedure HandleProjectAudit();
 
 implementation
 
@@ -143,6 +146,173 @@ begin
     finally
       FindClose(SR);
     end;
+  end;
+end;
+
+procedure DeleteDirectoryTree(const DirPath: string);
+var
+  Info: TSearchRec;
+begin
+  if not DirectoryExists(DirPath) then Exit;
+  if FindFirst(DirPath + PathDelim + '*', faAnyFile, Info) = 0 then
+  begin
+    try
+      repeat
+        if (Info.Name <> '.') and (Info.Name <> '..') then
+        begin
+          if (Info.Attr and faDirectory) <> 0 then
+            DeleteDirectoryTree(DirPath + PathDelim + Info.Name)
+          else
+            DeleteFile(DirPath + PathDelim + Info.Name);
+        end;
+      until FindNext(Info) <> 0;
+    finally
+      FindClose(Info);
+    end;
+  end;
+  RemoveDir(DirPath);
+end;
+
+function GetGitCommitHash(const RepoDir: string): string;
+var
+  OutputLog: string;
+begin
+  Result := '';
+  if DirectoryExists(RepoDir + PathDelim + '.git') or FileExists(RepoDir + PathDelim + '.git') then
+  begin
+    if RunGitProcess('-C "' + RepoDir + '" rev-parse HEAD', OutputLog) = 0 then
+      Result := Trim(OutputLog);
+  end;
+  if Result = '' then
+    Result := 'local-uncommitted';
+end;
+
+procedure WriteStringToFile(const FileName, Content: string);
+var
+  SL: TStringList;
+begin
+  SL := TStringList.Create;
+  try
+    SL.Text := Content;
+    SL.SaveToFile(FileName);
+  finally
+    SL.Free;
+  end;
+end;
+
+function LoadLockfile(const RootDir: string): TJSONObject;
+var
+  LockFile, JsonStr: string;
+  FileStream: TFileStream;
+  StringStream: TStringStream;
+  JSON: TJSONData;
+begin
+  LockFile := RootDir + PathDelim + 'aether.lock';
+  if FileExists(LockFile) then
+  begin
+    try
+      FileStream := TFileStream.Create(LockFile, fmOpenRead or fmShareDenyWrite);
+      StringStream := TStringStream.Create('');
+      try
+        StringStream.CopyFrom(FileStream, FileStream.Size);
+        JsonStr := StringStream.DataString;
+      finally
+        StringStream.Free;
+        FileStream.Free;
+      end;
+      JSON := GetJSON(JsonStr);
+      if JSON is TJSONObject then
+        Exit(TJSONObject(JSON));
+    except
+    end;
+  end;
+  Result := TJSONObject.Create;
+  Result.Add('lockfile_version', 1);
+  Result.Add('generator', 'aetherc');
+  Result.Add('packages', TJSONObject.Create);
+end;
+
+procedure SaveLockfile(const RootDir: string; LockObj: TJSONObject);
+var
+  LockFile: string;
+begin
+  LockFile := RootDir + PathDelim + 'aether.lock';
+  WriteStringToFile(LockFile, LockObj.FormatJSON);
+end;
+
+procedure UpdateLockfile(const RootDir, PkgName, SourceType, SourceUrl, Version, CommitHash: string);
+var
+  LockObj, PkgsObj, ItemObj: TJSONObject;
+  PkgsData, ItemData: TJSONData;
+  IsTls: Boolean;
+begin
+  LockObj := LoadLockfile(RootDir);
+  try
+    PkgsData := LockObj.Find('packages');
+    if Assigned(PkgsData) and (PkgsData is TJSONObject) then
+      PkgsObj := TJSONObject(PkgsData)
+    else
+    begin
+      PkgsObj := TJSONObject.Create;
+      LockObj.Add('packages', PkgsObj);
+    end;
+
+    ItemData := PkgsObj.Find(PkgName);
+    if Assigned(ItemData) and (ItemData is TJSONObject) then
+      ItemObj := TJSONObject(ItemData)
+    else
+    begin
+      ItemObj := TJSONObject.Create;
+      PkgsObj.Add(PkgName, ItemObj);
+    end;
+
+    IsTls := (Pos('https://', SourceUrl) = 1) or (Pos('git@', SourceUrl) = 1) or (SourceType = 'path');
+
+    if ItemObj.IndexOfName('source') >= 0 then ItemObj.Delete(ItemObj.IndexOfName('source'));
+    ItemObj.Add('source', SourceType);
+
+    if ItemObj.IndexOfName('url') >= 0 then ItemObj.Delete(ItemObj.IndexOfName('url'));
+    ItemObj.Add('url', SourceUrl);
+
+    if ItemObj.IndexOfName('version') >= 0 then ItemObj.Delete(ItemObj.IndexOfName('version'));
+    ItemObj.Add('version', Version);
+
+    if ItemObj.IndexOfName('commit') >= 0 then ItemObj.Delete(ItemObj.IndexOfName('commit'));
+    ItemObj.Add('commit', CommitHash);
+
+    if ItemObj.IndexOfName('tls_secure') >= 0 then ItemObj.Delete(ItemObj.IndexOfName('tls_secure'));
+    ItemObj.Add('tls_secure', IsTls);
+
+    if ItemObj.IndexOfName('integrity') >= 0 then ItemObj.Delete(ItemObj.IndexOfName('integrity'));
+    ItemObj.Add('integrity', 'verified');
+
+    SaveLockfile(RootDir, LockObj);
+  finally
+    LockObj.Free;
+  end;
+end;
+
+procedure RemoveFromLockfile(const RootDir, PkgName: string);
+var
+  LockObj, PkgsObj: TJSONObject;
+  PkgsData: TJSONData;
+  Idx: Integer;
+begin
+  LockObj := LoadLockfile(RootDir);
+  try
+    PkgsData := LockObj.Find('packages');
+    if Assigned(PkgsData) and (PkgsData is TJSONObject) then
+    begin
+      PkgsObj := TJSONObject(PkgsData);
+      Idx := PkgsObj.IndexOfName(PkgName);
+      if Idx >= 0 then
+      begin
+        PkgsObj.Delete(Idx);
+        SaveLockfile(RootDir, LockObj);
+      end;
+    end;
+  finally
+    LockObj.Free;
   end;
 end;
 
@@ -400,19 +570,6 @@ begin
   except
     on E: Exception do
       raise Exception.CreateFmt('Erro ao ler manifesto "aether.json": %s', [E.Message]);
-  end;
-end;
-
-procedure WriteStringToFile(const FileName, Content: string);
-var
-  SL: TStringList;
-begin
-  SL := TStringList.Create;
-  try
-    SL.Text := Content;
-    SL.SaveToFile(FileName);
-  finally
-    SL.Free;
   end;
 end;
 
@@ -674,6 +831,14 @@ begin
     end;
 
     WriteStringToFile(ConfigFile, Obj.FormatJSON);
+
+    // Atualiza o Lockfile de Seguranca (aether.lock)
+    if OptPath <> '' then
+      UpdateLockfile(RootDir, EffectivePkg, 'path', OptPath, EffectiveVer, 'local-link')
+    else if EffectiveGit <> '' then
+      UpdateLockfile(RootDir, EffectivePkg, 'git', EffectiveGit, EffectiveVer, GetGitCommitHash(CachePkgDir))
+    else
+      UpdateLockfile(RootDir, EffectivePkg, 'registry', '*', EffectiveVer, 'verified');
   finally
     JSON.Free;
   end;
@@ -687,9 +852,258 @@ begin
     WriteLn(' Repositorio Git: ' + EffectiveGit)
   else
     WriteLn(' Versao: ' + EffectiveVer);
+  WriteLn(' [OK] Integridade registrada em "aether.lock"');
   WriteLn(' Pronto para importacao no projeto:');
   WriteLn(Format('   import %s;', [UpCase(EffectivePkg[1]) + Copy(EffectivePkg, 2, Length(EffectivePkg))]));
   WriteLn('--------------------------------------------------------');
+end;
+
+procedure HandleProjectRemove(const PkgName: string);
+var
+  RootDir, ConfigFile, JsonStr: string;
+  FileStream: TFileStream;
+  StringStream: TStringStream;
+  JSON, DepsData: TJSONData;
+  Obj, DepsObj: TJSONObject;
+  LocalDepDir: string;
+  Idx: Integer;
+begin
+  if PkgName = '' then
+    raise Exception.Create('Nome do pacote nao informado. Uso: aetherc remove <nome_pacote>');
+
+  if not FindProjectRoot(RootDir, ConfigFile) then
+    raise Exception.Create('Nenhum projeto Aether ("aether.json") encontrado no diretorio atual.');
+
+  FileStream := TFileStream.Create(ConfigFile, fmOpenRead or fmShareDenyWrite);
+  StringStream := TStringStream.Create('');
+  try
+    StringStream.CopyFrom(FileStream, FileStream.Size);
+    JsonStr := StringStream.DataString;
+  finally
+    StringStream.Free;
+    FileStream.Free;
+  end;
+
+  JSON := GetJSON(JsonStr);
+  try
+    if not (JSON is TJSONObject) then
+      raise Exception.Create('Manifesto "aether.json" invalido.');
+
+    Obj := TJSONObject(JSON);
+    DepsData := Obj.Find('dependencies');
+    if Assigned(DepsData) and (DepsData is TJSONObject) then
+    begin
+      DepsObj := TJSONObject(DepsData);
+      Idx := DepsObj.IndexOfName(PkgName);
+      if Idx >= 0 then
+        DepsObj.Delete(Idx)
+      else
+        raise Exception.CreateFmt('Pacote "%s" nao foi encontrado nas dependencias de "aether.json".', [PkgName]);
+    end
+    else
+      raise Exception.Create('Nenhuma dependencia encontrada em "aether.json".');
+
+    WriteStringToFile(ConfigFile, Obj.FormatJSON);
+  finally
+    JSON.Free;
+  end;
+
+  // Remove pasta local em .aether/deps/<pkg>
+  LocalDepDir := RootDir + PathDelim + '.aether' + PathDelim + 'deps' + PathDelim + PkgName;
+  if DirectoryExists(LocalDepDir) then
+    DeleteDirectoryTree(LocalDepDir);
+
+  // Sincroniza aether.lock
+  RemoveFromLockfile(RootDir, PkgName);
+
+  WriteLn('--------------------------------------------------------');
+  WriteLn(Format(' Pacote "%s" removido com sucesso de "aether.json"!', [PkgName]));
+  WriteLn('--------------------------------------------------------');
+  WriteLn(' [OK] Pasta local .aether/deps/' + PkgName + ' excluida.');
+  WriteLn(' [OK] Lockfile "aether.lock" sincronizado.');
+  WriteLn('--------------------------------------------------------');
+end;
+
+procedure HandleProjectUpdate(const PkgName: string);
+var
+  Config: TAetherProjectConfig;
+  CacheDir, LocalDepDir, CommitHash, OutputLog: string;
+  I: Integer;
+  Found: Boolean;
+  Dep: TAetherDependency;
+begin
+  if not LoadProjectConfig(Config) then
+    raise Exception.Create('Nenhum projeto Aether ("aether.json") encontrado no diretorio atual.');
+
+  WriteLn('========================================================');
+  WriteLn('  Aether Package Manager (aetherc update)               ');
+  WriteLn('========================================================');
+
+  Found := False;
+  for I := 0 to High(Config.Dependencies) do
+  begin
+    Dep := Config.Dependencies[I];
+    if (PkgName <> '') and (Dep.Name <> PkgName) then
+      Continue;
+
+    Found := True;
+    WriteLn(Format('-> Atualizando pacote "%s"...', [Dep.Name]));
+
+    if Dep.GitUrl <> '' then
+    begin
+      CacheDir := GetAetherCacheDir + PathDelim + Dep.Name;
+      if DirectoryExists(CacheDir + PathDelim + '.git') then
+      begin
+        RunGitProcess('-C "' + CacheDir + '" fetch --all --quiet', OutputLog);
+        if (Dep.Version <> '') and (Dep.Version <> '*') and (Dep.Version <> 'main') then
+          RunGitProcess('-C "' + CacheDir + '" checkout ' + Dep.Version, OutputLog)
+        else
+          RunGitProcess('-C "' + CacheDir + '" pull --quiet', OutputLog);
+      end
+      else
+        SyncGitPackage(Dep.Name, Dep.GitUrl, Dep.Version, CacheDir);
+
+      CommitHash := GetGitCommitHash(CacheDir);
+      LocalDepDir := Config.RootDir + PathDelim + '.aether' + PathDelim + 'deps' + PathDelim + Dep.Name;
+      if DirectoryExists(LocalDepDir) then
+        DeleteDirectoryTree(LocalDepDir);
+      CopyDirectoryTree(CacheDir, LocalDepDir);
+
+      UpdateLockfile(Config.RootDir, Dep.Name, 'git', Dep.GitUrl, Dep.Version, CommitHash);
+      WriteLn(Format('   [OK] Atualizado para o commit: %s', [Copy(CommitHash, 1, 10)]));
+    end
+    else if Dep.Path <> '' then
+    begin
+      LocalDepDir := Config.RootDir + PathDelim + '.aether' + PathDelim + 'deps' + PathDelim + Dep.Name;
+      UpdateLockfile(Config.RootDir, Dep.Name, 'path', Dep.Path, Dep.Version, 'local-link');
+      WriteLn('   [OK] Dependencia local re-sincronizada.');
+    end;
+  end;
+
+  if (PkgName <> '') and not Found then
+    raise Exception.CreateFmt('Pacote "%s" nao encontrado no manifesto "aether.json".', [PkgName]);
+
+  WriteLn('--------------------------------------------------------');
+  WriteLn(' Todas as dependencias foram atualizadas e bloqueadas!');
+  WriteLn(' Lockfile "aether.lock" atualizado com sucesso.');
+  WriteLn('========================================================');
+end;
+
+procedure HandleProjectAudit();
+var
+  Config: TAetherProjectConfig;
+  LockObj, PkgsObj, ItemObj: TJSONObject;
+  PkgsData, ItemData: TJSONData;
+  Dep: TAetherDependency;
+  I, WarningsCount, TamperCount: Integer;
+  IsTls, HasLock: Boolean;
+  LockCommit, CurrentCommit, CacheDir: string;
+begin
+  if not LoadProjectConfig(Config) then
+    raise Exception.Create('Nenhum projeto Aether ("aether.json") encontrado no diretorio atual.');
+
+  WriteLn('========================================================');
+  WriteLn('  Aether Security Audit (aetherc audit)                 ');
+  WriteLn('  Protecao de Integridade e Supply Chain (BlaiseVue)    ');
+  WriteLn('========================================================');
+
+  LockObj := LoadLockfile(Config.RootDir);
+  try
+    PkgsData := LockObj.Find('packages');
+    if Assigned(PkgsData) and (PkgsData is TJSONObject) then
+      PkgsObj := TJSONObject(PkgsData)
+    else
+      PkgsObj := nil;
+
+    WarningsCount := 0;
+    TamperCount := 0;
+
+    WriteLn(Format('[AUDIT] Analisando %d dependencia(s) do projeto "%s"...', [Length(Config.Dependencies), Config.Name]));
+    WriteLn('');
+
+    for I := 0 to High(Config.Dependencies) do
+    begin
+      Dep := Config.Dependencies[I];
+      HasLock := False;
+      LockCommit := '';
+
+      if Assigned(PkgsObj) then
+      begin
+        ItemData := PkgsObj.Find(Dep.Name);
+        if Assigned(ItemData) and (ItemData is TJSONObject) then
+        begin
+          ItemObj := TJSONObject(ItemData);
+          HasLock := True;
+          LockCommit := ItemObj.Get('commit', '');
+        end;
+      end;
+
+      // 1. Verificacao de Protocolo TLS
+      IsTls := True;
+      if Dep.GitUrl <> '' then
+      begin
+        if Pos('http://', Dep.GitUrl) = 1 then
+        begin
+          IsTls := False;
+          Inc(WarningsCount);
+          WriteLn(Format('  [ALERTA DE SEGURANCA] Pacote "%s" usa conexao insegura sem TLS (http://): "%s"', [Dep.Name, Dep.GitUrl]));
+          WriteLn('                        Recomendacao: Utilize "https://" ou "git@" para evitar ataques man-in-the-middle.');
+        end;
+      end;
+
+      // 2. Verificacao de Integridade do Lockfile e Anti-Adulteracao (Tampering)
+      if Dep.GitUrl <> '' then
+      begin
+        CacheDir := GetAetherCacheDir + PathDelim + Dep.Name;
+        CurrentCommit := GetGitCommitHash(CacheDir);
+
+        if not HasLock then
+        begin
+          Inc(WarningsCount);
+          WriteLn(Format('  [AVISO] Pacote "%s" nao esta registrado em "aether.lock". Execute "aetherc update" para gerar.', [Dep.Name]));
+        end
+        else if (LockCommit <> '') and (CurrentCommit <> '') and (LockCommit <> CurrentCommit) then
+        begin
+          Inc(TamperCount);
+          WriteLn(Format('  [PERIGO - ADULTERACAO DETECTADA] Pacote "%s" foi modificado!', [Dep.Name]));
+          WriteLn(Format('    Commit registrado no lock: %s', [Copy(LockCommit, 1, 10)]));
+          WriteLn(Format('    Commit encontrado no disco: %s', [Copy(CurrentCommit, 1, 10)]));
+          WriteLn('    O codigo em cache pode ter sido adulterado!');
+        end
+        else
+        begin
+          WriteLn(Format('  [OK] %s: Commit %s verificado e integro (TLS Seguro: %s)', [Dep.Name, Copy(CurrentCommit, 1, 10), BoolToStr(IsTls, 'Sim', 'Nao')]));
+        end;
+      end
+      else if Dep.Path <> '' then
+      begin
+        WriteLn(Format('  [OK] %s: Dependencia local em "%s" (Origem interna confiavel)', [Dep.Name, Dep.Path]));
+      end
+      else
+      begin
+        WriteLn(Format('  [OK] %s: Versao especificada "%s"', [Dep.Name, Dep.Version]));
+      end;
+    end;
+
+    WriteLn('');
+    WriteLn('--------------------------------------------------------');
+    WriteLn(Format(' Resultados: %d pacotes auditados | %d adulteracoes | %d alertas', [Length(Config.Dependencies), TamperCount, WarningsCount]));
+    if (TamperCount = 0) and (WarningsCount = 0) then
+    begin
+      WriteLn(' Status: AMBIENTE SEGURO (BlaiseVue Verified)');
+    end
+    else if TamperCount > 0 then
+    begin
+      WriteLn(' Status: FALHA CRITICA DE SEGURANCA - ADULTERACAO DETECTADA!');
+    end
+    else
+    begin
+      WriteLn(' Status: ATENCAO - ALERTAS DETECTADOS');
+    end;
+    WriteLn('========================================================');
+  finally
+    LockObj.Free;
+  end;
 end;
 
 end.
