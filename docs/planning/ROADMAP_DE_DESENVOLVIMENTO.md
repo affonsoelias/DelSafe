@@ -775,3 +775,82 @@ Este documento traça o status oficial de desenvolvimento do compilador e as pr�
 - [x] **6. Suíte de Testes Automatizada & Documentação**:
   - Criação de `tests/10_fase48_matchrange_ifexpr_strmath_arrslice_default_test.aeth` validando todos os recursos nos backends FPC e GCC C99 (`10/10` testes aprovados em ambos os backends e `aetherc lint` limpo).
   - Atualização do Masterclass Course (`docs/course/02_VARIABLES_TYPES_MUTABILITY.md` e `docs/course/03_CONTROL_FLOW_AND_MATCH.md`).
+
+---
+
+## 🔎 Auditoria Completa de Lacunas da Linguagem & Planejamento (Fases 49 a 56)
+
+Mapeamento técnico completo dos recursos pendentes identificados no compilador (`compiler/src/*.pas`), nos dois backends (Free Pascal e GCC C99), na biblioteca padrão (`std/*.aeth`) e nas ferramentas de CLI, organizado nos 8 domínios estruturais da linguagem.
+
+### 📋 Fase 49: 1. Sistema de Tipos, Genéricos e Tipos Algébricos (ADTs) - PLANEJADA
+- [ ] **1.1 Enums com Payload (Tagged Unions / ADTs Reais)**:
+  - Emitir variant records (`record case tag of ...`) no `uAetherEmitterPascal.pas` e tagged unions (`struct { enum tag; union { ... }; }`) no `uAetherEmitterC.pas` para `TASTEnumVariant.Fields`.
+  - Suportar construtores de variante com payload (`Forma.Circulo(raio: 5.0)` / `Circulo(5.0)`) e desestruturação de múltiplos campos no `match` (`case Forma.Circulo(let r) =>`).
+- [ ] **1.2 `Record<T, U>` Genéricos, Múltiplos Parâmetros Genéricos & Monomorfização Composta**:
+  - Estender `TASTRecordDecl` e `TASTFunction` para múltiplos parâmetros genéricos (`<T, U>` / `<K, V>`).
+  - Generalizar `MonomorphizeFunction` no `uAetherTypeChecker.pas` para substituir parâmetros genéricos dentro de tipos compostos (`array of T`, `Option<T>`, `Result<T, E>`, `^T`, `Box<T>`).
+- [ ] **1.3 `Option<T>` e `Result<T, E>` para `Record`s por Valor**:
+  - Permitir `Option<Ponto>` e `Result<Usuario, Erro>` armazenando registros compostos diretamente por valor sem exigir `Box<T>`.
+- [ ] **1.4 Tuplas Anônimas (`(Int32, String)`) e Desestruturação (`let (a, b) := ...`)**:
+  - Sintaxe de tipo tupla, literal de tupla `(10, "ok")`, acesso posicional e desestruturação em declarações `let`/`var`.
+- [ ] **1.5 Tipos de Função (Callbacks) & Closures/Lambdas**:
+  - Declaração de tipos de função (`type Predicate = function(Int32): Bool;`) e expressões lambda (`fn(x: Int32): Int32 => x * 2`) nos backends Pascal e C99.
+
+### 📋 Fase 50: 2. Contratos (`contract` / `require` / `ensure`) - PLANEJADA
+- [ ] **2.1 Emissão Real de Pós-Condições (`ensure`) nos Dois Backends**:
+  - Emitir `Assert(...)` (Pascal) e `assert(...)` (C99) para todas as expressões de `Func.Ensures` antes de cada ponto de retorno (`TASTReturnStmt`) e na saída implícita da função.
+- [ ] **2.2 Suporte à Variável Especial `result` em `ensure`**:
+  - Registrar `result` no escopo de verificação de pós-condições em `TAetherTypeChecker.CheckFunction` com o `ReturnType` da função e unificar captura de retorno antes dos asserts `ensure` em ambos os backends.
+
+### 📋 Fase 51: 3. Expressões, Operadores e Controle de Fluxo - PLANEJADA
+- [ ] **3.1 Operador de Propagação Rápida de Erro (`?` / `try expr`)**:
+  - Extrair valor de `Ok`/`Some` ou propagar retorno antecipado de `Err`/`None` automaticamente quando o retorno da função envolvente for compatível (`Result`/`Option`).
+- [ ] **3.2 `match` como Expressão & Pattern Guards (`if` / `when`)**:
+  - Permitir `match` em expressões (`let msg := match code do 200 => "OK", _ => "ERR" end;`) e adicionar guardas condicionais por braço (`case let x if x > 100 =>`).
+- [ ] **3.3 Declarações `let` / `var` Inline no Corpo `begin..end` e Blocos Aninhados**:
+  - Permitir declarar variáveis locais em qualquer ponto dentro de `begin..end`, `if`, `while`, `for` e braços de `match` (não apenas no cabeçalho `var`/`let` antes de `begin`).
+- [ ] **3.4 Operadores `div`, `/=`, `mod=` e Bitwise Compostos (`&=`, `|=`, `^=`, `<<=`, `>>=`)**:
+  - Registrar `div` em `uAetherTokens.pas`/`uAetherParser.pas` e adicionar atribuições compostas faltantes com checagem de tipos inteiros/numéricos.
+- [ ] **3.5 Literais de Mapa (`["a": 1, "b": 2]`) & Escapes Completos de `Char`/`String`**:
+  - Inicialização direta de `map[K]V` via literal e suporte completo a escapes (`'\n'`, `'\t'`, `'\0'`, `'\r'`, `\\`, `'\"'`) em `Char` e strings multi-linha.
+
+### 📋 Fase 52: 4. Borrow Checker & Ciclo de Vida de Memória - PLANEJADA
+- [ ] **4.1 Integração do Borrow Checker Pós-Inferência & Suporte a Templates Genéricos**:
+  - Executar ou sincronizar `uAetherBorrowChecker.pas` com tipos inferidos por `CheckVarDecl` e validar corretamente funções genéricas monomorfizadas.
+- [ ] **4.2 Restauração de `vsBorrowedMut` & Empréstimo Disjunto de Campos**:
+  - Restaurar `State := vsOwned` ao fim do escopo de empréstimo mutável temporário em `ReleaseTemporaryBorrows` e rastrear empréstimos/movimentos independentes por campo (`obj.a` vs `obj.b`).
+- [ ] **4.3 Gerenciamento Explícito e Automático de Heap no Backend C99 (`Free`/`Dispose` & RAII/`Drop`)**:
+  - Introduzir liberação segura de `Box<T>`, buffers dinâmicos, mapas e strings temporárias no backend C99 e intrínsecos explícitos `Free`/`Dispose` em blocos controlados.
+
+### 📋 Fase 53: 5. Concorrência (`async` / `await` / `spawn` / `yield`) & `std/sync.aeth` - PLANEJADA
+- [ ] **5.1 Threads Reais de SO para `spawn`/`await` e Implementação de `yield`**:
+  - Substituir a execução síncrona imediata em `uAetherEmitterPascal.pas` (`TThread`) e `uAetherEmitterC.pas` (`CreateThread` no Windows / `pthread_create` no POSIX) para que `spawn` execute concorrentemente e `await` aguarde a conclusão real da tarefa.
+  - Conectar `tokYield` (`uAetherTokens.pas`) ao parser, analisador semântico e runtime.
+- [ ] **5.2 Primitivas Reais de Sincronização & Canais com Buffer em `std/sync.aeth`**:
+  - Evoluir `AtomicInt32` (operações atômicas de hardware/`Interlocked`/`__atomic_*`), `Mutex` real (bloqueio nativo de thread) e `Channel<T>` com fila real em memória em vez de contadores simulados.
+
+### 📋 Fase 54: 6. Sistema de Módulos, Visibilidade, Traits e `#[derive]` - PLANEJADA
+- [ ] **6.1 Alias de Importação (`import X as Y;`), Visibilidade (`pub`) e Qualificação `Y.Simbolo`**:
+  - Armazenar o identificador após `tokAs` em `TASTModule`, resolver chamadas qualificadas (`Y.Func()`) e aplicar regras de visibilidade pública/privada entre módulos.
+- [ ] **6.2 Blocos `impl Tipo` Diretos (Inherent Methods sem Trait)**:
+  - Permitir métodos inerentes diretamente em tipos (`impl Ponto ... end;`) em `TAetherParser.ParseImplDecl`, `uAetherTypeChecker.pas` e ambos os emitters sem obrigatoriedade de uma `trait`.
+- [ ] **6.3 Expansão de `#[derive(Debug, JSON, Clone, Equals)]` & `FromJSON`**:
+  - Estender `uAetherDerives.pas` para suportar campos `Char`, `Enum`, `array`, `map`, `set`, `Option<T>` e `Result<T, E>`, além de geração automática de `FromJSON` para records derivados.
+
+### 📋 Fase 55: 7. Biblioteca Padrão (`std/*.aeth`) e Intrínsecos de Sistema - PLANEJADA
+- [ ] **7.1 Strings & Conversões Avançadas (`Split`, `Join`, `PadLeft`, `PadRight`, `RepeatStr`, `StrToFloat`, `TryStrToInt`, `TryStrToFloat`)**:
+  - Implementar utilitários de texto essenciais para processamento de dados e conversões seguras retornando `Option<T>` nos dois backends.
+- [ ] **7.2 Matemática Completa na `SymbolTable` e Runtime**:
+  - Registrar e emitir `Floor`, `Ceil`, `Round`, `Pow`, `Exp`, `Log`, `Sin`, `Cos`, `Tan`, `Atan2`, `RandomInt` e `RandomFloat` de forma uniforme no Free Pascal e GCC C99.
+- [ ] **7.3 Console, Variáveis de Ambiente e Sistema de Arquivos (`Print`, `ReadLn`, `GetEnv`, `SetEnv`, `ListDir`, `CopyFile`, `RenameFile`)**:
+  - Completar I/O interativo, acesso a ambiente do SO e manipulação de arquivos/diretórios em `std/io.aeth` e `std/fs.aeth`.
+- [ ] **7.4 Parser JSON Estruturado em `std/json.aeth`**:
+  - Substituir a busca por substring por um parser recursivo compatível com objetos aninhados, arrays `[...]`, `Float64` e escapes `\"`/`\\`/`\n`.
+
+### 📋 Fase 56: 8. Ferramental do Compilador (`fmt`, `emit-header`, `lexer`) - PLANEJADA
+- [ ] **8.1 Correção do Formatador Canônico (`aetherc fmt` — `uAetherFormatter.pas`)**:
+  - Reescrever `NormalizeOperators` para respeitar tokens compostos multi-caractere (`=>`, `+=`, `-=`, `*=`, `<>`, `:=`, `..`) sem inserção indevida de espaços e corrigir o rastreamento de indentação em `if ... then ... else ... end;`.
+- [ ] **8.2 Exportação Completa no Gerador de Headers C (`aetherc emit-header` — `uAetherHeaderGen.pas`)**:
+  - Emitir declarações de `enum`, `type alias`, `subrange` e `array` fixo nos arquivos `.h` gerados além de `record`s e funções exportadas.
+- [ ] **8.3 Desambiguação Léxica UFCS em Literais Numéricos (`uAetherLexer.pas`)**:
+  - Evitar que `ScanNumber` consuma `.` como separador decimal quando o caractere seguinte não for dígito (`0..9`), habilitando chamadas UFCS diretamente em literais (`55.Clamp(0, 100)`).
