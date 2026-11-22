@@ -22,12 +22,14 @@ type
     FLength: Integer;
     FLine: Integer;
     FCol: Integer;
+    FCurrentDocComment: string;
 
     function PeekChar(Offset: Integer = 0): Char;
     function ReadChar: Char;
     function IsEOF: Boolean;
     procedure SkipWhitespaceAndComments;
 
+    function ScanTokenInternal: TToken;
     function ScanIdentifierOrKeyword: TToken;
     function ScanAsmBlock: string;
     function ScanNumber: TToken;
@@ -36,6 +38,7 @@ type
   public
     constructor Create(const ASource: string);
     function NextToken: TToken;
+    function ConsumeDocComment: string;
     property Line: Integer read FLine;
     property Col: Integer read FCol;
   end;
@@ -57,6 +60,13 @@ begin
   FPos := 1;
   FLine := 1;
   FCol := 1;
+  FCurrentDocComment := '';
+end;
+
+function TAetherLexer.ConsumeDocComment: string;
+begin
+  Result := FCurrentDocComment;
+  FCurrentDocComment := '';
 end;
 
 function TAetherLexer.PeekChar(Offset: Integer): Char;
@@ -98,6 +108,7 @@ end;
 procedure TAetherLexer.SkipWhitespaceAndComments;
 var
   C, NextC: Char;
+  DocLine: string;
 begin
   while not IsEOF do
   begin
@@ -107,6 +118,24 @@ begin
     if C in [' ', #9, #10, #13] then
     begin
       ReadChar;
+      Continue;
+    end;
+
+    // Comentario de documentacao /// (tres barras, mas nao quatro)
+    if (C = '/') and (PeekChar(1) = '/') and (PeekChar(2) = '/') and (PeekChar(3) <> '/') then
+    begin
+      ReadChar; // Consome primeiro /
+      ReadChar; // Consome segundo /
+      ReadChar; // Consome terceiro /
+      if (not IsEOF) and (PeekChar = ' ') then
+        ReadChar; // Consome espaco opcional apos ///
+      DocLine := '';
+      while (not IsEOF) and (PeekChar <> #10) and (PeekChar <> #13) do
+        DocLine := DocLine + ReadChar;
+      if FCurrentDocComment <> '' then
+        FCurrentDocComment := FCurrentDocComment + LineEnding + DocLine
+      else
+        FCurrentDocComment := DocLine;
       Continue;
     end;
 
@@ -377,13 +406,11 @@ begin
   Result := CreateToken(tokCharLiteral, CharVal, StartLine, StartCol);
 end;
 
-function TAetherLexer.NextToken: TToken;
+function TAetherLexer.ScanTokenInternal: TToken;
 var
   StartLine, StartCol: Integer;
   C: Char;
 begin
-  SkipWhitespaceAndComments;
-
   if IsEOF then
   begin
     Result := CreateToken(tokEOF, '', FLine, FCol);
@@ -542,6 +569,18 @@ begin
     ReadChar;
     Result := CreateToken(tokUnknown, C, StartLine, StartCol);
   end;
+end;
+
+function TAetherLexer.NextToken: TToken;
+var
+  SavedDoc: string;
+begin
+  SkipWhitespaceAndComments;
+  SavedDoc := FCurrentDocComment;
+  FCurrentDocComment := '';
+
+  Result := ScanTokenInternal;
+  Result.DocComment := SavedDoc;
 end;
 
 end.

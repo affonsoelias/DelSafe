@@ -108,11 +108,12 @@ type
     Value: string;
     Line: Integer;
     Col: Integer;
+    DocComment: string;
   end;
 
 function TokenKindToString(Kind: TTokenKind): string;
 function LookupKeyword(const S: string): TTokenKind;
-function CreateToken(Kind: TTokenKind; const Value: string; Line, Col: Integer): TToken;
+function CreateToken(Kind: TTokenKind; const Value: string; Line, Col: Integer; const ADocComment: string = ''): TToken;
 
 implementation
 
@@ -249,12 +250,13 @@ begin
   else Result := tokIdentifier;
 end;
 
-function CreateToken(Kind: TTokenKind; const Value: string; Line, Col: Integer): TToken;
+function CreateToken(Kind: TTokenKind; const Value: string; Line, Col: Integer; const ADocComment: string = ''): TToken;
 begin
   Result.Kind := Kind;
   Result.Value := Value;
   Result.Line := Line;
   Result.Col := Col;
+  Result.DocComment := ADocComment;
 end;
 
 end.

@@ -433,3 +433,71 @@ O modelo de tarefas assíncronas é 100% compatível em todos os backends do com
 - **C99 (GCC & Clang)**: Binários nativos compactos e de alto desempenho (`--target=c`).
 - **WebAssembly**: Módulos `.wasm` autônomos (`--target=wasm`).
 - **JavaScript (Pas2JS)**: Execução no navegador e runtime web (`--target=js`).
+
+---
+
+## 8. Gerador Canônico de Documentação (`aetherc doc`)
+
+A partir da **Fase 32**, o Aether possui um gerador de documentação oficial embutido no compilador (`aetherc doc`), capaz de inspecionar módulos `.aeth`, extrair comentários de documentação estruturados (`///`), contratos formais (`require` / `ensure`), semântica de posse (`borrow`, `mut borrow`, `take`) e compilar doctests automaticamente.
+
+### Comandos e Opções:
+```bash
+# Gera documentação HTML estática para todo o projeto em docs/api/
+aetherc doc
+
+# Gera documentação para um arquivo específico
+aetherc doc src/matematica.aeth
+
+# Especifica diretório de saída customizado
+aetherc doc --out-dir=public/api
+
+# Exporta em Markdown para documentação de repositórios (GitHub/GitLab)
+aetherc doc --format=md
+aetherc doc --format=all
+
+# Abre a documentação diretamente no navegador padrão
+aetherc doc --open
+
+# Executa e valida todos os exemplos de código (Doctests)
+aetherc doc --test
+```
+
+### Escrevendo Comentários de Documentação (`///`):
+```aether
+/// Módulo de cálculo numérico e vetorial.
+module matematica;
+
+/// Cria um vetor 2D normalizado.
+/// @param x Componente horizontal X
+/// @param y Componente vertical Y
+/// @return Novo vetor 2D
+///
+/// ```aether
+/// var v: Vetor := CriarVetor(3.0, 4.0);
+/// Assert(v.x > 0.0);
+/// ```
+function CriarVetor(x: Float64, y: Float64): Vetor
+require
+    x >= 0.0;
+    y >= 0.0;
+ensure
+    x >= 0.0;
+var
+    v: Vetor;
+begin
+    v.x := x;
+    v.y := y;
+    return v;
+end;
+```
+
+### Recursos Gerados:
+1. **Site Estático HTML Responsivo**:
+   - `index.html`: Dashboard com estatísticas do projeto, grafo de dependências e índice de módulos.
+   - `<Modulo>.html`: Página detalhada de cada módulo com sidebar, seções de structs, enums, traits e funções.
+   - `style.css`: Tema dark/light elegante inspirado no Rustdoc e VitePress.
+   - `search.js`: Índice de busca instantânea no cliente com filtragem em tempo real (Ctrl+K).
+2. **Exportação Markdown (`API.md`)**:
+   - Resumos em tabelas, contratos formais e blocos de código formatados para visualização direta no GitHub/GitLab.
+3. **Validação Automatizada de Doctests (`--test`)**:
+   - Extrai automaticamente blocos de código com asserções (`Assert`) contidos na documentação e os compila/executa em ambiente isolado, garantindo que os exemplos de código da documentação nunca fiquem desatualizados.

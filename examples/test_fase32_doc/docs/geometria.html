@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Módulo geometria - Aether Application</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="search.js"></script>
+</head>
+<body>
+  <header>
+    <a href="index.html" class="logo">⚡ <span>Aether</span>Doc | Aether Application</a>
+    <div style="position: relative;">
+      <input type="text" id="searchInput" class="search-bar" placeholder="Buscar símbolos... (Ctrl+K)">
+      <div id="searchResults" class="search-results"></div>
+    </div>
+  </header>
+  <div class="container">
+    <aside class="sidebar">
+      <h3>Módulos</h3>
+      <ul>
+        <li><a href="geometria.html" class="active">geometria</a></li>
+      </ul>
+      <h3>Neste Módulo</h3>
+      <ul>
+        <li><a href="#types">Tipos & Estruturas</a></li>
+        <li><a href="#traits">Traits</a></li>
+        <li><a href="#functions">Funções</a></li>
+      </ul>
+    </aside>
+    <main class="main-content">
+      <h1>Módulo <code>geometria</code></h1>
+      <p style="font-size: 1.15rem; color: #e6edf3;">Módulo de cálculos geométricos e estatísticos de alta precisão.</p>
+      <p style="color: var(--text-muted);">Fornece estruturas, contratos formais e funções com semântica estrita de posse.</p>
+      <h2 id="types">Tipos & Estruturas</h2>
+      <div class="card" id="type-Ponto">
+        <h3 style="margin-top: 0;"><span class="badge badge-take">record</span> Ponto</h3>
+        <p>Representa um Ponto 2D no plano cartesiano.</p>
+        <table><thead><tr><th>Campo / Variante</th><th>Tipo</th><th>Descrição</th></tr></thead><tbody>
+        <tr><td><code>x</code></td><td><code>Float64</code></td><td>Coordenada horizontal X.</td></tr>
+        <tr><td><code>y</code></td><td><code>Float64</code></td><td>Coordenada vertical Y.</td></tr>
+        </tbody></table>
+      </div>
+      <div class="card" id="type-ModoRender">
+        <h3 style="margin-top: 0;"><span class="badge badge-take">enum</span> ModoRender</h3>
+        <p>Modo de renderização de formas geométricas.</p>
+        <table><thead><tr><th>Campo / Variante</th><th>Tipo</th><th>Descrição</th></tr></thead><tbody>
+        <tr><td><code>Wireframe</code></td><td><code></code></td><td></td></tr>
+        <tr><td><code>Solid</code></td><td><code></code></td><td></td></tr>
+        <tr><td><code>Textured</code></td><td><code></code></td><td></td></tr>
+        </tbody></table>
+      </div>
+      <h2 id="traits">Traits (Contratos de Tipos)</h2>
+      <div class="card" id="trait-FormaGeometrica">
+        <h3 style="margin-top: 0;"><span class="badge badge-mut-borrow">trait</span> FormaGeometrica</h3>
+        <p>Contrato para formas geométricas com cálculo de área.</p>
+        <h4>Métodos Exigidos:</h4>
+        <div class="code-block">
+          function CalcularArea(...): Float64;
+        </div>
+      </div>
+      <h2 id="functions">Funções & Métodos</h2>
+      <div class="card" id="func-CriarPonto">
+        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+          <h3 style="margin: 0;">CriarPonto</h3>
+        </div>
+        <div class="code-block">
+function CriarPonto(x: Float64, y: Float64): Ponto;
+        </div>
+        <p style="font-weight: 500;">Cria um novo ponto no plano cartesiano.</p>
+        <p>```aether
+var p: Ponto := CriarPonto(10.0, 20.0);
+Assert(p.x &gt; 0.0);
+```</p>
+        <div style="margin: 14px 0;">
+          <div class="contract-box"><span class="contract-label">require:</span> <code>x &gt;= 0.0</code></div>
+          <div class="contract-box"><span class="contract-label">require:</span> <code>y &gt;= 0.0</code></div>
+          <div class="contract-box"><span class="contract-label">ensure:</span> <code>x &gt;= 0.0</code></div>
+        </div>
+        <h4>Parâmetros</h4>
+        <table><thead><tr><th>Parâmetro</th><th>Semântica de Posse</th><th>Tipo</th><th>Descrição</th></tr></thead><tbody>
+        <tr><td><code>x</code></td><td></td><td><code>Float64</code></td><td>Coordenada X</td></tr>
+        <tr><td><code>y</code></td><td></td><td><code>Float64</code></td><td>Coordenada Y</td></tr>
+        </tbody></table>
+        <h4>Exemplo Testável (Doctest)</h4>
+        <pre class="code-block"><code>var p: Ponto := CriarPonto(10.0, 20.0);
+Assert(p.x &gt; 0.0);</code></pre>
+      </div>
+      <div class="card" id="func-DeslocarPonto">
+        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+          <h3 style="margin: 0;">DeslocarPonto</h3>
+        </div>
+        <div class="code-block">
+function DeslocarPonto(mut borrow p: Ponto, dx: Float64, dy: Float64): Void;
+        </div>
+        <p style="font-weight: 500;">Desloca as coordenadas de um ponto diretamente na memória.</p>
+        <h4>Parâmetros</h4>
+        <table><thead><tr><th>Parâmetro</th><th>Semântica de Posse</th><th>Tipo</th><th>Descrição</th></tr></thead><tbody>
+        <tr><td><code>p</code></td><td><span class="badge badge-mut-borrow">mut borrow</span> </td><td><code>Ponto</code></td><td>Referência mutável do ponto a ser modificado</td></tr>
+        <tr><td><code>dx</code></td><td></td><td><code>Float64</code></td><td>Deslocamento horizontal</td></tr>
+        <tr><td><code>dy</code></td><td></td><td><code>Float64</code></td><td>Deslocamento vertical</td></tr>
+        </tbody></table>
+      </div>
+      <div class="card" id="func-CalcularAreaAsync">
+        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+          <span class="badge badge-async">async</span>
+          <h3 style="margin: 0;">CalcularAreaAsync</h3>
+        </div>
+        <div class="code-block">
+async function CalcularAreaAsync(largura: Float64, altura: Float64): Float64;
+        </div>
+        <p style="font-weight: 500;">Computa a área assíncrona de um retângulo delimitador.</p>
+        <div style="margin: 14px 0;">
+          <div class="contract-box"><span class="contract-label">require:</span> <code>largura &gt; 0.0</code></div>
+          <div class="contract-box"><span class="contract-label">require:</span> <code>altura &gt; 0.0</code></div>
+        </div>
+        <h4>Parâmetros</h4>
+        <table><thead><tr><th>Parâmetro</th><th>Semântica de Posse</th><th>Tipo</th><th>Descrição</th></tr></thead><tbody>
+        <tr><td><code>largura</code></td><td></td><td><code>Float64</code></td><td>Largura total do retângulo</td></tr>
+        <tr><td><code>altura</code></td><td></td><td><code>Float64</code></td><td>Altura total do retângulo</td></tr>
+        </tbody></table>
+      </div>
+    </main>
+  </div>
+</body>
+</html>

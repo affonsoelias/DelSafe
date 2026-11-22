@@ -394,13 +394,23 @@ Este documento traça o status oficial de desenvolvimento do compilador e as pr�
 - [x] **Validação Prática Multi-Backend**:
   - Demonstração canônica `examples/test_fase31_async/async_demo.aeth` compilada e validada com sucesso em Free Pascal, GCC, Clang, Wasm e Pas2JS.
 
-### ⏳ Fase 32: Gerador Canônico de Documentação (`aetherc doc`)
-- [ ] **Docstrings e Metadados de Módulos**:
-  - Parser de comentários de documentação estruturados (`///`).
-  - Extração de contratos (`require`/`ensure`), parâmetros com semântica de posse (`borrow`, `mut borrow`, `take`) e tipagem.
-- [ ] **Geração de Site Estático de Documentação**:
-  - Comando `aetherc doc [projeto] [--open]`.
-  - Geração de interface HTML/Markdown responsiva com busca instantânea local, diagrama de dependências e exemplos testáveis (*doctests*).
+### ✅ Fase 32: Gerador Canônico de Documentação (`aetherc doc`) (Concluído)
+- [x] **Docstrings Estruturados e Metadados de Módulos**:
+  - Parser de comentários de documentação estruturados (`///`) integrado diretamente ao Lexer (`uAetherLexer.pas`) e AST (`uAetherAST.pas`).
+  - Suporte a tags semânticas `@param <nome> <desc>` e `@return <desc>`.
+  - Extração automática de contratos formais de funções (`require` e `ensure`) formatados de volta para código canônico legível.
+  - Extração de semântica de posse dos parâmetros com badges específicos (`borrow`, `mut borrow`, `take`).
+- [x] **Geração de Site Estático de Documentação (`aetherc doc`)**:
+  - Comando canônico `aetherc doc [arquivo | pasta] [opcoes]`.
+  - Geração de site estático moderno, limpo e responsivo (`index.html`, `<Modulo>.html`, `style.css`) com suporte a temas dark/light e layout inspirado no Rustdoc/VitePress.
+  - Índice de busca instantânea no cliente (`search.js`) permitindo pesquisar módulos, funções, structs e traits em tempo real.
+  - Exportação opcional para Markdown (`API.md`) via `--format=md` ou `--format=all`.
+  - Suporte à flag `--open` para abertura automática da documentação no navegador padrão do sistema operacional.
+- [x] **Suíte de Doctests Integrada (`--test`)**:
+  - Extração automática de blocos de exemplos de código testáveis (`/// ```aether ... ``` `).
+  - Execução e compilação automatizada com harness dinâmico via `aetherc doc --test`, reportando status `PASS` ou `FAIL` para cada asserção contida na documentação.
+- [x] **Validação Prática**:
+  - Módulo completo de demonstração `examples/test_fase32_doc/geometria.aeth` criado com docstrings, contratos, types, traits, async functions e doctests aprovados com 100% de sucesso.
 
 ### ⏳ Fase 33: Registry Central de Pacotes Comunitários (`aetherc pkg publish`)
 - [ ] **Infraestrutura do Registro Central**:

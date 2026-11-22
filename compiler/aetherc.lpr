@@ -22,7 +22,8 @@ uAetherProject,
 uAetherFormatter,
 uAetherIncremental,
 uAetherOptimizer,
-uAetherBootstrap;
+uAetherBootstrap,
+uAetherDoc;
 
 Procedure PrintBanner;
 Begin
@@ -41,6 +42,7 @@ Begin
   WriteLn('  run               Compila e executa imediatamente o binario do projeto');
   WriteLn('  test [filtro]     Executa testes unitarios (arquivos individuais ou pasta tests/)');
   WriteLn('  fmt [caminho]     Formata codigo Aether segundo as normas canonicas (--check para CI/CD)');
+  WriteLn('  doc [caminho]     Gera documentacao canonica do projeto (HTML, Markdown e Doctests)');
   WriteLn('  clean             Limpa artefatos de build (bin/ e generated/) do projeto');
   WriteLn('  bootstrap         Executa ciclo completo de auto-hospedagem (Stage 1, 2 e 3)');
   WriteLn('');
@@ -1569,6 +1571,22 @@ Begin
         on E: Exception Do
           Begin
             WriteLn(ErrOutput, 'Erro ao formatar: ', E.Message);
+            Halt(1);
+          End;
+      End;
+    End;
+
+  // Checa comando de documentacao: doc [caminho] [opcoes]
+  If (ParamCount >= 1) And (LowerCase(ParamStr(1)) = 'doc') Then
+    Begin
+      PrintBanner;
+      Try
+        HandleDocCommand;
+        Halt(0);
+      Except
+        on E: Exception Do
+          Begin
+            WriteLn(ErrOutput, 'Erro ao gerar documentacao: ', E.Message);
             Halt(1);
           End;
       End;

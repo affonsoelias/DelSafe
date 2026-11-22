@@ -217,6 +217,7 @@ type
   public
     Name: string;
     TypeName: string;
+    DocComment: string;
     constructor Create(ALine, ACol: Integer; const AName, AType: string);
     function Dump(Indent: Integer = 0): string; override;
   end;
@@ -224,6 +225,7 @@ type
   TASTRecordDecl = class(TASTNode)
   public
     Name: string;
+    DocComment: string;
     Fields: TASTNodeList; // TASTRecordField
     constructor Create(ALine, ACol: Integer; const AName: string);
     destructor Destroy; override;
@@ -233,6 +235,7 @@ type
   TASTEnumVariant = class(TASTNode)
   public
     Name: string;
+    DocComment: string;
     Fields: TASTNodeList; // TASTRecordField (payload opcional)
     constructor Create(ALine, ACol: Integer; const AName: string);
     destructor Destroy; override;
@@ -242,6 +245,7 @@ type
   TASTEnumDecl = class(TASTNode)
   public
     Name: string;
+    DocComment: string;
     Variants: TASTNodeList; // TASTEnumVariant
     constructor Create(ALine, ACol: Integer; const AName: string);
     destructor Destroy; override;
@@ -273,6 +277,7 @@ type
     IsAsync: Boolean;
     ExternAbi: string;
     ExternLib: string;
+    DocComment: string;
     constructor Create(ALine, ACol: Integer; const AName, AReturnType: string);
     destructor Destroy; override;
     function Dump(Indent: Integer = 0): string; override;
@@ -281,6 +286,7 @@ type
   TASTTraitDecl = class(TASTNode)
   public
     Name: string;
+    DocComment: string;
     Methods: TASTNodeList;      // TASTFunction (assinaturas)
     constructor Create(ALine, ACol: Integer; const AName: string);
     destructor Destroy; override;
@@ -310,6 +316,7 @@ type
   TASTModule = class(TASTNode)
   public
     Name: string;
+    DocComment: string;
     Imports: TStringList;
     PascalImports: TStringList;
     CImports: TStringList;

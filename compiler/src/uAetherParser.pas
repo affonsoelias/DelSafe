@@ -185,8 +185,9 @@ end;
 
 function TAetherParser.ParseRecordDecl(const AName: string; ALine, ACol: Integer): TASTRecordDecl;
 var
-  FieldName, FieldType: string;
+  FieldName, FieldType, FDoc: string;
   FLine, FCol: Integer;
+  FieldNode: TASTRecordField;
 begin
   Expect(tokRecord);
   Result := TASTRecordDecl.Create(ALine, ACol, AName);
@@ -195,11 +196,14 @@ begin
     begin
       FLine := FCurTok.Line;
       FCol := FCurTok.Col;
+      FDoc := FCurTok.DocComment;
       FieldName := Expect(tokIdentifier, 'Esperado nome do campo do record').Value;
       Expect(tokColon, 'Esperado ":" apos nome do campo');
       FieldType := ParseTypeRef;
       Expect(tokSemicolon, 'Esperado ";" apos definicao do campo');
-      Result.Fields.Add(TASTRecordField.Create(FLine, FCol, FieldName, FieldType));
+      FieldNode := TASTRecordField.Create(FLine, FCol, FieldName, FieldType);
+      FieldNode.DocComment := FDoc;
+      Result.Fields.Add(FieldNode);
     end;
     Expect(tokEnd, 'Esperado "end" no fechamento do record');
   except
@@ -211,7 +215,7 @@ end;
 function TAetherParser.ParseEnumDecl(const AName: string; ALine, ACol: Integer): TASTEnumDecl;
 var
   VariantNode: TASTEnumVariant;
-  VName, FName, FType: string;
+  VName, FName, FType, VDoc: string;
   VLine, VCol: Integer;
 begin
   Expect(tokEnum);
@@ -221,8 +225,10 @@ begin
     begin
       VLine := FCurTok.Line;
       VCol := FCurTok.Col;
+      VDoc := FCurTok.DocComment;
       VName := Expect(tokIdentifier, 'Esperado nome da variante do enum').Value;
       VariantNode := TASTEnumVariant.Create(VLine, VCol, VName);
+      VariantNode.DocComment := VDoc;
       Result.Variants.Add(VariantNode);
 
       // Payload opcional: Variante(campo: Tipo, ...)
@@ -252,23 +258,39 @@ end;
 
 procedure TAetherParser.ParseTypeSection(AModule: TASTModule);
 var
-  TypeName: string;
+  TypeName, TypeDoc: string;
   TLine, TCol: Integer;
+  RecDecl: TASTRecordDecl;
+  EnumDecl: TASTEnumDecl;
+  TraitDecl: TASTTraitDecl;
 begin
   Expect(tokType);
   while Check(tokIdentifier) do
   begin
     TLine := FCurTok.Line;
     TCol := FCurTok.Col;
+    TypeDoc := FCurTok.DocComment;
     TypeName := Expect(tokIdentifier).Value;
     Expect(tokEqual, 'Esperado "=" na declaracao de tipo');
 
     if Check(tokRecord) then
-      AModule.Types.Add(ParseRecordDecl(TypeName, TLine, TCol))
+    begin
+      RecDecl := ParseRecordDecl(TypeName, TLine, TCol);
+      RecDecl.DocComment := TypeDoc;
+      AModule.Types.Add(RecDecl);
+    end
     else if Check(tokEnum) then
-      AModule.Types.Add(ParseEnumDecl(TypeName, TLine, TCol))
+    begin
+      EnumDecl := ParseEnumDecl(TypeName, TLine, TCol);
+      EnumDecl.DocComment := TypeDoc;
+      AModule.Types.Add(EnumDecl);
+    end
     else if Check(tokTrait) then
-      AModule.Traits.Add(ParseTraitDecl(TypeName, TLine, TCol))
+    begin
+      TraitDecl := ParseTraitDecl(TypeName, TLine, TCol);
+      TraitDecl.DocComment := TypeDoc;
+      AModule.Traits.Add(TraitDecl);
+    end
     else
       raise EAetherParserError.Create('Esperado "record", "enum" ou "trait" na declaracao de tipo', TLine, TCol);
 
@@ -278,8 +300,9 @@ end;
 
 function TAetherParser.ParseTraitDecl(const AName: string; ALine, ACol: Integer): TASTTraitDecl;
 var
-  TraitName: string;
+  TraitName, TraitDoc: string;
 begin
+  TraitDoc := FCurTok.DocComment;
   Expect(tokTrait);
   if AName <> '' then
     TraitName := AName
@@ -287,6 +310,7 @@ begin
     TraitName := Expect(tokIdentifier, 'Esperado identificador com nome da trait').Value;
 
   Result := TASTTraitDecl.Create(ALine, ACol, TraitName);
+  Result.DocComment := TraitDoc;
   try
     while not Check(tokEnd) and not Check(tokEOF) do
     begin
@@ -371,7 +395,7 @@ end;
 
 function TAetherParser.ParseFunction(IsSignatureOnly: Boolean): TASTFunction;
 var
-  FuncName, ReturnType, ParamName, ParamType: string;
+  FuncName, ReturnType, ParamName, ParamType, FDoc: string;
   FLine, FCol: Integer;
   Ownership: TOwnershipKind;
   IsExt, IsAsyncFunc: Boolean;
@@ -379,17 +403,24 @@ var
 begin
   FLine := FCurTok.Line;
   FCol := FCurTok.Col;
+  FDoc := FCurTok.DocComment;
   IsExt := False;
   IsAsyncFunc := False;
   ExtLib := '';
   ExtAbi := 'c';
 
   if Match(tokAsync) then
+  begin
     IsAsyncFunc := True;
+    if (FDoc = '') and (FCurTok.DocComment <> '') then
+      FDoc := FCurTok.DocComment;
+  end;
 
   if Match(tokExtern) then
   begin
     IsExt := True;
+    if (FDoc = '') and (FCurTok.DocComment <> '') then
+      FDoc := FCurTok.DocComment;
     if Match(tokPascal) then
       ExtAbi := 'pascal'
     else if Check(tokIdentifier) and SameText(FCurTok.Value, 'c') then
@@ -402,10 +433,14 @@ begin
       ExtLib := Expect(tokStringLiteral).Value;
   end;
 
+  if (FDoc = '') and (FCurTok.DocComment <> '') then
+    FDoc := FCurTok.DocComment;
+
   Expect(tokFunction);
   FuncName := Expect(tokIdentifier, 'Esperado nome da funcao').Value;
 
   Result := TASTFunction.Create(FLine, FCol, FuncName, '');
+  Result.DocComment := FDoc;
   Result.IsAsync := IsAsyncFunc;
   Result.IsExtern := IsExt;
   Result.ExternLib := ExtLib;
@@ -459,8 +494,8 @@ begin
       Exit;
     end;
 
-    // Bloco de Contratos Opcional
-    if Match(tokContract) then
+    // Bloco de Contratos Opcional (com ou sem a palavra-chave "contract")
+    if Match(tokContract) or Check(tokRequire) or Check(tokEnsure) then
     begin
       if Match(tokRequire) then
       begin
@@ -955,16 +990,18 @@ end;
 
 function TAetherParser.ParseModule: TASTModule;
 var
-  ModName: string;
+  ModName, ModDoc: string;
   MLine, MCol: Integer;
 begin
   MLine := FCurTok.Line;
   MCol := FCurTok.Col;
+  ModDoc := FCurTok.DocComment;
   Expect(tokModule, 'Todo arquivo Aether deve iniciar com "module <Nome>;"');
   ModName := Expect(tokIdentifier, 'Esperado nome do modulo').Value;
   Expect(tokSemicolon, 'Esperado ";" apos nome do modulo');
 
   Result := TASTModule.Create(MLine, MCol, ModName);
+  Result.DocComment := ModDoc;
   try
     // Imports
     while Check(tokImport) do
