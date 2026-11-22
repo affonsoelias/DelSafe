@@ -198,6 +198,12 @@ begin
   end;
 
   Kind := LookupKeyword(Val);
+  if (Kind = tokMod) and (PeekChar = '=') then
+  begin
+    ReadChar;
+    Result := CreateToken(tokModAssign, 'mod=', StartLine, StartCol);
+    Exit;
+  end;
   if Kind = tokAsm then
   begin
     Val := ScanAsmBlock;
@@ -348,7 +354,9 @@ begin
         'n': begin ReadChar; Val := Val + #10; end;
         'r': begin ReadChar; Val := Val + #13; end;
         't': begin ReadChar; Val := Val + #9; end;
+        '0': begin ReadChar; Val := Val + #0; end;
         '"': begin ReadChar; Val := Val + '"'; end;
+        '''': begin ReadChar; Val := Val + ''''; end;
         '\': begin ReadChar; Val := Val + '\'; end;
       else
         Val := Val + ReadChar;
@@ -387,6 +395,8 @@ begin
       'n': begin ReadChar; CharVal := #10; end;
       'r': begin ReadChar; CharVal := #13; end;
       't': begin ReadChar; CharVal := #9; end;
+      '0': begin ReadChar; CharVal := #0; end;
+      '"': begin ReadChar; CharVal := '"'; end;
       '''': begin ReadChar; CharVal := ''''; end;
       '\': begin ReadChar; CharVal := '\'; end;
     else
@@ -454,7 +464,8 @@ begin
   end;
 
   // Digito -> Numero
-  if (C in ['0'..'9']) or ((C in ['$', '%']) and (PeekChar(1) in ['0'..'9', 'a'..'f', 'A'..'F'])) then
+  if (C in ['0'..'9']) or ((C = '$') and (PeekChar(1) in ['0'..'9', 'a'..'f', 'A'..'F'])) or
+     ((C = '%') and (PeekChar(1) in ['0', '1'])) then
   begin
     Result := ScanNumber;
     Exit;
@@ -533,7 +544,18 @@ begin
     '<':
       begin
         ReadChar;
-        if PeekChar = '>' then
+        if PeekChar = '<' then
+        begin
+          ReadChar;
+          if PeekChar = '=' then
+          begin
+            ReadChar;
+            Result := CreateToken(tokShlAssign, '<<=', StartLine, StartCol);
+          end
+          else
+            Result := CreateToken(tokShl, 'shl', StartLine, StartCol);
+        end
+        else if PeekChar = '>' then
         begin
           ReadChar;
           Result := CreateToken(tokNotEqual, '<>', StartLine, StartCol);
@@ -549,7 +571,18 @@ begin
     '>':
       begin
         ReadChar;
-        if PeekChar = '=' then
+        if PeekChar = '>' then
+        begin
+          ReadChar;
+          if PeekChar = '=' then
+          begin
+            ReadChar;
+            Result := CreateToken(tokShrAssign, '>>=', StartLine, StartCol);
+          end
+          else
+            Result := CreateToken(tokShr, 'shr', StartLine, StartCol);
+        end
+        else if PeekChar = '=' then
         begin
           ReadChar;
           Result := CreateToken(tokGreaterEqual, '>=', StartLine, StartCol);
@@ -593,7 +626,46 @@ begin
     '/':
       begin
         ReadChar;
-        Result := CreateToken(tokSlash, '/', StartLine, StartCol);
+        if PeekChar = '=' then
+        begin
+          ReadChar;
+          Result := CreateToken(tokSlashAssign, '/=', StartLine, StartCol);
+        end
+        else
+          Result := CreateToken(tokSlash, '/', StartLine, StartCol);
+      end;
+    '%':
+      begin
+        ReadChar;
+        if PeekChar = '=' then
+        begin
+          ReadChar;
+          Result := CreateToken(tokModAssign, '%=', StartLine, StartCol);
+        end
+        else
+          Result := CreateToken(tokMod, 'mod', StartLine, StartCol);
+      end;
+    '&':
+      begin
+        ReadChar;
+        if PeekChar = '=' then
+        begin
+          ReadChar;
+          Result := CreateToken(tokBitAndAssign, '&=', StartLine, StartCol);
+        end
+        else
+          Result := CreateToken(tokAnd, 'and', StartLine, StartCol);
+      end;
+    '|':
+      begin
+        ReadChar;
+        if PeekChar = '=' then
+        begin
+          ReadChar;
+          Result := CreateToken(tokBitOrAssign, '|=', StartLine, StartCol);
+        end
+        else
+          Result := CreateToken(tokOr, 'or', StartLine, StartCol);
       end;
     '(':
       begin
@@ -623,7 +695,18 @@ begin
     '^':
       begin
         ReadChar;
-        Result := CreateToken(tokCaret, '^', StartLine, StartCol);
+        if PeekChar = '=' then
+        begin
+          ReadChar;
+          Result := CreateToken(tokBitXorAssign, '^=', StartLine, StartCol);
+        end
+        else
+          Result := CreateToken(tokCaret, '^', StartLine, StartCol);
+      end;
+    '?':
+      begin
+        ReadChar;
+        Result := CreateToken(tokQuestion, '?', StartLine, StartCol);
       end;
   else
     ReadChar;

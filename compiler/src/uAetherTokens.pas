@@ -103,6 +103,7 @@ type
     tokFalse,
     tokNil,
     tokMod,
+    tokDiv,
 
     // Pontuação e Operadores
     tokColon,          // :
@@ -114,6 +115,13 @@ type
     tokPlusAssign,     // +=
     tokMinusAssign,    // -=
     tokStarAssign,     // *=
+    tokSlashAssign,    // /=
+    tokModAssign,      // mod= / %=
+    tokBitAndAssign,   // &=
+    tokBitOrAssign,    // |=
+    tokBitXorAssign,   // ^=
+    tokShlAssign,      // <<=
+    tokShrAssign,      // >>=
     tokEqual,          // =
     tokFatArrow,       // =>
     tokNotEqual,       // <>
@@ -131,7 +139,8 @@ type
     tokRBracket,       // ]
     tokUnderscore,     // _
     tokAt,             // @
-    tokCaret           // ^
+    tokCaret,          // ^
+    tokQuestion        // ?
   );
 
   TToken = record
@@ -227,6 +236,7 @@ begin
     tokFalse:         Result := 'false';
     tokNil:           Result := 'nil';
     tokMod:           Result := 'mod';
+    tokDiv:           Result := 'div';
 
     tokColon:         Result := ':';
     tokSemicolon:     Result := ';';
@@ -237,6 +247,13 @@ begin
     tokPlusAssign:    Result := '+=';
     tokMinusAssign:   Result := '-=';
     tokStarAssign:    Result := '*=';
+    tokSlashAssign:   Result := '/=';
+    tokModAssign:     Result := 'mod=';
+    tokBitAndAssign:  Result := '&=';
+    tokBitOrAssign:   Result := '|=';
+    tokBitXorAssign:  Result := '^=';
+    tokShlAssign:     Result := '<<=';
+    tokShrAssign:     Result := '>>=';
     tokEqual:         Result := '=';
     tokFatArrow:      Result := '=>';
     tokNotEqual:      Result := '<>';
@@ -255,6 +272,7 @@ begin
     tokUnderscore:    Result := '_';
     tokAt:            Result := '@';
     tokCaret:         Result := '^';
+    tokQuestion:      Result := '?';
   else
     Result := 'Desconhecido';
   end;
@@ -332,6 +350,7 @@ begin
   else if Lower = 'false' then Result := tokFalse
   else if Lower = 'nil' then Result := tokNil
   else if Lower = 'mod' then Result := tokMod
+  else if Lower = 'div' then Result := tokDiv
   else Result := tokIdentifier;
 end;
 

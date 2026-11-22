@@ -138,12 +138,30 @@ type
     function Dump(Indent: Integer = 0): string; override;
   end;
 
+  TASTMapLiteralExpr = class(TASTExpr)
+  public
+    Keys: TASTNodeList;   // lista de TASTExpr
+    Values: TASTNodeList; // lista de TASTExpr
+    constructor Create(ALine, ACol: Integer);
+    destructor Destroy; override;
+    function Dump(Indent: Integer = 0): string; override;
+  end;
+
   TASTIfExpr = class(TASTExpr)
   public
     Condition: TASTExpr;
     ThenExpr: TASTExpr;
     ElseExpr: TASTExpr;
     constructor Create(ALine, ACol: Integer; ACond, AThen, AElse: TASTExpr);
+    destructor Destroy; override;
+    function Dump(Indent: Integer = 0): string; override;
+  end;
+
+  TASTMatchExpr = class(TASTExpr)
+  public
+    Expr: TASTExpr;
+    Cases: TASTNodeList; // TASTMatchCase
+    constructor Create(ALine, ACol: Integer; AExpr: TASTExpr);
     destructor Destroy; override;
     function Dump(Indent: Integer = 0): string; override;
   end;
@@ -234,6 +252,8 @@ type
   TASTMatchCase = class(TASTNode)
   public
     Pattern: TASTPattern;
+    Guard: TASTExpr;
+    ValueExpr: TASTExpr;
     Body: TASTNodeList; // TASTStmt
     constructor Create(ALine, ACol: Integer; APattern: TASTPattern);
     destructor Destroy; override;
@@ -292,6 +312,14 @@ type
   TASTUnsafeStmt = class(TASTStmt)
   public
     Body: TASTNodeList;
+    constructor Create(ALine, ACol: Integer);
+    destructor Destroy; override;
+    function Dump(Indent: Integer = 0): string; override;
+  end;
+
+  TASTVarDeclStmt = class(TASTStmt)
+  public
+    Decls: TASTNodeList; // TASTVarDecl
     constructor Create(ALine, ACol: Integer);
     destructor Destroy; override;
     function Dump(Indent: Integer = 0): string; override;
@@ -865,6 +893,35 @@ begin
   Result := Result + ']';
 end;
 
+{ TASTMapLiteralExpr }
+
+constructor TASTMapLiteralExpr.Create(ALine, ACol: Integer);
+begin
+  inherited Create(ALine, ACol);
+  Keys := TASTNodeList.Create;
+  Values := TASTNodeList.Create;
+end;
+
+destructor TASTMapLiteralExpr.Destroy;
+begin
+  Keys.Free;
+  Values.Free;
+  inherited Destroy;
+end;
+
+function TASTMapLiteralExpr.Dump(Indent: Integer): string;
+var
+  I: Integer;
+begin
+  Result := MakeIndent(Indent) + 'Literal de Mapa: [';
+  for I := 0 to Keys.Count - 1 do
+  begin
+    if I > 0 then Result := Result + ', ';
+    Result := Result + Keys[I].Dump(0) + ': ' + Values[I].Dump(0);
+  end;
+  Result := Result + ']';
+end;
+
 { TASTIfExpr }
 
 constructor TASTIfExpr.Create(ALine, ACol: Integer; ACond, AThen, AElse: TASTExpr);
@@ -889,6 +946,31 @@ begin
             Condition.Dump(Indent + 1) + LineEnding +
             ThenExpr.Dump(Indent + 1) + LineEnding +
             ElseExpr.Dump(Indent + 1);
+end;
+
+{ TASTMatchExpr }
+
+constructor TASTMatchExpr.Create(ALine, ACol: Integer; AExpr: TASTExpr);
+begin
+  inherited Create(ALine, ACol);
+  Expr := AExpr;
+  Cases := TASTNodeList.Create;
+end;
+
+destructor TASTMatchExpr.Destroy;
+begin
+  Expr.Free;
+  Cases.Free;
+  inherited Destroy;
+end;
+
+function TASTMatchExpr.Dump(Indent: Integer): string;
+var
+  I: Integer;
+begin
+  Result := MakeIndent(Indent) + 'Expressao Match:' + LineEnding + Expr.Dump(Indent + 1);
+  for I := 0 to Cases.Count - 1 do
+    Result := Result + LineEnding + Cases[I].Dump(Indent + 1);
 end;
 
 { TASTAssignStmt }
@@ -1130,12 +1212,16 @@ constructor TASTMatchCase.Create(ALine, ACol: Integer; APattern: TASTPattern);
 begin
   inherited Create(ALine, ACol);
   Pattern := APattern;
+  Guard := nil;
+  ValueExpr := nil;
   Body := TASTNodeList.Create;
 end;
 
 destructor TASTMatchCase.Destroy;
 begin
   Pattern.Free;
+  Guard.Free;
+  ValueExpr.Free;
   Body.Free;
   inherited Destroy;
 end;
@@ -1146,6 +1232,10 @@ var
 begin
   Result := MakeIndent(Indent) + 'Caso:' + LineEnding +
             Pattern.Dump(Indent + 1);
+  if Assigned(Guard) then
+    Result := Result + LineEnding + MakeIndent(Indent + 1) + 'Guarda:' + LineEnding + Guard.Dump(Indent + 2);
+  if Assigned(ValueExpr) then
+    Result := Result + LineEnding + MakeIndent(Indent + 1) + 'Valor:' + LineEnding + ValueExpr.Dump(Indent + 2);
   for I := 0 to Body.Count - 1 do
     Result := Result + LineEnding + Body[I].Dump(Indent + 1);
 end;
@@ -1302,6 +1392,29 @@ begin
   Result := MakeIndent(Indent) + 'Unsafe:';
   for I := 0 to Body.Count - 1 do
     Result := Result + LineEnding + Body[I].Dump(Indent + 1);
+end;
+
+{ TASTVarDeclStmt }
+
+constructor TASTVarDeclStmt.Create(ALine, ACol: Integer);
+begin
+  inherited Create(ALine, ACol);
+  Decls := TASTNodeList.Create;
+end;
+
+destructor TASTVarDeclStmt.Destroy;
+begin
+  Decls.Free;
+  inherited Destroy;
+end;
+
+function TASTVarDeclStmt.Dump(Indent: Integer): string;
+var
+  I: Integer;
+begin
+  Result := MakeIndent(Indent) + 'DeclVarInline:';
+  for I := 0 to Decls.Count - 1 do
+    Result := Result + LineEnding + Decls[I].Dump(Indent + 1);
 end;
 
 { TASTConstDecl }
@@ -1895,11 +2008,28 @@ begin
       TASTSetLiteralExpr(Result).Elements.Add(CloneASTNode(TASTSetLiteralExpr(Node).Elements[I]));
     Exit;
   end
+  else if Node is TASTMapLiteralExpr then
+  begin
+    Result := TASTMapLiteralExpr.Create(Node.Line, Node.Col);
+    for I := 0 to TASTMapLiteralExpr(Node).Keys.Count - 1 do
+    begin
+      TASTMapLiteralExpr(Result).Keys.Add(CloneASTNode(TASTMapLiteralExpr(Node).Keys[I]));
+      TASTMapLiteralExpr(Result).Values.Add(CloneASTNode(TASTMapLiteralExpr(Node).Values[I]));
+    end;
+    Exit;
+  end
   else if Node is TASTIfExpr then
     Exit(TASTIfExpr.Create(Node.Line, Node.Col,
       TASTExpr(CloneASTNode(TASTIfExpr(Node).Condition)),
       TASTExpr(CloneASTNode(TASTIfExpr(Node).ThenExpr)),
       TASTExpr(CloneASTNode(TASTIfExpr(Node).ElseExpr))))
+  else if Node is TASTMatchExpr then
+  begin
+    Result := TASTMatchExpr.Create(Node.Line, Node.Col, TASTExpr(CloneASTNode(TASTMatchExpr(Node).Expr)));
+    for I := 0 to TASTMatchExpr(Node).Cases.Count - 1 do
+      TASTMatchExpr(Result).Cases.Add(CloneASTNode(TASTMatchExpr(Node).Cases[I]));
+    Exit;
+  end
 
   // Instruções
   else if Node is TASTAssignStmt then
@@ -1960,6 +2090,10 @@ begin
   else if Node is TASTMatchCase then
   begin
     Result := TASTMatchCase.Create(Node.Line, Node.Col, TASTPattern(CloneASTNode(TASTMatchCase(Node).Pattern)));
+    if Assigned(TASTMatchCase(Node).Guard) then
+      TASTMatchCase(Result).Guard := TASTExpr(CloneASTNode(TASTMatchCase(Node).Guard));
+    if Assigned(TASTMatchCase(Node).ValueExpr) then
+      TASTMatchCase(Result).ValueExpr := TASTExpr(CloneASTNode(TASTMatchCase(Node).ValueExpr));
     for I := 0 to TASTMatchCase(Node).Body.Count - 1 do
       TASTMatchCase(Result).Body.Add(CloneASTNode(TASTMatchCase(Node).Body[I]));
     Exit;
@@ -1998,6 +2132,13 @@ begin
     Result := TASTUnsafeStmt.Create(Node.Line, Node.Col);
     for I := 0 to TASTUnsafeStmt(Node).Body.Count - 1 do
       TASTUnsafeStmt(Result).Body.Add(CloneASTNode(TASTUnsafeStmt(Node).Body[I]));
+    Exit;
+  end
+  else if Node is TASTVarDeclStmt then
+  begin
+    Result := TASTVarDeclStmt.Create(Node.Line, Node.Col);
+    for I := 0 to TASTVarDeclStmt(Node).Decls.Count - 1 do
+      TASTVarDeclStmt(Result).Decls.Add(CloneASTNode(TASTVarDeclStmt(Node).Decls[I]));
     Exit;
   end
   else if Node is TASTParam then

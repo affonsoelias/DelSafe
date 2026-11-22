@@ -235,6 +235,8 @@ var
   Bin: TASTBinaryExpr;
   Un: TASTUnaryExpr;
   Call: TASTCallExpr;
+  MExpr: TASTMatchExpr;
+  CaseNode: TASTMatchCase;
   I: Integer;
 begin
   if not Assigned(Expr) then Exit;
@@ -349,11 +351,44 @@ begin
     Exit;
   end;
 
+  // Literal de Mapa
+  if Expr is TASTMapLiteralExpr then
+  begin
+    for I := 0 to TASTMapLiteralExpr(Expr).Keys.Count - 1 do
+    begin
+      CheckExpr(TASTExpr(TASTMapLiteralExpr(Expr).Keys[I]), accRead);
+      CheckExpr(TASTExpr(TASTMapLiteralExpr(Expr).Values[I]), accRead);
+    end;
+    Exit;
+  end;
+
   if Expr is TASTIfExpr then
   begin
     CheckExpr(TASTIfExpr(Expr).Condition, accRead);
     CheckExpr(TASTIfExpr(Expr).ThenExpr, accRead);
     CheckExpr(TASTIfExpr(Expr).ElseExpr, accRead);
+    Exit;
+  end;
+
+  if Expr is TASTMatchExpr then
+  begin
+    MExpr := TASTMatchExpr(Expr);
+    CheckExpr(MExpr.Expr, accBorrowShared);
+    for I := 0 to MExpr.Cases.Count - 1 do
+    begin
+      CaseNode := TASTMatchCase(MExpr.Cases[I]);
+      EnterScope;
+      try
+        if CaseNode.Pattern.SubPattern <> '' then
+          FCurrentScope.AddVar(CaseNode.Pattern.SubPattern, vsOwned, CaseNode.Line, CaseNode.Col, False);
+        if Assigned(CaseNode.Guard) then
+          CheckExpr(CaseNode.Guard, accRead);
+        if Assigned(CaseNode.ValueExpr) then
+          CheckExpr(CaseNode.ValueExpr, accRead);
+      finally
+        LeaveScope;
+      end;
+    end;
     Exit;
   end;
 end;
@@ -384,6 +419,7 @@ var
   CaseNode: TASTMatchCase;
   Ret: TASTReturnStmt;
   CallStmt: TASTCallStmt;
+  VarDecl: TASTVarDecl;
   VarInfo, V: TBorrowVarInfo;
   I, J: Integer;
   SavedStates, ThenStates: TFPList;
@@ -542,6 +578,16 @@ begin
     if Assigned(TASTRaiseStmt(Stmt).Expr) then
       CheckExpr(TASTRaiseStmt(Stmt).Expr, accRead);
   end
+  else if Stmt is TASTVarDeclStmt then
+  begin
+    for I := 0 to TASTVarDeclStmt(Stmt).Decls.Count - 1 do
+    begin
+      VarDecl := TASTVarDecl(TASTVarDeclStmt(Stmt).Decls[I]);
+      if Assigned(VarDecl.InitialExpr) then
+        CheckExpr(VarDecl.InitialExpr, accRead);
+      FCurrentScope.AddVar(VarDecl.Name, vsOwned, VarDecl.Line, VarDecl.Col, IsPrimitiveType(VarDecl.TypeName));
+    end;
+  end
   else if Stmt is TASTUnsafeStmt then
   begin
     for I := 0 to TASTUnsafeStmt(Stmt).Body.Count - 1 do
@@ -558,6 +604,8 @@ begin
       try
         if CaseNode.Pattern.SubPattern <> '' then
           FCurrentScope.AddVar(CaseNode.Pattern.SubPattern, vsOwned, CaseNode.Line, CaseNode.Col, False);
+        if Assigned(CaseNode.Guard) then
+          CheckExpr(CaseNode.Guard, accRead);
         for J := 0 to CaseNode.Body.Count - 1 do
           CheckStmt(TASTStmt(CaseNode.Body[J]));
       finally

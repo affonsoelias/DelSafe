@@ -131,7 +131,7 @@ for key, val in scores do
 end;
 ```
 
-You can also update numeric targets using compound assignment operators (`+=`, `-=`, `*=`) or `Inc(x)` / `Dec(x)` on variables, record fields, array elements, and maps.
+You can also update numeric targets using `div` (integer division) and compound assignment operators (`+=`, `-=`, `*=`, `/=`, `mod=`, `%=`, `&=`, `|=`, `^=`, `<<=`, `>>=`) or `Inc(x)` / `Dec(x)` on variables, record fields, array elements, and maps. You can also declare local `var` / `let` variables inline anywhere inside `begin...end`, `if`, `while`, or `for` blocks, and initialize associative maps with literals such as `var scores := ["alice": 100, "bob": 85];` or empty `[:]` alongside escaped `Char`/`String` literals (`'\n'`, `'\t'`, `'\0'`, `'\r'`, `'\\'`, `'\"'`, `'\''`).
 
 ---
 
@@ -252,6 +252,23 @@ begin
     assert(recovered = true);
 end.
 ```
+
+---
+
+## 2.6 Fast Error Propagation (`?` and `try expr`)
+
+When writing functions returning `Result<T, E>` or `Option<T>`, you can unwrap the inner value or propagate an early error/empty return cleanly with either the postfix `?` operator or prefix `try <expr>`:
+
+```aether
+function SumPositivesWithTry(a: Int32, b: Int32): Result<Int32, String>
+begin
+    let va := ParsePositive(a)?;
+    let vb := try ParsePositive(b);
+    return Ok(va + vb);
+end;
+```
+
+If `ParsePositive(b)` returns `Err("non-positive")`, `SumPositivesWithTry` immediately executes any active `defer` statements and returns `Err("non-positive")` without extra boilerplate.
 
 ---
 
@@ -392,12 +409,36 @@ match st with
 end;
 ```
 
+### 4.3 `match` Expressions & Conditional Pattern Guards (`if` / `when`)
+
+`match` can also be used directly as an expression returning a unified value type, and individual arms can bind variables and attach conditional guards using `if` or `when`:
+
+```aether
+let statusLabel := match code do
+    case 200, 201 => "OK";
+    case let c if c >= 500 => "SERVER_ERR";
+    case let c when c >= 400 => "CLIENT_ERR";
+    case _ => "OTHER";
+end;
+
+function ScoreResultExpr(res: Result<Int32, String>): Int32
+begin
+    return match res do
+        case Ok(let v) if v > 50 => v * 2;
+        case Ok(let v) => v + 1;
+        case Err(let _msg) => -1;
+    end;
+end;
+```
+
+Guarded patterns do not act as unconditional wildcards during exhaustiveness checking, preserving full compile-time safety.
+
 ---
 
 ## 5. Summary
 1. `if...then...else...end;` provides unambiguous nesting without `begin`, and inline `if <cond> then <exprA> else <exprB>` evaluates conditional expressions cleanly inside initializers and arguments.
-2. Loops use `while <cond> do ... end;`, `for` (`to` / `downto` / `in` over arrays, `String`, and `map[K]V`), and `repeat ... until` with `break` and `continue`, plus `+=`/`-=`/`*=` and `Inc`/`Dec`.
-3. `defer` ensures deterministic LIFO cleanup, while `try ... except` and `raise` handle system faults.
-4. Enums are algebraic types, and `match` handles `Enum`, value `Option<T>`, typed `Result<T, E>`, primitives, multi-value comma lists, inclusive `low..high` ranges, and `_` wildcards with compile-time exhaustiveness checking.
+2. Loops use `while <cond> do ... end;`, `for` (`to` / `downto` / `in` over arrays, `String`, and `map[K]V`), and `repeat ... until` with `break` and `continue`, plus `div`, `+=`/`-=`/`*=`/`/=`/`mod=`/`&=`/`|=`/`^=`/`<<=`/`>>=`, inline `var`/`let` blocks, and `Inc`/`Dec`.
+3. `defer` ensures deterministic LIFO cleanup, `try ... except` and `raise` handle system faults, and `?` / `try` propagates `Result<T, E>` and `Option<T>` errors ergonomically.
+4. Enums are algebraic types, and `match` (statement or expression) handles `Enum`, value `Option<T>`, typed `Result<T, E>`, primitives, multi-value comma lists, inclusive `low..high` ranges, `if`/`when` guards, and `_` wildcards with compile-time exhaustiveness checking.
 
 ➡️ **Next:** **[Chapter 04: Functions & Contracts](04_FUNCTIONS_AND_CONTRACTS.md)**

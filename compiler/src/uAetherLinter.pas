@@ -147,11 +147,31 @@ begin
     for I := 0 to TASTSetLiteralExpr(Expr).Elements.Count - 1 do
       CollectIdentifiersInExpr(TASTExpr(TASTSetLiteralExpr(Expr).Elements[I]), IdentList);
   end
+  else if Expr is TASTMapLiteralExpr then
+  begin
+    for I := 0 to TASTMapLiteralExpr(Expr).Keys.Count - 1 do
+    begin
+      CollectIdentifiersInExpr(TASTExpr(TASTMapLiteralExpr(Expr).Keys[I]), IdentList);
+      CollectIdentifiersInExpr(TASTExpr(TASTMapLiteralExpr(Expr).Values[I]), IdentList);
+    end;
+  end
   else if Expr is TASTIfExpr then
   begin
     CollectIdentifiersInExpr(TASTIfExpr(Expr).Condition, IdentList);
     CollectIdentifiersInExpr(TASTIfExpr(Expr).ThenExpr, IdentList);
     CollectIdentifiersInExpr(TASTIfExpr(Expr).ElseExpr, IdentList);
+  end
+  else if Expr is TASTMatchExpr then
+  begin
+    CollectIdentifiersInExpr(TASTMatchExpr(Expr).Expr, IdentList);
+    for I := 0 to TASTMatchExpr(Expr).Cases.Count - 1 do
+    begin
+      if TASTMatchCase(TASTMatchExpr(Expr).Cases[I]).Pattern.SubPattern <> '' then
+        IdentList.Add(TASTMatchCase(TASTMatchExpr(Expr).Cases[I]).Pattern.SubPattern);
+      if Assigned(TASTMatchCase(TASTMatchExpr(Expr).Cases[I]).Guard) then
+        CollectIdentifiersInExpr(TASTMatchCase(TASTMatchExpr(Expr).Cases[I]).Guard, IdentList);
+      CollectIdentifiersInExpr(TASTMatchCase(TASTMatchExpr(Expr).Cases[I]).ValueExpr, IdentList);
+    end;
   end;
 end;
 
@@ -225,6 +245,8 @@ begin
       CaseNode := TASTMatchCase(MatchStmt.Cases[I]);
       if CaseNode.Pattern.SubPattern <> '' then
         IdentList.Add(CaseNode.Pattern.SubPattern);
+      if Assigned(CaseNode.Guard) then
+        CollectIdentifiersInExpr(CaseNode.Guard, IdentList);
       CollectIdentifiersInNodeList(CaseNode.Body, IdentList);
     end;
   end
@@ -245,6 +267,11 @@ begin
   else if Stmt is TASTRaiseStmt then
   begin
     CollectIdentifiersInExpr(TASTRaiseStmt(Stmt).Expr, IdentList);
+  end
+  else if Stmt is TASTVarDeclStmt then
+  begin
+    for I := 0 to TASTVarDeclStmt(Stmt).Decls.Count - 1 do
+      CollectIdentifiersInExpr(TASTVarDecl(TASTVarDeclStmt(Stmt).Decls[I]).InitialExpr, IdentList);
   end
   else if Stmt is TASTUnsafeStmt then
   begin
@@ -364,12 +391,30 @@ var
       CheckExprForRedundancies(TASTIfExpr(Expr).Condition);
       CheckExprForRedundancies(TASTIfExpr(Expr).ThenExpr);
       CheckExprForRedundancies(TASTIfExpr(Expr).ElseExpr);
+    end
+    else if Expr is TASTMapLiteralExpr then
+    begin
+      for SubI := 0 to TASTMapLiteralExpr(Expr).Keys.Count - 1 do
+      begin
+        CheckExprForRedundancies(TASTExpr(TASTMapLiteralExpr(Expr).Keys[SubI]));
+        CheckExprForRedundancies(TASTExpr(TASTMapLiteralExpr(Expr).Values[SubI]));
+      end;
+    end
+    else if Expr is TASTMatchExpr then
+    begin
+      CheckExprForRedundancies(TASTMatchExpr(Expr).Expr);
+      for SubI := 0 to TASTMatchExpr(Expr).Cases.Count - 1 do
+      begin
+        if Assigned(TASTMatchCase(TASTMatchExpr(Expr).Cases[SubI]).Guard) then
+          CheckExprForRedundancies(TASTMatchCase(TASTMatchExpr(Expr).Cases[SubI]).Guard);
+        CheckExprForRedundancies(TASTMatchCase(TASTMatchExpr(Expr).Cases[SubI]).ValueExpr);
+      end;
     end;
   end;
 
   procedure CheckStmtListForDeadCode(List: TASTNodeList);
   var
-    SIdx: Integer;
+    SIdx, K: Integer;
     CurStmt: TASTStmt;
     LocalReturnFound: Boolean;
     LocRetLine, LocRetCol: Integer;
@@ -435,7 +480,22 @@ var
       else if CurStmt is TASTUnsafeStmt then
         CheckStmtListForDeadCode(TASTUnsafeStmt(CurStmt).Body)
       else if CurStmt is TASTRaiseStmt then
-        CheckExprForRedundancies(TASTRaiseStmt(CurStmt).Expr);
+        CheckExprForRedundancies(TASTRaiseStmt(CurStmt).Expr)
+      else if CurStmt is TASTVarDeclStmt then
+      begin
+        for K := 0 to TASTVarDeclStmt(CurStmt).Decls.Count - 1 do
+          CheckExprForRedundancies(TASTVarDecl(TASTVarDeclStmt(CurStmt).Decls[K]).InitialExpr);
+      end
+      else if CurStmt is TASTMatchStmt then
+      begin
+        CheckExprForRedundancies(TASTMatchStmt(CurStmt).Expr);
+        for K := 0 to TASTMatchStmt(CurStmt).Cases.Count - 1 do
+        begin
+          if Assigned(TASTMatchCase(TASTMatchStmt(CurStmt).Cases[K]).Guard) then
+            CheckExprForRedundancies(TASTMatchCase(TASTMatchStmt(CurStmt).Cases[K]).Guard);
+          CheckStmtListForDeadCode(TASTMatchCase(TASTMatchStmt(CurStmt).Cases[K]).Body);
+        end;
+      end;
     end;
   end;
 

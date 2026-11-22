@@ -802,17 +802,17 @@ Mapeamento técnico completo dos recursos pendentes identificados no compilador 
 - [x] **2.2 Suporte à Variável Especial `result` em `ensure` & Genéricos com Contrato**:
   - Registrar `result` no escopo de verificação de pós-condições em `TAetherTypeChecker.CheckFunction` com o `ReturnType` da função, preservar `Requires`/`Ensures` em `MonomorphizeFunction` e unificar captura de retorno antes dos asserts `ensure` em ambos os backends. Validado em `tests/11_fase50_56_contracts_ensure_ufcs_lit_fmt_header_test.aeth`.
 
-### 📋 Fase 51: 3. Expressões, Operadores e Controle de Fluxo - PLANEJADA
-- [ ] **3.1 Operador de Propagação Rápida de Erro (`?` / `try expr`)**:
+### ✅ Fase 51: 3. Expressões, Operadores e Controle de Fluxo - CONCLUÍDA
+- [x] **3.1 Operador de Propagação Rápida de Erro (`?` / `try expr`)**:
   - Extrair valor de `Ok`/`Some` ou propagar retorno antecipado de `Err`/`None` automaticamente quando o retorno da função envolvente for compatível (`Result`/`Option`).
-- [ ] **3.2 `match` como Expressão & Pattern Guards (`if` / `when`)**:
-  - Permitir `match` em expressões (`let msg := match code do 200 => "OK", _ => "ERR" end;`) e adicionar guardas condicionais por braço (`case let x if x > 100 =>`).
-- [ ] **3.3 Declarações `let` / `var` Inline no Corpo `begin..end` e Blocos Aninhados**:
+- [x] **3.2 `match` como Expressão & Pattern Guards (`if` / `when`)**:
+  - Permitir `match` em expressões (`let msg := match code do case 200, 201 => "OK"; ... end;`) e adicionar guardas condicionais por braço (`case let c if c >= 500 =>`, `case let c when c >= 400 =>`).
+- [x] **3.3 Declarações `let` / `var` Inline no Corpo `begin..end` e Blocos Aninhados**:
   - Permitir declarar variáveis locais em qualquer ponto dentro de `begin..end`, `if`, `while`, `for` e braços de `match` (não apenas no cabeçalho `var`/`let` antes de `begin`).
-- [ ] **3.4 Operadores `div`, `/=`, `mod=` e Bitwise Compostos (`&=`, `|=`, `^=`, `<<=`, `>>=`)**:
-  - Registrar `div` em `uAetherTokens.pas`/`uAetherParser.pas` e adicionar atribuições compostas faltantes com checagem de tipos inteiros/numéricos.
-- [ ] **3.5 Literais de Mapa (`["a": 1, "b": 2]`) & Escapes Completos de `Char`/`String`**:
-  - Inicialização direta de `map[K]V` via literal e suporte completo a escapes (`'\n'`, `'\t'`, `'\0'`, `'\r'`, `\\`, `'\"'`) em `Char` e strings multi-linha.
+- [x] **3.4 Operadores `div`, `/=`, `mod=` e Bitwise Compostos (`&=`, `|=`, `^=`, `<<=`, `>>=`)**:
+  - Registrar `div` e atribuições compostas faltantes (`/=`, `mod=`, `%=`, `&=`, `|=`, `^=`, `<<=`, `>>=`) no Lexer/Parser/TypeChecker e nos backends Pascal e C99.
+- [x] **3.5 Literais de Mapa (`["a": 1, "b": 2]`, `[:]`) & Escapes Completos de `Char`/`String`**:
+  - Inicialização e indexação direta de `map[K]V` via literal (`["alice": 100, "bob": 85]`, `[:]`) e suporte aos escapes `'\n'`, `'\t'`, `'\0'`, `'\r'`, `'\\'`, `'\"'` e `'\''` em `Char` e `String`. Validado em `tests/12_fase51_tryop_matchexpr_inlinevar_divcomp_maplit_test.aeth` (`12/12 PASS` nos dois backends).
 
 ### 📋 Fase 52: 4. Borrow Checker & Ciclo de Vida de Memória - PLANEJADA
 - [ ] **4.1 Integração do Borrow Checker Pós-Inferência & Suporte a Templates Genéricos**:

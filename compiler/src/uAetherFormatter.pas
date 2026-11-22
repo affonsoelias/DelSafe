@@ -139,10 +139,24 @@ begin
       Continue;
     end;
 
-    // Operadores compostos de 2 caracteres (prioridade sobre 1 caractere)
+    // Operadores compostos de 3-4 caracteres e de 2 caracteres (prioridade sobre 1 caractere)
+    if (I + 3 <= Len) and (LowerCase(Copy(Line, I, 4)) = 'mod=') and
+       ((Length(Res) = 0) or (not IsAlphaNumChar(Res[Length(Res)]))) then
+    begin
+      EmitSpacedOp(Copy(Line, I, 4));
+      Continue;
+    end;
+
+    if (I + 2 <= Len) and ((Copy(Line, I, 3) = '<<=') or (Copy(Line, I, 3) = '>>=')) then
+    begin
+      EmitSpacedOp(Copy(Line, I, 3));
+      Continue;
+    end;
+
     TwoChar := C + NextC;
     if (TwoChar = ':=') or (TwoChar = '+=') or (TwoChar = '-=') or (TwoChar = '*=') or
-       (TwoChar = '/=') or (TwoChar = '=>') or (TwoChar = '<>') or (TwoChar = '<=') or
+       (TwoChar = '/=') or (TwoChar = '%=') or (TwoChar = '&=') or (TwoChar = '|=') or
+       (TwoChar = '^=') or (TwoChar = '=>') or (TwoChar = '<>') or (TwoChar = '<=') or
        (TwoChar = '>=') then
     begin
       EmitSpacedOp(TwoChar);
@@ -161,7 +175,10 @@ begin
     if C = ':' then
     begin
       TrimResTrailingSpaces;
-      Res := Res + ': ';
+      if NextC = ']' then
+        Res := Res + ':'
+      else
+        Res := Res + ': ';
       Inc(I);
       SkipLineSpaces;
       Continue;
@@ -463,7 +480,8 @@ begin
           PushBlock(bkMatchArm);
           Inc(IndentLevel);
         end
-        else if (StartsWithWord(CodeOnly, 'match') and (EndsWithWord(CodeOnly, 'do') or EndsWithWord(CodeOnly, 'with'))) then
+        else if ((StartsWithWord(CodeOnly, 'match') or (Pos(':= match ', CodeOnly) > 0) or (Pos('return match ', CodeOnly) > 0)) and
+                 (EndsWithWord(CodeOnly, 'do') or EndsWithWord(CodeOnly, 'with'))) then
         begin
           PushBlock(bkMatch);
           Inc(IndentLevel);
