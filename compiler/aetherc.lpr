@@ -21,7 +21,8 @@ uAetherLSP,
 uAetherProject,
 uAetherFormatter,
 uAetherIncremental,
-uAetherOptimizer;
+uAetherOptimizer,
+uAetherBootstrap;
 
 Procedure PrintBanner;
 Begin
@@ -41,6 +42,7 @@ Begin
   WriteLn('  test [filtro]     Executa testes unitarios (arquivos individuais ou pasta tests/)');
   WriteLn('  fmt [caminho]     Formata codigo Aether segundo as normas canonicas (--check para CI/CD)');
   WriteLn('  clean             Limpa artefatos de build (bin/ e generated/) do projeto');
+  WriteLn('  bootstrap         Executa ciclo completo de auto-hospedagem (Stage 1, 2 e 3)');
   WriteLn('');
   WriteLn('Comandos de Emissao e Inspecao de Codigo (Integracao BlaiseVue):');
   WriteLn('  emit <pascal|c> [arquivo] [opcoes]');
@@ -1192,6 +1194,22 @@ Begin
         on E: Exception Do
           Begin
             WriteLn(ErrOutput, 'Erro ao limpar projeto: ', E.Message);
+            Halt(1);
+          End;
+      End;
+    End;
+
+  // Checa comando de auto-hospedagem: bootstrap
+  If (ParamCount >= 1) And (LowerCase(ParamStr(1)) = 'bootstrap') Then
+    Begin
+      PrintBanner;
+      Try
+        HandleBootstrapCommand();
+        Halt(0);
+      Except
+        on E: Exception Do
+          Begin
+            WriteLn(ErrOutput, 'Erro durante o processo de bootstrap: ', E.Message);
             Halt(1);
           End;
       End;

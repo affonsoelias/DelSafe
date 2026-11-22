@@ -134,10 +134,17 @@ begin
     if ch = "\"" then
         continua := true;
         while (not IsAtEnd(borrow lex)) and continua do
-            if Peek(borrow lex) = "\"" then
-                continua := false;
-            else
+            if Peek(borrow lex) = "\\" then
                 Advance(mut borrow lex);
+                if not IsAtEnd(borrow lex) then
+                    Advance(mut borrow lex);
+                end;
+            else
+                if Peek(borrow lex) = "\"" then
+                    continua := false;
+                else
+                    Advance(mut borrow lex);
+                end;
             end;
         end;
         if not IsAtEnd(borrow lex) then

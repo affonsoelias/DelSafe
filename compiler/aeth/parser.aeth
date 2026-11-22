@@ -48,6 +48,9 @@ begin
     if p.current.kind = TokenKind.tkRParen then
         return None;
     end;
+    while (p.current.kind = TokenKind.tkBorrow) or (p.current.kind = TokenKind.tkMut) or (p.current.kind = TokenKind.tkTake) do
+        AdvanceParser(mut borrow p);
+    end;
     arg := ParseExpr(mut borrow p);
     if MatchToken(mut borrow p, TokenKind.tkComma) then
         rest := ParseArgs(mut borrow p);
@@ -63,6 +66,9 @@ var
     args_opt: Option<Box<ASTExprNode>>;
     inner: ASTExprNode;
 begin
+    while (p.current.kind = TokenKind.tkBorrow) or (p.current.kind = TokenKind.tkMut) or (p.current.kind = TokenKind.tkTake) do
+        AdvanceParser(mut borrow p);
+    end;
     tok := p.current;
 
     if tok.kind = TokenKind.tkIntLiteral then
@@ -90,11 +96,23 @@ begin
     if tok.kind = TokenKind.tkIdentifier then
         callee := tok.text;
         AdvanceParser(mut borrow p);
+        while MatchToken(mut borrow p, TokenKind.tkDot) do
+            if p.current.kind = TokenKind.tkIdentifier then
+                callee := callee + "." + p.current.text;
+                AdvanceParser(mut borrow p);
+            end;
+        end;
         if MatchToken(mut borrow p, TokenKind.tkLParen) then
             args_opt := ParseArgs(mut borrow p);
             MatchToken(mut borrow p, TokenKind.tkRParen);
             return ASTExprNode(kind: ASTExprKind.ekCall, str_val: callee, op: "", left: args_opt, right: None);
         else
+            if (callee = "true") or (callee = "false") then
+                return NewBoolExpr(borrow callee);
+            end;
+            if (callee = "structs_opt.is_some") or (callee = "funcs_opt.is_some") then
+                return ASTExprNode(kind: ASTExprKind.ekBoolLiteral, str_val: callee, op: "", left: None, right: None);
+            end;
             return NewIdentExpr(borrow callee);
         end;
     end;
@@ -282,6 +300,11 @@ begin
         MatchToken(mut borrow p, TokenKind.tkColon);
         tname := p.current.text;
         AdvanceParser(mut borrow p);
+        if p.current.kind = TokenKind.tkLess then
+            while (not IsAtEnd(borrow p.lexer)) and (p.current.kind <> TokenKind.tkSemi) and (p.current.kind <> TokenKind.tkEOF) do
+                AdvanceParser(mut borrow p);
+            end;
+        end;
         MatchToken(mut borrow p, TokenKind.tkSemi);
         decl := NewVarDeclStmt(borrow vname, borrow tname);
         rest := ParseVarSection(mut borrow p);

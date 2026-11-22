@@ -214,3 +214,22 @@ aetherc fmt src/ --check
 
 ### `aetherc --dump-tokens` e `aetherc --dump-ast`
 Exibe a lista de tokens do Lexer ou a árvore sintática abstrata (AST) para análise interna e estudo do compilador.
+
+---
+
+## 6. Auto-Hospedagem e Bootstrapping de Ciclo Fechado (`aetherc bootstrap`)
+
+O comando `bootstrap` executa o ciclo completo de auto-hospedagem (*Stage 3 Bootstrapping*) e atesta matematicamente a independência e o determinismo do compilador da linguagem Aether:
+
+```bash
+aetherc bootstrap
+```
+
+### O que o comando realiza:
+1. **Stage 1 (Compilação do Compilador em Aether)**: O compilador bootstrap em Pascal (`aetherc`) compila o código-fonte auto-hospedado (`compiler/aeth/main.aeth`) com GCC C99 em modo release otimizado, gerando `bin/bootstrap/aetherc-stage1.exe`.
+2. **Stage 2 (Emissão e Compilação Nativa via Stage 1)**: O compilador gerado `aetherc-stage1.exe` compila o próprio compilador para C (`stage2_compiler.c`) e a suíte de testes de structs e funções (`stage2_suite.c`), compilando o binário executável com GCC.
+3. **Stage 3 (Iteração Isolada e Ponto Fixo / Fixed Point)**: O compilador repete o processo em ambiente isolado, emitindo `stage3_compiler.c` e `stage3_suite.c`.
+4. **Validação em Runtime e Determinismo Bit-a-Bit**:
+   - Os binários executáveis gerados no Stage 2 e Stage 3 rodam e produzem saídas estritamente idênticas.
+   - Os hashes criptográficos SHA-256 e tamanhos em bytes dos artefatos do Stage 2 e Stage 3 são comparados.
+   - Havendo 0 bytes de divergência e hashes idênticos, atesta-se **CONVERGÊNCIA TOTAL (Fixed Point)** e **100% DE DETERMINISMO BIT-A-BIT**.

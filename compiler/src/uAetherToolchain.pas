@@ -25,6 +25,7 @@ type
 
 function DetectToolchain: TToolchainInfo;
 procedure PrintDoctorReport;
+function RunCommandCapture(const ExePath, Params: string; const ExtraPathDir: string; var OutText: string): Integer;
 function CompileWithFPC(const PascalSource, OutExe: string; var OutputLog: string; ReleaseMode: Boolean = False): Boolean;
 function CompileWithGCC(const CSource, OutExe: string; var OutputLog: string; ReleaseMode: Boolean = False): Boolean;
 

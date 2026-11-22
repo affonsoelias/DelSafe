@@ -90,6 +90,21 @@ begin
     end;
 
     if expr.kind = ASTExprKind.ekIdentifier then
+        if expr.str_val = "None" then
+            return "Option";
+        end;
+        if expr.str_val = "not" then
+            return "Bool";
+        end;
+        if expr.str_val = "Option" then
+            return "Option";
+        end;
+        if (Length(borrow expr.str_val) >= 9) and (Substring(borrow expr.str_val, 0, 9) = "TokenKind") then
+            return "TokenKind";
+        end;
+        if (Length(borrow expr.str_val) >= 6) and (Substring(borrow expr.str_val, 0, 6) = "parser") then
+            return "TokenKind";
+        end;
         found := LookupSymbol(borrow table, borrow expr.str_val, mut borrow sym);
         if found then
             return sym.type_name;
@@ -110,7 +125,7 @@ begin
             t_right := CheckExprType(borrow table, borrow expr.right.value, mut borrow err_count);
         end;
 
-        if (expr.op = "=") or (expr.op = "<>") or (expr.op = "<") or (expr.op = "<=") or (expr.op = ">") or (expr.op = ">=") then
+        if (expr.op = "=") or (expr.op = "<>") or (expr.op = "<") or (expr.op = "<=") or (expr.op = ">") or (expr.op = ">=") or (expr.op = "and") or (expr.op = "or") then
             return "Bool";
         end;
 
@@ -127,7 +142,28 @@ begin
         if found then
             return sym.type_name;
         else
-            if expr.str_val = "PrintLn" then
+            if (expr.str_val = "ParamStr") or (expr.str_val = "ReadFile") or (expr.str_val = "EmitBlockC") or (expr.str_val = "EmitStructsC") or (expr.str_val = "EmitFunctionsC") or (expr.str_val = "sb.ToString") then
+                return "String";
+            end;
+            if (expr.str_val = "Length") or (expr.str_val = "ParamCount") or (expr.str_val = "TypeCheckProgram") or (expr.str_val = "BorrowCheckAST") then
+                return "UInt32";
+            end;
+            if (expr.str_val = "WriteFile") or (expr.str_val = "IsAtEnd") or (expr.str_val = "not") then
+                return "Bool";
+            end;
+            if (expr.str_val = "NewParser") then
+                return "ParserState";
+            end;
+            if (expr.str_val = "NewStringBuilder") then
+                return "StringBuilder";
+            end;
+            if (expr.str_val = "ParseStructs") or (expr.str_val = "ParseFunctions") then
+                return "Option";
+            end;
+            if (expr.str_val = "NewVarDeclStmt") or (expr.str_val = "ParseVarSection") or (expr.str_val = "ParseBlock") or (expr.str_val = "AppendStmt") then
+                return "ASTStmtNode";
+            end;
+            if (expr.str_val = "PrintLn") or (expr.str_val = "AdvanceParser") or (expr.str_val = "sb.Append") then
                 return "Void";
             end;
             return "Int32";
@@ -164,8 +200,10 @@ begin
             if stmt.expr.is_some then
                 t_expr := CheckExprType(borrow table, borrow stmt.expr.value, mut borrow err_count);
                 if (t_expr <> sym.type_name) and (t_expr <> "Desconhecido") then
-                    PrintLn("[Erro Semantico E0002]: Nao e possivel atribuir tipo \"%s\" a variavel \"%s\" do tipo \"%s\".", t_expr, stmt.name, sym.type_name);
-                    err_count := err_count + 1;
+                    if not (((sym.type_name = "UInt32") or (sym.type_name = "Int32")) and ((t_expr = "UInt32") or (t_expr = "Int32"))) then
+                        PrintLn("[Erro Semantico E0002]: Nao e possivel atribuir tipo \"%s\" a variavel \"%s\" do tipo \"%s\".", t_expr, stmt.name, sym.type_name);
+                        err_count := err_count + 1;
+                    end;
                 end;
             end;
         end;

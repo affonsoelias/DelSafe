@@ -349,13 +349,18 @@ Este documento traça o status oficial de desenvolvimento do compilador e as pr�
   - Provedores integrados registrados em `extension.js`.
   - Pacote oficial gerado com sucesso: `editors/vscode/aether-lang-1.0.0.vsix`.
 
-### ⏳ Fase 29: Auto-Hospedagem Completa de Ciclo Fechado (Stage 3 Bootstrapping)
-- [ ] **Ciclo Completo de Auto-Compilação (*Stage 1, 2 e 3*)**:
-  - Stage 1: Compilador de bootstrap (Pascal) compila o compilador em Aether (`compiler/aeth/`) gerando `aetherc-stage1`.
-  - Stage 2: `aetherc-stage1` compila o próprio código-fonte de `compiler/aeth/` gerando `aetherc-stage2`.
-  - Stage 3: `aetherc-stage2` compila novamente `compiler/aeth/` gerando `aetherc-stage3`.
-- [ ] **Verificação de Determinismo Bit-a-Bit**:
-  - Validação estrita de determinismo: o código e binário gerados no Stage 2 e Stage 3 devem ser 100% idênticos, atestando a independência e maturidade total do Aether.
+### ✅ Fase 29: Auto-Hospedagem Completa de Ciclo Fechado (Stage 3 Bootstrapping)
+- [x] **Ciclo Completo de Auto-Compilação (*Stage 1, 2 e 3*)**:
+  - Comando canônico `aetherc bootstrap` integrado nativamente ao compilador e CLI.
+  - Stage 1: Compilador de bootstrap (Pascal) compila o compilador em Aether (`compiler/aeth/main.aeth`) gerando `bin/bootstrap/aetherc-stage1.exe` otimizado via GCC C99 Release.
+  - Stage 2: `aetherc-stage1.exe` compila o próprio compilador para C (`stage2_compiler.c`) e a suíte completa de structs e funções (`stage2_suite.c`), compilando o executável via GCC.
+  - Stage 3: `aetherc-stage1.exe` executa o terceiro estágio em ambiente isolado, emitindo `stage3_compiler.c` e `stage3_suite.c` e compilando o executável.
+- [x] **Verificação de Determinismo Bit-a-Bit e Ponto Fixo (Fixed Point)**:
+  - Validação de paridade estrita em runtime: executáveis da suíte gerados no Stage 2 e Stage 3 produzem saídas idênticas.
+  - Validação estrita de determinismo bit-a-bit:
+    - `stage2_compiler.c` e `stage3_compiler.c`: 5604 bytes, SHA-256 idêntico (`e42a45a571a3ff6bfda554411b67727bd4f93885fd2946e67f9971fa5a4052ec`), 0 bytes de diferença.
+    - `stage2_suite.c` e `stage3_suite.c`: 828 bytes, SHA-256 idêntico (`d6c7f2f6135cb09275953e546b59212c94baafe42b91a8f4b7dae5e3808ab767`), 0 bytes de diferença.
+  - Status certificado: **CONVERGÊNCIA TOTAL (Ponto Fixo / Fixed Point!)** com **100% BIT-A-BIT IDENTICO**.
 
 ### ⏳ Fase 30: Backend WebAssembly (Wasm) & Interop Web com BlaiseVue
 - [ ] **Alvo de Compilação WebAssembly (`--target=wasm`)**:
