@@ -197,6 +197,16 @@ type
     function Dump(Indent: Integer = 0): string; override;
   end;
 
+  TASTBreakStmt = class(TASTStmt)
+  public
+    function Dump(Indent: Integer = 0): string; override;
+  end;
+
+  TASTContinueStmt = class(TASTStmt)
+  public
+    function Dump(Indent: Integer = 0): string; override;
+  end;
+
   TASTPattern = class(TASTNode)
   public
     Value: string;
@@ -239,7 +249,20 @@ type
     function Dump(Indent: Integer = 0): string; override;
   end;
 
-  // --- Declarações de Variáveis e Tipos ---
+  // --- Declarações de Constantes, Variáveis e Tipos ---
+  TASTConstDecl = class(TASTNode)
+  public
+    Name: string;
+    TypeName: string;
+    DeclaredType: string;
+    ValueExpr: TASTExpr;
+    DocComment: string;
+    CfgCondition: string;
+    constructor Create(ALine, ACol: Integer; const AName, ATypeName: string; AVal: TASTExpr);
+    destructor Destroy; override;
+    function Dump(Indent: Integer = 0): string; override;
+  end;
+
   TASTVarDecl = class(TASTNode)
   public
     Name: string;
@@ -406,6 +429,7 @@ type
     PascalImports: TStringList;
     CImports: TStringList;
     LinkDirectives: TStringList;
+    Constants: TASTNodeList;   // TASTConstDecl
     Types: TASTNodeList;       // TASTRecordDecl, TASTEnumDecl
     Traits: TASTNodeList;      // TASTTraitDecl
     Impls: TASTNodeList;       // TASTImplDecl
@@ -934,6 +958,20 @@ begin
     Result := Result + Condition.Dump(Indent + 1);
 end;
 
+{ TASTBreakStmt }
+
+function TASTBreakStmt.Dump(Indent: Integer): string;
+begin
+  Result := MakeIndent(Indent) + 'Break;';
+end;
+
+{ TASTContinueStmt }
+
+function TASTContinueStmt.Dump(Indent: Integer): string;
+begin
+  Result := MakeIndent(Indent) + 'Continue;';
+end;
+
 { TASTPattern }
 
 constructor TASTPattern.Create(ALine, ACol: Integer; const AValue: string; const ASub: string; AIsLet: Boolean);
@@ -1042,6 +1080,32 @@ end;
 function TASTAsmStmt.Dump(Indent: Integer): string;
 begin
   Result := MakeIndent(Indent) + 'Asm:' + LineEnding + MakeIndent(Indent + 1) + AsmCode;
+end;
+
+{ TASTConstDecl }
+
+constructor TASTConstDecl.Create(ALine, ACol: Integer; const AName, ATypeName: string; AVal: TASTExpr);
+begin
+  inherited Create(ALine, ACol);
+  Name := AName;
+  TypeName := ATypeName;
+  DeclaredType := ATypeName;
+  ValueExpr := AVal;
+  DocComment := '';
+  CfgCondition := '';
+end;
+
+destructor TASTConstDecl.Destroy;
+begin
+  ValueExpr.Free;
+  inherited Destroy;
+end;
+
+function TASTConstDecl.Dump(Indent: Integer): string;
+begin
+  Result := MakeIndent(Indent) + Format('Constante: %s: %s', [Name, TypeName]);
+  if Assigned(ValueExpr) then
+    Result := Result + ' =' + LineEnding + ValueExpr.Dump(Indent + 1);
 end;
 
 { TASTVarDecl }
@@ -1452,6 +1516,7 @@ begin
   PascalImports := TStringList.Create;
   CImports := TStringList.Create;
   LinkDirectives := TStringList.Create;
+  Constants := TASTNodeList.Create;
   Types := TASTNodeList.Create;
   Traits := TASTNodeList.Create;
   Impls := TASTNodeList.Create;
@@ -1465,6 +1530,7 @@ begin
   PascalImports.Free;
   CImports.Free;
   LinkDirectives.Free;
+  Constants.Free;
   Types.Free;
   Traits.Free;
   Impls.Free;
@@ -1481,6 +1547,13 @@ begin
   if Imports.Count > 0 then
   begin
     Result := Result + LineEnding + MakeIndent(Indent + 1) + 'Imports: ' + Imports.CommaText;
+  end;
+
+  if Constants.Count > 0 then
+  begin
+    Result := Result + LineEnding + MakeIndent(Indent + 1) + 'Constantes Declaradas:';
+    for I := 0 to Constants.Count - 1 do
+      Result := Result + LineEnding + Constants[I].Dump(Indent + 2);
   end;
 
   if Types.Count > 0 then
@@ -1521,6 +1594,7 @@ function CloneASTNode(Node: TASTNode): TASTNode;
 var
   I: Integer;
   InitNode: TASTExpr;
+  ConstNode: TASTConstDecl;
 begin
   if not Assigned(Node) then Exit(nil);
 
@@ -1601,6 +1675,10 @@ begin
       TASTRepeatStmt(Result).Body.Add(CloneASTNode(TASTRepeatStmt(Node).Body[I]));
     Exit;
   end
+  else if Node is TASTBreakStmt then
+    Exit(TASTBreakStmt.Create(Node.Line, Node.Col))
+  else if Node is TASTContinueStmt then
+    Exit(TASTContinueStmt.Create(Node.Line, Node.Col))
   else if Node is TASTPattern then
     Exit(TASTPattern.Create(Node.Line, Node.Col, TASTPattern(Node).Value, TASTPattern(Node).SubPattern, TASTPattern(Node).IsLet))
   else if Node is TASTMatchCase then
@@ -1628,6 +1706,17 @@ begin
     Exit(TASTAsmStmt.Create(Node.Line, Node.Col, TASTAsmStmt(Node).AsmCode))
   else if Node is TASTParam then
     Exit(TASTParam.Create(Node.Line, Node.Col, TASTParam(Node).Name, TASTParam(Node).TypeName, TASTParam(Node).Ownership))
+  else if Node is TASTConstDecl then
+  begin
+    InitNode := nil;
+    if Assigned(TASTConstDecl(Node).ValueExpr) then
+      InitNode := TASTExpr(CloneASTNode(TASTConstDecl(Node).ValueExpr));
+    ConstNode := TASTConstDecl.Create(Node.Line, Node.Col, TASTConstDecl(Node).Name, TASTConstDecl(Node).TypeName, InitNode);
+    ConstNode.DeclaredType := TASTConstDecl(Node).DeclaredType;
+    ConstNode.DocComment := TASTConstDecl(Node).DocComment;
+    ConstNode.CfgCondition := TASTConstDecl(Node).CfgCondition;
+    Exit(ConstNode);
+  end
   else if Node is TASTVarDecl then
   begin
     InitNode := nil;

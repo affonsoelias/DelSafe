@@ -31,6 +31,22 @@ begin
 end.
 ```
 
+### 1.1 Module-Level Constants (`const`)
+
+For defining compile-time, globally accessible constants, Aether provides the canonical `const` section at module scope:
+
+```aether
+module config;
+
+const
+    MAX_USERS = 1000;
+    PI: Float64 = 3.1415926535;
+    APP_NAME = "AetherCore";
+    TIMEOUT_MS: Int32 = 5000;
+```
+
+Constants can be untyped (with automatic type inference) or explicitly typed (`NAME: Type = Value;`). Attempting to reassign a constant produces compile-time error `E0384`.
+
 ---
 
 ## 2. Primitive Types & Hierarchy

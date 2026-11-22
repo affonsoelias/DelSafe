@@ -32,6 +32,7 @@ type
     FCurrentFunction: TASTFunction;
     FModule: TASTModule;
     FTraitImpls: TFPList;
+    FLoopDepth: Integer;
 
     procedure Error(const ACode, AMsg: string; ALine, ACol: Integer);
     function IsNumericType(const AType: string): Boolean;
@@ -57,9 +58,12 @@ type
     procedure CheckWhile(WhileStmt: TASTWhileStmt);
     procedure CheckFor(ForStmt: TASTForStmt);
     procedure CheckRepeat(RepeatStmt: TASTRepeatStmt);
+    procedure CheckBreak(BreakStmt: TASTBreakStmt);
+    procedure CheckContinue(ContStmt: TASTContinueStmt);
     procedure CheckReturn(Ret: TASTReturnStmt);
     procedure CheckMatch(MatchStmt: TASTMatchStmt);
 
+    procedure RegisterConstants(AModule: TASTModule);
     procedure RegisterTypes(AModule: TASTModule);
     procedure RegisterTraits(AModule: TASTModule);
     procedure RegisterImpls(AModule: TASTModule);
@@ -95,6 +99,7 @@ begin
   FCurrentFunction := nil;
   FModule := nil;
   FTraitImpls := TFPList.Create;
+  FLoopDepth := 0;
 end;
 
 destructor TAetherTypeChecker.Destroy;
@@ -976,8 +981,13 @@ begin
   if Assign.Target is TASTIdentifierExpr then
   begin
     Sym := FSymbols.Resolve(TASTIdentifierExpr(Assign.Target).Name);
-    if Assigned(Sym) and not Sym.IsMutable then
-      Error('E0384', Format('Nao e possivel modificar variavel imutavel (declarada com "let"): "%s"', [Sym.Name]), Assign.Line, Assign.Col);
+    if Assigned(Sym) then
+    begin
+      if Sym.Kind = skConstant then
+        Error('E0384', Format('Nao e possivel atribuir valor a constante: "%s"', [Sym.Name]), Assign.Line, Assign.Col)
+      else if not Sym.IsMutable then
+        Error('E0384', Format('Nao e possivel modificar variavel imutavel (declarada com "let"): "%s"', [Sym.Name]), Assign.Line, Assign.Col);
+    end;
   end;
 end;
 
@@ -1006,8 +1016,13 @@ begin
   if CondType <> 'Bool' then
     Error('E0308', Format('Condicao do "while" deve ser Bool, encontrado: "%s"', [CondType]), WhileStmt.Line, WhileStmt.Col);
 
-  for I := 0 to WhileStmt.Body.Count - 1 do
-    CheckStmt(TASTStmt(WhileStmt.Body[I]));
+  Inc(FLoopDepth);
+  try
+    for I := 0 to WhileStmt.Body.Count - 1 do
+      CheckStmt(TASTStmt(WhileStmt.Body[I]));
+  finally
+    Dec(FLoopDepth);
+  end;
 end;
 
 procedure TAetherTypeChecker.CheckFor(ForStmt: TASTForStmt);
@@ -1031,8 +1046,13 @@ begin
   if not IsIntegerType(EndType) and (EndType <> 'IntLiteral') then
     Error('E0308', Format('Limite final do laco "for" deve ser inteiro, encontrado: "%s"', [EndType]), ForStmt.Line, ForStmt.Col);
 
-  for I := 0 to ForStmt.Body.Count - 1 do
-    CheckStmt(TASTStmt(ForStmt.Body[I]));
+  Inc(FLoopDepth);
+  try
+    for I := 0 to ForStmt.Body.Count - 1 do
+      CheckStmt(TASTStmt(ForStmt.Body[I]));
+  finally
+    Dec(FLoopDepth);
+  end;
 end;
 
 procedure TAetherTypeChecker.CheckReturn(Ret: TASTReturnStmt);
@@ -1186,6 +1206,10 @@ begin
     CheckFor(TASTForStmt(Stmt))
   else if Stmt is TASTRepeatStmt then
     CheckRepeat(TASTRepeatStmt(Stmt))
+  else if Stmt is TASTBreakStmt then
+    CheckBreak(TASTBreakStmt(Stmt))
+  else if Stmt is TASTContinueStmt then
+    CheckContinue(TASTContinueStmt(Stmt))
   else if Stmt is TASTReturnStmt then
     CheckReturn(TASTReturnStmt(Stmt))
   else if Stmt is TASTMatchStmt then
@@ -1200,13 +1224,58 @@ var
   I: Integer;
   CondType: string;
 begin
-  for I := 0 to RepeatStmt.Body.Count - 1 do
-    CheckStmt(TASTStmt(RepeatStmt.Body[I]));
+  Inc(FLoopDepth);
+  try
+    for I := 0 to RepeatStmt.Body.Count - 1 do
+      CheckStmt(TASTStmt(RepeatStmt.Body[I]));
+  finally
+    Dec(FLoopDepth);
+  end;
   if Assigned(RepeatStmt.Condition) then
   begin
     CondType := CheckExpr(RepeatStmt.Condition);
     if CondType <> 'Bool' then
       Error('E0308', Format('Condicao do "repeat...until" deve ser do tipo Bool, encontrado: "%s"', [CondType]), RepeatStmt.Line, RepeatStmt.Col);
+  end;
+end;
+
+procedure TAetherTypeChecker.CheckBreak(BreakStmt: TASTBreakStmt);
+begin
+  if FLoopDepth <= 0 then
+    Error('E0310', '"break" so pode ser utilizado dentro de um laco (for, while, repeat)', BreakStmt.Line, BreakStmt.Col);
+end;
+
+procedure TAetherTypeChecker.CheckContinue(ContStmt: TASTContinueStmt);
+begin
+  if FLoopDepth <= 0 then
+    Error('E0310', '"continue" so pode ser utilizado dentro de um laco (for, while, repeat)', ContStmt.Line, ContStmt.Col);
+end;
+
+procedure TAetherTypeChecker.RegisterConstants(AModule: TASTModule);
+var
+  I: Integer;
+  ConstDecl: TASTConstDecl;
+  ValType: string;
+begin
+  for I := 0 to AModule.Constants.Count - 1 do
+  begin
+    ConstDecl := TASTConstDecl(AModule.Constants[I]);
+    ValType := CheckExpr(ConstDecl.ValueExpr);
+    if ConstDecl.DeclaredType <> '' then
+    begin
+      if not TypesAreCompatible(ConstDecl.DeclaredType, ValType) then
+        Error('E0308', Format('Tipo da constante "%s" declarado como "%s", mas o valor e "%s"',
+          [ConstDecl.Name, ConstDecl.DeclaredType, ValType]), ConstDecl.Line, ConstDecl.Col);
+      ConstDecl.TypeName := ConstDecl.DeclaredType;
+    end
+    else
+    begin
+      if (ValType = 'IntLiteral') then ConstDecl.TypeName := 'Int32'
+      else if (ValType = 'FloatLiteral') then ConstDecl.TypeName := 'Float64'
+      else ConstDecl.TypeName := ValType;
+    end;
+
+    FSymbols.Define(TSymbol.Create(ConstDecl.Name, skConstant, ConstDecl.TypeName, ConstDecl.Line, ConstDecl.Col, False, owNone, ConstDecl));
   end;
 end;
 
@@ -1559,6 +1628,7 @@ var
   Func: TASTFunction;
 begin
   FModule := AModule;
+  RegisterConstants(AModule);
   RegisterTypes(AModule);
   RegisterTraits(AModule);
   RegisterImpls(AModule);

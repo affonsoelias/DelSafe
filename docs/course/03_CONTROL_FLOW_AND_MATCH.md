@@ -133,6 +133,45 @@ Notice:
 
 ---
 
+## 2.3 Loop Flow Control: `break` and `continue`
+
+Aether provides fine-grained loop control statements applicable across all loop types (`for`, `while`, and `repeat ... until`):
+
+- **`break;`**: Exits the innermost loop immediately.
+- **`continue;`**: Skips the remainder of the current iteration and advances to the next step.
+
+```aether
+module loop_control_demo;
+
+program Main;
+var
+    i: Int32;
+    sum: Int32;
+begin
+    // 1. Break: exit early when finding an element
+    for i := 1 to 100 do
+        if i = 5 then
+            break; // Stop iterating immediately
+        end;
+    end;
+
+    // 2. Continue: skip even numbers, summing only odd numbers (1..10)
+    sum := 0;
+    for i := 1 to 10 do
+        if (i mod 2) = 0 then
+            continue; // Skip even numbers
+        end;
+        sum := sum + i;
+    end;
+
+    PrintLn("Sum of odd numbers: " + IntToStr(sum)); // 25
+end.
+```
+
+The compiler strictly verifies that `break` and `continue` only occur inside active loop bodies (rejecting top-level or standalone uses with error `E0310`).
+
+---
+
 ## 3. Algebraic Enums
 
 Enums in Aether are not just lists of numbers; they are **Algebraic Data Types (ADTs)** that can carry payload data with variants:

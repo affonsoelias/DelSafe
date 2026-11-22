@@ -486,6 +486,10 @@ begin
     if Assigned(FCurrentScope) then
       FCurrentScope.ReleaseTemporaryBorrows;
   end
+  else if (Stmt is TASTBreakStmt) or (Stmt is TASTContinueStmt) then
+  begin
+    // Controle de fluxo de laco: nenhuma transicao de borrow
+  end
   else if Stmt is TASTReturnStmt then
   begin
     Ret := TASTReturnStmt(Stmt);

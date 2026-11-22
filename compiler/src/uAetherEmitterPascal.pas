@@ -787,6 +787,10 @@ begin
     DecIndent;
     Emit(Format('until %s;', [EmitExpr(RepeatStmt.Condition)]));
   end
+  else if Stmt is TASTBreakStmt then
+    Emit('break;')
+  else if Stmt is TASTContinueStmt then
+    Emit('continue;')
   else if Stmt is TASTReturnStmt then
   begin
     Ret := TASTReturnStmt(Stmt);
@@ -1572,6 +1576,7 @@ var
   UsesClause, Sig: string;
   Func: TASTFunction;
   Rec: TASTRecordDecl;
+  ConstDecl: TASTConstDecl;
   EffectiveLibrary: Boolean;
 begin
   FModule := AModule;
@@ -1633,6 +1638,22 @@ begin
     Emit('type');
     Emit('  TResultDoubleError = specialize TAetherResult<Double, Integer>;');
     Emit('');
+
+    if AModule.Constants.Count > 0 then
+    begin
+      Emit('const');
+      IncIndent;
+      for I := 0 to AModule.Constants.Count - 1 do
+      begin
+        ConstDecl := TASTConstDecl(AModule.Constants[I]);
+        if ConstDecl.DeclaredType <> '' then
+          Emit(Format('%s: %s = %s;', [ConstDecl.Name, EmitTypeRef(ConstDecl.DeclaredType), EmitExpr(ConstDecl.ValueExpr)]))
+        else
+          Emit(Format('%s = %s;', [ConstDecl.Name, EmitExpr(ConstDecl.ValueExpr)]));
+      end;
+      DecIndent;
+      Emit('');
+    end;
 
     if AModule.Types.Count > 0 then
     begin
@@ -1761,6 +1782,22 @@ begin
     Emit('type');
     Emit('  TResultDoubleError = specialize TAetherResult<Double, Integer>;');
     Emit('');
+
+    if AModule.Constants.Count > 0 then
+    begin
+      Emit('const');
+      IncIndent;
+      for I := 0 to AModule.Constants.Count - 1 do
+      begin
+        ConstDecl := TASTConstDecl(AModule.Constants[I]);
+        if ConstDecl.DeclaredType <> '' then
+          Emit(Format('%s: %s = %s;', [ConstDecl.Name, EmitTypeRef(ConstDecl.DeclaredType), EmitExpr(ConstDecl.ValueExpr)]))
+        else
+          Emit(Format('%s = %s;', [ConstDecl.Name, EmitExpr(ConstDecl.ValueExpr)]));
+      end;
+      DecIndent;
+      Emit('');
+    end;
 
     if AModule.Types.Count > 0 then
     begin

@@ -654,3 +654,24 @@ Este documento traça o status oficial de desenvolvimento do compilador e as pr�
   - Criação de `tests/05_fase43_arrays_repeat_set_subrange_test.aeth` (validando 1D, 2D, 3D, 4D, `repeat ... until`, execução mínima de 1 iteração, `set of`, pertinência `in`, união `+`, interseção `*` e subfaixa `1..31`).
   - 100% de aprovação no runner de testes FPC e GCC C99 (`aetherc test` e `aetherc test --target=c`).
   - Atualização dos capítulos correspondentes no Masterclass Course em `docs/course/02_VARIABLES_TYPES_MUTABILITY.md` e `docs/course/03_CONTROL_FLOW_AND_MATCH.md`.
+
+---
+
+### ✅ Fase 44: Controle de Fluxo Fino (`break`, `continue`) e Bloco de Constantes Canônico (`const`) - CONCLUÍDA
+- [x] **1. Controle de Interrupção de Laços (`break` e `continue`)**:
+  - Tokens oficiais `tokBreak` e `tokContinue` integrados ao Lexer e Parser.
+  - Nós na AST `TASTBreakStmt` e `TASTContinueStmt`.
+  - Suporte uniforme em todos os laços da linguagem: `for ... to/downto`, `while ... do` e `repeat ... until`.
+  - Validação semântica no TypeChecker: impede uso de `break` ou `continue` fora de um laço (`E0310`).
+  - Mapeamento nativo nos backends Free Pascal (`break;` / `continue;`) e GCC C99 (`break;` / `continue;`).
+- [x] **2. Seção Canônica de Constantes no Nível de Módulo (`const`)**:
+  - Token `tokConst` e gramática de declaração de constantes: `const Nome [':' Tipo] '=' Expressao ';'`.
+  - Suporte a constantes com inferência automática de tipo ou tipo explícito (`MAX_ITEMS = 100`, `PI: Float64 = 3.14159`, `APP = "..."`).
+  - Símbolos `skConstant` na Tabela de Símbolos, garantindo imutabilidade estrita e bloqueando reatribuições (`E0384`).
+  - Mapeamento nativo:
+    - *Free Pascal*: `const Nome: Tipo = Valor;` ou `const Nome = Valor;`.
+    - *GCC C99*: `static const Tipo Nome = Valor;` e `static const char* const Nome = Valor;` para strings.
+- [x] **3. Suíte de Testes e Documentação**:
+  - Criação de `tests/06_fase44_break_continue_const_test.aeth` (validando `break` e `continue` em `for`, `while`, `repeat`, além de constantes numéricas e strings).
+  - 100% de aprovação no test runner FPC e GCC C99 (`aetherc test 06` e `aetherc test 06 --target=c`).
+  - Atualização dos capítulos correspondentes no Masterclass Course em `docs/course/02_VARIABLES_TYPES_MUTABILITY.md` e `docs/course/03_CONTROL_FLOW_AND_MATCH.md`.

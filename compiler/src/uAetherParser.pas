@@ -46,6 +46,8 @@ type
     function ParseTypeRef: string;
     procedure ParseAttribute(var Attrs: TParsedAttributes);
     procedure ParseImport(AModule: TASTModule);
+    procedure ParseConstSection(AModule: TASTModule; var SectionAttrs: TParsedAttributes); overload;
+    procedure ParseConstSection(AModule: TASTModule); overload;
     procedure ParseTypeSection(AModule: TASTModule; var SectionAttrs: TParsedAttributes); overload;
     procedure ParseTypeSection(AModule: TASTModule); overload;
     function ParseRecordDecl(const AName: string; ALine, ACol: Integer): TASTRecordDecl;
@@ -433,6 +435,65 @@ begin
 
   if IsBracket then
     Expect(tokRBracket, 'Esperado "]" ao fechar atributo');
+end;
+
+procedure TAetherParser.ParseConstSection(AModule: TASTModule; var SectionAttrs: TParsedAttributes);
+var
+  ConstName, ConstType, ConstDoc, EffectiveCfg: string;
+  CLine, CCol: Integer;
+  ValExpr: TASTExpr;
+  ConstNode: TASTConstDecl;
+  CurrentAttrs: TParsedAttributes;
+begin
+  Expect(tokConst);
+  InitAttributes(CurrentAttrs);
+  try
+    while not Check(tokEOF) do
+    begin
+      while Check(tokLBracket) or Check(tokAt) do
+        ParseAttribute(CurrentAttrs);
+
+      if Check(tokIdentifier) then
+      begin
+        CLine := FCurTok.Line;
+        CCol := FCurTok.Col;
+        ConstDoc := FCurTok.DocComment;
+        ConstName := Expect(tokIdentifier, 'Esperado nome da constante').Value;
+        ConstType := '';
+        if Match(tokColon) then
+          ConstType := ParseTypeRef;
+        Expect(tokEqual, 'Esperado "=" na definicao de constante');
+        ValExpr := ParseExpr;
+        Expect(tokSemicolon, 'Esperado ";" apos definicao de constante');
+
+        EffectiveCfg := CurrentAttrs.CfgCondition;
+        if EffectiveCfg = '' then
+          EffectiveCfg := SectionAttrs.CfgCondition;
+
+        ConstNode := TASTConstDecl.Create(CLine, CCol, ConstName, ConstType, ValExpr);
+        ConstNode.DocComment := ConstDoc;
+        ConstNode.CfgCondition := EffectiveCfg;
+        AModule.Constants.Add(ConstNode);
+        ClearAttributes(SectionAttrs);
+      end
+      else
+        Break;
+    end;
+  finally
+    FreeAttributes(CurrentAttrs);
+  end;
+end;
+
+procedure TAetherParser.ParseConstSection(AModule: TASTModule);
+var
+  EmptyAttrs: TParsedAttributes;
+begin
+  InitAttributes(EmptyAttrs);
+  try
+    ParseConstSection(AModule, EmptyAttrs);
+  finally
+    FreeAttributes(EmptyAttrs);
+  end;
 end;
 
 procedure TAetherParser.ParseTypeSection(AModule: TASTModule; var SectionAttrs: TParsedAttributes);
@@ -1165,6 +1226,16 @@ begin
     Result := ParseForStmt
   else if Check(tokRepeat) then
     Result := ParseRepeatStmt
+  else if Check(tokBreak) then
+  begin
+    Result := TASTBreakStmt.Create(FCurTok.Line, FCurTok.Col);
+    Advance;
+  end
+  else if Check(tokContinue) then
+  begin
+    Result := TASTContinueStmt.Create(FCurTok.Line, FCurTok.Col);
+    Advance;
+  end
   else if Check(tokMatch) then
     Result := ParseMatchStmt
   else if Check(tokReturn) then
@@ -1465,7 +1536,11 @@ begin
       while Check(tokLBracket) or Check(tokAt) do
         ParseAttribute(PendingAttrs);
 
-      if Check(tokType) then
+      if Check(tokConst) then
+      begin
+        ParseConstSection(Result, PendingAttrs);
+      end
+      else if Check(tokType) then
       begin
         ParseTypeSection(Result, PendingAttrs);
       end

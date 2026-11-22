@@ -205,6 +205,12 @@ begin
         if SameText(V.Name, Id.Name) then Exit(V.TypeName);
       end;
     end;
+    if Assigned(FModule) then
+    begin
+      for I := 0 to FModule.Constants.Count - 1 do
+        if SameText(TASTConstDecl(FModule.Constants[I]).Name, Id.Name) then
+          Exit(TASTConstDecl(FModule.Constants[I]).TypeName);
+    end;
   end
   else if Expr is TASTMemberAccessExpr then
   begin
@@ -910,6 +916,10 @@ begin
     DecIndent;
     Emit(Format('} while (!(%s));', [EmitExpr(RepeatStmt.Condition)]));
   end
+  else if Stmt is TASTBreakStmt then
+    Emit('break;')
+  else if Stmt is TASTContinueStmt then
+    Emit('continue;')
   else if Stmt is TASTReturnStmt then
   begin
     Ret := TASTReturnStmt(Stmt);
@@ -1313,6 +1323,7 @@ var
   I, J: Integer;
   Func: TASTFunction;
   Param: TASTParam;
+  ConstDecl: TASTConstDecl;
   ParamListStr, ModStr, ExportPrefix: string;
   HasExports: Boolean;
 begin
@@ -1776,6 +1787,17 @@ begin
   Emit('    int error;');
   Emit('} AetherResult;');
   Emit('');
+
+  // Constantes
+  for I := 0 to AModule.Constants.Count - 1 do
+  begin
+    ConstDecl := TASTConstDecl(AModule.Constants[I]);
+    if (ConstDecl.TypeName = 'String') or (GetExprTypeName(ConstDecl.ValueExpr) = 'String') then
+      Emit(Format('static const char* const %s = %s;', [ConstDecl.Name, EmitExpr(ConstDecl.ValueExpr)]))
+    else
+      Emit(Format('static const %s %s = %s;', [EmitTypeRef(ConstDecl.TypeName), ConstDecl.Name, EmitExpr(ConstDecl.ValueExpr)]));
+  end;
+  if AModule.Constants.Count > 0 then Emit('');
 
   // Typedefs antecipados para permitir records recursivos
   for I := 0 to AModule.Types.Count - 1 do

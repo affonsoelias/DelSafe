@@ -52,7 +52,8 @@ type
     tokRequire,
     tokEnsure,
 
-    // Palavras-chave: Variáveis
+    // Palavras-chave: Constantes e Variaveis
+    tokConst,
     tokVar,
     tokLet,
 
@@ -70,6 +71,8 @@ type
     tokDownto,
     tokRepeat,
     tokUntil,
+    tokBreak,
+    tokContinue,
     tokMatch,
     tokCase,
     tokReturn,
@@ -159,6 +162,7 @@ begin
     tokContract:      Result := 'contract';
     tokRequire:       Result := 'require';
     tokEnsure:        Result := 'ensure';
+    tokConst:         Result := 'const';
     tokVar:           Result := 'var';
     tokLet:           Result := 'let';
     tokBegin:         Result := 'begin';
@@ -174,6 +178,8 @@ begin
     tokDownto:        Result := 'downto';
     tokRepeat:        Result := 'repeat';
     tokUntil:         Result := 'until';
+    tokBreak:         Result := 'break';
+    tokContinue:      Result := 'continue';
     tokMatch:         Result := 'match';
     tokCase:          Result := 'case';
     tokReturn:        Result := 'return';
@@ -245,6 +251,7 @@ begin
   else if Lower = 'contract' then Result := tokContract
   else if Lower = 'require' then Result := tokRequire
   else if Lower = 'ensure' then Result := tokEnsure
+  else if Lower = 'const' then Result := tokConst
   else if Lower = 'var' then Result := tokVar
   else if Lower = 'let' then Result := tokLet
   else if Lower = 'begin' then Result := tokBegin
@@ -260,6 +267,8 @@ begin
   else if Lower = 'downto' then Result := tokDownto
   else if Lower = 'repeat' then Result := tokRepeat
   else if Lower = 'until' then Result := tokUntil
+  else if Lower = 'break' then Result := tokBreak
+  else if Lower = 'continue' then Result := tokContinue
   else if Lower = 'match' then Result := tokMatch
   else if Lower = 'case' then Result := tokCase
   else if Lower = 'return' then Result := tokReturn

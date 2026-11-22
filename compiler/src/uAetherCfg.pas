@@ -92,10 +92,23 @@ var
   TypeNode: TASTNode;
   RecDecl: TASTRecordDecl;
   EnumDecl: TASTEnumDecl;
+  ConstDecl: TASTConstDecl;
 begin
   if not Assigned(AModule) then Exit;
 
-  // 1. Filtra funcoes
+  // 1. Filtra constantes
+  I := AModule.Constants.Count - 1;
+  while I >= 0 do
+  begin
+    ConstDecl := TASTConstDecl(AModule.Constants[I]);
+    if (ConstDecl.CfgCondition <> '') and not EvaluateCfgCondition(ConstDecl.CfgCondition, TargetOS, TargetBackend, IsRelease) then
+    begin
+      AModule.Constants.Delete(I);
+    end;
+    Dec(I);
+  end;
+
+  // 2. Filtra funcoes
   I := AModule.Functions.Count - 1;
   while I >= 0 do
   begin
