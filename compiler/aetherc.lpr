@@ -81,22 +81,15 @@ Begin
   WriteLn('  pkg clean            Limpa o cache global de pacotes (~/.aether/cache)');
   WriteLn('');
   WriteLn('Opcoes Principais:');
-  WriteLn(
-
-       '  --doctor          Verifica e diagnostica o ambiente (FPC e MSYS2/GCC)'
-  );
-  WriteLn(
-
-       '  --target=pascal   Compila gerando Object Pascal e invoca FPC (Padrao)'
-  );
-  WriteLn(
-
-       '  --target=c        Compila gerando C99 e invoca GCC (MSYS2 no Windows)'
-  );
-  WriteLn(
-
-  '  --check-only      Executa apenas analise sintatica, tipos e borrow checker'
-  );
+  WriteLn('  --doctor          Verifica e diagnostica o ambiente (FPC, GCC, Clang e Pas2JS)');
+  WriteLn('  --target=pascal   Compila gerando Object Pascal e invoca FPC (Padrao)');
+  WriteLn('  --target=c        Compila gerando C99 e invoca GCC ou Clang');
+  WriteLn('  --target=wasm     Compila gerando binario WebAssembly (.wasm) via Clang');
+  WriteLn('  --target=js       Compila gerando JavaScript (.js) via Pas2JS');
+  WriteLn('  --cc=<gcc|clang>  Seleciona o compilador C nativo (padrao: gcc)');
+  WriteLn('  --backend=<nome>  Sobrescreve a toolchain do target (ex: clang, pas2js)');
+  WriteLn('  --html            Gera wrapper HTML minimo para testar .wasm ou .js no navegador');
+  WriteLn('  --check-only      Executa apenas analise sintatica, tipos e borrow checker');
   WriteLn('  --incremental     Habilita compilacao incremental baseada em hashes SHA-256');
   WriteLn('  --force           Forca recompilacao total ignorando cache de objetos');
   WriteLn('  --release         Modo release: otimiza AST e ativa -O3, DCE e strip de simbolos');
@@ -210,6 +203,10 @@ Var
   GlobalOutPascalUnitDir: string = '';
   GlobalOutCSrcDir: string = '';
   GlobalAsUnit: Boolean = False;
+  GlobalCCompiler: string = 'gcc';
+  GlobalTargetKind: string = 'pascal';
+  GlobalBackendOverride: string = '';
+  GlobalEmitHtmlWrapper: Boolean = False;
 
 Procedure InitGlobalPaths;
 Begin
@@ -342,6 +339,38 @@ Begin
   Else If (Arg = '--unit') Then
   Begin
     GlobalAsUnit := True;
+  End
+  Else If (Arg = '--html') Then
+  Begin
+    GlobalEmitHtmlWrapper := True;
+  End
+  Else If Pos('--cc=', Arg) = 1 Then
+  Begin
+    GlobalCCompiler := Copy(Arg, 6, Length(Arg));
+  End
+  Else If Pos('--c-compiler=', Arg) = 1 Then
+  Begin
+    GlobalCCompiler := Copy(Arg, 14, Length(Arg));
+  End
+  Else If Pos('--backend=', Arg) = 1 Then
+  Begin
+    GlobalBackendOverride := Copy(Arg, 11, Length(Arg));
+  End
+  Else If Arg = '--target=wasm' Then
+  Begin
+    GlobalTargetKind := 'wasm';
+  End
+  Else If Arg = '--target=js' Then
+  Begin
+    GlobalTargetKind := 'js';
+  End
+  Else If Arg = '--target=c' Then
+  Begin
+    GlobalTargetKind := 'c';
+  End
+  Else If Arg = '--target=pascal' Then
+  Begin
+    GlobalTargetKind := 'pascal';
   End
   Else
     Result := False;
@@ -588,11 +617,12 @@ Begin
 End;
 End;
 
-Procedure CompileFile(Const SourceFile: String; TargetPascal: Boolean; CheckOnly
+Procedure CompileFile(Const SourceFile: String; Const TargetMode: String; CheckOnly
                       , DumpASTOnly: Boolean; Const OutputExeName: String;
                       SilentBanner: Boolean; Incremental: Boolean = False;
                       ForceRebuild: Boolean = False; ReleaseMode: Boolean = False;
-                      RunOptimizer: Boolean = False);
+                      RunOptimizer: Boolean = False; Const BackendChoice: String = '';
+                      Const CCompilerChoice: String = '');
 
 Var 
   Source: string;
@@ -617,31 +647,58 @@ Var
   BuildCache: TAetherBuildCache;
   CacheUpToDate: Boolean;
   CacheItem: PFileCacheItem;
+  EffectiveTarget, EffectiveCComp, EffectiveBackend: string;
 Begin
   ModuleNode := nil;
   DependencyFiles := nil;
+
+  If TargetMode <> '' Then
+    EffectiveTarget := LowerCase(TargetMode)
+  Else
+    EffectiveTarget := 'pascal';
+
+  If (LowerCase(BackendChoice) = 'gcc') Or (LowerCase(BackendChoice) = 'clang') Then
+    EffectiveCComp := LowerCase(BackendChoice)
+  Else If CCompilerChoice <> '' Then
+    EffectiveCComp := LowerCase(CCompilerChoice)
+  Else
+    EffectiveCComp := LowerCase(GlobalCCompiler);
+
+  If BackendChoice <> '' Then
+    EffectiveBackend := LowerCase(BackendChoice)
+  Else
+    EffectiveBackend := LowerCase(GlobalBackendOverride);
 
   // Determina BaseProjDir e FinalExe antecipadamente para checagem incremental
   If Not FindProjectRoot(BaseProjDir, Dummy) Then
     BaseProjDir := GetCurrentDir;
   BaseProjDir := ExcludeTrailingPathDelimiter(BaseProjDir);
 
-  If TargetPascal Then
-  Begin
-    If ReleaseMode Then TargetBackendStr := 'pascal-release' Else TargetBackendStr := 'pascal';
-  End
+  If ReleaseMode Then
+    TargetBackendStr := EffectiveTarget + '-release'
   Else
-  Begin
-    If ReleaseMode Then TargetBackendStr := 'c-release' Else TargetBackendStr := 'c';
-  End;
+    TargetBackendStr := EffectiveTarget;
 
   If OutputExeName <> '' Then
     FinalExe := OutputExeName
   Else If GlobalOutBinDir <> '' Then
-    FinalExe := IncludeTrailingPathDelimiter(GlobalOutBinDir) + ChangeFileExt(ExtractFileName(SourceFile), '.exe')
+  Begin
+    If EffectiveTarget = 'wasm' Then
+      FinalExe := IncludeTrailingPathDelimiter(GlobalOutBinDir) + ChangeFileExt(ExtractFileName(SourceFile), '.wasm')
+    Else If EffectiveTarget = 'js' Then
+      FinalExe := IncludeTrailingPathDelimiter(GlobalOutBinDir) + ChangeFileExt(ExtractFileName(SourceFile), '.js')
+    Else
+      FinalExe := IncludeTrailingPathDelimiter(GlobalOutBinDir) + ChangeFileExt(ExtractFileName(SourceFile), '.exe');
+  End
   Else
-    FinalExe := BaseProjDir + PathDelim + 'bin' + PathDelim + ChangeFileExt(ExtractFileName(
-                SourceFile), '.exe');
+  Begin
+    If EffectiveTarget = 'wasm' Then
+      FinalExe := BaseProjDir + PathDelim + 'bin' + PathDelim + ChangeFileExt(ExtractFileName(SourceFile), '.wasm')
+    Else If EffectiveTarget = 'js' Then
+      FinalExe := BaseProjDir + PathDelim + 'bin' + PathDelim + ChangeFileExt(ExtractFileName(SourceFile), '.js')
+    Else
+      FinalExe := BaseProjDir + PathDelim + 'bin' + PathDelim + ChangeFileExt(ExtractFileName(SourceFile), '.exe');
+  End;
 
   // Checagem antecipada de cache incremental (0 ms rebuild)
   If Incremental And (Not ForceRebuild) And (Not CheckOnly) And (Not DumpASTOnly) And FileExists(FinalExe) Then
@@ -770,12 +827,12 @@ Begin
   End;
 End;
 
-// 4. Emissao de Codigo e Geracao do Executavel
+// 4. Emissao de Codigo e Geracao do Executavel / Binario
 If Not FindProjectRoot(BaseProjDir, Dummy) Then
   BaseProjDir := GetCurrentDir;
 BaseProjDir := ExcludeTrailingPathDelimiter(BaseProjDir);
 
-If TargetPascal Then
+If (EffectiveTarget = 'pascal') Or (EffectiveTarget = 'js') Then
 Begin
   If GlobalOutPascalSrcDir <> '' Then
     GenDir := GlobalOutPascalSrcDir
@@ -791,129 +848,243 @@ Begin
 End;
 
 ForceDirectories(GenDir);
-
-If OutputExeName <> '' Then
-  FinalExe := OutputExeName
-Else If GlobalOutBinDir <> '' Then
-  FinalExe := IncludeTrailingPathDelimiter(GlobalOutBinDir) + ChangeFileExt(ExtractFileName(SourceFile), '.exe')
-Else
-  FinalExe := BaseProjDir + PathDelim + 'bin' + PathDelim + ChangeFileExt(ExtractFileName(
-              SourceFile), '.exe');
-
 ForceDirectories(ExtractFileDir(FinalExe));
 
-If TargetPascal Then
+If EffectiveTarget = 'wasm' Then
+Begin
+  // WebAssembly (.wasm) via Clang
+  IntermediateFile := GenDir + PathDelim + ChangeFileExt(ExtractFileName(SourceFile), '.c');
+  EmitterC := TAetherEmitterC.Create;
+  Try
+    GeneratedCode := EmitterC.Generate(ModuleNode);
+  Finally
+    EmitterC.Free;
+  End;
+
+  CodeFile := TStringList.Create;
+  Try
+    CodeFile.Text := GeneratedCode;
+    CodeFile.SaveToFile(IntermediateFile);
+  Finally
+    CodeFile.Free;
+  End;
+
+  If Not SilentBanner Then
   Begin
-    IntermediateFile := GenDir + PathDelim + ChangeFileExt(ExtractFileName(
-                        SourceFile), '.pas');
-    EmitterPas := TAetherEmitterPascal.Create;
-    Try
-      GeneratedCode := EmitterPas.Generate(ModuleNode, GlobalAsUnit);
-    Finally
-      EmitterPas.Free;
+    WriteLn(Format('[4/4] Transpilando para C99 -> "%s"', [ExtractFileName(IntermediateFile)]));
+    If ReleaseMode Then
+      WriteLn('      Invocando Clang WebAssembly (wasm32) [Modo RELEASE: -O3 -flto]...')
+    Else
+      WriteLn('      Invocando Clang WebAssembly (wasm32)...');
+  End;
+
+  CompileLog := '';
+  Success := CompileWithClangWasm(IntermediateFile, FinalExe, CompileLog, ReleaseMode);
+  If Success Then
+  Begin
+    If Incremental Then
+      SaveBuildCache(BaseProjDir, SourceFile, TargetBackendStr, FinalExe, DependencyFiles);
+    If Not SilentBanner Then
+    Begin
+      WriteLn('');
+      WriteLn('SUCESSO! Modulo WebAssembly (.wasm) gerado via Clang:');
+      WriteLn('  --> ' + FinalExe);
+      If GlobalEmitHtmlWrapper Then
+      Begin
+        GenerateWasmHtmlWrapper(FinalExe, ChangeFileExt(FinalExe, '.html'));
+        WriteLn('  --> ' + ChangeFileExt(FinalExe, '.html') + ' (HTML Runner)');
+      End;
     End;
-
-CodeFile := TStringList.Create;
-Try
-  CodeFile.Text := GeneratedCode;
-  CodeFile.SaveToFile(IntermediateFile);
-Finally
-  CodeFile.Free;
-End;
-
-If Not SilentBanner Then
+  End
+  Else
   Begin
-    WriteLn(Format('[4/4] Transpilando para Object Pascal -> "%s"', [
-            ExtractFileName(IntermediateFile)]));
+    WriteLn(ErrOutput, 'Falha na compilacao WebAssembly com Clang:');
+    WriteLn(ErrOutput, CompileLog);
+    Halt(1);
+  End;
+End
+Else If EffectiveTarget = 'js' Then
+Begin
+  // Web JavaScript (.js) via Pas2JS
+  IntermediateFile := GenDir + PathDelim + ChangeFileExt(ExtractFileName(SourceFile), '.pas');
+  EmitterPas := TAetherEmitterPascal.Create;
+  Try
+    GeneratedCode := EmitterPas.Generate(ModuleNode, not Assigned(ModuleNode.ProgramBlock));
+  Finally
+    EmitterPas.Free;
+  End;
+
+  CodeFile := TStringList.Create;
+  Try
+    CodeFile.Text := GeneratedCode;
+    CodeFile.SaveToFile(IntermediateFile);
+  Finally
+    CodeFile.Free;
+  End;
+
+  If Not SilentBanner Then
+  Begin
+    WriteLn(Format('[4/4] Transpilando para Object Pascal -> "%s"', [ExtractFileName(IntermediateFile)]));
+    If ReleaseMode Then
+      WriteLn('      Invocando Pas2JS [Modo RELEASE: -O1 -Jc]...')
+    Else
+      WriteLn('      Invocando Pas2JS...');
+  End;
+
+  CompileLog := '';
+  Success := CompileWithPas2JS(IntermediateFile, FinalExe, CompileLog, ReleaseMode, GlobalPascalUnitPaths);
+  If Success Then
+  Begin
+    If Incremental Then
+      SaveBuildCache(BaseProjDir, SourceFile, TargetBackendStr, FinalExe, DependencyFiles);
+    If Not SilentBanner Then
+    Begin
+      WriteLn('');
+      WriteLn('SUCESSO! Script JavaScript (.js) gerado via Pas2JS:');
+      WriteLn('  --> ' + FinalExe);
+      If GlobalEmitHtmlWrapper Then
+      Begin
+        GenerateJSHtmlWrapper(FinalExe, ChangeFileExt(FinalExe, '.html'));
+        WriteLn('  --> ' + ChangeFileExt(FinalExe, '.html') + ' (HTML Runner)');
+      End;
+    End;
+  End
+  Else
+  Begin
+    WriteLn(ErrOutput, 'Falha na compilacao JavaScript com Pas2JS:');
+    WriteLn(ErrOutput, CompileLog);
+    Halt(1);
+  End;
+End
+Else If EffectiveTarget = 'c' Then
+Begin
+  // Target C (GCC ou Clang)
+  IntermediateFile := GenDir + PathDelim + ChangeFileExt(ExtractFileName(SourceFile), '.c');
+  EmitterC := TAetherEmitterC.Create;
+  Try
+    GeneratedCode := EmitterC.Generate(ModuleNode);
+  Finally
+    EmitterC.Free;
+  End;
+
+  CodeFile := TStringList.Create;
+  Try
+    CodeFile.Text := GeneratedCode;
+    CodeFile.SaveToFile(IntermediateFile);
+  Finally
+    CodeFile.Free;
+  End;
+
+  If Not SilentBanner Then
+  Begin
+    WriteLn(Format('[4/4] Transpilando para C99 -> "%s"', [ExtractFileName(IntermediateFile)]));
+    If EffectiveCComp = 'clang' Then
+    Begin
+      If ReleaseMode Then
+        WriteLn('      Invocando Clang [Modo RELEASE: -O3 -flto -s]...')
+      Else
+        WriteLn('      Invocando Clang...');
+    End
+    Else
+    Begin
+      If ReleaseMode Then
+        WriteLn('      Invocando GCC [Modo RELEASE: -O3 -flto -s]...')
+      Else
+        WriteLn('      Invocando GCC...');
+    End;
+  End;
+
+  CompileLog := '';
+  If EffectiveCComp = 'clang' Then
+    Success := CompileWithClang(IntermediateFile, FinalExe, CompileLog, ReleaseMode, GlobalIncludePaths, GlobalCSources, GlobalLibDirs, GlobalLibs)
+  Else
+    Success := CompileWithGCC(IntermediateFile, FinalExe, CompileLog, ReleaseMode, GlobalIncludePaths, GlobalCSources, GlobalLibDirs, GlobalLibs);
+
+  If Success Then
+  Begin
+    CopySharedLibraries(BaseProjDir, FinalExe, GlobalSharedLibs);
+    If Incremental Then
+      SaveBuildCache(BaseProjDir, SourceFile, TargetBackendStr, FinalExe, DependencyFiles);
+    If Not SilentBanner Then
+    Begin
+      WriteLn('');
+      If EffectiveCComp = 'clang' Then
+        WriteLn('SUCESSO! Executavel nativo gerado via Clang:')
+      Else
+        WriteLn('SUCESSO! Executavel nativo gerado via GCC:');
+      WriteLn('  --> ' + FinalExe);
+    End;
+  End
+  Else
+  Begin
+    If EffectiveCComp = 'clang' Then
+      WriteLn(ErrOutput, 'Falha na compilacao com Clang:')
+    Else
+      WriteLn(ErrOutput, 'Falha na compilacao com GCC:');
+    WriteLn(ErrOutput, CompileLog);
+    Halt(1);
+  End;
+End
+Else
+Begin
+  // Target Pascal (Free Pascal / FPC)
+  IntermediateFile := GenDir + PathDelim + ChangeFileExt(ExtractFileName(SourceFile), '.pas');
+  EmitterPas := TAetherEmitterPascal.Create;
+  Try
+    GeneratedCode := EmitterPas.Generate(ModuleNode, GlobalAsUnit);
+  Finally
+    EmitterPas.Free;
+  End;
+
+  CodeFile := TStringList.Create;
+  Try
+    CodeFile.Text := GeneratedCode;
+    CodeFile.SaveToFile(IntermediateFile);
+  Finally
+    CodeFile.Free;
+  End;
+
+  If Not SilentBanner Then
+  Begin
+    WriteLn(Format('[4/4] Transpilando para Object Pascal -> "%s"', [ExtractFileName(IntermediateFile)]));
     If ReleaseMode Then
       WriteLn('      Invocando Free Pascal (fpc) [Modo RELEASE: -O3 -XX -Xs]...')
     Else
       WriteLn('      Invocando Free Pascal (fpc)...');
   End;
 
-CompileLog := '';
-Success := CompileWithFPC(IntermediateFile, FinalExe, CompileLog, ReleaseMode, GlobalPascalUnitPaths, GlobalLibDirs, GlobalOutPascalUnitDir, GlobalAsUnit);
-If Success Then
+  CompileLog := '';
+  Success := CompileWithFPC(IntermediateFile, FinalExe, CompileLog, ReleaseMode, GlobalPascalUnitPaths, GlobalLibDirs, GlobalOutPascalUnitDir, GlobalAsUnit);
+  If Success Then
   Begin
     If GlobalAsUnit Then
-      Begin
-        If Not SilentBanner Then
-          Begin
-            WriteLn('');
-            WriteLn('SUCESSO! Unit Object Pascal compilada com sucesso:');
-            If GlobalOutPascalUnitDir <> '' Then
-              WriteLn('  --> Diretorio de units (.ppu/.o): ' + GlobalOutPascalUnitDir)
-            Else
-              WriteLn('  --> ' + IntermediateFile);
-          End;
-      End
-    Else
-      Begin
-        CopySharedLibraries(BaseProjDir, FinalExe, GlobalSharedLibs);
-        If Incremental Then
-          SaveBuildCache(BaseProjDir, SourceFile, TargetBackendStr, FinalExe, DependencyFiles);
-        If Not SilentBanner Then
-          Begin
-            WriteLn('');
-            WriteLn('SUCESSO! Executavel nativo gerado:');
-            WriteLn('  --> ' + FinalExe);
-          End;
-      End;
-  End
-Else
-  Begin
-    WriteLn(ErrOutput, 'Falha na compilacao com FPC:');
-    WriteLn(ErrOutput, CompileLog);
-    Halt(1);
-  End;
-End
-Else
-  Begin
-    // Target C (MSYS2 GCC no Windows / GCC no Linux/macOS)
-    IntermediateFile := GenDir + PathDelim + ChangeFileExt(ExtractFileName(
-                        SourceFile), '.c');
-    EmitterC := TAetherEmitterC.Create;
-    Try
-      GeneratedCode := EmitterC.Generate(ModuleNode);
-    Finally
-      EmitterC.Free;
-  End;
-
-CodeFile := TStringList.Create;
-Try
-  CodeFile.Text := GeneratedCode;
-  CodeFile.SaveToFile(IntermediateFile);
-Finally
-  CodeFile.Free;
-End;
-
-If Not SilentBanner Then
-  Begin
-    WriteLn(Format('[4/4] Transpilando para C99 -> "%s"', [ExtractFileName(
-            IntermediateFile)]));
-    If ReleaseMode Then
-      WriteLn('      Invocando GCC [Modo RELEASE: -O3 -flto -s]...')
-    Else
-      WriteLn('      Invocando GCC...');
-  End;
-
-CompileLog := '';
-Success := CompileWithGCC(IntermediateFile, FinalExe, CompileLog, ReleaseMode, GlobalIncludePaths, GlobalCSources, GlobalLibDirs, GlobalLibs);
-If Success Then
-  Begin
-    CopySharedLibraries(BaseProjDir, FinalExe, GlobalSharedLibs);
-    If Incremental Then
-      SaveBuildCache(BaseProjDir, SourceFile, TargetBackendStr, FinalExe, DependencyFiles);
-    If Not SilentBanner Then
+    Begin
+      If Not SilentBanner Then
       Begin
         WriteLn('');
-        WriteLn('SUCESSO! Executavel nativo gerado via GCC:');
+        WriteLn('SUCESSO! Unit Object Pascal compilada com sucesso:');
+        If GlobalOutPascalUnitDir <> '' Then
+          WriteLn('  --> Diretorio de units (.ppu/.o): ' + GlobalOutPascalUnitDir)
+        Else
+          WriteLn('  --> ' + IntermediateFile);
+      End;
+    End
+    Else
+    Begin
+      CopySharedLibraries(BaseProjDir, FinalExe, GlobalSharedLibs);
+      If Incremental Then
+        SaveBuildCache(BaseProjDir, SourceFile, TargetBackendStr, FinalExe, DependencyFiles);
+      If Not SilentBanner Then
+      Begin
+        WriteLn('');
+        WriteLn('SUCESSO! Executavel nativo gerado:');
         WriteLn('  --> ' + FinalExe);
       End;
+    End;
   End
-Else
+  Else
   Begin
-    WriteLn(ErrOutput, 'Falha na compilacao com GCC:');
+    WriteLn(ErrOutput, 'Falha na compilacao com FPC:');
     WriteLn(ErrOutput, CompileLog);
     Halt(1);
   End;
@@ -925,6 +1096,18 @@ Finally
   Parser.Free;
   Lexer.Free;
 End;
+End;
+
+Procedure CompileFile(Const SourceFile: String; TargetPascal: Boolean; CheckOnly
+                      , DumpASTOnly: Boolean; Const OutputExeName: String;
+                      SilentBanner: Boolean; Incremental: Boolean = False;
+                      ForceRebuild: Boolean = False; ReleaseMode: Boolean = False;
+                      RunOptimizer: Boolean = False);
+Begin
+  If TargetPascal Then
+    CompileFile(SourceFile, 'pascal', CheckOnly, DumpASTOnly, OutputExeName, SilentBanner, Incremental, ForceRebuild, ReleaseMode, RunOptimizer, '', '')
+  Else
+    CompileFile(SourceFile, 'c', CheckOnly, DumpASTOnly, OutputExeName, SilentBanner, Incremental, ForceRebuild, ReleaseMode, RunOptimizer, '', '');
 End;
 
 Procedure EmitFile(Const SourceFile: String; TargetPascal: Boolean; Const CustomOutput: String;
@@ -1357,6 +1540,7 @@ Var
   I, J: Integer;
   Arg: string;
   PkgName, OptPath, OptGit, OptVer, FilterName, SubCmd: string;
+  TargetEntry, TargetOut, TargetBackend, TargetCC: string;
   EmitTargetPascal, EmitToStdout, HasTargetSpecified, EmitAsUnit, EmitSilent, EmitWatch: Boolean;
   EmitSource, EmitOut, EmitOutDir: string;
 Begin
@@ -1892,16 +2076,42 @@ If (ParamCount >= 1) And ((LowerCase(ParamStr(1)) = 'build') Or (LowerCase(
       PrintBanner;
 
     Try
-      CompileFile(InputFile, OptionTargetPascal, OptionCheckOnly, False,
-                  OutputExe, OptionJSONDiag, OptionIncremental, OptionForce,
-                  OptionRelease, OptionOptimize);
+      If Length(ProjConfig.Targets) > 0 Then
+      Begin
+        For J := 0 To High(ProjConfig.Targets) Do
+        Begin
+          TargetEntry := ProjConfig.RootDir + PathDelim + StringReplace(ProjConfig.Targets[J].Entry, '/', PathDelim, [rfReplaceAll]);
+          TargetOut := ProjConfig.RootDir + PathDelim + StringReplace(ProjConfig.Targets[J].Output, '/', PathDelim, [rfReplaceAll]);
+          If Not OptionJSONDiag Then
+          Begin
+            WriteLn('');
+            WriteLn(Format('==> Compilando Target [%s] (%s): "%s"', [ProjConfig.Targets[J].Name, ProjConfig.Targets[J].Target, ProjConfig.Targets[J].Entry]));
+          End;
+          TargetBackend := LowerCase(ProjConfig.Targets[J].Backend);
+          If (TargetBackend = 'gcc') Or (TargetBackend = 'clang') Then
+            TargetCC := TargetBackend
+          Else
+            TargetCC := ProjConfig.CCompiler;
+
+          CompileFile(TargetEntry, ProjConfig.Targets[J].Target, OptionCheckOnly, False,
+                      TargetOut, OptionJSONDiag, OptionIncremental, OptionForce,
+                      OptionRelease, OptionOptimize, ProjConfig.Targets[J].Backend, TargetCC);
+        End;
+      End
+      Else
+      Begin
+        CompileFile(InputFile, GlobalTargetKind, OptionCheckOnly, False,
+                    OutputExe, OptionJSONDiag, OptionIncremental, OptionForce,
+                    OptionRelease, OptionOptimize, GlobalBackendOverride, ProjConfig.CCompiler);
+      End;
+
       If IsRunCommand And Not OptionCheckOnly Then
         Begin
-          If GlobalAsUnit Then
+          If GlobalAsUnit Or (GlobalTargetKind = 'wasm') Or (GlobalTargetKind = 'js') Then
             Begin
               WriteLn('');
-              WriteLn('Aviso: Projeto configurado em modo Unit Pascal (--unit / outputs.as_unit: true).');
-              WriteLn('Units Object Pascal nao possuem ponto de entrada executavel direto para "run".');
+              WriteLn(Format('Aviso: Projeto compilado para target "%s".', [GlobalTargetKind]));
+              WriteLn('Modulos Web e Units nao possuem ponto de entrada executavel nativo direto para "run".');
             End
           Else
             Begin
@@ -2047,9 +2257,9 @@ Try
   If OptionDumpTokens Then
     DumpTokens(InputFile);
 
-  CompileFile(InputFile, OptionTargetPascal, OptionCheckOnly, OptionDumpAST,
+  CompileFile(InputFile, GlobalTargetKind, OptionCheckOnly, OptionDumpAST,
               OutputExe, OptionJSONDiag, OptionIncremental, OptionForce,
-              OptionRelease, OptionOptimize);
+              OptionRelease, OptionOptimize, GlobalBackendOverride, GlobalCCompiler);
 Except
   on E: EAetherBorrowError Do
         Begin

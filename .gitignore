@@ -11,5 +11,7 @@ build/
 *.bak
 *.vsix
 *.lps
+*.wasm
+.aether/
 .DS_Store
 Thumbs.db

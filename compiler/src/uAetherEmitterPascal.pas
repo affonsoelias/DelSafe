@@ -1058,8 +1058,8 @@ begin
   Emit('function AetherRemoveDir(const APath: string): Boolean;');
   Emit('function AetherDeleteFile(const APath: string): Boolean;');
   Emit('function AetherDirExists(const APath: string): Boolean;');
-  Emit('function AetherFileSize(const APath: string): Int64;');
-  Emit('function AetherGetNanoseconds: QWord;');
+  Emit('function AetherFileSize(const APath: string): {$IFDEF PAS2JS}NativeInt{$ELSE}Int64{$ENDIF};');
+  Emit('function AetherGetNanoseconds: {$IFDEF PAS2JS}Double{$ELSE}QWord{$ENDIF};');
   Emit('procedure AetherSleepMs(AMs: Cardinal);');
   Emit('function AetherSocketCreate(): LongInt;');
   Emit('function AetherSocketListen(Port: Word; Backlog: LongInt): LongInt;');
@@ -1089,6 +1089,7 @@ begin
   Emit('  Result := Copy(S, Start + 1, Len);');
   Emit('end;');
   Emit('');
+  Emit('{$IFNDEF PAS2JS}');
   Emit('function AetherFileExists(const APath: string): Boolean;');
   Emit('begin');
   Emit('  Result := SysUtils.FileExists(APath);');
@@ -1140,8 +1141,21 @@ begin
   Emit('  H := FileOpen(APath, fmOpenRead or fmShareDenyNone);');
   Emit('  if H <> feInvalidHandle then begin Result := FileSeek(H, Int64(0), 2); FileClose(H); end;');
   Emit('end;');
+  Emit('{$ELSE}');
+  Emit('function AetherFileExists(const APath: string): Boolean; begin Result := False; end;');
+  Emit('function AetherReadFile(const APath: string): string; begin Result := ''''; end;');
+  Emit('function AetherWriteFile(const APath: string; const AContent: string): Boolean; begin Result := False; end;');
+  Emit('function AetherCreateDir(const APath: string): Boolean; begin Result := False; end;');
+  Emit('function AetherRemoveDir(const APath: string): Boolean; begin Result := False; end;');
+  Emit('function AetherDeleteFile(const APath: string): Boolean; begin Result := False; end;');
+  Emit('function AetherDirExists(const APath: string): Boolean; begin Result := False; end;');
+  Emit('function AetherFileSize(const APath: string): {$IFDEF PAS2JS}NativeInt{$ELSE}Int64{$ENDIF}; begin Result := -1; end;');
+  Emit('{$ENDIF}');
   Emit('');
-  Emit('function AetherGetNanoseconds: QWord;');
+  Emit('function AetherGetNanoseconds: {$IFDEF PAS2JS}Double{$ELSE}QWord{$ENDIF};');
+  Emit('{$IFDEF PAS2JS}');
+  Emit('begin Result := 0; end;');
+  Emit('{$ELSE}');
   Emit('{$IFDEF WINDOWS}');
   Emit('var Freq, Count: Int64;');
   Emit('begin');
@@ -1154,10 +1168,16 @@ begin
   Emit('{$ELSE}');
   Emit('begin Result := QWord(GetTickCount64 * 1000000); end;');
   Emit('{$ENDIF}');
+  Emit('{$ENDIF}');
   Emit('');
   Emit('procedure AetherSleepMs(AMs: Cardinal);');
+  Emit('{$IFDEF PAS2JS}');
+  Emit('begin end;');
+  Emit('{$ELSE}');
   Emit('begin SysUtils.Sleep(AMs); end;');
+  Emit('{$ENDIF}');
   Emit('');
+  Emit('{$IFNDEF PAS2JS}');
   Emit('// Sockets Nativos via Sockets FPC');
   Emit('function AetherSocketCreate(): LongInt;');
   Emit('begin');
@@ -1238,6 +1258,15 @@ begin
   Emit('begin');
   Emit('  if Fd >= 0 then Sockets.CloseSocket(Fd);');
   Emit('end;');
+  Emit('{$ELSE}');
+  Emit('function AetherSocketCreate(): LongInt; begin Result := -1; end;');
+  Emit('function AetherSocketListen(Port: Word; Backlog: LongInt): LongInt; begin Result := -1; end;');
+  Emit('function AetherSocketAccept(ListenFd: LongInt): LongInt; begin Result := -1; end;');
+  Emit('function AetherSocketConnect(const Host: String; Port: Word): LongInt; begin Result := -1; end;');
+  Emit('function AetherSocketSend(Fd: LongInt; const Data: String): LongInt; begin Result := 0; end;');
+  Emit('function AetherSocketRecv(Fd: LongInt; MaxLen: LongInt): String; begin Result := ''''; end;');
+  Emit('procedure AetherSocketClose(Fd: LongInt); begin end;');
+  Emit('{$ENDIF}');
   Emit('');
 end;
 
@@ -1252,7 +1281,7 @@ begin
   FOutput.Clear;
   FIndent := 0;
 
-  UsesClause := '  SysUtils, Sockets, Math{$IFDEF WINDOWS}, Windows{$ENDIF}';
+  UsesClause := '  SysUtils, Math{$IFNDEF PAS2JS}, Sockets{$IFDEF WINDOWS}, Windows{$ENDIF}{$ENDIF}';
   for I := 0 to AModule.PascalImports.Count - 1 do
   begin
     if Pos(LowerCase(AModule.PascalImports[I]), LowerCase(UsesClause)) = 0 then
@@ -1456,7 +1485,10 @@ begin
     if Assigned(AModule.ProgramBlock) then
       EmitProgramBlock(AModule.ProgramBlock)
     else
+    begin
+      Emit('begin');
       Emit('end.');
+    end;
   end;
 
   Result := FOutput.Text;

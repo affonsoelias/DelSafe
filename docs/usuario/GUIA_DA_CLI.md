@@ -24,7 +24,25 @@ Compila o projeto baseado no manifesto `aether.json` presente no diretório atua
 ```bash
 aetherc build
 aetherc build --target=c
+aetherc build --target=c --cc=clang
+aetherc build --target=wasm --html -o public/modulo.wasm
+aetherc build --target=js --html -o public/modulo.js
 ```
+
+### Targets de Compilação (`--target`):
+- `--target=pascal`: Compila para binário nativo via Object Pascal e Free Pascal (padrão).
+- `--target=c`: Compila para binário nativo via C99 (usando GCC ou Clang).
+- `--target=wasm`: Compila diretamente para módulo WebAssembly autônomo (`.wasm`) via **Clang** (`clang --target=wasm32 -nostdlib -Wl,--no-entry -Wl,--export-all`).
+- `--target=js`: Compila diretamente para JavaScript modular (`.js`) via **Pas2JS** (`pas2js -Jc`).
+
+### Seleção de Compilador C (`--cc` / `--c-compiler`):
+- `--cc=gcc`: Utiliza o GCC (ex: MinGW-w64 UCRT64 no Windows).
+- `--cc=clang`: Utiliza o Clang / LLVM (suporte nativo e cross-compilação WebAssembly).
+
+### Runner HTML para Navegador (`--html`):
+Quando `--html` é informado junto a `--target=wasm` ou `--target=js`, o compilador gera automaticamente um arquivo `.html` completo e estilizado com runner embutido:
+- Para `.wasm`: instancia o WebAssembly com `WebAssembly.instantiateStreaming` e disponibiliza os exports em `window.aetherWasm`.
+- Para `.js`: copia a runtime `rtl.js` do Pas2JS e inicializa os módulos disponíveis em `window.pas`.
 
 ### `aetherc run`
 Compila a aplicação e a executa imediatamente no terminal:
@@ -238,6 +256,52 @@ Para integrar perfeitamente o Aether ao ecossistema **BlaiseVue** e controlar co
 - **`c_src_dir`**: Diretório onde os fontes C (`.c`) transpilados são gravados.
 - **`as_unit`**: Quando `true`, emite e compila o código Aether como uma **Unit Object Pascal** (`unit ... interface ... implementation ... end.`) pronta para ser importada via `uses` em projetos BlaiseVue e Lazarus.
 
+---
+
+### Configuração Multi-Target e Compiladores C (`targets` e `c_compiler`)
+
+Para projetos com múltiplos alvos simultâneos (por exemplo, gerar um módulo WebAssembly para a web, um script JavaScript, e binários nativos compilados com GCC ou Clang), configure o array `"targets"` no `aether.json`:
+
+```json
+{
+  "name": "meu_projeto_multitarget",
+  "version": "0.1.0",
+  "c_compiler": "clang",
+  "targets": [
+    {
+      "name": "modulo_web",
+      "entry": "src/calculadora.aeth",
+      "target": "wasm",
+      "backend": "clang",
+      "output": "public/calculadora.wasm"
+    },
+    {
+      "name": "script_js",
+      "entry": "src/calculadora.aeth",
+      "target": "js",
+      "backend": "pas2js",
+      "output": "public/calculadora.js"
+    },
+    {
+      "name": "binario_nativo_clang",
+      "entry": "src/main.aeth",
+      "target": "c",
+      "backend": "clang",
+      "output": "bin/app_clang.exe"
+    },
+    {
+      "name": "binario_nativo_gcc",
+      "entry": "src/main.aeth",
+      "target": "c",
+      "backend": "gcc",
+      "output": "bin/app_gcc.exe"
+    }
+  ]
+}
+```
+
+Ao executar `aetherc build`, cada target é compilado em ordem com sua respectiva toolchain e diretório de saída definidos.
+
 ### Flags de Caminhos, Saídas e Interop na Linha de Comando (CLI)
 Você também pode passar essas configurações diretamente na linha de comando:
 - `-FE <dir>`: Define o diretório de saída dos executáveis finais.
@@ -266,7 +330,11 @@ Gerenciador nativo de pacotes do Aether:
 ## 5. Ferramentas de Linguagem e Diagnósticos
 
 ### `aetherc --doctor`
-Verifica a presença e versões do Free Pascal Compiler (`fpc`) e do compilador GCC (MSYS2 UCRT64 no Windows ou nativo no Linux/macOS).
+Verifica a presença, caminhos e versões dos 4 compiladores da toolchain Aether:
+1. **Free Pascal (`fpc`)**: Compilador Object Pascal nativo.
+2. **GCC (`gcc`)**: Compilador C nativo (MSYS2 UCRT64 no Windows ou nativo no Linux/macOS).
+3. **Clang / LLVM (`clang`)**: Compilador C nativo e cross-compilador WebAssembly (`wasm32`).
+4. **Pas2JS (`pas2js`)**: Compilador Free Pascal para JavaScript modular (Web/NodeJS).
 
 ### `aetherc lsp` (ou `--lsp`)
 Inicia o servidor de linguagem oficial (**Language Server Protocol - LSP**), fornecendo autocompletion, hover documentation, go-to-definition e diagnósticos em tempo real para o VS Code e editores modernos.

@@ -26,11 +26,21 @@ type
     AsUnit: Boolean;
   end;
 
+  TAetherTargetConfig = record
+    Name: string;
+    Entry: string;
+    Target: string;    // 'pascal', 'c', 'wasm', 'js'
+    Backend: string;   // 'clang', 'fpc', 'gcc', 'pas2js'
+    Output: string;
+  end;
+  TAetherTargetArray = array of TAetherTargetConfig;
+
   TAetherProjectConfig = record
     Name: string;
     Version: string;
     Description: string;
     Backend: string;
+    CCompiler: string; // 'gcc' ou 'clang'
     Entry: string;
     Output: string;
     RootDir: string;
@@ -44,6 +54,7 @@ type
     PathsLibs: TStringArray;
     PathsSharedLibs: TStringArray;
     Outputs: TAetherProjectOutputs;
+    Targets: TAetherTargetArray;
   end;
 
 function FindProjectRoot(out RootDir, ConfigFile: string): Boolean;
@@ -612,8 +623,9 @@ var
   RootDir, ConfigFile, JsonStr: string;
   FileStream: TFileStream;
   StringStream: TStringStream;
-  JSON, DepsData, ItemData, PathsData, OutputsData: TJSONData;
+  JSON, DepsData, ItemData, PathsData, OutputsData, TargetsData: TJSONData;
   Obj, DepsObj, ItemObj, PathsObj, OutputsObj: TJSONObject;
+  TargetsArr: TJSONArray;
   I: Integer;
 begin
   Result := False;
@@ -625,6 +637,8 @@ begin
   SetLength(Config.PathsLibDirs, 0);
   SetLength(Config.PathsLibs, 0);
   SetLength(Config.PathsSharedLibs, 0);
+  SetLength(Config.Targets, 0);
+  Config.CCompiler := 'gcc';
   Config.Outputs.BinDir := '';
   Config.Outputs.PascalSrcDir := '';
   Config.Outputs.PascalUnitDir := '';
@@ -656,6 +670,7 @@ begin
         Config.Version := Obj.Get('version', '0.1.0');
         Config.Description := Obj.Get('description', '');
         Config.Backend := LowerCase(Obj.Get('backend', 'pascal'));
+        Config.CCompiler := LowerCase(Obj.Get('c_compiler', 'gcc'));
         Config.Entry := Obj.Get('entry', 'src' + PathDelim + 'main.aeth');
         Config.Output := Obj.Get('output', 'bin' + PathDelim + Config.Name + '.exe');
 
@@ -708,6 +723,26 @@ begin
           Config.Outputs.PascalUnitDir := OutputsObj.Get('pascal_unit_dir', '');
           Config.Outputs.CSrcDir := OutputsObj.Get('c_src_dir', '');
           Config.Outputs.AsUnit := OutputsObj.Get('as_unit', False);
+        end;
+
+        TargetsData := Obj.Find('targets');
+        if Assigned(TargetsData) and (TargetsData is TJSONArray) then
+        begin
+          TargetsArr := TJSONArray(TargetsData);
+          SetLength(Config.Targets, TargetsArr.Count);
+          for I := 0 to TargetsArr.Count - 1 do
+          begin
+            ItemData := TargetsArr.Items[I];
+            if ItemData is TJSONObject then
+            begin
+              ItemObj := TJSONObject(ItemData);
+              Config.Targets[I].Name := ItemObj.Get('name', '');
+              Config.Targets[I].Entry := ItemObj.Get('entry', '');
+              Config.Targets[I].Target := LowerCase(ItemObj.Get('target', 'pascal'));
+              Config.Targets[I].Backend := LowerCase(ItemObj.Get('backend', ''));
+              Config.Targets[I].Output := ItemObj.Get('output', '');
+            end;
+          end;
         end;
 
         Result := True;

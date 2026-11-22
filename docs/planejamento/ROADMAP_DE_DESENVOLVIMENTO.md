@@ -362,17 +362,21 @@ Este documento traça o status oficial de desenvolvimento do compilador e as pr�
     - `stage2_suite.c` e `stage3_suite.c`: 828 bytes, SHA-256 idêntico (`d6c7f2f6135cb09275953e546b59212c94baafe42b91a8f4b7dae5e3808ab767`), 0 bytes de diferença.
   - Status certificado: **CONVERGÊNCIA TOTAL (Ponto Fixo / Fixed Point!)** com **100% BIT-A-BIT IDENTICO**.
 
-### ⏳ Fase 30: Backend WebAssembly (`.wasm`) & JavaScript via `pas2js` (`--target=js` / `--target=wasm`)
-- [ ] **Alvo JavaScript via Free Pascal (`--target=js` / `pas2js`)**:
+### ✅ Fase 30: Backend WebAssembly (`.wasm`) & JavaScript via `pas2js` (`--target=js` / `--target=wasm`)
+- [x] **Alvo JavaScript via Free Pascal (`--target=js` / `pas2js`)**:
   - Integração nativa com o compilador oficial `pas2js` da suíte Free Pascal / Lazarus.
   - O Aether transpila para Object Pascal e invoca `pas2js` para gerar um arquivo `.js` (ECMAScript) puro, leve e direto.
+  - Cópia automática da biblioteca de runtime `rtl.js` para distribuição autônoma.
   - Zero dependência de TypeScript, sem necessidade de Node.js/npm e sem bundlers complexos.
   - Execução imediata em qualquer navegador via tag `<script src="saida.js"></script>`.
-- [ ] **Alvo WebAssembly Puro (`--target=wasm`) via Clang**:
+- [x] **Alvo WebAssembly Puro (`--target=wasm`) via Clang**:
   - Compilação direta do código C gerado pelo Aether para binário WebAssembly (`.wasm`) de baixo nível utilizando Clang/LLVM (`clang --target=wasm32 -nostdlib -Wl,--no-entry -Wl,--export-all`).
-  - Geração opcional de um arquivo `.html` mínimo de teste apenas com `<script>` JavaScript vanilla nativo (`WebAssembly.instantiateStreaming`) para carga e testes imediatos no browser.
-- [ ] **Diagnóstico de Toolchain Web**:
-  - Detecção no `aetherc --doctor` de `pas2js.exe` e `clang.exe`.
+  - Geração opcional de um arquivo `.html` mínimo de teste (`--html`) apenas com `<script>` JavaScript vanilla nativo (`WebAssembly.instantiateStreaming`) para carga e testes imediatos no browser.
+- [x] **Seleção Flexível de Compiladores C & Multi-Target (`aether.json`)**:
+  - Escolha transparente entre **GCC** e **Clang** (`--cc=gcc` ou `--cc=clang`, e `"c_compiler"` no manifesto).
+  - Suporte ao array `"targets"` no `aether.json`, permitindo compilar múltiplos alvos (Wasm, JS, C Clang, C GCC, Pascal) num único `aetherc build`.
+- [x] **Diagnóstico de Toolchain Web (`aetherc --doctor`)**:
+  - Detecção no `aetherc --doctor` dos 4 compiladores: Free Pascal (`fpc`), GCC, Clang (LLVM / wasm32) e Pas2JS.
 
 ### ⏳ Fase 31: Concorrência Estruturada & Async/Await com Corrotinas
 - [ ] **Corrotinas Zero-Cost e Tarefas Cooperativas**:

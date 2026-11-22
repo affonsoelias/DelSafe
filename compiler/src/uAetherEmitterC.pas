@@ -1008,6 +1008,38 @@ begin
 
   Emit('// Codigo gerado automaticamente pelo Compilador Aether (aetherc)');
   Emit('// Alvo: C99 / GCC (MSYS2)');
+  Emit('#if defined(__wasm__)');
+  Emit('// WebAssembly Standalone Environment');
+  Emit('typedef unsigned long size_t;');
+  Emit('typedef signed char int8_t;');
+  Emit('typedef unsigned char uint8_t;');
+  Emit('typedef signed short int16_t;');
+  Emit('typedef unsigned short uint16_t;');
+  Emit('typedef signed int int32_t;');
+  Emit('typedef unsigned int uint32_t;');
+  Emit('typedef signed long long int64_t;');
+  Emit('typedef unsigned long long uint64_t;');
+  Emit('#define NULL ((void*)0)');
+  Emit('#define true 1');
+  Emit('#define false 0');
+  Emit('typedef _Bool bool;');
+  Emit('static unsigned char __wasm_heap[65536];');
+  Emit('static unsigned long __wasm_heap_ptr = 0;');
+  Emit('static inline void* malloc(size_t sz) {');
+  Emit('    void* p = (void*)&__wasm_heap[__wasm_heap_ptr];');
+  Emit('    __wasm_heap_ptr += (sz + 7) & ~7;');
+  Emit('    return p;');
+  Emit('}');
+  Emit('static inline void free(void* p) { (void)p; }');
+  Emit('static inline size_t strlen(const char* s) {');
+  Emit('    size_t l = 0; if (!s) return 0; while (s[l]) l++; return l;');
+  Emit('}');
+  Emit('static inline void* memcpy(void* dst, const void* src, size_t n) {');
+  Emit('    char* d = (char*)dst; const char* s = (const char*)src;');
+  Emit('    for (size_t i = 0; i < n; i++) d[i] = s[i]; return dst;');
+  Emit('}');
+  Emit('static inline int printf(const char* fmt, ...) { (void)fmt; return 0; }');
+  Emit('#else');
   Emit('#include <stdio.h>');
   Emit('#include <stdlib.h>');
   Emit('#include <stdint.h>');
@@ -1033,6 +1065,7 @@ begin
   Emit('#include <arpa/inet.h>');
   Emit('#include <unistd.h>');
   Emit('#endif');
+  Emit('#endif');
   Emit('');
 
   // Headers adicionais de C (import c)
@@ -1051,10 +1084,16 @@ begin
 
   // Helpers de compatibilidade Pascal no backend C
   Emit('static inline double AetherPascalNow(void) {');
+  Emit('#if defined(__wasm__)');
+  Emit('    return 0.0;');
+  Emit('#else');
   Emit('    return (double)time(NULL);');
+  Emit('#endif');
   Emit('}');
   Emit('static inline uint64_t AetherPascalGetTickCount64(void) {');
-  Emit('#ifdef _WIN32');
+  Emit('#if defined(__wasm__)');
+  Emit('    return 0;');
+  Emit('#elif defined(_WIN32)');
   Emit('    return (uint64_t)GetTickCount64();');
   Emit('#else');
   Emit('    struct timespec ts;');
@@ -1097,6 +1136,16 @@ begin
   Emit('    return res;');
   Emit('}');
   Emit('');
+  Emit('#if defined(__wasm__)');
+  Emit('static inline bool AetherFileExists(const char* path) { (void)path; return false; }');
+  Emit('static inline char* AetherReadFile(const char* path) { (void)path; char* empty = (char*)malloc(1); if (empty) empty[0] = ''\0''; return empty; }');
+  Emit('static inline bool AetherWriteFile(const char* path, const char* content) { (void)path; (void)content; return false; }');
+  Emit('static inline bool AetherCreateDir(const char* path) { (void)path; return false; }');
+  Emit('static inline bool AetherRemoveDir(const char* path) { (void)path; return false; }');
+  Emit('static inline bool AetherDeleteFile(const char* path) { (void)path; return false; }');
+  Emit('static inline bool AetherDirExists(const char* path) { (void)path; return false; }');
+  Emit('static inline int64_t AetherFileSize(const char* path) { (void)path; return -1; }');
+  Emit('#else');
   Emit('static inline bool AetherFileExists(const char* path) {');
   Emit('    FILE* f = fopen(path, "rb");');
   Emit('    if (f) { fclose(f); return true; }');
@@ -1166,9 +1215,12 @@ begin
   Emit('    return -1;');
   Emit('#endif');
   Emit('}');
+  Emit('#endif');
   Emit('');
   Emit('static inline uint64_t AetherGetNanoseconds(void) {');
-  Emit('#ifdef _WIN32');
+  Emit('#if defined(__wasm__)');
+  Emit('    return 0;');
+  Emit('#elif defined(_WIN32)');
   Emit('    LARGE_INTEGER freq, count;');
   Emit('    QueryPerformanceFrequency(&freq);');
   Emit('    QueryPerformanceCounter(&count);');
@@ -1184,7 +1236,9 @@ begin
   Emit('}');
   Emit('');
   Emit('static inline void AetherSleepMs(uint32_t ms) {');
-  Emit('#ifdef _WIN32');
+  Emit('#if defined(__wasm__)');
+  Emit('    (void)ms;');
+  Emit('#elif defined(_WIN32)');
   Emit('    Sleep(ms);');
   Emit('#else');
   Emit('    usleep((useconds_t)ms * 1000);');
@@ -1192,14 +1246,35 @@ begin
   Emit('}');
   Emit('');
   Emit('static inline char* AetherIntToStr(int32_t val) {');
+  Emit('#if defined(__wasm__)');
+  Emit('    char* buf = (char*)malloc(32);');
+  Emit('    if (!buf) return (char*)"";');
+  Emit('    int idx = 0;');
+  Emit('    uint32_t uval;');
+  Emit('    if (val < 0) { buf[idx++] = ''-''; uval = (uint32_t)(-val); } else uval = (uint32_t)val;');
+  Emit('    char tmp[32]; int t = 0;');
+  Emit('    do { tmp[t++] = ''0'' + (uval % 10); uval /= 10; } while (uval > 0);');
+  Emit('    while (t > 0) buf[idx++] = tmp[--t];');
+  Emit('    buf[idx] = ''\0'';');
+  Emit('    return buf;');
+  Emit('#else');
   Emit('    char* buf = (char*)malloc(32);');
   Emit('    snprintf(buf, 32, "%d", val);');
   Emit('    return buf;');
+  Emit('#endif');
   Emit('}');
   Emit('');
   Emit('static inline int32_t AetherStrToInt(const char* s) {');
+  Emit('#if defined(__wasm__)');
+  Emit('    if (!s) return 0;');
+  Emit('    int32_t res = 0; int sign = 1; size_t i = 0;');
+  Emit('    if (s[0] == ''-'') { sign = -1; i = 1; }');
+  Emit('    for (; s[i] >= ''0'' && s[i] <= ''9''; i++) { res = res * 10 + (s[i] - ''0''); }');
+  Emit('    return res * sign;');
+  Emit('#else');
   Emit('    if (!s) return 0;');
   Emit('    return (int32_t)atoi(s);');
+  Emit('#endif');
   Emit('}');
   Emit('');
   Emit('// Helpers de Linha de Comando');
@@ -1224,6 +1299,15 @@ begin
   Emit('}');
   Emit('');
   Emit('// Helpers de Sockets Aether');
+  Emit('#if defined(__wasm__)');
+  Emit('static inline int32_t AetherSocketCreate(void) { return -1; }');
+  Emit('static inline int32_t AetherSocketListen(uint16_t port, int32_t backlog) { (void)port; (void)backlog; return -1; }');
+  Emit('static inline int32_t AetherSocketAccept(int32_t listen_fd) { (void)listen_fd; return -1; }');
+  Emit('static inline int32_t AetherSocketConnect(const char* host, uint16_t port) { (void)host; (void)port; return -1; }');
+  Emit('static inline int32_t AetherSocketSend(int32_t fd, const char* data) { (void)fd; (void)data; return 0; }');
+  Emit('static inline char* AetherSocketRecv(int32_t fd, int32_t max_len) { (void)fd; (void)max_len; char* b = (char*)malloc(1); if (b) b[0] = ''\0''; return b; }');
+  Emit('static inline void AetherSocketClose(int32_t fd) { (void)fd; }');
+  Emit('#else');
   Emit('#ifdef _WIN32');
   Emit('static inline void AetherSocketInit(void) {');
   Emit('    static int wsa_init = 0;');
@@ -1332,6 +1416,7 @@ begin
   Emit('#endif');
   Emit('    }');
   Emit('}');
+  Emit('#endif // !__wasm__');
   Emit('');
 
   // Estrutura Result para C
@@ -1408,7 +1493,16 @@ begin
 
   // Bloco do Programa
   if Assigned(AModule.ProgramBlock) then
-    EmitProgramBlock(AModule.ProgramBlock);
+    EmitProgramBlock(AModule.ProgramBlock)
+  else
+  begin
+    Emit('#ifndef __wasm__');
+    Emit('int main(int argc, char** argv) {');
+    Emit('    (void)argc; (void)argv;');
+    Emit('    return 0;');
+    Emit('}');
+    Emit('#endif');
+  end;
 
   Result := FOutput.Text;
 end;
