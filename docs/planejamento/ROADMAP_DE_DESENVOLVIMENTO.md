@@ -304,3 +304,38 @@ Este documento traça o status oficial de desenvolvimento do compilador e as pr�
   - Emissor Pascal atualizado para mapear divisão inteira com `div` prevenindo conversões espúrias para `Double`.
 - [x] **Validação Prática Dual-Backend**:
   - Exemplo integrado criado em `examples/20_stdlib_expanded.aeth`, testado e validado com 100% de sucesso e paridade idêntica nos backends Free Pascal e GCC C99.
+
+### ⏳ Fase 26: Compilação Incremental e Sistema de Cache de Objetos (`aetherc build --incremental`)
+- [ ] **Hash e Detecção de Mudanças (SHA-256)**:
+  - Rastreamento criptográfico do conteúdo dos arquivos fonte `.aeth` e das suas dependências transitivas em `.aether/cache/build/`.
+  - Mapeamento de grafo de dependências entre módulos para invalidar apenas os nós que foram alterados ou dependem de nós alterados.
+- [ ] **Reutilização de Artefatos Compilados**:
+  - Reutilização direta de arquivos objeto (`.o`, `.ppu`) já gerados, pulando a transpilação e compilação de unidades inalteradas.
+  - Linkagem inteligente preservando o binário de saída final.
+- [ ] **Integração na CLI**:
+  - Flag `--incremental` (ativada por padrão em `aetherc build` e `aetherc run` quando configurado no `aether.json`).
+  - Flag `--force` para limpar o cache local e forçar recompilação total de todos os módulos.
+
+### ⏳ Fase 27: Otimizações de AST & Modo Release (`aetherc build --release`)
+- [ ] **Constant Folding & Otimizações na AST**:
+  - Avaliação estática em tempo de compilação de expressões numéricas e booleanas constantes (ex: `1000 * 60 * 60` -> `3600000`).
+  - Simplificação de identidades algébricas (`x + 0` -> `x`, `x * 1` -> `x`, `true and x` -> `x`).
+- [ ] **Dead Code Elimination (DCE)**:
+  - Eliminação de ramos inalcançáveis (`if false then ...`, `while false do ...`).
+  - Omissão de emissão para funções privadas de módulos não utilizadas.
+- [ ] **Pipeline de Release de Alta Performance**:
+  - Flag `--release` na CLI com passagem de diretivas agressivas aos backends:
+    - Free Pascal: `-O3 -XX -Xs` (otimização máxima, remoção de seções mortas e strip de símbolos de debug).
+    - GCC C99: `-O3 -flto -s` (otimização LTO em tempo de linkagem e binários ultra compactos).
+
+### ⏳ Fase 28: Expansão do LSP & IDE Developer Experience (VS Code Extension v1.0.0)
+- [ ] **Formatação Integrada via LSP**:
+  - Implementação do endpoint `textDocument/formatting` no servidor LSP chamando o motor canônico `uAetherFormatter.pas`.
+  - Atalho padrão de formatação no VS Code (`Shift + Alt + F` / "Format Document") formatando o buffer ativo em tempo real.
+- [ ] **Refatoração Segura (`textDocument/rename`)**:
+  - Renomeação de variáveis, funções e tipos com verificação de escopo léxico e atualização atômica de todas as referências.
+- [ ] **Ações Rápidas de Correção (`textDocument/codeAction`)**:
+  - Sugestões de quick-fix automáticas no editor para erros clássicos do Borrow Checker (sugestão de `borrow` ou `mut borrow`) e inclusão de imports ausentes.
+- [ ] **Lançamento da Extensão VS Code v1.0.0**:
+  - Atualização do manifesto `package.json` para a versão estável `1.0.0`.
+  - Empacotamento do arquivo `.vsix` atualizado em `editors/vscode/`.
