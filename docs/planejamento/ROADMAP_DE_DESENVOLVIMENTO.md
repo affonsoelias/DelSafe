@@ -339,3 +339,41 @@ Este documento traça o status oficial de desenvolvimento do compilador e as pr�
 - [ ] **Lançamento da Extensão VS Code v1.0.0**:
   - Atualização do manifesto `package.json` para a versão estável `1.0.0`.
   - Empacotamento do arquivo `.vsix` atualizado em `editors/vscode/`.
+
+### ⏳ Fase 29: Auto-Hospedagem Completa de Ciclo Fechado (Stage 3 Bootstrapping)
+- [ ] **Ciclo Completo de Auto-Compilação (*Stage 1, 2 e 3*)**:
+  - Stage 1: Compilador de bootstrap (Pascal) compila o compilador em Aether (`compiler/aeth/`) gerando `aetherc-stage1`.
+  - Stage 2: `aetherc-stage1` compila o próprio código-fonte de `compiler/aeth/` gerando `aetherc-stage2`.
+  - Stage 3: `aetherc-stage2` compila novamente `compiler/aeth/` gerando `aetherc-stage3`.
+- [ ] **Verificação de Determinismo Bit-a-Bit**:
+  - Validação estrita de determinismo: o código e binário gerados no Stage 2 e Stage 3 devem ser 100% idênticos, atestando a independência e maturidade total do Aether.
+
+### ⏳ Fase 30: Backend WebAssembly (Wasm) & Interop Web com BlaiseVue
+- [ ] **Alvo de Compilação WebAssembly (`--target=wasm`)**:
+  - Emissão de código adaptado para compilação WebAssembly (`.wasm`) via toolchain C/Emscripten e Free Pascal Wasm backend (sem dependência de backend LLVM IR nativo).
+  - Geração de wrapper JavaScript/TypeScript e manifesto de carregamento para browsers e runtimes edge (Cloudflare Workers, Deno, Wasmtime).
+- [ ] **Integração de Primeira Classe com BlaiseVue**:
+  - Execução de lógica de negócios e stores reativos escritos em Aether diretamente no frontend do navegador via Wasm com transferências de memória zero-copy.
+
+### ⏳ Fase 31: Concorrência Estruturada & Async/Await com Corrotinas
+- [ ] **Corrotinas Zero-Cost e Tarefas Cooperativas**:
+  - Primitivas de `async` e `await` nativas sobre modelo de corrotinas/fibras leves, sem sobrecarga de alocação de threads de SO.
+  - Runtime de agendamento cooperativo (*Event Loop* / *Task Scheduler*) em Aether.
+- [ ] **Concorrência Segura Garantida pelo Borrow Checker**:
+  - Imposição estrita de traits de segurança em concorrência (`Send` e `Sync`), eliminando data races em tempo de compilação sem necessidade de GC.
+
+### ⏳ Fase 32: Gerador Canônico de Documentação (`aetherc doc`)
+- [ ] **Docstrings e Metadados de Módulos**:
+  - Parser de comentários de documentação estruturados (`///`).
+  - Extração de contratos (`require`/`ensure`), parâmetros com semântica de posse (`borrow`, `mut borrow`, `take`) e tipagem.
+- [ ] **Geração de Site Estático de Documentação**:
+  - Comando `aetherc doc [projeto] [--open]`.
+  - Geração de interface HTML/Markdown responsiva com busca instantânea local, diagrama de dependências e exemplos testáveis (*doctests*).
+
+### ⏳ Fase 33: Registry Central de Pacotes Comunitários (`aetherc pkg publish`)
+- [ ] **Infraestrutura do Registro Central**:
+  - Especificação e cliente de API para o repositório público de pacotes do Aether.
+  - Auditoria criptográfica de autoria via assinaturas digitais.
+- [ ] **Comandos de Publicação e Descoberta**:
+  - Subcomandos na CLI: `aetherc pkg publish` e `aetherc pkg search <termo>`.
+  - Sincronização automatizada de dependências e resolução de conflitos semânticos (SemVer).
