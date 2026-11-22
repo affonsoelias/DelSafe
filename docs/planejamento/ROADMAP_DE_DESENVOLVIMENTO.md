@@ -197,7 +197,19 @@ Este documento traça o status oficial de desenvolvimento do compilador e as pr�
   - Serialização e resposta de payloads JSON estruturados utilizando `std/json.aeth`.
   - Exemplo prático de micro-serviço web com validação dual-backend (`fpc` e `gcc`).
 
-### ⏳ Fase 21: Bootstrapping 100% Autônomo do Compilador Auto-Hospedado (`compiler/aeth/`)
+### ⏳ Fase 21: Interoperabilidade Avançada de Primeira Classe (Free Pascal Units & C Headers / FFI)
+- [ ] **Interoperabilidade Fluida com Units do Free Pascal (`import pascal`)**:
+  - Consumo direto de funções e procedimentos de units FPC (`SysUtils`, `DateUtils`, `Classes`, `Horse`, `mORMot`) via namespaces transparentes.
+  - Mapeamento automático e seguro de strings e registros Pascal com as regras de posse do Aether (`borrow`, `take`).
+  - Proteção e encapsulamento de exceções Pascal (`try..except`) convertidas automaticamente em retornos `Result<T, String>` sem quebrar a execução do servidor.
+  - Capacidade de interagir com instâncias e métodos de classes/records do Pascal.
+- [ ] **Interoperabilidade Avançada com Cabeçalhos e Bibliotecas C (`import c`)**:
+  - Inclusão direta de headers C (`import c "<sqlite3.h>";`, `import c "minha_lib.h";`) no backend C99.
+  - Suporte a diretivas de linkagem automática de bibliotecas externas C (ex: `-lsqlite3`, `-lssl`, `-lcrypto`).
+  - Mapeamento bidirecional de ponteiros seguros (`Pointer`, `borrow` ➔ `const char*`, `mut borrow` ➔ buffers mutáveis C).
+  - Suporte a constantes e macros de cabeçalhos C (`extern c const`).
+
+### ⏳ Fase 22: Bootstrapping 100% Autônomo do Compilador Auto-Hospedado (`compiler/aeth/`)
 - [ ] **Resolução Multi-Módulo no Compilador Auto-Hospedado**:
   - Capacidade de analisar e resolver múltiplos arquivos com `import` diretamente no código Aether de `compiler/aeth/`.
 - [ ] **Geração Completa do Binário Final Auto-Gerado**:
