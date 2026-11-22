@@ -290,7 +290,7 @@ begin
   try
     while not Check(tokEnd) and not Check(tokEOF) do
     begin
-      if Check(tokFunction) then
+      if Check(tokFunction) or Check(tokAsync) then
         Result.Methods.Add(ParseFunction(True))
       else
         raise EAetherParserError.Create('Esperado "function" na declaracao da trait', FCurTok.Line, FCurTok.Col);
@@ -321,7 +321,7 @@ begin
   try
     while not Check(tokEnd) and not Check(tokEOF) do
     begin
-      if Check(tokFunction) then
+      if Check(tokFunction) or Check(tokAsync) then
       begin
         FuncNode := ParseFunction(False);
         for J := 0 to FuncNode.Params.Count - 1 do
@@ -374,14 +374,18 @@ var
   FuncName, ReturnType, ParamName, ParamType: string;
   FLine, FCol: Integer;
   Ownership: TOwnershipKind;
-  IsExt: Boolean;
+  IsExt, IsAsyncFunc: Boolean;
   ExtLib, ExtAbi: string;
 begin
   FLine := FCurTok.Line;
   FCol := FCurTok.Col;
   IsExt := False;
+  IsAsyncFunc := False;
   ExtLib := '';
   ExtAbi := 'c';
+
+  if Match(tokAsync) then
+    IsAsyncFunc := True;
 
   if Match(tokExtern) then
   begin
@@ -402,6 +406,7 @@ begin
   FuncName := Expect(tokIdentifier, 'Esperado nome da funcao').Value;
 
   Result := TASTFunction.Create(FLine, FCol, FuncName, '');
+  Result.IsAsync := IsAsyncFunc;
   Result.IsExtern := IsExt;
   Result.ExternLib := ExtLib;
   Result.ExternAbi := ExtAbi;
@@ -862,6 +867,10 @@ begin
     Result := TASTUnaryExpr.Create(Line, Col, '-', ParseUnaryExpr())
   else if Match(tokNot) then
     Result := TASTUnaryExpr.Create(Line, Col, 'not', ParseUnaryExpr())
+  else if Match(tokAwait) then
+    Result := TASTAwaitExpr.Create(Line, Col, ParseUnaryExpr())
+  else if Match(tokSpawn) then
+    Result := TASTSpawnExpr.Create(Line, Col, ParseUnaryExpr())
   else
     Result := ParsePrimaryExpr();
 end;
@@ -970,7 +979,7 @@ begin
         Result.Traits.Add(ParseTraitDecl('', FCurTok.Line, FCurTok.Col))
       else if Check(tokImpl) then
         Result.Impls.Add(ParseImplDecl)
-      else if Check(tokFunction) or Check(tokExtern) then
+      else if Check(tokFunction) or Check(tokExtern) or Check(tokAsync) then
         Result.Functions.Add(ParseFunction(False))
       else if Check(tokProgram) then
       begin

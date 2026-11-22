@@ -248,6 +248,19 @@ begin
         if SameText(TASTFunction(FModule.Functions[I]).Name, Call.Callee) then
           Exit(TASTFunction(FModule.Functions[I]).ReturnType);
     end;
+  end
+  else if Expr is TASTAwaitExpr then
+  begin
+    TargetType := GetExprTypeName(TASTAwaitExpr(Expr).Expr);
+    if (Copy(TargetType, 1, 5) = 'Task<') and (TargetType[Length(TargetType)] = '>') then
+      Exit(Copy(TargetType, 6, Length(TargetType) - 6))
+    else
+      Exit(TargetType);
+  end
+  else if Expr is TASTSpawnExpr then
+  begin
+    TargetType := GetExprTypeName(TASTSpawnExpr(Expr).CallExpr);
+    Exit('Task<' + TargetType + '>');
   end;
 end;
 
@@ -286,6 +299,7 @@ begin
     if P2 > 0 then Inner := Copy(Inner, 1, P2 - 1);
     Result := 'P' + EmitTypeRef(Inner);
   end
+  else if (Copy(AType, 1, 5) = 'Task<') and (AType[Length(AType)] = '>') then Result := 'AetherTask'
   else if Pos('Option<', AType) = 1 then
   begin
     Inner := Copy(AType, 8, Length(AType) - 8);
@@ -310,6 +324,7 @@ var
   OpStr: string;
   TargetStr: string;
   ArgType: string;
+  TName: string;
 begin
   if not Assigned(Expr) then Exit('');
 
@@ -432,6 +447,25 @@ begin
     OpStr := Un.Op;
     if OpStr = 'not' then OpStr := '!';
     Result := Format('(%s%s)', [OpStr, EmitExpr(Un.Expr)]);
+    Exit;
+  end;
+
+  if Expr is TASTAwaitExpr then
+  begin
+    TName := GetExprTypeName(TASTAwaitExpr(Expr).Expr);
+    if (TName = 'Float') or (TName = 'Float32') or (TName = 'Float64') or (TName = 'Double') or
+       (TName = 'Task<Float>') or (TName = 'Task<Float32>') or (TName = 'Task<Float64>') or (TName = 'Task<Double>') then
+      Result := Format('(%s).float_val', [EmitExpr(TASTAwaitExpr(Expr).Expr)])
+    else if (TName = 'String') or (TName = 'Task<String>') then
+      Result := Format('(%s).str_val', [EmitExpr(TASTAwaitExpr(Expr).Expr)])
+    else
+      Result := Format('(%s).int_val', [EmitExpr(TASTAwaitExpr(Expr).Expr)]);
+    Exit;
+  end;
+
+  if Expr is TASTSpawnExpr then
+  begin
+    Result := EmitExpr(TASTSpawnExpr(Expr).CallExpr);
     Exit;
   end;
 
@@ -707,6 +741,7 @@ var
   LineStr: string;
   I, J: Integer;
   PatStr: string;
+  TName: string;
 begin
   if Stmt is TASTAssignStmt then
   begin
@@ -753,7 +788,20 @@ begin
   begin
     Ret := TASTReturnStmt(Stmt);
     if Assigned(Ret.Expr) then
-      Emit(Format('return %s;', [EmitExpr(Ret.Expr)]))
+    begin
+      if Assigned(FCurrentFunc) and FCurrentFunc.IsAsync then
+      begin
+        TName := GetExprTypeName(Ret.Expr);
+        if (TName = 'Float') or (TName = 'Float32') or (TName = 'Float64') or (TName = 'Double') then
+          Emit(Format('return (AetherTask){ .is_completed = true, .float_val = %s };', [EmitExpr(Ret.Expr)]))
+        else if TName = 'String' then
+          Emit(Format('return (AetherTask){ .is_completed = true, .str_val = %s };', [EmitExpr(Ret.Expr)]))
+        else
+          Emit(Format('return (AetherTask){ .is_completed = true, .int_val = (int64_t)(%s) };', [EmitExpr(Ret.Expr)]));
+      end
+      else
+        Emit(Format('return %s;', [EmitExpr(Ret.Expr)]));
+    end
     else
       Emit('return;');
   end
@@ -946,7 +994,12 @@ begin
 
   if ParamListStr = '' then ParamListStr := 'void';
 
-  Emit(Format('%s %s(%s) {', [EmitTypeRef(Func.ReturnType), Func.Name, ParamListStr]));
+  if Func.IsAsync then
+    Emit(Format('AetherTask %s(%s) {', [Func.Name, ParamListStr]))
+  else if (Func.ReturnType = 'Void') or (Func.ReturnType = '') then
+    Emit(Format('void %s(%s) {', [Func.Name, ParamListStr]))
+  else
+    Emit(Format('%s %s(%s) {', [EmitTypeRef(Func.ReturnType), Func.Name, ParamListStr]));
   IncIndent;
 
   // Asserts de Pre-condicao
@@ -1039,6 +1092,8 @@ begin
   Emit('    for (size_t i = 0; i < n; i++) d[i] = s[i]; return dst;');
   Emit('}');
   Emit('static inline int printf(const char* fmt, ...) { (void)fmt; return 0; }');
+  Emit('int puts(const char* s) { (void)s; return 0; }');
+  Emit('#define assert(x) ((void)0)');
   Emit('#else');
   Emit('#include <stdio.h>');
   Emit('#include <stdlib.h>');
@@ -1066,6 +1121,15 @@ begin
   Emit('#include <unistd.h>');
   Emit('#endif');
   Emit('#endif');
+  Emit('');
+  Emit('// Runtime de Concorrencia e Tarefas Assincronas (AetherTask)');
+  Emit('typedef struct {');
+  Emit('    bool is_completed;');
+  Emit('    int64_t int_val;');
+  Emit('    double float_val;');
+  Emit('    const char* str_val;');
+  Emit('    void* ptr_val;');
+  Emit('} AetherTask;');
   Emit('');
 
   // Headers adicionais de C (import c)
@@ -1482,7 +1546,12 @@ begin
         if J < Func.Params.Count - 1 then
           ParamListStr := ParamListStr + ', ';
       end;
-      Emit(Format('%s %s(%s);', [EmitTypeRef(Func.ReturnType), Func.Name, ParamListStr]));
+      if Func.IsAsync then
+        Emit(Format('AetherTask %s(%s);', [Func.Name, ParamListStr]))
+      else if (Func.ReturnType = 'Void') or (Func.ReturnType = '') then
+        Emit(Format('void %s(%s);', [Func.Name, ParamListStr]))
+      else
+        Emit(Format('%s %s(%s);', [EmitTypeRef(Func.ReturnType), Func.Name, ParamListStr]));
     end;
   end;
   Emit('');

@@ -44,6 +44,8 @@ type
     function CheckMemberAccess(Acc: TASTMemberAccessExpr): string;
     function CheckBinary(Bin: TASTBinaryExpr): string;
     function CheckUnary(Un: TASTUnaryExpr): string;
+    function CheckAwait(AwaitExpr: TASTAwaitExpr): string;
+    function CheckSpawn(SpawnExpr: TASTSpawnExpr): string;
     function CheckCall(Call: TASTCallExpr): string;
 
     procedure CheckStmt(Stmt: TASTStmt);
@@ -133,6 +135,7 @@ begin
   if (Pos('Result', TargetType) = 1) and (Pos('Result', SourceType) = 1) then Exit(True);
   if (Pos('Option', TargetType) = 1) and ((Pos('Option', SourceType) = 1) or (SourceType = 'Option<GenericNone>')) then Exit(True);
   if (Pos('Box', TargetType) = 1) and (Pos('Box', SourceType) = 1) then Exit(True);
+  if (Pos('Task', TargetType) = 1) and (Pos('Task', SourceType) = 1) then Exit(True);
   if (Pos('Option<Box<', TargetType) = 1) and ((Pos('Box<', SourceType) = 1) or (SourceType = 'Option<GenericNone>')) then Exit(True);
   Result := False;
 end;
@@ -335,6 +338,28 @@ begin
     Exit('Bool');
   end;
   Result := OperandType;
+end;
+
+function TAetherTypeChecker.CheckAwait(AwaitExpr: TASTAwaitExpr): string;
+var
+  InnerType: string;
+begin
+  InnerType := CheckExpr(AwaitExpr.Expr);
+  if (Copy(InnerType, 1, 5) = 'Task<') and (InnerType[Length(InnerType)] = '>') then
+    Result := Copy(InnerType, 6, Length(InnerType) - 6)
+  else
+    Result := InnerType;
+end;
+
+function TAetherTypeChecker.CheckSpawn(SpawnExpr: TASTSpawnExpr): string;
+var
+  CallType: string;
+begin
+  CallType := CheckExpr(SpawnExpr.CallExpr);
+  if (Copy(CallType, 1, 5) = 'Task<') and (CallType[Length(CallType)] = '>') then
+    Result := CallType
+  else
+    Result := 'Task<' + CallType + '>';
 end;
 
 function TAetherTypeChecker.HasForeignImports: Boolean;
@@ -781,6 +806,10 @@ begin
     Result := CheckBinary(TASTBinaryExpr(Expr))
   else if Expr is TASTUnaryExpr then
     Result := CheckUnary(TASTUnaryExpr(Expr))
+  else if Expr is TASTAwaitExpr then
+    Result := CheckAwait(TASTAwaitExpr(Expr))
+  else if Expr is TASTSpawnExpr then
+    Result := CheckSpawn(TASTSpawnExpr(Expr))
   else if Expr is TASTCallExpr then
     Result := CheckCall(TASTCallExpr(Expr))
   else

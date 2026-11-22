@@ -318,6 +318,18 @@ begin
     CheckExpr(Un.Expr, accRead);
     Exit;
   end;
+
+  // Await e Spawn
+  if Expr is TASTAwaitExpr then
+  begin
+    CheckExpr(TASTAwaitExpr(Expr).Expr, accRead);
+    Exit;
+  end;
+  if Expr is TASTSpawnExpr then
+  begin
+    CheckExpr(TASTSpawnExpr(Expr).CallExpr, accRead);
+    Exit;
+  end;
 end;
 
 procedure TAetherBorrowChecker.CheckCallArg(Arg: TASTCallArg);

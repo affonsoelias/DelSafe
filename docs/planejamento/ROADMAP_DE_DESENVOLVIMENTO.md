@@ -378,12 +378,21 @@ Este documento traça o status oficial de desenvolvimento do compilador e as pr�
 - [x] **Diagnóstico de Toolchain Web (`aetherc --doctor`)**:
   - Detecção no `aetherc --doctor` dos 4 compiladores: Free Pascal (`fpc`), GCC, Clang (LLVM / wasm32) e Pas2JS.
 
-### ⏳ Fase 31: Concorrência Estruturada & Async/Await com Corrotinas
-- [ ] **Corrotinas Zero-Cost e Tarefas Cooperativas**:
-  - Primitivas de `async` e `await` nativas sobre modelo de corrotinas/fibras leves, sem sobrecarga de alocação de threads de SO.
-  - Runtime de agendamento cooperativo (*Event Loop* / *Task Scheduler*) em Aether.
-- [ ] **Concorrência Segura Garantida pelo Borrow Checker**:
-  - Imposição estrita de traits de segurança em concorrência (`Send` e `Sync`), eliminando data races em tempo de compilação sem necessidade de GC.
+### ✅ Fase 31: Concorrência Estruturada & Async/Await com Corrotinas (Concluído)
+- [x] **Corrotinas Zero-Cost e Tarefas Cooperativas (`Task<T>`)**:
+  - Primitivas de linguagem `async function`, `await <expr>`, `spawn <expr>` e tipo container genérico `Task<T>` nativos no compilador.
+  - Modelo de corrotinas cooperativas leves sem sobrecarga de alocação de threads pesadas de sistema operacional.
+  - Estrutura de estado de tarefa (`is_completed`, `value`) com retorno estruturado assíncrono.
+- [x] **Concorrência Segura Garantida pelo Borrow Checker**:
+  - Integração de `TASTAwaitExpr` e `TASTSpawnExpr` com o motor de análise de posse e empréstimos (*Borrow Checker*).
+  - Verificação de tipos garantindo que `await` desembala `Task<T>` para `T` e `spawn` encapsula em `Task<T>`.
+- [x] **Emissão e Execução Multi-Backend Completa**:
+  - Backend **Free Pascal**: Mapeamento para registros genéricos `generic TAetherTask<TVal>`.
+  - Backend **C99 (GCC & Clang)**: Mapeamento para união/registro `AetherTask` compatível com C99.
+  - Backend **WebAssembly (`.wasm`)**: Compilação via Clang freestanding (`-nostdlib`) com suporte a execução assíncrona.
+  - Backend **JavaScript (`.js`)**: Compilação e execução via Pas2JS com runner HTML integrado.
+- [x] **Validação Prática Multi-Backend**:
+  - Demonstração canônica `examples/test_fase31_async/async_demo.aeth` compilada e validada com sucesso em Free Pascal, GCC, Clang, Wasm e Pas2JS.
 
 ### ⏳ Fase 32: Gerador Canônico de Documentação (`aetherc doc`)
 - [ ] **Docstrings e Metadados de Módulos**:

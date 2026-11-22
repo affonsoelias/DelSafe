@@ -86,6 +86,22 @@ type
     function Dump(Indent: Integer = 0): string; override;
   end;
 
+  TASTAwaitExpr = class(TASTExpr)
+  public
+    Expr: TASTExpr;
+    constructor Create(ALine, ACol: Integer; AExpr: TASTExpr);
+    destructor Destroy; override;
+    function Dump(Indent: Integer = 0): string; override;
+  end;
+
+  TASTSpawnExpr = class(TASTExpr)
+  public
+    CallExpr: TASTExpr;
+    constructor Create(ALine, ACol: Integer; ACallExpr: TASTExpr);
+    destructor Destroy; override;
+    function Dump(Indent: Integer = 0): string; override;
+  end;
+
   TASTCallArg = class(TASTNode)
   public
     Ownership: TOwnershipKind;
@@ -254,6 +270,7 @@ type
     LocalVars: TASTNodeList;   // TASTVarDecl
     Body: TASTNodeList;        // TASTStmt
     IsExtern: Boolean;
+    IsAsync: Boolean;
     ExternAbi: string;
     ExternLib: string;
     constructor Create(ALine, ACol: Integer; const AName, AReturnType: string);
@@ -510,6 +527,44 @@ function TASTUnaryExpr.Dump(Indent: Integer): string;
 begin
   Result := MakeIndent(Indent) + Format('Operacao Unaria (%s):' + LineEnding, [Op]) +
             Expr.Dump(Indent + 1);
+end;
+
+{ TASTAwaitExpr }
+
+constructor TASTAwaitExpr.Create(ALine, ACol: Integer; AExpr: TASTExpr);
+begin
+  inherited Create(ALine, ACol);
+  Expr := AExpr;
+end;
+
+destructor TASTAwaitExpr.Destroy;
+begin
+  Expr.Free;
+  inherited Destroy;
+end;
+
+function TASTAwaitExpr.Dump(Indent: Integer): string;
+begin
+  Result := MakeIndent(Indent) + 'Await:' + LineEnding + Expr.Dump(Indent + 1);
+end;
+
+{ TASTSpawnExpr }
+
+constructor TASTSpawnExpr.Create(ALine, ACol: Integer; ACallExpr: TASTExpr);
+begin
+  inherited Create(ALine, ACol);
+  CallExpr := ACallExpr;
+end;
+
+destructor TASTSpawnExpr.Destroy;
+begin
+  CallExpr.Free;
+  inherited Destroy;
+end;
+
+function TASTSpawnExpr.Dump(Indent: Integer): string;
+begin
+  Result := MakeIndent(Indent) + 'Spawn:' + LineEnding + CallExpr.Dump(Indent + 1);
 end;
 
 { TASTCallArg }
@@ -924,6 +979,7 @@ begin
   LocalVars := TASTNodeList.Create;
   Body := TASTNodeList.Create;
   IsExtern := False;
+  IsAsync := False;
   ExternAbi := 'c';
   ExternLib := '';
 end;
@@ -1166,6 +1222,10 @@ begin
     Exit(TASTBinaryExpr.Create(Node.Line, Node.Col, TASTExpr(CloneASTNode(TASTBinaryExpr(Node).Left)), TASTBinaryExpr(Node).Op, TASTExpr(CloneASTNode(TASTBinaryExpr(Node).Right))))
   else if Node is TASTUnaryExpr then
     Exit(TASTUnaryExpr.Create(Node.Line, Node.Col, TASTUnaryExpr(Node).Op, TASTExpr(CloneASTNode(TASTUnaryExpr(Node).Expr))))
+  else if Node is TASTAwaitExpr then
+    Exit(TASTAwaitExpr.Create(Node.Line, Node.Col, TASTExpr(CloneASTNode(TASTAwaitExpr(Node).Expr))))
+  else if Node is TASTSpawnExpr then
+    Exit(TASTSpawnExpr.Create(Node.Line, Node.Col, TASTExpr(CloneASTNode(TASTSpawnExpr(Node).CallExpr))))
   else if Node is TASTCallArg then
     Exit(TASTCallArg.Create(Node.Line, Node.Col, TASTCallArg(Node).Ownership, TASTExpr(CloneASTNode(TASTCallArg(Node).Expr))))
   else if Node is TASTCallExpr then

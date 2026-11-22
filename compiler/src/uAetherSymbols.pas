@@ -300,7 +300,7 @@ begin
   if P > 0 then
     CleanName := Copy(CleanName, 1, P - 1);
 
-  if (CleanName = 'Result') or (CleanName = 'Option') or (CleanName = 'Box') then
+  if (CleanName = 'Result') or (CleanName = 'Option') or (CleanName = 'Box') or (CleanName = 'Task') then
     Exit(True);
 
   Sym := ResolveTypeSymbol(CleanName);

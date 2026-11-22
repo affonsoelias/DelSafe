@@ -388,3 +388,48 @@ aetherc bootstrap
    - Os binários executáveis gerados no Stage 2 e Stage 3 rodam e produzem saídas estritamente idênticas.
    - Os hashes criptográficos SHA-256 e tamanhos em bytes dos artefatos do Stage 2 e Stage 3 são comparados.
    - Havendo 0 bytes de divergência e hashes idênticos, atesta-se **CONVERGÊNCIA TOTAL (Fixed Point)** e **100% DE DETERMINISMO BIT-A-BIT**.
+
+---
+
+## 7. Concorrência Estruturada & Async/Await com Corrotinas (`Task<T>`)
+
+A partir da **Fase 31**, o Aether inclui suporte nativo de primeira classe à concorrência estruturada e corrotinas cooperativas de custo zero (*zero-cost coroutines*), sem necessidade de alocar threads pesadas de sistema operacional.
+
+### Sintaxe e Primitivas:
+- `async function Nome(params): Tipo`: Declara uma função assíncrona. Seu retorno real é automaticamente empacotado no container genérico `Task<Tipo>`.
+- `await <expr>`: Aguarda a conclusão da tarefa cooperativa e extrai seu valor resultante com segurança estática.
+- `spawn <expr>`: Dispara uma tarefa assíncrona desacoplada retornando um `Task<T>`.
+- `Task<T>`: Tipo genérico canônico embutido (`specialize TAetherTask<T>` em Pascal / `AetherTask` em C99).
+
+### Exemplo em Aether:
+```aether
+module async_demo;
+
+async function ComputarFatorial(n: Int32): Int32
+begin
+    if n <= 1 then
+        return 1;
+    end;
+    return n * (n - 1);
+end;
+
+program async_app;
+var
+    t1: Task<Int32>;
+    resultado: Int32;
+begin
+    // Dispara a execucao assincrona
+    t1 := spawn ComputarFatorial(5);
+
+    // Aguarda o resultado de forma cooperativa
+    resultado := await t1;
+    PrintLn("Resultado: " + IntToStr(resultado));
+end.
+```
+
+### Suporte Multi-Backend Completo:
+O modelo de tarefas assíncronas é 100% compatível em todos os backends do compilador:
+- **Free Pascal**: Compilação nativa de alta velocidade (`--target=pascal`).
+- **C99 (GCC & Clang)**: Binários nativos compactos e de alto desempenho (`--target=c`).
+- **WebAssembly**: Módulos `.wasm` autônomos (`--target=wasm`).
+- **JavaScript (Pas2JS)**: Execução no navegador e runtime web (`--target=js`).

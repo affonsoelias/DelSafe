@@ -271,6 +271,11 @@ begin
     if P2 > 0 then Inner := Copy(Inner, 1, P2 - 1);
     Result := 'P' + EmitTypeRef(Inner);
   end
+  else if (Copy(AType, 1, 5) = 'Task<') and (AType[Length(AType)] = '>') then
+  begin
+    Inner := Copy(AType, 6, Length(AType) - 6);
+    Result := 'specialize TAetherTask<' + EmitTypeRef(Inner) + '>';
+  end
   else if Pos('Option<', AType) = 1 then
   begin
     Inner := Copy(AType, 8, Length(AType) - 8);
@@ -373,6 +378,18 @@ begin
   begin
     Un := TASTUnaryExpr(Expr);
     Result := Format('(%s %s)', [Un.Op, EmitExpr(Un.Expr)]);
+    Exit;
+  end;
+
+  if Expr is TASTAwaitExpr then
+  begin
+    Result := Format('(%s).value', [EmitExpr(TASTAwaitExpr(Expr).Expr)]);
+    Exit;
+  end;
+
+  if Expr is TASTSpawnExpr then
+  begin
+    Result := EmitExpr(TASTSpawnExpr(Expr).CallExpr);
     Exit;
   end;
 
@@ -653,7 +670,12 @@ begin
   begin
     Ret := TASTReturnStmt(Stmt);
     if Assigned(Ret.Expr) then
-      Emit(Format('Exit(%s);', [EmitExpr(Ret.Expr)]))
+    begin
+      if Assigned(FCurrentFunc) and FCurrentFunc.IsAsync then
+        Emit(Format('begin Result.is_completed := True; Result.value := %s; Exit(Result); end;', [EmitExpr(Ret.Expr)]))
+      else
+        Emit(Format('Exit(%s);', [EmitExpr(Ret.Expr)]));
+    end
     else
       Emit('Exit;');
   end
@@ -859,7 +881,9 @@ begin
       ParamListStr := ParamListStr + '; ';
   end;
 
-  if (Func.ReturnType = 'Void') or (Func.ReturnType = '') then
+  if Func.IsAsync then
+    Emit(Format('function %s(%s): specialize TAetherTask<%s>;', [Func.Name, ParamListStr, EmitTypeRef(Func.ReturnType)]))
+  else if (Func.ReturnType = 'Void') or (Func.ReturnType = '') then
     Emit(Format('procedure %s(%s);', [Func.Name, ParamListStr]))
   else
     Emit(Format('function %s(%s): %s;', [Func.Name, ParamListStr, EmitTypeRef(Func.ReturnType)]));
@@ -1022,7 +1046,9 @@ begin
       ParamListStr := ParamListStr + '; ';
   end;
 
-  if (Func.ReturnType = 'Void') or (Func.ReturnType = '') then
+  if Func.IsAsync then
+    Result := Format('function %s(%s): specialize TAetherTask<%s>;', [Func.Name, ParamListStr, EmitTypeRef(Func.ReturnType)])
+  else if (Func.ReturnType = 'Void') or (Func.ReturnType = '') then
     Result := Format('procedure %s(%s);', [Func.Name, ParamListStr])
   else
     Result := Format('function %s(%s): %s;', [Func.Name, ParamListStr, EmitTypeRef(Func.ReturnType)]);
@@ -1313,6 +1339,12 @@ begin
     Emit('  end;');
     Emit('');
     Emit('type');
+    Emit('  generic TAetherTask<TVal> = record');
+    Emit('    is_completed: Boolean;');
+    Emit('    value: TVal;');
+    Emit('  end;');
+    Emit('');
+    Emit('type');
     Emit('  TResultDoubleError = specialize TAetherResult<Double, Integer>;');
     Emit('');
 
@@ -1421,6 +1453,12 @@ begin
     Emit('    is_err: Boolean;');
     Emit('    value: TVal;');
     Emit('    error: TErr;');
+    Emit('  end;');
+    Emit('');
+    Emit('type');
+    Emit('  generic TAetherTask<TVal> = record');
+    Emit('    is_completed: Boolean;');
+    Emit('    value: TVal;');
     Emit('  end;');
     Emit('');
     Emit('type');

@@ -35,6 +35,12 @@ type
     tokTrait,
     tokImpl,
 
+    // Palavras-chave: Concorrencia e Async
+    tokAsync,
+    tokAwait,
+    tokSpawn,
+    tokYield,
+
     // Palavras-chave: Funções e Contratos
     tokFunction,
     tokContract,
@@ -151,6 +157,10 @@ begin
     tokCase:          Result := 'case';
     tokReturn:        Result := 'return';
     tokAsm:           Result := 'asm';
+    tokAsync:         Result := 'async';
+    tokAwait:         Result := 'await';
+    tokSpawn:         Result := 'spawn';
+    tokYield:         Result := 'yield';
     tokTake:          Result := 'take';
     tokBorrow:        Result := 'borrow';
     tokMut:           Result := 'mut';
@@ -222,6 +232,10 @@ begin
   else if Lower = 'case' then Result := tokCase
   else if Lower = 'return' then Result := tokReturn
   else if Lower = 'asm' then Result := tokAsm
+  else if Lower = 'async' then Result := tokAsync
+  else if Lower = 'await' then Result := tokAwait
+  else if Lower = 'spawn' then Result := tokSpawn
+  else if Lower = 'yield' then Result := tokYield
   else if Lower = 'take' then Result := tokTake
   else if Lower = 'borrow' then Result := tokBorrow
   else if Lower = 'mut' then Result := tokMut
