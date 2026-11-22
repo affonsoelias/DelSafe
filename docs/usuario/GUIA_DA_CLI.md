@@ -1,0 +1,131 @@
+# Guia Completo da CLI do Aether (`aetherc`)
+
+O compilador oficial do Aether (`aetherc`) é uma ferramenta multifuncional e completa para compilação nativa, gerenciamento de projetos, auditoria de pacotes e ferramentas de integração com o ecossistema.
+
+---
+
+## 1. Visão Geral da Sintaxe
+
+```bash
+aetherc <comando | arquivo.aeth> [opcoes]
+```
+
+---
+
+## 2. Comandos de Construção e Execução
+
+### `aetherc build`
+Compila o projeto baseado no manifesto `aether.json` presente no diretório atual ou pastas superiores.
+- Restaura automaticamente dependências ausentes de `.aether/deps/`.
+- Executa a análise sintática, verificação de tipos e o *Borrow Checker*.
+- Transpila para a pasta `generated/pascal/` ou `generated/c/`.
+- Invoca o compilador nativo (FPC ou GCC) e gera o binário final na pasta `bin/`.
+
+```bash
+aetherc build
+aetherc build --target=c
+```
+
+### `aetherc run`
+Compila a aplicação e a executa imediatamente no terminal:
+```bash
+aetherc run
+aetherc run --target=c
+```
+
+### `aetherc test [filtro]`
+Executa a suíte de testes unitários automatizados da pasta `tests/`:
+```bash
+# Executa todos os testes (*.aeth em tests/)
+aetherc test
+
+# Executa testes com o backend C99 nativo
+aetherc test --target=c
+
+# Executa apenas testes que contenham "banco" no nome do arquivo
+aetherc test banco
+```
+
+### `aetherc clean`
+Remove com segurança todos os artefatos de compilação do projeto atual (`bin/` e `generated/`), preservando o código-fonte e o compilador:
+```bash
+aetherc clean
+```
+
+---
+
+## 3. Comandos de Emissão e Transpilação (`aetherc emit`)
+
+O comando `emit` gera o código-fonte transpilado sem necessariamente invocar o FPC ou GCC, permitindo inspeção, depuração, integração com CI/CD e integração direta com o **BlaiseVue**:
+
+```bash
+aetherc emit <pascal | c> [arquivo.aeth] [opcoes]
+```
+
+### Opções do `emit`:
+- `--unit`: Emite no formato **Unit Free Pascal** (`unit ...; interface ... implementation ... end.`), permitindo consumo direto pelo BlaiseVue com `uses MinhaUnit;`.
+- `--out-dir=<caminho>` ou `-d <caminho>`: Grava o código gerado no diretório especificado (ex: `.blaisevue/generated/` ou `src/generated/`).
+- `--stdout`: Imprime o código gerado diretamente na saída padrão do terminal, ideal para pipes e redirecionamentos (`| gcc -x c -`, `> codigo.c`).
+- `--silent` ou `-s`: Modo silencioso para pipelines de ferramentas externas, retornando ExitCode 0 em sucesso e erros em `stderr`.
+- `--watch` ou `-w`: Observa o arquivo fonte e regera a unit/código automaticamente sempre que o arquivo for salvo (Hot-Reload reativo).
+- `-o <arquivo>`: Especifica o nome exato do arquivo de destino.
+
+### Exemplos Práticos do `emit`:
+```bash
+# 1. Gera Unit Pascal para consumo no BlaiseVue
+aetherc emit pascal src/Store.aeth --unit
+
+# 2. Gera Unit Pascal diretamente dentro da pasta gerenciada pelo BlaiseVue
+aetherc emit pascal src/Store.aeth --unit --out-dir=./generated/blaisevue
+
+# 3. Observa alterações e regera em tempo real (Hot-Reload)
+aetherc emit pascal src/Store.aeth --unit --watch
+
+# 4. Inspeciona o código C99 gerado direto no console via pipe
+aetherc emit c src/main.aeth --stdout | head -n 30
+```
+
+---
+
+## 4. Gerenciamento de Projetos e Pacotes
+
+### `aetherc new [nome | .]`
+Inicializa um novo projeto Aether estruturado com `aether.json`, `src/main.aeth`, `tests/main_test.aeth`, `.gitignore` e `README.md`:
+```bash
+# Cria um novo projeto em uma nova pasta:
+aetherc new meu_projeto
+
+# Cria um novo projeto dentro do diretorio atual:
+aetherc new .
+```
+
+### `aetherc pkg <subcomando>`
+Gerenciador nativo de pacotes do Aether:
+- `aetherc pkg add <pacote>`: Adiciona dependência Git ou local ao `aether.json` e `aether.lock`.
+- `aetherc pkg remove <pacote>` (ou `rm`): Remove dependência e limpa caches locais.
+- `aetherc pkg update [pacote]` (ou `upgrade`): Atualiza dependências Git e sincroniza o lockfile.
+- `aetherc pkg audit`: Inspeciona a integridade criptográfica SHA e validação TLS.
+- `aetherc pkg list` (ou `ls`): Exibe a árvore de dependências declaradas no projeto.
+- `aetherc pkg clean`: Limpa o cache global compartilhado em `~/.aether/cache`.
+
+---
+
+## 5. Ferramentas de Linguagem e Diagnósticos
+
+### `aetherc --doctor`
+Verifica a presença e versões do Free Pascal Compiler (`fpc`) e do compilador GCC (MSYS2 UCRT64 no Windows ou nativo no Linux/macOS).
+
+### `aetherc lsp` (ou `--lsp`)
+Inicia o servidor de linguagem oficial (**Language Server Protocol - LSP**), fornecendo autocompletion, hover documentation, go-to-definition e diagnósticos em tempo real para o VS Code e editores modernos.
+
+### `aetherc --emit-json-diag`
+Executa o compilador emitindo todos os erros e diagnósticos estruturados em formato JSON, projetado para consumo por IAs e extensões de IDE:
+```bash
+aetherc build --emit-json-diag
+```
+
+### `aetherc --check-only`
+Valida apenas sintaxe, tipos e regras do Borrow Checker sem gerar executáveis nem código intermediário (ideal para linters e checagens ultrarrápidas).
+
+### `aetherc --dump-tokens` e `aetherc --dump-ast`
+Exibe a lista de tokens do Lexer ou a árvore sintática abstrata (AST) para análise interna e estudo do compilador.

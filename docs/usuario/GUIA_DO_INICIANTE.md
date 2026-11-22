@@ -76,11 +76,11 @@ Para compilar usando o **Backend Object Pascal** (Padrão):
 ```bash
 ./bin/aetherc meu_primeiro_app.aeth
 ```
-O compilador analisará a sintaxe, verificará os tipos e a posse da memória, gerará o código intermediário em `bin/generated/meu_primeiro_app.pas` e chamará o Free Pascal para gerar `meu_primeiro_app.exe`.
+O compilador analisará a sintaxe, verificará os tipos e a posse da memória, gerará o código intermediário organizado em `generated/pascal/meu_primeiro_app.pas` e chamará o Free Pascal para gerar `bin/meu_primeiro_app.exe`.
 
 Para executar:
 ```bash
-./meu_primeiro_app.exe
+./bin/meu_primeiro_app.exe
 ```
 
 Para compilar usando o **Backend C99** (via GCC):
@@ -90,7 +90,34 @@ Para compilar usando o **Backend C99** (via GCC):
 
 ---
 
-## 4. Próximos Passos
+## 4. Criando e Gerenciando um Projeto Completo
+
+Para projetos reais com dependências, testes e múltiplos arquivos, utilize o comando `new`:
+
+```bash
+# 1. Cria um novo projeto estruturado
+aetherc new meu_projeto
+cd meu_projeto
+
+# 2. Compila e executa imediatamente
+aetherc run
+
+# 3. Executa os testes unitarios
+aetherc test
+
+# 4. Emite Unit Free Pascal para usar no BlaiseVue
+aetherc emit pascal src/main.aeth --unit
+
+# 5. Limpa binarios e arquivos intermediarios
+aetherc clean
+```
+
+---
+
+## 5. Próximos Passos
 Agora que você já tem o compilador rodando, confira:
-- [Conceitos de Posse e Empréstimo](file:///c:/Users/Pichau/Documents/aether/docs/usuario/CONCEITOS_POSSE_E_BORROW.md) para entender como o Aether gerencia memória sem Garbage Collector.
-- [Exemplos Oficiais](file:///c:/Users/Pichau/Documents/aether/examples/) com código pronto para testes.
+- [Guia Completo da CLI](file:///c:/Users/Pichau/Documents/aether/docs/usuario/GUIA_DA_CLI.md): Todos os comandos, subcomandos e opções do `aetherc`.
+- [Integração com BlaiseVue](file:///c:/Users/Pichau/Documents/aether/docs/tecnica/INTEGRACAO_BLAISEVUE_E_PASCAL.md): Como usar o Aether no ecossistema do BlaiseVue com `--unit` e `--watch`.
+- [Gerenciamento de Pacotes](file:///c:/Users/Pichau/Documents/aether/docs/usuario/GERENCIAMENTO_DE_PACOTES.md): Como gerenciar dependências Git e auditoria com `aetherc pkg`.
+- [Conceitos de Posse e Empréstimo](file:///c:/Users/Pichau/Documents/aether/docs/usuario/CONCEITOS_POSSE_E_BORROW.md): Como o Aether garante segurança de memória sem Garbage Collector.
+- [Exemplos Oficiais](file:///c:/Users/Pichau/Documents/aether/examples/): Demonstrações práticas prontas para estudo e testes.

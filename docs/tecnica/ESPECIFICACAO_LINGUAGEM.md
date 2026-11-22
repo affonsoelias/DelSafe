@@ -196,3 +196,97 @@ CallArg       ::= [ "take" | "borrow" | "mut borrow" ] Expr
      - `take variavel`
      - `borrow variavel`
      - `mut borrow variavel`
+
+---
+
+## 5. Interoperabilidade de Primeira Classe (Pascal & C FFI)
+
+O Aether possui interoperabilidade nativa e transparente com bibliotecas do Free Pascal e cabeçalhos C99 com **Zero-Boilerplate** (sem necessidade de escrever declarações manuais de `extern`).
+
+### 5.1 Importação de Units do Free Pascal (`import pascal`)
+Permite consumir qualquer Unit do ecossistema Free Pascal ou Lazarus (`SysUtils`, `Classes`, `DateUtils`, `Math`, etc.):
+
+```pascal
+module ExemploPascal;
+
+import pascal SysUtils;
+import pascal DateUtils;
+
+program Main;
+var
+    t: UInt64;
+begin
+    // Chamada direta sem nenhum 'extern' manual:
+    t := GetTickCount64();
+    PrintLn("Tick do sistema: %d", t);
+end.
+```
+
+### 5.2 Importação de Headers e Bibliotecas C (`import c`)
+Permite incluir headers da biblioteca padrão C ou bibliotecas nativas:
+
+```pascal
+module ExemploC;
+
+import c "<math.h>";
+import link "-lm";
+
+program Main;
+var
+    raiz: Float64;
+begin
+    raiz := sqrt(25.0);
+    PrintLn("Raiz quadrada de 25.0 = %f", raiz);
+end.
+```
+
+---
+
+## 6. Traits e Polimorfismo Estático
+
+O Aether adota composição sobre herança via **Traits** e implementação desacoplada (`impl ... for ...`), com despacho estático em tempo de compilação (*Zero-Cost Abstractions*):
+
+```pascal
+module ExemploTraits;
+
+trait Printable
+    function Descrever(borrow self: Self): String;
+end;
+
+type
+    Circulo = record
+        raio: Int32;
+    end;
+
+impl Printable for Circulo
+    function Descrever(borrow self: Circulo): String
+    begin
+        return "Circulo Geometrico";
+    end;
+end;
+
+// Polimorfismo Estatico com Trait Bound:
+function ExibirElemento<T: Printable>(borrow item: T): Void
+begin
+    PrintLn("Elemento: %s", item.Descrever());
+end;
+```
+
+---
+
+## 7. Camada de Rede e Sockets do Sistema Operacional (`std/net.aeth`)
+
+Sockets nativos reais integrados no compilador com paridade total nos dois backends:
+- **Backend Object Pascal:** Utiliza a unit `Sockets` nativa do FPC (`fpsocket`, `fpbind`, `fplisten`, `fpaccept`, `fpconnect`, `fpsend`, `fprecv`).
+- **Backend C99:** Utiliza a API `WinSock2` (`<winsock2.h>`) no Windows e BSD sockets POSIX no Linux/macOS.
+- Servidor HTTP e parser de requisições de alta performance nativos em `std/net.aeth`.
+
+---
+
+## 8. Emissão de Units para BlaiseVue (`aetherc emit pascal --unit`)
+
+Quando transpilado no modo unit:
+1. Gera `unit <NomeDoModulo>;` no arquivo `<NomeDoModulo>.pas`.
+2. Exporta publicamente na seção `interface` todos os tipos de records, enums, assinaturas de funções e helpers monádicos.
+3. Isola corpos e despachos na seção `implementation`.
+4. Permite consumo imediato no Free Pascal e no ecossistema BlaiseVue via cláusula `uses <NomeDoModulo>;`.
