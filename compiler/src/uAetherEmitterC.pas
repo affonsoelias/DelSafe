@@ -224,8 +224,8 @@ begin
     Call := TASTCallExpr(Expr);
     if Call.Callee = 'Box' then Exit('Box');
     if Call.Callee = 'Some' then Exit('Option');
-    if (Call.Callee = 'ReadFile') or (Call.Callee = 'CharAt') or (Call.Callee = 'Substring') or (Call.Callee = 'ToString') or (Call.Callee = 'IntToStr') or (Call.Callee = 'SocketRecv') then Exit('String');
-    if (Call.Callee = 'Length') or (Call.Callee = 'StrToInt') or (Call.Callee = 'SocketCreate') or (Call.Callee = 'SocketListen') or (Call.Callee = 'SocketAccept') or (Call.Callee = 'SocketConnect') or (Call.Callee = 'SocketSend') then Exit('Int32');
+    if (Call.Callee = 'ReadFile') or (Call.Callee = 'CharAt') or (Call.Callee = 'Substring') or (Call.Callee = 'ToString') or (Call.Callee = 'IntToStr') or (Call.Callee = 'SocketRecv') or (Call.Callee = 'ParamStr') then Exit('String');
+    if (Call.Callee = 'Length') or (Call.Callee = 'StrToInt') or (Call.Callee = 'SocketCreate') or (Call.Callee = 'SocketListen') or (Call.Callee = 'SocketAccept') or (Call.Callee = 'SocketConnect') or (Call.Callee = 'SocketSend') or (Call.Callee = 'ParamCount') then Exit('Int32');
     if (Call.Callee = 'sin') or (Call.Callee = 'cos') or (Call.Callee = 'tan') or (Call.Callee = 'sqrt') or (Call.Callee = 'Now') then Exit('Float64');
     if Call.Callee = 'GetTickCount64' then Exit('UInt64');
     if (Call.Callee = 'FileExists') or (Call.Callee = 'WriteFile') then Exit('Bool');
@@ -516,6 +516,18 @@ begin
     if Call.Callee = 'StrToInt' then
     begin
       Result := 'AetherStrToInt(' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + ')';
+      Exit;
+    end;
+
+    if Call.Callee = 'ParamCount' then
+    begin
+      Result := 'AetherParamCount()';
+      Exit;
+    end;
+
+    if Call.Callee = 'ParamStr' then
+    begin
+      Result := 'AetherParamStr(' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + ')';
       Exit;
     end;
 
@@ -871,6 +883,8 @@ begin
   FProgramBlock := Prog;
   Emit('int main(int argc, char* argv[]) {');
   IncIndent;
+  Emit('g_aether_argc = argc;');
+  Emit('g_aether_argv = argv;');
   for I := 0 to Prog.LocalVars.Count - 1 do
   begin
     VarDecl := TASTVarDecl(Prog.LocalVars[I]);
@@ -1020,6 +1034,27 @@ begin
   Emit('static inline int32_t AetherStrToInt(const char* s) {');
   Emit('    if (!s) return 0;');
   Emit('    return (int32_t)atoi(s);');
+  Emit('}');
+  Emit('');
+  Emit('// Helpers de Linha de Comando');
+  Emit('static int g_aether_argc = 0;');
+  Emit('static char** g_aether_argv = NULL;');
+  Emit('');
+  Emit('static inline int32_t AetherParamCount(void) {');
+  Emit('    return g_aether_argc > 0 ? (int32_t)(g_aether_argc - 1) : 0;');
+  Emit('}');
+  Emit('');
+  Emit('static inline char* AetherParamStr(int32_t idx) {');
+  Emit('    if (idx < 0 || idx >= g_aether_argc || !g_aether_argv) {');
+  Emit('        char* empty = (char*)malloc(1);');
+  Emit('        empty[0] = ''\0'';');
+  Emit('        return empty;');
+  Emit('    }');
+  Emit('    size_t len = strlen(g_aether_argv[idx]);');
+  Emit('    char* copy = (char*)malloc(len + 1);');
+  Emit('    memcpy(copy, g_aether_argv[idx], len);');
+  Emit('    copy[len] = ''\0'';');
+  Emit('    return copy;');
   Emit('}');
   Emit('');
   Emit('// Helpers de Sockets Aether');

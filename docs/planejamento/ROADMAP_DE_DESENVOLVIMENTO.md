@@ -236,10 +236,15 @@ Este documento traça o status oficial de desenvolvimento do compilador e as pr�
   - Criado `examples/17_blaisevue_component_store.aeth` demonstrando Store reativo com records e empréstimo mutável (`mut borrow`).
   - Unit `generated/pascal/BlaisevueComponentStore.pas` compilada e testada com FPC nativo sendo consumida por aplicação Pascal com 100% de sucesso.
 
-### ⏳ Fase 22: Bootstrapping 100% Autônomo do Compilador Auto-Hospedado (`compiler/aeth/`)
-- [ ] **Resolução Multi-Módulo no Compilador Auto-Hospedado**:
-  - Capacidade de analisar e resolver múltiplos arquivos com `import` diretamente no código Aether de `compiler/aeth/`.
-- [ ] **Geração Completa do Binário Final Auto-Gerado**:
-  - Pipeline completo compilando todo o código-fonte do compilador (`compiler/aeth/main.aeth`) gerando o código C99 correspondente.
-  - Compilação do executável final autônomo sem necessidade do compilador Free Pascal para o ciclo de compilação diário.
-  - Testes de ciclo completo de auto-hospedagem (*Self-Hosting Verification*).
+### 🎯 Fase 22: Bootstrapping 100% Autônomo do Compilador Auto-Hospedado (`compiler/aeth/`)
+- [x] **Argumentos de Linha de Comando Nativos (`ParamCount` e `ParamStr`)**:
+  - Implementado suporte embutido a `ParamCount(): Int32` e `ParamStr(Index: Int32): String` com paridade idêntica tanto no backend Pascal (RTL nativa) quanto no C99 (`g_aether_argc`, `g_aether_argv`).
+  - Validação de tipos no `uAetherTypeChecker.pas` garantindo compatibilidade com literais e expressões inteiras.
+- [x] **CLI Autônoma do Compilador Auto-Hospedado (`compiler/aeth/main.aeth`)**:
+  - `compiler/aeth/main.aeth` atualizado para processar argumentos dinâmicos de linha de comando (`aetherc-core <arquivo.aeth> [-o saida.c]`), com exibição de uso, flags de saída e modo de demonstração.
+- [x] **Geração do Binário Final Auto-Gerado (`bin/aetherc-core.exe`)**:
+  - Compilação completa de todo o pipeline do compilador auto-hospedado (`compiler/aeth/`) gerando `bin/aetherc-core.exe`.
+- [x] **Testes de Ciclo Completo de Auto-Hospedagem (*Self-Hosting Verification*)**:
+  - Execução de `bin\aetherc-core.exe examples/13_self_hosted_compiler_demo.aeth -o bin/self_hosted_output.c`.
+  - Análise léxica, sintática, verificação de tipos nativa e borrow checking nativo executados com 0 erros.
+  - Compilação do código C99 gerado via GCC e execução bem-sucedida, fechando com êxito o ciclo de bootstrapping e auto-hospedagem!

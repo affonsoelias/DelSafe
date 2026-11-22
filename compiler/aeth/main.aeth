@@ -27,13 +27,33 @@ var
     erros_posse: UInt32;
 begin
     PrintLn("====================================================================");
-    PrintLn("  AetherLang Self-Hosted Compiler (aetherc-core) - Fase 16          ");
-    PrintLn("  Compilador Aether escrito 100% nativamente na linguagem Aether!   ");
+    PrintLn("  AetherLang Self-Hosted Compiler (aetherc-core) - Fase 22          ");
+    PrintLn("  Compilador Aether 100% Autônomo escrito na linguagem Aether!      ");
     PrintLn("====================================================================");
     PrintLn("");
 
-    caminho_entrada := "examples/13_self_hosted_compiler_demo.aeth";
-    caminho_saida := "bin/self_hosted_output.c";
+    if ParamCount() >= 1 then
+        caminho_entrada := ParamStr(1);
+        if ParamCount() >= 3 then
+            if ParamStr(2) = "-o" then
+                caminho_saida := ParamStr(3);
+            else
+                caminho_saida := ParamStr(2);
+            end;
+        else
+            if ParamCount() >= 2 then
+                caminho_saida := ParamStr(2);
+            else
+                caminho_saida := "bin/self_hosted_output.c";
+            end;
+        end;
+    else
+        PrintLn("Uso: aetherc-core <arquivo.aeth> [-o saida.c]");
+        PrintLn("Nenhum arquivo informado. Executando demonstracao padrao...");
+        PrintLn("");
+        caminho_entrada := "examples/13_self_hosted_compiler_demo.aeth";
+        caminho_saida := "bin/self_hosted_output.c";
+    end;
 
     PrintLn("[1/4] Analise Lexica e Sintatica de \"%s\"...", caminho_entrada);
     codigo_fonte := ReadFile(borrow caminho_entrada);

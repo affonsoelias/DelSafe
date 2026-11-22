@@ -207,6 +207,8 @@ begin
   FGlobalScope.Define(TSymbol.Create('WriteFile', skFunction, 'Bool', 0, 0));
   FGlobalScope.Define(TSymbol.Create('IntToStr', skFunction, 'String', 0, 0));
   FGlobalScope.Define(TSymbol.Create('StrToInt', skFunction, 'Int32', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('ParamCount', skFunction, 'Int32', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('ParamStr', skFunction, 'String', 0, 0));
 
   // Funcoes nativas de Sockets (SO / Rede)
   FGlobalScope.Define(TSymbol.Create('SocketCreate', skFunction, 'Int32', 0, 0));

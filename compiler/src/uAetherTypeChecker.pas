@@ -606,6 +606,9 @@ begin
     begin
       if Call.Args.Count <> 1 then
         Error('E0061', 'Funcao "IntToStr" espera 1 argumento (Int32)', Call.Line, Call.Col);
+      ArgType := CheckExpr(TASTCallArg(Call.Args[0]).Expr);
+      if not IsIntegerType(ArgType) and (ArgType <> 'IntLiteral') then
+        Error('E0308', Format('Funcao "IntToStr" espera tipo inteiro, recebeu: "%s"', [ArgType]), Call.Line, Call.Col);
       Exit('String');
     end;
 
@@ -614,6 +617,23 @@ begin
       if Call.Args.Count <> 1 then
         Error('E0061', 'Funcao "StrToInt" espera 1 argumento (String)', Call.Line, Call.Col);
       Exit('Int32');
+    end;
+
+    if Call.Callee = 'ParamCount' then
+    begin
+      if Call.Args.Count <> 0 then
+        Error('E0061', 'Funcao "ParamCount" nao espera argumentos', Call.Line, Call.Col);
+      Exit('Int32');
+    end;
+
+    if Call.Callee = 'ParamStr' then
+    begin
+      if Call.Args.Count <> 1 then
+        Error('E0061', 'Funcao "ParamStr" espera 1 argumento (Int32)', Call.Line, Call.Col);
+      ArgType := CheckExpr(TASTCallArg(Call.Args[0]).Expr);
+      if not IsIntegerType(ArgType) and (ArgType <> 'IntLiteral') then
+        Error('E0308', Format('Funcao "ParamStr" espera Int32, recebeu: "%s"', [ArgType]), Call.Line, Call.Col);
+      Exit('String');
     end;
 
     if Call.Callee = 'SocketCreate' then
