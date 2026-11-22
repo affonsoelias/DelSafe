@@ -280,8 +280,8 @@ begin
   LeftType := CheckExpr(Bin.Left);
   RightType := CheckExpr(Bin.Right);
 
-  // Operacoes Aritmeticas: +, -, *, /, mod
-  if (Bin.Op = '+') or (Bin.Op = '-') or (Bin.Op = '*') or (Bin.Op = '/') or (Bin.Op = 'mod') then
+  // Operacoes Aritmeticas: +, -, *, /, mod, div, %
+  if (Bin.Op = '+') or (Bin.Op = '-') or (Bin.Op = '*') or (Bin.Op = '/') or (Bin.Op = 'mod') or (Bin.Op = 'div') or (Bin.Op = '%') then
   begin
     // Concatenacao de strings com +
     if (Bin.Op = '+') and ((LeftType = 'String') or (RightType = 'String')) then
@@ -292,6 +292,17 @@ begin
 
     if not IsNumericType(RightType) and (RightType <> 'IntLiteral') and (RightType <> 'FloatLiteral') then
       Error('E0369', Format('Operando direito de "%s" deve ser numerico, encontrado: "%s"', [Bin.Op, RightType]), Bin.Line, Bin.Col);
+
+    // Deteccao de divisao por zero em tempo de compilacao (comptime / const eval)
+    if (Bin.Op = '/') or (Bin.Op = 'mod') or (Bin.Op = 'div') or (Bin.Op = '%') then
+    begin
+      if (Bin.Right is TASTLiteralExpr) and
+         (((TASTLiteralExpr(Bin.Right).Kind = lkInt) and (TASTLiteralExpr(Bin.Right).Value = '0')) or
+          ((TASTLiteralExpr(Bin.Right).Kind = lkFloat) and (StrToFloatDef(TASTLiteralExpr(Bin.Right).Value, 1.0) = 0.0))) then
+      begin
+        Error('E0301', 'Divisao por zero detectada em tempo de compilacao (comptime)', Bin.Line, Bin.Col);
+      end;
+    end;
 
     if (LeftType = 'Float64') or (RightType = 'Float64') or (LeftType = 'FloatLiteral') or (RightType = 'FloatLiteral') then
       Exit('Float64')

@@ -29,7 +29,8 @@ uAetherHeaderGen,
 uAetherBenchmark,
 uAetherDerives,
 uAetherLinter,
-uAetherProfiler;
+uAetherProfiler,
+uAetherCfg;
 
 Procedure PrintBanner;
 Begin
@@ -563,6 +564,7 @@ Begin
       SubParser := TAetherParser.Create(SubLexer);
       Try
         SubMod := SubParser.ParseModule;
+        ApplyCfgToModule(SubMod, GetCurrentOSName, 'pascal', False);
         Try
           CollectModuleImports(SubMod, ExtractFilePath(ModPath), Visited,
           AllTypes, AllTraits, AllImpls, AllFuncs, PascalImports, DependencyFiles);
@@ -771,6 +773,8 @@ Begin
   Parser := TAetherParser.Create(Lexer);
   Try
     ModuleNode := Parser.ParseModule;
+    // Compilacao Condicional Multiplataforma (@cfg) - Fase 40
+    ApplyCfgToModule(ModuleNode, GetCurrentOSName, EffectiveTarget, ReleaseMode);
 
     // Validação Estrita 1:1 de Módulo no arquivo raiz (Fase 13)
     FileBase := ChangeFileExt(ExtractFileName(SourceFile), '');
@@ -1185,6 +1189,9 @@ Begin
   Parser := TAetherParser.Create(Lexer);
   Try
     ModuleNode := Parser.ParseModule;
+    TargetExt := 'pascal';
+    if not TargetPascal then TargetExt := 'c';
+    ApplyCfgToModule(ModuleNode, GetCurrentOSName, TargetExt, False);
 
     FileBase := ChangeFileExt(ExtractFileName(SourceFile), '');
     CleanBase := FileBase;
@@ -1689,6 +1696,7 @@ Begin
   Parser := TAetherParser.Create(Lexer);
   Try
     ModuleNode := Parser.ParseModule;
+    ApplyCfgToModule(ModuleNode, GetCurrentOSName, 'c', False);
     SaveCHeaderToFile(ModuleNode, DestPath);
     PrintBanner;
     WriteLn('Cabecalho C (C99/C++) gerado com sucesso:');

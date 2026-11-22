@@ -228,6 +228,7 @@ type
     DocComment: string;
     Fields: TASTNodeList; // TASTRecordField
     Derives: TStringList;
+    CfgCondition: string;
     constructor Create(ALine, ACol: Integer; const AName: string);
     destructor Destroy; override;
     function HasDerive(const ADerive: string): Boolean;
@@ -250,6 +251,7 @@ type
     DocComment: string;
     Variants: TASTNodeList; // TASTEnumVariant
     Derives: TStringList;
+    CfgCondition: string;
     constructor Create(ALine, ACol: Integer; const AName: string);
     destructor Destroy; override;
     function HasDerive(const ADerive: string): Boolean;
@@ -280,6 +282,9 @@ type
     IsExtern: Boolean;
     IsAsync: Boolean;
     IsExport: Boolean;
+    InlineMode: string;        // 'always', 'never', ''
+    IsCold: Boolean;
+    CfgCondition: string;
     ExternAbi: string;
     ExternLib: string;
     ExportAbi: string;
@@ -897,6 +902,7 @@ begin
   Name := AName;
   Fields := TASTNodeList.Create;
   Derives := TStringList.Create;
+  CfgCondition := '';
 end;
 
 destructor TASTRecordDecl.Destroy;
@@ -960,6 +966,7 @@ begin
   Name := AName;
   Variants := TASTNodeList.Create;
   Derives := TStringList.Create;
+  CfgCondition := '';
 end;
 
 destructor TASTEnumDecl.Destroy;
@@ -1024,6 +1031,9 @@ begin
   IsExtern := False;
   IsAsync := False;
   IsExport := False;
+  InlineMode := '';
+  IsCold := False;
+  CfgCondition := '';
   ExternAbi := 'c';
   ExportAbi := 'cdecl';
   ExternLib := '';

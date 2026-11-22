@@ -1,0 +1,64 @@
+module cfg_inline_comptime_test;
+
+@cfg(target_os = "windows")
+function get_os_name(): String
+begin
+  return "Windows";
+end;
+
+@cfg(target_os = "linux")
+function get_os_name(): String
+begin
+  return "Linux";
+end;
+
+@cfg(target_os = "darwin")
+function get_os_name(): String
+begin
+  return "macOS";
+end;
+
+@inline(always)
+function compute_fast_math(x: Int32, y: Int32): Int32
+begin
+  return (x * y) + 10;
+end;
+
+@cold
+function error_handler(): String
+begin
+  return "erro raro";
+end;
+
+@cfg(target_os = "windows")
+type
+  PlatformConfig = record
+    name: String;
+    is_win: Bool;
+  end;
+
+@cfg(not(windows))
+type
+  PlatformConfig = record
+    name: String;
+    is_win: Bool;
+  end;
+
+program Main;
+var
+  current_os: String;
+  val: Int32;
+  cfg: PlatformConfig;
+begin
+  current_os := get_os_name();
+  Assert(current_os = "Windows", "get_os_name deve retornar Windows no ambiente de teste atual");
+
+  val := compute_fast_math(5, 6);
+  Assert(val = 40, "compute_fast_math deve ser 40");
+
+  cfg.name := "AetherOS";
+  cfg.is_win := true;
+  Assert(cfg.is_win, "is_win deve ser true");
+
+  PrintLn("CFG and Inline Test: Todos os testes passaram com sucesso!");
+end.

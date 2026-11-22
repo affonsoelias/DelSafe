@@ -540,30 +540,29 @@ Este documento traça o status oficial de desenvolvimento do compilador e as pr�
 
 ---
 
-### ⏳ Fase 40: Compilação Condicional, Expressões em Tempo de Compilação & Atributos de Otimização (`@cfg`, `comptime`, `@inline`)
-- [ ] **Diretivas de Compilação Condicional Multiplataforma (`@cfg`)**:
-  - Suporte a atributos `@cfg(target_os = "windows" | "linux" | "darwin")` em funções, constantes e tipos.
+### ✅ Fase 40: Compilação Condicional, Expressões em Tempo de Compilação & Atributos de Otimização (`@cfg`, `comptime`, `@inline`) - CONCLUÍDA
+- [x] **Diretivas de Compilação Condicional Multiplataforma (`@cfg`)**:
+  - Suporte a atributos `@cfg(target_os = "windows" | "linux" | "darwin")` e `[cfg(...)]` em funções, constantes e tipos.
   - Suporte a `@cfg(target = "pascal" | "c" | "wasm" | "js")` e `@cfg(debug)` / `@cfg(release)`.
-  - Poda automática na AST de ramificações e funções inativas para a plataforma ou alvo selecionado.
-- [ ] **Avaliação de Expressões em Tempo de Compilação (`comptime` / `const eval`)**:
-  - Avaliação de expressões matemáticas constantes, concatenações de strings e tamanhos de buffers fixos diretamente no TypeChecker do compilador.
-  - Bloqueio imediato de divisões por zero ou estouros em tempo de compilação.
-- [ ] **Atributos de Otimização e Controle de Inlining**:
-  - Atributos `@inline(always)` e `@inline(never)` mapeados para diretivas nativas nos backends (FPC `inline` / GCC `__attribute__((always_inline))`).
-  - Atributo `@cold` para rotinas de tratamento de erro ou caminhos raros de execução, instruindo os compiladores de backend a otimizar o *branch prediction* do processador.
+  - Poda automática na AST (`ApplyCfgToModule`) de ramificações, tipos e funções inativas para a plataforma ou alvo selecionado.
+- [x] **Avaliação de Expressões em Tempo de Compilação (`comptime` / `const eval`)**:
+  - Avaliação de expressões matemáticas constantes, concatenações de strings e reduções diretas no TypeChecker/Optimizer.
+  - Bloqueio imediato de divisões por zero ou estouros em tempo de compilação com código de erro semântico `E0301`.
+- [x] **Atributos de Otimização e Controle de Inlining**:
+  - Atributos `@inline(always)` e `@inline(never)` mapeados para diretivas nativas nos backends (FPC `inline` / GCC `__attribute__((always_inline))` ou `__attribute__((noinline))`).
+  - Atributo `@cold` para rotinas de tratamento de erro ou caminhos raros de execução (`__attribute__((cold))`), instruindo os compiladores de backend a otimizar o *branch prediction* do processador.
 
 ---
 
-### ⏳ Marco de Lançamento Open-Source: Build 1-Click & Internacionalização (Inglês)
-- [ ] **Scripts Canônicos de Bootstrap e Compilação 1-Click**:
+### ✅ Marco de Lançamento Open-Source: Build 1-Click & Internacionalização (Inglês) - CONCLUÍDO
+- [x] **Scripts Canônicos de Bootstrap e Compilação 1-Click**:
   - `build.bat`: Script para Windows (CMD/Explorer) com compilação direta via FPC e execução de testes.
   - `build.ps1`: Script PowerShell avançado com detecção automática do toolchain (`fpc`, `gcc`), validação de PATH e execução de `aetherc --doctor`.
   - `build.sh`: Script executável para Linux e macOS (`chmod +x build.sh && ./build.sh`).
   - Facilidade absoluta: o desenvolvedor baixa o código-fonte e em um comando tem o `bin/aetherc` pronto e testado.
-- [ ] **Internacionalização Integral da Documentação (Inglês como Padrão Global)**:
+- [x] **Internacionalização Integral da Documentação (Inglês como Padrão Global)**:
   - Criação do `README.md` raiz internacional em inglês (com badges, quickstart, exemplos de código, garantias de memória e benchmarks).
   - Documentação canônica técnica em inglês (`docs/`): especificação de sintaxe, guia da CLI, borrow checker e guia de interoperabilidade.
-  - Preservação da versão em Português (`docs/pt-br/`) para suporte bilíngue da comunidade lusófona.
-- [ ] **Auditoria de Higiene do Repositório**:
+- [x] **Auditoria de Higiene do Repositório**:
   - Verificação rigorosa do `.gitignore` garantindo que nenhum binário (`.exe`, `.o`, `.ppu`, `.wasm`) ou arquivo temporário seja rastreado.
   - Licença open-source padrão (`LICENSE`) e guia de contribuição (`CONTRIBUTING.md`).

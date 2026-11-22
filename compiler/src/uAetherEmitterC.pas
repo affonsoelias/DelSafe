@@ -1007,8 +1007,16 @@ begin
   if ParamListStr = '' then ParamListStr := 'void';
 
   ExportPrefix := '';
+  if Func.InlineMode = 'always' then
+    ExportPrefix := 'static inline __attribute__((always_inline)) '
+  else if Func.InlineMode = 'never' then
+    ExportPrefix := '__attribute__((noinline)) ';
+
+  if Func.IsCold then
+    ExportPrefix := ExportPrefix + '__attribute__((cold)) ';
+
   if Func.IsExport then
-    ExportPrefix := 'AETHER_EXPORT ';
+    ExportPrefix := ExportPrefix + 'AETHER_EXPORT ';
 
   if Func.IsAsync then
     Emit(Format('%sAetherTask %s(%s) {', [ExportPrefix, Func.Name, ParamListStr]))
@@ -1599,7 +1607,13 @@ begin
           ParamListStr := ParamListStr + ', ';
       end;
       ExportPrefix := '';
-      if Func.IsExport then ExportPrefix := 'AETHER_EXPORT ';
+      if Func.InlineMode = 'always' then
+        ExportPrefix := 'static inline __attribute__((always_inline)) '
+      else if Func.InlineMode = 'never' then
+        ExportPrefix := '__attribute__((noinline)) ';
+      if Func.IsCold then
+        ExportPrefix := ExportPrefix + '__attribute__((cold)) ';
+      if Func.IsExport then ExportPrefix := ExportPrefix + 'AETHER_EXPORT ';
       if Func.IsAsync then
         Emit(Format('%sAetherTask %s(%s);', [ExportPrefix, Func.Name, ParamListStr]))
       else if (Func.ReturnType = 'Void') or (Func.ReturnType = '') then

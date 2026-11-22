@@ -565,6 +565,11 @@ begin
         ReadChar;
         Result := CreateToken(tokRBracket, ']', StartLine, StartCol);
       end;
+    '@':
+      begin
+        ReadChar;
+        Result := CreateToken(tokAt, '@', StartLine, StartCol);
+      end;
   else
     ReadChar;
     Result := CreateToken(tokUnknown, C, StartLine, StartCol);

@@ -912,6 +912,8 @@ begin
   ExportClause := '';
   if Func.IsExport then
     ExportClause := ' cdecl;';
+  if Func.InlineMode = 'always' then
+    ExportClause := ExportClause + ' inline;';
 
   if Func.IsAsync then
     Emit(Format('function %s(%s): specialize TAetherTask<%s>;%s', [Func.Name, ParamListStr, EmitTypeRef(Func.ReturnType), ExportClause]))
@@ -1578,7 +1580,7 @@ begin
     for I := 0 to AModule.Functions.Count - 1 do
     begin
       Func := TASTFunction(AModule.Functions[I]);
-      if (not Func.IsExtern) and (Func.GenericParam = '') then
+      if (not Func.IsExtern) and (Func.GenericParam = '') and (Func.InlineMode <> 'always') then
       begin
         Sig := BuildFuncSig(Func);
         if Sig <> '' then

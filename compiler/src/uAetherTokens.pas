@@ -102,7 +102,8 @@ type
     tokRParen,         // )
     tokLBracket,       // [
     tokRBracket,       // ]
-    tokUnderscore      // _
+    tokUnderscore,     // _
+    tokAt              // @
   );
 
   TToken = record
@@ -197,6 +198,7 @@ begin
     tokLBracket:      Result := '[';
     tokRBracket:      Result := ']';
     tokUnderscore:    Result := '_';
+    tokAt:            Result := '@';
   else
     Result := 'Desconhecido';
   end;

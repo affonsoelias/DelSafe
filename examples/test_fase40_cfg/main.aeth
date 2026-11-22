@@ -1,0 +1,60 @@
+module main;
+
+@cfg(target_os = "windows")
+function get_platform(): String
+begin
+  return "Plataforma: Windows";
+end;
+
+@cfg(target_os = "linux")
+function get_platform(): String
+begin
+  return "Plataforma: Linux";
+end;
+
+@inline(always)
+function fast_add(a: Int32, b: Int32): Int32
+begin
+  return a + b;
+end;
+
+@cold
+function handle_rare_case(): String
+begin
+  return "Caso raro executado";
+end;
+
+@cfg(target_os = "windows")
+type
+  SystemInfo = record
+    os_name: String;
+    is_windows: Bool;
+  end;
+
+@cfg(target_os = "linux")
+type
+  SystemInfo = record
+    os_name: String;
+    is_linux: Bool;
+  end;
+
+program TestFase40;
+var
+  info: SystemInfo;
+  sum: Int32;
+  msg: String;
+begin
+  msg := get_platform();
+  PrintLn(msg);
+
+  sum := fast_add(10, 20);
+  PrintLn(IntToStr(sum));
+
+  info.os_name := "Windows 64-bit";
+  info.is_windows := true;
+  if info.is_windows then
+    PrintLn("Info: Windows detectado com sucesso!");
+  end;
+
+  PrintLn("Fase 40 CFG e Inline testados com sucesso!");
+end.

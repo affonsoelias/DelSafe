@@ -12,6 +12,19 @@ uses
   uAetherDerives;
 
 type
+  TParsedAttributes = record
+    Derives: TStringList;
+    CfgCondition: string;
+    InlineMode: string;
+    IsCold: Boolean;
+  end;
+
+procedure InitAttributes(out Attrs: TParsedAttributes);
+procedure ClearAttributes(var Attrs: TParsedAttributes);
+procedure FreeAttributes(var Attrs: TParsedAttributes);
+procedure CopyAttributes(const Src: TParsedAttributes; var Dst: TParsedAttributes);
+
+type
   EAetherParserError = class(Exception)
   public
     Line: Integer;
@@ -31,14 +44,16 @@ type
     function Expect(Kind: TTokenKind; const Msg: string = ''): TToken;
 
     function ParseTypeRef: string;
-    procedure ParseAttribute(ADerives: TStringList);
+    procedure ParseAttribute(var Attrs: TParsedAttributes);
     procedure ParseImport(AModule: TASTModule);
-    procedure ParseTypeSection(AModule: TASTModule);
+    procedure ParseTypeSection(AModule: TASTModule; var SectionAttrs: TParsedAttributes); overload;
+    procedure ParseTypeSection(AModule: TASTModule); overload;
     function ParseRecordDecl(const AName: string; ALine, ACol: Integer): TASTRecordDecl;
     function ParseEnumDecl(const AName: string; ALine, ACol: Integer): TASTEnumDecl;
     function ParseTraitDecl(const AName: string; ALine, ACol: Integer): TASTTraitDecl;
     function ParseImplDecl: TASTImplDecl;
-    function ParseFunction(IsSignatureOnly: Boolean = False): TASTFunction;
+    function ParseFunction(IsSignatureOnly: Boolean; const Attrs: TParsedAttributes): TASTFunction; overload;
+    function ParseFunction(IsSignatureOnly: Boolean = False): TASTFunction; overload;
     function ParseProgramBlock: TASTProgramBlock;
     procedure ParseVarSection(ALocalVars: TASTNodeList);
 
@@ -258,84 +273,226 @@ begin
   end;
 end;
 
-procedure TAetherParser.ParseAttribute(ADerives: TStringList);
-var
-  AttrId, DeriveItem: string;
+procedure InitAttributes(out Attrs: TParsedAttributes);
 begin
-  Expect(tokLBracket);
-  AttrId := Expect(tokIdentifier, 'Esperado identificador do atributo (ex: derive)').Value;
+  Attrs.Derives := TStringList.Create;
+  Attrs.CfgCondition := '';
+  Attrs.InlineMode := '';
+  Attrs.IsCold := False;
+end;
+
+procedure ClearAttributes(var Attrs: TParsedAttributes);
+begin
+  if Assigned(Attrs.Derives) then
+    Attrs.Derives.Clear;
+  Attrs.CfgCondition := '';
+  Attrs.InlineMode := '';
+  Attrs.IsCold := False;
+end;
+
+procedure FreeAttributes(var Attrs: TParsedAttributes);
+begin
+  if Assigned(Attrs.Derives) then
+  begin
+    Attrs.Derives.Free;
+    Attrs.Derives := nil;
+  end;
+end;
+
+procedure CopyAttributes(const Src: TParsedAttributes; var Dst: TParsedAttributes);
+begin
+  if Assigned(Src.Derives) and Assigned(Dst.Derives) then
+    Dst.Derives.AddStrings(Src.Derives);
+  if Src.CfgCondition <> '' then
+    Dst.CfgCondition := Src.CfgCondition;
+  if Src.InlineMode <> '' then
+    Dst.InlineMode := Src.InlineMode;
+  if Src.IsCold then
+    Dst.IsCold := True;
+end;
+
+procedure TAetherParser.ParseAttribute(var Attrs: TParsedAttributes);
+var
+  AttrId, DeriveItem, CondStr, InlineVal: string;
+  IsBracket: Boolean;
+  ParenDepth: Integer;
+begin
+  IsBracket := Check(tokLBracket);
+  if IsBracket then
+    Advance
+  else if Check(tokAt) then
+    Advance
+  else
+    Exit;
+
+  AttrId := Expect(tokIdentifier, 'Esperado identificador do atributo (ex: derive, cfg, inline, cold)').Value;
+
   if SameText(AttrId, 'derive') then
   begin
     Expect(tokLParen, 'Esperado "(" apos derive');
     repeat
       DeriveItem := Expect(tokIdentifier, 'Esperado nome da trait a derivar (ex: Debug, JSON, Clone, Equals)').Value;
-      if ADerives.IndexOf(DeriveItem) < 0 then
-        ADerives.Add(DeriveItem);
+      if Assigned(Attrs.Derives) and (Attrs.Derives.IndexOf(DeriveItem) < 0) then
+        Attrs.Derives.Add(DeriveItem);
     until not Match(tokComma);
     Expect(tokRParen, 'Esperado ")" ao fechar derive');
   end
+  else if SameText(AttrId, 'cfg') then
+  begin
+    Expect(tokLParen, 'Esperado "(" apos cfg');
+    CondStr := '';
+    ParenDepth := 1;
+    while (ParenDepth > 0) and not Check(tokEOF) do
+    begin
+      if Check(tokLParen) then
+      begin
+        Inc(ParenDepth);
+        CondStr := CondStr + '(';
+        Advance;
+      end
+      else if Check(tokRParen) then
+      begin
+        Dec(ParenDepth);
+        if ParenDepth > 0 then
+        begin
+          CondStr := CondStr + ')';
+          Advance;
+        end;
+      end
+      else
+      begin
+        if FCurTok.Kind = tokStringLiteral then
+          CondStr := CondStr + '"' + FCurTok.Value + '"'
+        else
+          CondStr := CondStr + FCurTok.Value;
+        Advance;
+      end;
+    end;
+    Expect(tokRParen, 'Esperado ")" ao fechar cfg');
+    Attrs.CfgCondition := Trim(CondStr);
+  end
+  else if SameText(AttrId, 'inline') then
+  begin
+    if Match(tokLParen) then
+    begin
+      InlineVal := Expect(tokIdentifier, 'Esperado "always" ou "never" em inline(...)').Value;
+      Attrs.InlineMode := LowerCase(InlineVal);
+      Expect(tokRParen, 'Esperado ")" ao fechar inline');
+    end
+    else
+      Attrs.InlineMode := 'always';
+  end
+  else if SameText(AttrId, 'cold') then
+  begin
+    Attrs.IsCold := True;
+    if Match(tokLParen) then
+    begin
+      while not Check(tokRParen) and not Check(tokEOF) do
+        Advance;
+      Expect(tokRParen, 'Esperado ")" ao fechar cold');
+    end;
+  end
   else
   begin
-    while not Check(tokRBracket) and not Check(tokEOF) do
+    // Atributo desconhecido / futuro
+    if Check(tokLParen) then
+    begin
       Advance;
+      ParenDepth := 1;
+      while (ParenDepth > 0) and not Check(tokEOF) do
+      begin
+        if Check(tokLParen) then Inc(ParenDepth)
+        else if Check(tokRParen) then Dec(ParenDepth);
+        if ParenDepth > 0 then Advance;
+      end;
+      if Check(tokRParen) then Advance;
+    end;
   end;
-  Expect(tokRBracket, 'Esperado "]" ao fechar atributo');
+
+  if IsBracket then
+    Expect(tokRBracket, 'Esperado "]" ao fechar atributo');
 end;
 
-procedure TAetherParser.ParseTypeSection(AModule: TASTModule);
+procedure TAetherParser.ParseTypeSection(AModule: TASTModule; var SectionAttrs: TParsedAttributes);
 var
-  TypeName, TypeDoc: string;
+  TypeName, TypeDoc, EffectiveCfg: string;
   TLine, TCol: Integer;
   RecDecl: TASTRecordDecl;
   EnumDecl: TASTEnumDecl;
   TraitDecl: TASTTraitDecl;
-  CurrentDerives: TStringList;
+  CurrentAttrs: TParsedAttributes;
 begin
   Expect(tokType);
-  CurrentDerives := TStringList.Create;
+  InitAttributes(CurrentAttrs);
   try
-    while Check(tokIdentifier) or Check(tokLBracket) do
+    while not Check(tokEOF) do
     begin
-      CurrentDerives.Clear;
-      while Check(tokLBracket) do
-        ParseAttribute(CurrentDerives);
+      ClearAttributes(CurrentAttrs);
+      while Check(tokLBracket) or Check(tokAt) do
+        ParseAttribute(CurrentAttrs);
 
-      if not Check(tokIdentifier) then
-        Break;
+      if Check(tokIdentifier) and (FPeekTok.Kind = tokEqual) then
+      begin
+        TLine := FCurTok.Line;
+        TCol := FCurTok.Col;
+        TypeDoc := FCurTok.DocComment;
+        TypeName := Expect(tokIdentifier).Value;
+        Expect(tokEqual, 'Esperado "=" na declaracao de tipo');
 
-      TLine := FCurTok.Line;
-      TCol := FCurTok.Col;
-      TypeDoc := FCurTok.DocComment;
-      TypeName := Expect(tokIdentifier).Value;
-      Expect(tokEqual, 'Esperado "=" na declaracao de tipo');
+        EffectiveCfg := CurrentAttrs.CfgCondition;
+        if EffectiveCfg = '' then
+          EffectiveCfg := SectionAttrs.CfgCondition;
 
-      if Check(tokRecord) then
-      begin
-        RecDecl := ParseRecordDecl(TypeName, TLine, TCol);
-        RecDecl.DocComment := TypeDoc;
-        RecDecl.Derives.AddStrings(CurrentDerives);
-        AModule.Types.Add(RecDecl);
-      end
-      else if Check(tokEnum) then
-      begin
-        EnumDecl := ParseEnumDecl(TypeName, TLine, TCol);
-        EnumDecl.DocComment := TypeDoc;
-        EnumDecl.Derives.AddStrings(CurrentDerives);
-        AModule.Types.Add(EnumDecl);
-      end
-      else if Check(tokTrait) then
-      begin
-        TraitDecl := ParseTraitDecl(TypeName, TLine, TCol);
-        TraitDecl.DocComment := TypeDoc;
-        AModule.Traits.Add(TraitDecl);
+        if Check(tokRecord) then
+        begin
+          RecDecl := ParseRecordDecl(TypeName, TLine, TCol);
+          RecDecl.DocComment := TypeDoc;
+          RecDecl.Derives.AddStrings(CurrentAttrs.Derives);
+          RecDecl.Derives.AddStrings(SectionAttrs.Derives);
+          RecDecl.CfgCondition := EffectiveCfg;
+          AModule.Types.Add(RecDecl);
+        end
+        else if Check(tokEnum) then
+        begin
+          EnumDecl := ParseEnumDecl(TypeName, TLine, TCol);
+          EnumDecl.DocComment := TypeDoc;
+          EnumDecl.Derives.AddStrings(CurrentAttrs.Derives);
+          EnumDecl.Derives.AddStrings(SectionAttrs.Derives);
+          EnumDecl.CfgCondition := EffectiveCfg;
+          AModule.Types.Add(EnumDecl);
+        end
+        else if Check(tokTrait) then
+        begin
+          TraitDecl := ParseTraitDecl(TypeName, TLine, TCol);
+          TraitDecl.DocComment := TypeDoc;
+          AModule.Traits.Add(TraitDecl);
+        end
+        else
+          raise EAetherParserError.Create('Esperado "record", "enum" ou "trait" na declaracao de tipo', TLine, TCol);
+
+        ClearAttributes(SectionAttrs);
+        Expect(tokSemicolon, 'Esperado ";" apos declaracao de tipo');
       end
       else
-        raise EAetherParserError.Create('Esperado "record", "enum" ou "trait" na declaracao de tipo', TLine, TCol);
-
-      Expect(tokSemicolon, 'Esperado ";" apos declaracao de tipo');
+      begin
+        CopyAttributes(CurrentAttrs, SectionAttrs);
+        Break;
+      end;
     end;
   finally
-    CurrentDerives.Free;
+    FreeAttributes(CurrentAttrs);
+  end;
+end;
+
+procedure TAetherParser.ParseTypeSection(AModule: TASTModule);
+var
+  EmptyAttrs: TParsedAttributes;
+begin
+  InitAttributes(EmptyAttrs);
+  try
+    ParseTypeSection(AModule, EmptyAttrs);
+  finally
+    FreeAttributes(EmptyAttrs);
   end;
 end;
 
@@ -434,7 +591,7 @@ begin
   end;
 end;
 
-function TAetherParser.ParseFunction(IsSignatureOnly: Boolean): TASTFunction;
+function TAetherParser.ParseFunction(IsSignatureOnly: Boolean; const Attrs: TParsedAttributes): TASTFunction;
 var
   FuncName, ReturnType, ParamName, ParamType, FDoc: string;
   FLine, FCol: Integer;
@@ -508,6 +665,9 @@ begin
   Result.ExternLib := ExtLib;
   Result.ExternAbi := ExtAbi;
   Result.ExportAbi := ExportAbi;
+  Result.InlineMode := Attrs.InlineMode;
+  Result.IsCold := Attrs.IsCold;
+  Result.CfgCondition := Attrs.CfgCondition;
   try
     // Parametro generico com bound opcional: function Imprimir<T: Printable>(...)
     if Match(tokLess) then
@@ -628,6 +788,18 @@ begin
   except
     Result.Free;
     raise;
+  end;
+end;
+
+function TAetherParser.ParseFunction(IsSignatureOnly: Boolean): TASTFunction;
+var
+  EmptyAttrs: TParsedAttributes;
+begin
+  InitAttributes(EmptyAttrs);
+  try
+    Result := ParseFunction(IsSignatureOnly, EmptyAttrs);
+  finally
+    FreeAttributes(EmptyAttrs);
   end;
 end;
 
@@ -1079,12 +1251,8 @@ end;
 function TAetherParser.ParseModule: TASTModule;
 var
   ModName, ModDoc: string;
-  MLine, MCol, TLine, TCol: Integer;
-  PendingDerives: TStringList;
-  RecDecl: TASTRecordDecl;
-  EnumDecl: TASTEnumDecl;
-  TraitDecl: TASTTraitDecl;
-  TypeDoc, TypeName: string;
+  MLine, MCol: Integer;
+  PendingAttrs: TParsedAttributes;
 begin
   MLine := FCurTok.Line;
   MCol := FCurTok.Col;
@@ -1095,7 +1263,7 @@ begin
 
   Result := TASTModule.Create(MLine, MCol, ModName);
   Result.DocComment := ModDoc;
-  PendingDerives := TStringList.Create;
+  InitAttributes(PendingAttrs);
   try
     // Imports
     while Check(tokImport) do
@@ -1104,65 +1272,28 @@ begin
     // Tipos, Traits, Impls, Funcoes e Programa Principal
     while not Check(tokEOF) do
     begin
-      if Check(tokLBracket) then
+      while Check(tokLBracket) or Check(tokAt) do
+        ParseAttribute(PendingAttrs);
+
+      if Check(tokType) then
       begin
-        PendingDerives.Clear;
-        while Check(tokLBracket) do
-          ParseAttribute(PendingDerives);
-
-        if Check(tokType) then
-        begin
-          Advance; // consome 'type'
-          while Check(tokIdentifier) or Check(tokLBracket) do
-          begin
-            while Check(tokLBracket) do
-              ParseAttribute(PendingDerives);
-
-            if not Check(tokIdentifier) then Break;
-            TLine := FCurTok.Line;
-            TCol := FCurTok.Col;
-            TypeDoc := FCurTok.DocComment;
-            TypeName := Expect(tokIdentifier).Value;
-            Expect(tokEqual, 'Esperado "=" na declaracao de tipo');
-
-            if Check(tokRecord) then
-            begin
-              RecDecl := ParseRecordDecl(TypeName, TLine, TCol);
-              RecDecl.DocComment := TypeDoc;
-              RecDecl.Derives.AddStrings(PendingDerives);
-              Result.Types.Add(RecDecl);
-            end
-            else if Check(tokEnum) then
-            begin
-              EnumDecl := ParseEnumDecl(TypeName, TLine, TCol);
-              EnumDecl.DocComment := TypeDoc;
-              EnumDecl.Derives.AddStrings(PendingDerives);
-              Result.Types.Add(EnumDecl);
-            end
-            else if Check(tokTrait) then
-            begin
-              TraitDecl := ParseTraitDecl(TypeName, TLine, TCol);
-              TraitDecl.DocComment := TypeDoc;
-              Result.Traits.Add(TraitDecl);
-            end
-            else
-              raise EAetherParserError.Create('Esperado "record", "enum" ou "trait" na declaracao de tipo', TLine, TCol);
-
-            Expect(tokSemicolon, 'Esperado ";" apos declaracao de tipo');
-            PendingDerives.Clear;
-          end;
-        end
-        else
-          raise EAetherParserError.Create('Atributo inesperado no modulo (deve preceder declaracao de tipo)', FCurTok.Line, FCurTok.Col);
+        ParseTypeSection(Result, PendingAttrs);
       end
-      else if Check(tokType) then
-        ParseTypeSection(Result)
       else if Check(tokTrait) then
-        Result.Traits.Add(ParseTraitDecl('', FCurTok.Line, FCurTok.Col))
+      begin
+        Result.Traits.Add(ParseTraitDecl('', FCurTok.Line, FCurTok.Col));
+        ClearAttributes(PendingAttrs);
+      end
       else if Check(tokImpl) then
-        Result.Impls.Add(ParseImplDecl)
+      begin
+        Result.Impls.Add(ParseImplDecl);
+        ClearAttributes(PendingAttrs);
+      end
       else if Check(tokFunction) or Check(tokExtern) or Check(tokAsync) or Check(tokExport) then
-        Result.Functions.Add(ParseFunction(False))
+      begin
+        Result.Functions.Add(ParseFunction(False, PendingAttrs));
+        ClearAttributes(PendingAttrs);
+      end
       else if Check(tokProgram) then
       begin
         Result.ProgramBlock := ParseProgramBlock;
@@ -1175,11 +1306,11 @@ begin
     // Expande derivacoes automaticas (Debug, JSON, Clone, Equals)
     ExpandDerives(Result);
   except
-    PendingDerives.Free;
+    FreeAttributes(PendingAttrs);
     Result.Free;
     raise;
   end;
-  PendingDerives.Free;
+  FreeAttributes(PendingAttrs);
 end;
 
 end.
