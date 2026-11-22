@@ -136,22 +136,49 @@ end;
 procedure TAetherParser.ParseImport(AModule: TASTModule);
 var
   ImportName: string;
-  IsPascal: Boolean;
+  IsPascal, IsC, IsLink: Boolean;
 begin
   Expect(tokImport);
   IsPascal := False;
-  if Match(tokPascal) then
-    IsPascal := True;
+  IsC := False;
+  IsLink := False;
 
-  ImportName := Expect(tokIdentifier, 'Esperado nome do modulo importado').Value;
-  while Match(tokDot) do
-    ImportName := ImportName + '.' + Expect(tokIdentifier, 'Esperado identificador apos "." no nome do modulo importado').Value;
-  if (not IsPascal) and Match(tokAs) then
-    ImportName := ImportName + ' as ' + Expect(tokIdentifier).Value;
+  if Match(tokPascal) then
+    IsPascal := True
+  else if Check(tokIdentifier) and SameText(FCurTok.Value, 'c') then
+  begin
+    Advance;
+    IsC := True;
+  end
+  else if Check(tokIdentifier) and SameText(FCurTok.Value, 'link') then
+  begin
+    Advance;
+    IsLink := True;
+  end;
+
+  if IsC or IsLink then
+  begin
+    if Check(tokStringLiteral) then
+      ImportName := Expect(tokStringLiteral).Value
+    else
+      ImportName := Expect(tokIdentifier).Value;
+  end
+  else
+  begin
+    ImportName := Expect(tokIdentifier, 'Esperado nome do modulo importado').Value;
+    while Match(tokDot) do
+      ImportName := ImportName + '.' + Expect(tokIdentifier, 'Esperado identificador apos "." no nome do modulo importado').Value;
+    if (not IsPascal) and Match(tokAs) then
+      ImportName := ImportName + ' as ' + Expect(tokIdentifier).Value;
+  end;
   Expect(tokSemicolon);
 
   if IsPascal then
     AModule.PascalImports.Add(ImportName)
+  else if IsC then
+    AModule.CImports.Add(ImportName)
+  else if IsLink then
+    AModule.LinkDirectives.Add(ImportName)
   else
     AModule.Imports.Add(ImportName);
 end;
@@ -348,16 +375,25 @@ var
   FLine, FCol: Integer;
   Ownership: TOwnershipKind;
   IsExt: Boolean;
-  ExtLib: string;
+  ExtLib, ExtAbi: string;
 begin
   FLine := FCurTok.Line;
   FCol := FCurTok.Col;
   IsExt := False;
   ExtLib := '';
+  ExtAbi := 'c';
 
   if Match(tokExtern) then
   begin
     IsExt := True;
+    if Match(tokPascal) then
+      ExtAbi := 'pascal'
+    else if Check(tokIdentifier) and SameText(FCurTok.Value, 'c') then
+    begin
+      Advance;
+      ExtAbi := 'c';
+    end;
+
     if Check(tokStringLiteral) then
       ExtLib := Expect(tokStringLiteral).Value;
   end;
@@ -368,7 +404,7 @@ begin
   Result := TASTFunction.Create(FLine, FCol, FuncName, '');
   Result.IsExtern := IsExt;
   Result.ExternLib := ExtLib;
-  Result.ExternAbi := 'c';
+  Result.ExternAbi := ExtAbi;
   try
     // Parametro generico com bound opcional: function Imprimir<T: Printable>(...)
     if Match(tokLess) then

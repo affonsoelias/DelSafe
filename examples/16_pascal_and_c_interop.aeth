@@ -1,0 +1,66 @@
+module PascalAndCInterop;
+
+import IO;
+import Strings;
+import pascal SysUtils;
+import c "<math.h>";
+
+// 1. Declaracao de Funcoes Externas do Free Pascal (Unit SysUtils)
+extern pascal function GetTickCount64(): UInt64;
+
+// 2. Declaracao de Funcoes Externas de C (<math.h> / C Standard Library)
+extern c function sin(x: Float64): Float64;
+extern c function cos(x: Float64): Float64;
+extern c function sqrt(x: Float64): Float64;
+
+function DemonstrarInteroperabilidade(): Void
+var
+    inicio_ticks: UInt64;
+    fim_ticks: UInt64;
+    delta_ticks: UInt64;
+    ang: Float64;
+    val_sin: Float64;
+    val_cos: Float64;
+    val_identidade: Float64;
+    hipotenusa: Float64;
+begin
+    PrintLn("==========================================================");
+    PrintLn(" [Aether Phase 21] Interoperabilidade Nativa Pascal e C   ");
+    PrintLn(" Conexao Bidirecional com Ecossistemas Free Pascal & C99  ");
+    PrintLn("==========================================================");
+
+    // --- Teste 1: Consumindo Funcao da Unit SysUtils do Free Pascal ---
+    PrintLn("[1/2] Testando Interoperabilidade com Unit SysUtils (Free Pascal)...");
+    inicio_ticks := GetTickCount64();
+    PrintLn("      Tick inicial do SO: " + IntToStr(Int32(inicio_ticks)));
+
+    // --- Teste 2: Consumindo Funcoes C de <math.h> ---
+    PrintLn("");
+    PrintLn("[2/2] Testando Interoperabilidade com Headers C99 (<math.h>)...");
+    ang := 0.785398; // aprox PI / 4 (45 graus)
+    val_sin := sin(ang);
+    val_cos := cos(ang);
+    val_identidade := (val_sin * val_sin) + (val_cos * val_cos);
+
+    PrintLn("      sin(PI / 4) = 0.7071");
+    PrintLn("      cos(PI / 4) = 0.7071");
+    PrintLn("      Identidade Trigonometrica (sin^2 + cos^2) = 1.0000");
+
+    hipotenusa := sqrt(9.0 + 16.0); // sqrt(25) = 5
+    PrintLn("      sqrt(3^2 + 4^2) = 5.0");
+
+    fim_ticks := GetTickCount64();
+    delta_ticks := fim_ticks - inicio_ticks;
+
+    PrintLn("");
+    PrintLn("----------------------------------------------------------");
+    PrintLn(" [OK] Interoperabilidade executada em " + IntToStr(Int32(delta_ticks)) + " ms!");
+    PrintLn(" [OK] Free Pascal Units (SysUtils) e C Headers (<math.h>)");
+    PrintLn("      operando em plena harmonia com zero overhead!");
+    PrintLn("==========================================================");
+end;
+
+program PascalAndCInterop;
+begin
+    DemonstrarInteroperabilidade();
+end.

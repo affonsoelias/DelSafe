@@ -684,6 +684,22 @@ begin
   FCurrentFunc := Func;
   if Func.IsExtern then
   begin
+    if Func.ExternAbi = 'pascal' then
+    begin
+      Emit(Format('// Extern Pascal: %s (fornecido por unit FPC)', [Func.Name]));
+      Emit('');
+      Exit;
+    end;
+
+    // Funcoes padrao de C math mapeadas diretamente para Math do FPC
+    if (Func.ExternAbi = 'c') and ((Func.Name = 'sin') or (Func.Name = 'cos') or (Func.Name = 'sqrt') or
+       (Func.Name = 'tan') or (Func.Name = 'abs') or (Func.Name = 'floor') or (Func.Name = 'ceil')) then
+    begin
+      Emit(Format('// Extern C Math: %s (fornecido nativamente por System/Math FPC)', [Func.Name]));
+      Emit('');
+      Exit;
+    end;
+
     if Func.ExternLib <> '' then
       LibClause := Format(' external ''%s'';', [Func.ExternLib])
     else
@@ -853,9 +869,12 @@ begin
   Emit('{$mode objfpc}{$H+}{$assertions on}');
   Emit('');
 
-  UsesClause := '  SysUtils, Sockets';
+  UsesClause := '  SysUtils, Sockets, Math';
   for I := 0 to AModule.PascalImports.Count - 1 do
-    UsesClause := UsesClause + ', ' + AModule.PascalImports[I];
+  begin
+    if Pos(LowerCase(AModule.PascalImports[I]), LowerCase(UsesClause)) = 0 then
+      UsesClause := UsesClause + ', ' + AModule.PascalImports[I];
+  end;
   UsesClause := UsesClause + ';';
 
   Emit('uses');

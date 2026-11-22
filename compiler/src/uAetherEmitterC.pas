@@ -772,6 +772,33 @@ begin
   if Func.GenericParam <> '' then Exit; // Molde generico nao emite codigo diretamente
   if Func.IsExtern then
   begin
+    if Func.ExternAbi = 'pascal' then
+    begin
+      if Func.Name = 'Now' then
+      begin
+        Emit('static inline double Now(void) { return AetherPascalNow(); }');
+        Emit('');
+        Exit;
+      end
+      else if Func.Name = 'GetTickCount64' then
+      begin
+        Emit('#ifndef _WIN32');
+        Emit('static inline uint64_t GetTickCount64(void) { return AetherPascalGetTickCount64(); }');
+        Emit('#endif');
+        Emit('');
+        Exit;
+      end;
+    end;
+
+    // Funcoes de math.h nao devem ser redeclaradas com extern simples para nao conflitar com atributos do GCC
+    if (Func.ExternAbi = 'c') and ((Func.Name = 'sin') or (Func.Name = 'cos') or (Func.Name = 'sqrt') or
+       (Func.Name = 'tan') or (Func.Name = 'abs') or (Func.Name = 'floor') or (Func.Name = 'ceil')) then
+    begin
+      Emit(Format('// Extern C Math: %s (fornecido por <math.h>)', [Func.Name]));
+      Emit('');
+      Exit;
+    end;
+
     ParamListStr := '';
     for I := 0 to Func.Params.Count - 1 do
     begin
@@ -876,9 +903,11 @@ begin
   Emit('#include <string.h>');
   Emit('#include <assert.h>');
   Emit('#include <math.h>');
+  Emit('#include <time.h>');
   Emit('#ifdef _WIN32');
   Emit('#include <winsock2.h>');
   Emit('#include <ws2tcpip.h>');
+  Emit('#include <windows.h>');
   Emit('typedef int socklen_t;');
   Emit('#else');
   Emit('#include <sys/socket.h>');
@@ -886,6 +915,35 @@ begin
   Emit('#include <arpa/inet.h>');
   Emit('#include <unistd.h>');
   Emit('#endif');
+  Emit('');
+
+  // Headers adicionais de C (import c)
+  if Assigned(AModule.CImports) then
+  begin
+    for I := 0 to AModule.CImports.Count - 1 do
+    begin
+      if (Pos('<', AModule.CImports[I]) = 1) or (Pos('"', AModule.CImports[I]) = 1) then
+        Emit('#include ' + AModule.CImports[I])
+      else
+        Emit('#include "' + AModule.CImports[I] + '"');
+    end;
+    if AModule.CImports.Count > 0 then
+      Emit('');
+  end;
+
+  // Helpers de compatibilidade Pascal no backend C
+  Emit('static inline double AetherPascalNow(void) {');
+  Emit('    return (double)time(NULL);');
+  Emit('}');
+  Emit('static inline uint64_t AetherPascalGetTickCount64(void) {');
+  Emit('#ifdef _WIN32');
+  Emit('    return (uint64_t)GetTickCount64();');
+  Emit('#else');
+  Emit('    struct timespec ts;');
+  Emit('    clock_gettime(CLOCK_MONOTONIC, &ts);');
+  Emit('    return (uint64_t)(ts.tv_sec * 1000 + ts.tv_nsec / 1000000);');
+  Emit('#endif');
+  Emit('}');
   Emit('');
 
   // Helpers de Runtime do Aether

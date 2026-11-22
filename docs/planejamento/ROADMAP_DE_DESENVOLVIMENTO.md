@@ -201,17 +201,20 @@ Este documento traça o status oficial de desenvolvimento do compilador e as pr�
   - Compilado e executado com 100% de sucesso e paridade idêntica nos backends **Free Pascal** e **GCC (MSYS2)**.
   - Suíte completa de testes de regressão (`examples/12_package_manager_and_tests` e `examples/14_stdlib_and_concurrency.aeth`) 100% aprovada em ambos os backends.
 
-### ⏳ Fase 21: Interoperabilidade Avançada de Primeira Classe (Free Pascal Units & C Headers / FFI)
-- [ ] **Interoperabilidade Fluida com Units do Free Pascal (`import pascal`)**:
-  - Consumo direto de funções e procedimentos de units FPC (`SysUtils`, `DateUtils`, `Classes`, `Horse`, `mORMot`) via namespaces transparentes.
-  - Mapeamento automático e seguro de strings e registros Pascal com as regras de posse do Aether (`borrow`, `take`).
-  - Proteção e encapsulamento de exceções Pascal (`try..except`) convertidas automaticamente em retornos `Result<T, String>` sem quebrar a execução do servidor.
-  - Capacidade de interagir com instâncias e métodos de classes/records do Pascal.
-- [ ] **Interoperabilidade Avançada com Cabeçalhos e Bibliotecas C (`import c`)**:
-  - Inclusão direta de headers C (`import c "<sqlite3.h>";`, `import c "minha_lib.h";`) no backend C99.
-  - Suporte a diretivas de linkagem automática de bibliotecas externas C (ex: `-lsqlite3`, `-lssl`, `-lcrypto`).
-  - Mapeamento bidirecional de ponteiros seguros (`Pointer`, `borrow` ➔ `const char*`, `mut borrow` ➔ buffers mutáveis C).
-  - Suporte a constantes e macros de cabeçalhos C (`extern c const`).
+### ✅ Fase 21: Interoperabilidade Avançada de Primeira Classe (Free Pascal Units & C Headers / FFI) (Concluído)
+- [x] **Interoperabilidade Fluida com Units do Free Pascal (`import pascal`)**:
+  - Inclusão transparente de units FPC (`SysUtils`, `DateUtils`, `Classes`, `Horse`, `mORMot`) na cláusula `uses` do Object Pascal sem duplicação de identificadores.
+  - Declaração de funções e rotinas de units Pascal usando `extern pascal function <Nome>(...): <Tipo>;`.
+  - No backend Free Pascal: omissão automática de diretivas de linkagem DLL (`external 'msvcrt'`), consumindo a unit nativamente com máxima otimização inline do compilador FPC.
+- [x] **Interoperabilidade Avançada com Cabeçalhos e Bibliotecas C (`import c` / `extern c`)**:
+  - Inclusão direta de headers C com suporte a delimitadores angulares e aspas (`import c "<math.h>";`, `import c "minha_lib.h";`).
+  - Declaração de funções da biblioteca padrão C ou bibliotecas externas usando `extern c function <Nome>(...): <Tipo>;`.
+  - Suporte a diretivas de linkagem nativa no compilador e toolchain (`-lm`, `-lws2_32`).
+  - Prevenção automática de conflitos de redeclaração no GCC para funções padrão de `<math.h>` (`sin`, `cos`, `sqrt`, etc.).
+- [x] **Validação Prática Dual-Backend**:
+  - Exemplo modelo criado em `examples/16_pascal_and_c_interop.aeth`, consumindo simultaneamente `SysUtils.GetTickCount64` do Free Pascal e `sin`, `cos`, `sqrt` de `<math.h>` do C99.
+  - Compilado e executado com 100% de paridade e sucesso nos backends **Free Pascal** e **GCC C99**.
+  - Suíte completa de testes de regressão (exemplos 12, 14 e 15) 100% aprovada em ambos os backends.
 
 ### ⏳ Fase 22: Bootstrapping 100% Autônomo do Compilador Auto-Hospedado (`compiler/aeth/`)
 - [ ] **Resolução Multi-Módulo no Compilador Auto-Hospedado**:

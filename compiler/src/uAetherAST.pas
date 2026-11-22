@@ -285,6 +285,8 @@ type
     Name: string;
     Imports: TStringList;
     PascalImports: TStringList;
+    CImports: TStringList;
+    LinkDirectives: TStringList;
     Types: TASTNodeList;       // TASTRecordDecl, TASTEnumDecl
     Traits: TASTNodeList;      // TASTTraitDecl
     Impls: TASTNodeList;       // TASTImplDecl
@@ -1024,6 +1026,8 @@ begin
   Name := AName;
   Imports := TStringList.Create;
   PascalImports := TStringList.Create;
+  CImports := TStringList.Create;
+  LinkDirectives := TStringList.Create;
   Types := TASTNodeList.Create;
   Traits := TASTNodeList.Create;
   Impls := TASTNodeList.Create;
@@ -1035,6 +1039,8 @@ destructor TASTModule.Destroy;
 begin
   Imports.Free;
   PascalImports.Free;
+  CImports.Free;
+  LinkDirectives.Free;
   Types.Free;
   Traits.Free;
   Impls.Free;
