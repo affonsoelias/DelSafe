@@ -325,6 +325,105 @@ function activate(context) {
                     )
                 );
             }
+        }),
+
+        // Provedor de Formatação de Documento (Shift+Alt+F / formatOnSave)
+        vscode.languages.registerDocumentFormattingEditProvider('aether', {
+            async provideDocumentFormattingEdits(document) {
+                const res = await requestLSP('textDocument/formatting', {
+                    textDocument: { uri: document.uri.toString() },
+                    options: { tabSize: 4, insertSpaces: true }
+                });
+
+                if (!Array.isArray(res)) return [];
+                return res.map(e => new vscode.TextEdit(
+                    new vscode.Range(
+                        e.range.start.line,
+                        e.range.start.character,
+                        e.range.end.line,
+                        e.range.end.character
+                    ),
+                    e.newText
+                ));
+            }
+        }),
+
+        // Provedor de Refatoração Segura (Rename / F2)
+        vscode.languages.registerRenameProvider('aether', {
+            async provideRenameEdits(document, position, newName) {
+                const res = await requestLSP('textDocument/rename', {
+                    textDocument: { uri: document.uri.toString() },
+                    position: { line: position.line, character: position.character },
+                    newName
+                });
+
+                if (!res || !res.changes) return null;
+                const we = new vscode.WorkspaceEdit();
+                for (const [uriStr, edits] of Object.entries(res.changes)) {
+                    const uri = vscode.Uri.parse(uriStr);
+                    for (const e of edits) {
+                        we.replace(
+                            uri,
+                            new vscode.Range(
+                                e.range.start.line,
+                                e.range.start.character,
+                                e.range.end.line,
+                                e.range.end.character
+                            ),
+                            e.newText
+                        );
+                    }
+                }
+                return we;
+            }
+        }),
+
+        // Provedor de Ações Rápidas de Correção (CodeActions / QuickFix / Ctrl+.)
+        vscode.languages.registerCodeActionsProvider('aether', {
+            async provideCodeActions(document, range, context) {
+                const res = await requestLSP('textDocument/codeAction', {
+                    textDocument: { uri: document.uri.toString() },
+                    range: {
+                        start: { line: range.start.line, character: range.start.character },
+                        end: { line: range.end.line, character: range.end.character }
+                    },
+                    context: {
+                        diagnostics: context.diagnostics.map(d => ({
+                            message: d.message,
+                            code: d.code,
+                            range: {
+                                start: { line: d.range.start.line, character: d.range.start.character },
+                                end: { line: d.range.end.line, character: d.range.end.character }
+                            }
+                        }))
+                    }
+                });
+
+                if (!Array.isArray(res)) return [];
+                return res.map(ca => {
+                    const action = new vscode.CodeAction(ca.title, vscode.CodeActionKind.QuickFix);
+                    action.isPreferred = ca.isPreferred || false;
+                    if (ca.edit && ca.edit.changes) {
+                        action.edit = new vscode.WorkspaceEdit();
+                        for (const [uriStr, edits] of Object.entries(ca.edit.changes)) {
+                            const uri = vscode.Uri.parse(uriStr);
+                            for (const e of edits) {
+                                action.edit.replace(
+                                    uri,
+                                    new vscode.Range(
+                                        e.range.start.line,
+                                        e.range.start.character,
+                                        e.range.end.line,
+                                        e.range.end.character
+                                    ),
+                                    e.newText
+                                );
+                            }
+                        }
+                    }
+                    return action;
+                });
+            }
         })
     );
 
@@ -391,6 +490,11 @@ function activate(context) {
             const term = vscode.window.createTerminal('Aether Build (C99)');
             term.show();
             term.sendText(`"${compiler}" "${editor.document.uri.fsPath}" --target=c`);
+        }),
+
+        // Comando: Formatar Documento
+        vscode.commands.registerCommand('aether.formatDocument', () => {
+            vscode.commands.executeCommand('editor.action.formatDocument');
         })
     );
 }

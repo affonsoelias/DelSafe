@@ -1,8 +1,8 @@
 {
   "name": "aether-lang",
   "displayName": "Aether Programming Language",
-  "description": "Suporte oficial para a linguagem Aether (.aeth): realce de sintaxe, snippets, LSP nativo com diagnosticos em tempo real, autocompletar, hover e go-to-definition.",
-  "version": "0.10.0",
+  "description": "Suporte oficial e estável (v1.0.0) para a linguagem Aether (.aeth): realce de sintaxe, formatação canônica (Shift+Alt+F), refatoração segura (F2), quick-fix para Borrow Checker, snippets e LSP nativo com diagnóstico instantâneo.",
+  "version": "1.0.0",
   "publisher": "aether-lang",
   "engines": {
     "vscode": "^1.75.0"
@@ -82,6 +82,11 @@
       {
         "command": "aether.checkDiagnostics",
         "title": "Aether: Analisar e Atualizar Diagnósticos (Modo IA)",
+        "category": "Aether"
+      },
+      {
+        "command": "aether.formatDocument",
+        "title": "Aether: Formatar Documento (Shift+Alt+F)",
         "category": "Aether"
       }
     ],

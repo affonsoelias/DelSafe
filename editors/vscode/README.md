@@ -6,19 +6,25 @@ Esta extensão adiciona suporte completo de primeira classe para a linguagem de 
 
 ## 🌟 Recursos
 
-1. **Realce de Sintaxe Completo (TextMate Grammar):**
+1. **LSP Nativo de Alta Performance (`aetherc --lsp`):**
+   - **Formatação Canônica (`Shift + Alt + F` / `formatOnSave`)**: Integração direta com `textDocument/formatting` chamando o motor canônico `uAetherFormatter.pas` (indentação de 4 espaços, operadores normalizados).
+   - **Refatoração Segura (`F2` / Rename Symbol)**: Renomeação atômica e consistente via `textDocument/rename` sem afetar literais ou comentários.
+   - **Ações Rápidas de Correção (`Ctrl + .` / Quick-Fix)**: Sugestões instantâneas para resolução de transferências indevidas de posse (`borrow` ou `mut borrow`) e adição automática de imports da biblioteca padrão (`std.fs`, `std.time`, `std.http`, `std.json`).
+   - **Autocompletar Inteligente (`Ctrl + Espaço`)**: Palavras-chave, modificadores de posse, tipos primitivos, mônades e símbolos locais.
+   - **Informações ao Passar o Cursor (Hover)**: Assinaturas de funções, tipos e documentação explicativa da semântica de posse.
+   - **Ir para a Definição (`F12`)**: Navegação instantânea para funções, tipos records, traits e enums.
+2. **Realce de Sintaxe Completo (TextMate Grammar):**
    - Cores semânticas para módulos, records, enums algébricos, contratos (`require`/`ensure`), operadores e literais.
    - Destaque especial para palavras de sistema de posse (`borrow`, `take`, `mut`).
    - Cores nativas para mônades embutidas (`Result`, `Option`, `Ok`, `Err`, `Some`, `None`).
-2. **Snippets Inteligentes:**
+3. **Snippets Inteligentes:**
    - Crie módulos, funções com contratos, records, enums com dados e blocos de casamento exaustivo (`match`) instantaneamente teclando `Tab`.
-3. **Diagnósticos Nativos e Modo IA em Tempo Real:**
-   - Integração direta com a flag `--emit-json-diagnostics` do compilador `aetherc`.
-   - Erros de compilação e violações de posse (*Borrow Checker*) aparecem sublinhados no código e listados na aba **Problems** do VS Code, incluindo sugestões inteligentes de correção (*suggested fixes*).
 4. **Comandos Integrados:**
-   - `Aether: Compilar Arquivo Atual (Backend Pascal)`: compila para executável nativo via Free Pascal.
-   - `Aether: Compilar Arquivo Atual (Backend C99 / GCC)`: compila para executável nativo via GCC.
-   - `Aether: Analisar e Atualizar Diagnósticos (Modo IA)`.
+   - `Aether: Formatar Documento (Shift+Alt+F)`.
+   - `Aether: Compilar Arquivo Atual (Backend Pascal)`.
+   - `Aether: Compilar Arquivo Atual (Backend C99 / GCC)`.
+   - `Aether: Compilar Projeto (Build)`.
+   - `Aether: Executar Projeto (Run)`.
 
 ---
 
@@ -47,7 +53,7 @@ Se tiver o utilitário `vsce` do npm instalado:
 ```bash
 cd editors/vscode
 npx @vscode/vsce package
-code --install-extension aether-lang-0.7.0.vsix
+code --install-extension aether-lang-1.0.0.vsix
 ```
 
 ---

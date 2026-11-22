@@ -8,7 +8,7 @@ interface
 uses
   SysUtils, Classes, Math, fpjson, jsonparser,
   uAetherTokens, uAetherLexer, uAetherAST, uAetherParser,
-  uAetherTypeChecker, uAetherBorrowChecker;
+  uAetherTypeChecker, uAetherBorrowChecker, uAetherFormatter;
 
 procedure RunAetherLSP;
 
@@ -825,6 +825,235 @@ begin
   end;
 end;
 
+function HandleFormatting(Params: TJSONObject): TJSONArray;
+var
+  URI, SourceText, FormattedText: string;
+  Idx, TotalLines, LastLineLen: Integer;
+  Lines: TStringList;
+  Item, RangeObj, StartPos, EndPos: TJSONObject;
+begin
+  Result := TJSONArray.Create;
+  if not Assigned(Params) or not Assigned(Params.Find('textDocument')) then Exit;
+  URI := (Params.Find('textDocument') as TJSONObject).Get('uri', '');
+  Idx := FindDocIndex(URI);
+  if Idx < 0 then Exit;
+
+  SourceText := FDocuments[Idx].Text;
+  FormattedText := TAetherFormatter.FormatSource(SourceText);
+  if FormattedText = SourceText then Exit;
+
+  Lines := TStringList.Create;
+  try
+    Lines.Text := SourceText;
+    TotalLines := Math.Max(0, Lines.Count - 1);
+    if Lines.Count > 0 then
+      LastLineLen := Length(Lines[Lines.Count - 1])
+    else
+      LastLineLen := 0;
+  finally
+    Lines.Free;
+  end;
+
+  Item := TJSONObject.Create;
+  RangeObj := TJSONObject.Create;
+  StartPos := TJSONObject.Create(['line', 0, 'character', 0]);
+  EndPos := TJSONObject.Create(['line', TotalLines, 'character', LastLineLen]);
+  RangeObj.Add('start', StartPos);
+  RangeObj.Add('end', EndPos);
+  Item.Add('range', RangeObj);
+  Item.Add('newText', FormattedText);
+  Result.Add(Item);
+end;
+
+function HandleRename(Params: TJSONObject): TJSONObject;
+var
+  URI, SourceText, NewName, OldName: string;
+  Line, CharPos, Idx: Integer;
+  PosObj: TJSONObject;
+  Lexer: TAetherLexer;
+  Tok: TToken;
+  ChangesObj, EditObj, RangeObj, StartPos, EndPos: TJSONObject;
+  Arr: TJSONArray;
+begin
+  Result := nil;
+  if not Assigned(Params) or not Assigned(Params.Find('textDocument')) then Exit;
+  URI := (Params.Find('textDocument') as TJSONObject).Get('uri', '');
+  NewName := Params.Get('newName', '');
+  if NewName = '' then Exit;
+
+  PosObj := Params.Find('position') as TJSONObject;
+  if not Assigned(PosObj) then Exit;
+  Line := PosObj.Get('line', 0);
+  CharPos := PosObj.Get('character', 0);
+
+  Idx := FindDocIndex(URI);
+  if Idx < 0 then Exit;
+  SourceText := FDocuments[Idx].Text;
+
+  OldName := GetWordAt(SourceText, Line, CharPos);
+  if OldName = '' then Exit;
+
+  Arr := TJSONArray.Create;
+  Lexer := TAetherLexer.Create(SourceText);
+  try
+    while True do
+    begin
+      Tok := Lexer.NextToken;
+      if Tok.Kind = tokEOF then Break;
+      if (Tok.Kind = tokIdentifier) and SameText(Tok.Value, OldName) then
+      begin
+        EditObj := TJSONObject.Create;
+        RangeObj := TJSONObject.Create;
+        StartPos := TJSONObject.Create(['line', Tok.Line - 1, 'character', Tok.Col - 1]);
+        EndPos := TJSONObject.Create(['line', Tok.Line - 1, 'character', Tok.Col - 1 + Length(OldName)]);
+        RangeObj.Add('start', StartPos);
+        RangeObj.Add('end', EndPos);
+        EditObj.Add('range', RangeObj);
+        EditObj.Add('newText', NewName);
+        Arr.Add(EditObj);
+      end;
+    end;
+  finally
+    Lexer.Free;
+  end;
+
+  ChangesObj := TJSONObject.Create;
+  ChangesObj.Add(URI, Arr);
+  Result := TJSONObject.Create;
+  Result.Add('changes', ChangesObj);
+end;
+
+function HandleCodeAction(Params: TJSONObject): TJSONArray;
+var
+  URI, DiagMsg, DiagCode: string;
+  ContextObj, DiagObj, ActionObj, EditObj, ChangesObj, TextEditObj, RangeObj: TJSONObject;
+  DiagsArr, EditsArr: TJSONArray;
+  I: Integer;
+begin
+  Result := TJSONArray.Create;
+  if not Assigned(Params) or not Assigned(Params.Find('textDocument')) then Exit;
+  URI := (Params.Find('textDocument') as TJSONObject).Get('uri', '');
+  ContextObj := Params.Find('context') as TJSONObject;
+  if not Assigned(ContextObj) then Exit;
+
+  DiagsArr := ContextObj.Find('diagnostics') as TJSONArray;
+  if not Assigned(DiagsArr) or (DiagsArr.Count = 0) then Exit;
+
+  for I := 0 to DiagsArr.Count - 1 do
+  begin
+    if not (DiagsArr[I] is TJSONObject) then Continue;
+    DiagObj := TJSONObject(DiagsArr[I]);
+    DiagMsg := DiagObj.Get('message', '');
+    DiagCode := DiagObj.Get('code', '');
+
+    // 1. QuickFix para Borrow Checker (E0401, E0402 ou 'posse' / 'borrow')
+    if (Pos('E04', DiagCode) = 1) or (Pos('posse', LowerCase(DiagMsg)) > 0) or (Pos('borrow', LowerCase(DiagMsg)) > 0) then
+    begin
+      ActionObj := TJSONObject.Create;
+      ActionObj.Add('title', '💡 Substituir argumento por "borrow" (Empréstimo Imutável)');
+      ActionObj.Add('kind', 'quickfix');
+      ActionObj.Add('isPreferred', True);
+      Result.Add(ActionObj);
+
+      ActionObj := TJSONObject.Create;
+      ActionObj.Add('title', '💡 Substituir argumento por "mut borrow" (Empréstimo Mutável Exclusivo)');
+      ActionObj.Add('kind', 'quickfix');
+      ActionObj.Add('isPreferred', False);
+      Result.Add(ActionObj);
+    end;
+
+    // 2. QuickFix para imports canônicos da stdlib
+    if (Pos('FileInfo', DiagMsg) > 0) or (Pos('CreateDir', DiagMsg) > 0) or (Pos('ExisteDiretorio', DiagMsg) > 0) then
+    begin
+      ActionObj := TJSONObject.Create;
+      ActionObj.Add('title', '📦 Adicionar import "std.fs;"');
+      ActionObj.Add('kind', 'quickfix');
+      ActionObj.Add('isPreferred', True);
+
+      EditObj := TJSONObject.Create;
+      ChangesObj := TJSONObject.Create;
+      EditsArr := TJSONArray.Create;
+      TextEditObj := TJSONObject.Create;
+      RangeObj := TJSONObject.Create;
+      RangeObj.Add('start', TJSONObject.Create(['line', 1, 'character', 0]));
+      RangeObj.Add('end', TJSONObject.Create(['line', 1, 'character', 0]));
+      TextEditObj.Add('range', RangeObj);
+      TextEditObj.Add('newText', 'import std.fs;'#10);
+      EditsArr.Add(TextEditObj);
+      ChangesObj.Add(URI, EditsArr);
+      EditObj.Add('changes', ChangesObj);
+      ActionObj.Add('edit', EditObj);
+      Result.Add(ActionObj);
+    end
+    else if (Pos('Timer', DiagMsg) > 0) or (Pos('NovoTimer', DiagMsg) > 0) or (Pos('GetNanoseconds', DiagMsg) > 0) then
+    begin
+      ActionObj := TJSONObject.Create;
+      ActionObj.Add('title', '📦 Adicionar import "std.time;"');
+      ActionObj.Add('kind', 'quickfix');
+      ActionObj.Add('isPreferred', True);
+
+      EditObj := TJSONObject.Create;
+      ChangesObj := TJSONObject.Create;
+      EditsArr := TJSONArray.Create;
+      TextEditObj := TJSONObject.Create;
+      RangeObj := TJSONObject.Create;
+      RangeObj.Add('start', TJSONObject.Create(['line', 1, 'character', 0]));
+      RangeObj.Add('end', TJSONObject.Create(['line', 1, 'character', 0]));
+      TextEditObj.Add('range', RangeObj);
+      TextEditObj.Add('newText', 'import std.time;'#10);
+      EditsArr.Add(TextEditObj);
+      ChangesObj.Add(URI, EditsArr);
+      EditObj.Add('changes', ChangesObj);
+      ActionObj.Add('edit', EditObj);
+      Result.Add(ActionObj);
+    end
+    else if (Pos('Client', DiagMsg) > 0) or (Pos('Server', DiagMsg) > 0) or (Pos('NewClient', DiagMsg) > 0) then
+    begin
+      ActionObj := TJSONObject.Create;
+      ActionObj.Add('title', '📦 Adicionar import "std.http;"');
+      ActionObj.Add('kind', 'quickfix');
+      ActionObj.Add('isPreferred', True);
+
+      EditObj := TJSONObject.Create;
+      ChangesObj := TJSONObject.Create;
+      EditsArr := TJSONArray.Create;
+      TextEditObj := TJSONObject.Create;
+      RangeObj := TJSONObject.Create;
+      RangeObj.Add('start', TJSONObject.Create(['line', 1, 'character', 0]));
+      RangeObj.Add('end', TJSONObject.Create(['line', 1, 'character', 0]));
+      TextEditObj.Add('range', RangeObj);
+      TextEditObj.Add('newText', 'import std.http;'#10);
+      EditsArr.Add(TextEditObj);
+      ChangesObj.Add(URI, EditsArr);
+      EditObj.Add('changes', ChangesObj);
+      ActionObj.Add('edit', EditObj);
+      Result.Add(ActionObj);
+    end
+    else if (Pos('JsonBuilder', DiagMsg) > 0) or (Pos('ParseJson', DiagMsg) > 0) then
+    begin
+      ActionObj := TJSONObject.Create;
+      ActionObj.Add('title', '📦 Adicionar import "std.json;"');
+      ActionObj.Add('kind', 'quickfix');
+      ActionObj.Add('isPreferred', True);
+
+      EditObj := TJSONObject.Create;
+      ChangesObj := TJSONObject.Create;
+      EditsArr := TJSONArray.Create;
+      TextEditObj := TJSONObject.Create;
+      RangeObj := TJSONObject.Create;
+      RangeObj.Add('start', TJSONObject.Create(['line', 1, 'character', 0]));
+      RangeObj.Add('end', TJSONObject.Create(['line', 1, 'character', 0]));
+      TextEditObj.Add('range', RangeObj);
+      TextEditObj.Add('newText', 'import std.json;'#10);
+      EditsArr.Add(TextEditObj);
+      ChangesObj.Add(URI, EditsArr);
+      EditObj.Add('changes', ChangesObj);
+      ActionObj.Add('edit', EditObj);
+      Result.Add(ActionObj);
+    end;
+  end;
+end;
+
 procedure RunAetherLSP;
 var
   RawMsg: UTF8String;
@@ -869,6 +1098,9 @@ begin
 
           Caps.Add('hoverProvider', True);
           Caps.Add('definitionProvider', True);
+          Caps.Add('documentFormattingProvider', True);
+          Caps.Add('renameProvider', True);
+          Caps.Add('codeActionProvider', True);
 
           ResultData := TJSONObject.Create;
           TJSONObject(ResultData).Add('capabilities', Caps);
@@ -928,6 +1160,24 @@ begin
         else if Method = 'textDocument/definition' then
         begin
           ResultData := HandleDefinition(Params);
+          SendLSPResponse(Id, ResultData);
+        end
+        else if Method = 'textDocument/formatting' then
+        begin
+          ResultData := HandleFormatting(Params);
+          SendLSPResponse(Id, ResultData);
+        end
+        else if Method = 'textDocument/rename' then
+        begin
+          ResultData := HandleRename(Params);
+          if Assigned(ResultData) then
+            SendLSPResponse(Id, ResultData)
+          else
+            SendLSPResponse(Id, TJSONNull.Create);
+        end
+        else if Method = 'textDocument/codeAction' then
+        begin
+          ResultData := HandleCodeAction(Params);
           SendLSPResponse(Id, ResultData);
         end
         else if Method = 'shutdown' then

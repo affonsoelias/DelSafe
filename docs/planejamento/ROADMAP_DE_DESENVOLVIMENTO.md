@@ -333,17 +333,21 @@ Este documento traça o status oficial de desenvolvimento do compilador e as pr�
     - GCC C99: `-O3 -flto -s` com Link-Time Optimization (LTO) gerando binários ultra compactos de apenas ~13.8 KB.
   - Exemplo integrado criado e validado em `examples/21_optimizer_and_release.aeth` com 100% de paridade em ambos os backends.
 
-### ⏳ Fase 28: Expansão do LSP & IDE Developer Experience (VS Code Extension v1.0.0)
-- [ ] **Formatação Integrada via LSP**:
-  - Implementação do endpoint `textDocument/formatting` no servidor LSP chamando o motor canônico `uAetherFormatter.pas`.
-  - Atalho padrão de formatação no VS Code (`Shift + Alt + F` / "Format Document") formatando o buffer ativo em tempo real.
-- [ ] **Refatoração Segura (`textDocument/rename`)**:
-  - Renomeação de variáveis, funções e tipos com verificação de escopo léxico e atualização atômica de todas as referências.
-- [ ] **Ações Rápidas de Correção (`textDocument/codeAction`)**:
-  - Sugestões de quick-fix automáticas no editor para erros clássicos do Borrow Checker (sugestão de `borrow` ou `mut borrow`) e inclusão de imports ausentes.
-- [ ] **Lançamento da Extensão VS Code v1.0.0**:
-  - Atualização do manifesto `package.json` para a versão estável `1.0.0`.
-  - Empacotamento do arquivo `.vsix` atualizado em `editors/vscode/`.
+### ✅ Fase 28: Expansão do LSP & IDE Developer Experience (VS Code Extension v1.0.0) (Concluído)
+- [x] **Formatação Integrada via LSP (`textDocument/formatting`)**:
+  - Implementado o endpoint `textDocument/formatting` no servidor LSP chamando o motor canônico `uAetherFormatter.pas`.
+  - Suporte total ao atalho padrão do VS Code (`Shift + Alt + F` / "Format Document") e formatação automática ao salvar (`formatOnSave`).
+- [x] **Refatoração Segura (`textDocument/rename`)**:
+  - Implementado o endpoint `textDocument/rename` com varredura léxica atômica em tokens de identificadores preservando literais de texto e comentários.
+  - Suporte ao comando Rename Symbol (`F2`) no VS Code.
+- [x] **Ações Rápidas de Correção (`textDocument/codeAction`)**:
+  - Implementado o endpoint `textDocument/codeAction` com sugestões inteligentes de Quick-Fix (`Ctrl + .`):
+    - Sugestão automática de `borrow` ou `mut borrow` para violações de posse do Borrow Checker (`E0401`, `E0402`).
+    - Sugestão automática de inserção de imports ausentes da biblioteca padrão (`std.fs`, `std.time`, `std.http`, `std.json`).
+- [x] **Lançamento da Extensão VS Code v1.0.0**:
+  - Atualizado manifesto `package.json` para a versão estável `1.0.0`.
+  - Provedores integrados registrados em `extension.js`.
+  - Pacote oficial gerado com sucesso: `editors/vscode/aether-lang-1.0.0.vsix`.
 
 ### ⏳ Fase 29: Auto-Hospedagem Completa de Ciclo Fechado (Stage 3 Bootstrapping)
 - [ ] **Ciclo Completo de Auto-Compilação (*Stage 1, 2 e 3*)**:
