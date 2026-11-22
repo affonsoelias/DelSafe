@@ -1,38 +1,38 @@
-# Documentação Oficial da Linguagem Aether (AetherLang)
+# Aether Official Documentation
 
-> **"A clareza, estrutura e disciplina do Object Pascal com a segurança estrita de memória do Rust e arquitetura projetada para humanos e IAs."**
+> **"The structure and discipline of Object Pascal, the uncompromising memory safety of an affine Borrow Checker, and a developer experience designed for both humans and AI agents."**
 
-Bem-vindo à documentação oficial do **Aether**. A documentação está estruturada em seções para atender desde iniciantes até desenvolvedores de compiladores, engenheiros de ferramentas e criadores de aplicações no ecossistema Pascal e BlaiseVue.
-
----
-
-## 📚 Mapa da Documentação
-
-### 🎓 0. [Curso Oficial Aether do Zero](file:///c:/Users/Pichau/Documents/aether/docs/curso/README.md)
-Trilha didática completa em 9 lições práticas para aprender Aether do início ao primeiro projeto real:
-- **[Ementa e Índice do Curso](file:///c:/Users/Pichau/Documents/aether/docs/curso/README.md):** Da sintaxe básica a contratos, ownership, records, enums algébricos e projeto final.
+Welcome to the official documentation for the **Aether Programming Language (AetherLang)**. The documentation is organized into dedicated sections for beginners, systems engineers, and toolchain developers.
 
 ---
 
-### 👤 1. [Documentação do Usuário](file:///c:/Users/Pichau/Documents/aether/docs/usuario/)
-Manuais práticos para quem deseja programar e criar aplicações em Aether:
-- **[Guia do Iniciante](file:///c:/Users/Pichau/Documents/aether/docs/usuario/GUIA_DO_INICIANTE.md):** Requisitos de ambiente (Free Pascal e MSYS2 GCC), instalação, diagnóstico com `aetherc --doctor`, primeiro programa nativo e criação de projetos com `aetherc new`.
-- **[Guia Completo da CLI](file:///c:/Users/Pichau/Documents/aether/docs/usuario/GUIA_DA_CLI.md):** Referência de todos os comandos do compilador `aetherc` (`build`, `run`, `test`, `clean`, `emit`, `pkg`, `--watch`, etc.).
-- **[Gerenciamento de Pacotes (`aetherc pkg`)](file:///c:/Users/Pichau/Documents/aether/docs/usuario/GERENCIAMENTO_DE_PACOTES.md):** Gerenciador nativo de dependências Git e locais, lockfile criptográfico `aether.lock` e auditoria de segurança `aetherc pkg audit`.
-- **[Conceitos de Posse e Empréstimo](file:///c:/Users/Pichau/Documents/aether/docs/usuario/CONCEITOS_POSSE_E_BORROW.md):** Entenda `take`, `borrow` e `mut borrow` de forma intuitiva, sem complicação matemática.
+## 📚 Documentation Map
+
+### 🎓 1. [The Aether Masterclass Course](course/README.md)
+A comprehensive, hands-on 12-chapter curriculum that takes you from complete beginner to master:
+- **[Curriculum Index](course/README.md):** From basic syntax, module anatomy, and algebraic types to compile-time contracts, the Borrow Checker, traits, async/await, and the final capstone service.
 
 ---
 
-### ⚙️ 2. [Documentação Técnica](file:///c:/Users/Pichau/Documents/aether/docs/tecnica/)
-Especificações formais e detalhes de engenharia de software do Aether:
-- **[Integração com BlaiseVue](file:///c:/Users/Pichau/Documents/aether/docs/tecnica/INTEGRACAO_BLAISEVUE_E_PASCAL.md):** Como usar o Aether no BlaiseVue, emissão em formato Unit (`--unit`), customização de diretório (`--out-dir`) e hot-reload (`--watch`).
-- **[Especificação Formal da Linguagem](file:///c:/Users/Pichau/Documents/aether/docs/tecnica/ESPECIFICACAO_LINGUAGEM.md):** Gramática EBNF completa, regras léxicas, sistema de tipos, UFCS, interoperabilidade zero-boilerplate (`import pascal` / `import c`), Traits e Sockets.
-- **[Segurança de Memória Estática](file:///c:/Users/Pichau/Documents/aether/docs/tecnica/SEGURANCA_DE_MEMORIA.md):** Prova formal de eliminação de *Use-After-Free*, *Double-Free*, *Data Races* e *Null Pointers*.
-- **[Arquitetura do Compilador](file:///c:/Users/Pichau/Documents/aether/docs/tecnica/ARQUITETURA_DO_COMPILADOR.md):** Funcionamento interno do `aetherc` (Lexer, Parser recursivo, Type Checker, Borrow Checker e Emissores Pascal/C).
-- **[Modo IA & Diagnósticos em JSON](file:///c:/Users/Pichau/Documents/aether/docs/tecnica/MODO_IA_DIAGNOSTICO_JSON.md):** Schema estruturado para ferramentas, IDEs e cooperação com agentes inteligentes.
+### 👤 2. [User Guides](user-guide/)
+Practical manuals for writing, building, and maintaining applications in Aether:
+- **[Beginner's Guide](user-guide/GUIA_DO_INICIANTE.md):** Environment requirements (Free Pascal and GCC), quickstart, diagnostic validation with `aetherc --doctor`, and creating new projects.
+- **[CLI Reference Manual](user-guide/GUIA_DA_CLI.md):** Complete reference of all `aetherc` compiler commands (`build`, `run`, `test`, `bench`, `profile`, `lint`, `fmt`, `doc`, `emit-header`).
+- **[Package Manager](user-guide/GERENCIAMENTO_DE_PACOTES.md):** Managing Git and local dependencies (`aetherc pkg`), cryptographic lockfiles (`aether.lock`), and TLS security audits.
+- **[Ownership & Borrowing Concepts](user-guide/CONCEITOS_POSSE_E_BORROW.md):** Intuitive explanation of `take`, `borrow`, and `mut borrow` with practical visual examples.
 
 ---
 
-### 🗺️ 3. [Planejamento e Roadmap](file:///c:/Users/Pichau/Documents/aether/docs/planejamento/)
-Acompanhamento da evolução do projeto:
-- **[Roadmap de Desenvolvimento](file:///c:/Users/Pichau/Documents/aether/docs/planejamento/ROADMAP_DE_DESENVOLVIMENTO.md):** Histórico completo de todas as fases implementadas (Fases 1 a 21.1) e planejamento da Fase 22 (Bootstrapping do Compilador Auto-Hospedado).
+### ⚙️ 3. [Technical Documentation](technical/)
+Formal specifications and compiler architecture:
+- **[Language Specification](technical/ESPECIFICACAO_LINGUAGEM.md):** Grammar, type hierarchy, UFCS, traits, and zero-boilerplate FFI (`import c`, `import pascal`).
+- **[BlaiseVue & Zephyr Integration](technical/INTEGRACAO_BLAISEVUE_E_PASCAL.md):** Zephyr backend architecture (`vendor/zephyr`), high-performance FPC/C backend execution, and tooling integration.
+- **[Static Memory Safety](technical/SEGURANCA_DE_MEMORIA.md):** Formal proof of how Aether guarantees zero Use-After-Free, Double-Free, Data Races, and Null-Pointer exceptions.
+- **[Compiler Architecture](technical/ARQUITETURA_DO_COMPILADOR.md):** Internal subsystems of `aetherc` (Lexer, Recursive-Descent Parser, Type Checker, Borrow Checker, AST Optimizer, and Emitters).
+- **[AI Diagnostic Mode (JSON)](technical/MODO_IA_DIAGNOSTICO_JSON.md):** Structured JSON schema for compiler diagnostics and IDE/AI agent integration.
+
+---
+
+### 🗺️ 4. [Roadmap & Planning](planning/)
+Project evolution, milestones, and design records:
+- **[Development Roadmap](planning/ROADMAP_DE_DESENVOLVIMENTO.md):** Complete history of all 40 completed development phases and future ecosystem milestones.

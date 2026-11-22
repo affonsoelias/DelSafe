@@ -2,9 +2,13 @@ module InteropExtern;
 
 import pascal Math;
 
-// Declaracao explicita de FFI com ABI C (Fase 20)
-// Para libc / C runtime ou bibliotecas externas customizadas:
+// 1. FFI Explícita (extern c): Necessária para invocar funções C de bibliotecas
+// nativas / libc (como puts) nos backends FPC e GCC com checagem rigorosa de tipos.
 extern c function puts(s: String): Int32;
+
+// 2. Nota sobre 'sqrt': Funções de módulos padrão (como Math e SysUtils)
+// são auto-importadas sem necessidade de 'extern' manual (Zero-Boilerplate).
+// Aqui declaramos com 'contract require' para demonstrar contratos em funções FFI:
 extern c function sqrt(x: Float64): Float64
 contract
     require
@@ -21,7 +25,7 @@ begin
     // 1. Chamada a funcao C externa: puts() via FFI
     res_puts := puts("Mensagem impressa diretamente pela funcao C: puts()");
 
-    // 2. Chamada a funcao C externa com ponto flutuante: sqrt()
+    // 2. Chamada a funcao C com contrato e verificacao de pre-condicao
     raiz := sqrt(144.0);
     PrintLn("Raiz quadrada de 144.0 calculada via C sqrt(): " + FloatToStr(raiz));
 

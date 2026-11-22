@@ -401,7 +401,7 @@ begin
     Exit('String');
 
   if (LowName = 'strtoint') or (LowName = 'strtointdef') or
-     (LowName = 'length') then
+     (LowName = 'length') or (LowName = 'puts') or (LowName = 'printf') then
     Exit('Int32');
 
   Result := 'Float64';
