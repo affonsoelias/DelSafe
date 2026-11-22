@@ -111,7 +111,6 @@ Aether powers **Zephyr** (`vendor/zephyr`), the native backend engine for the Bl
 - [Roadmap & Development Plan](docs/planejamento/ROADMAP_DE_DESENVOLVIMENTO.md)
 - [Language Specification](docs/tecnica/ESPECIFICACAO_LINGUAGEM.md)
 - [BlaiseVue Integration Guide](docs/tecnica/INTEGRACAO_BLAISEVUE_E_PASCAL.md)
-- [Documentação em Português](docs/pt-br/README.md)
 
 ---
 
