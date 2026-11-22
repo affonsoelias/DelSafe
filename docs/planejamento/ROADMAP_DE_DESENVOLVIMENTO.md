@@ -421,7 +421,15 @@ Este documento traça o status oficial de desenvolvimento do compilador e as pr�
   - Sincronização automatizada de dependências e resolução de compatibilidade semântica (SemVer `^`, `~`, `*` e exata).
   - Integração transparente com `aetherc add <pacote>` e `RestoreProjectDependencies` gravando integridade no `aether.lock`.
 
-### ⏳ Fase 34: Integração de Primeira Classe com BlaiseVue (SFC `<script lang="aether">` & Wasm por Convenção) [Pausada]
+### ⏳ Fase 34: Integração de Primeira Classe com BlaiseVue (SFC `<script lang="aether">`, Wasm & Backend Nativo em `vendor/`)
+- [ ] **Módulo Backend Aether Nativo Embutido em `vendor/`**:
+  - Implementação do servidor backend Aether como módulo nativo do BlaiseVue dentro do diretório `vendor/` (`vendor/aether-backend/`), eliminando a necessidade de repositório externo ou submódulos adicionais.
+  - **Simples como Express/FastAPI, Poderoso como mORMot**:
+    - Roteamento declarativo simples (`server.Get("/api/endpoint", handler)`), tipagem estática e serialização instantânea via `[derive(JSON)]`.
+    - Performance de ponta equiparável ou superior ao mORMot via sockets de kernel (`std/net.aeth`), buffers zero-copy garantidos pelo Borrow Checker e corrotinas cooperativas assíncronas (`Task<T>`).
+  - **Alvo de Compilação Duplo (Pascal ou C)**:
+    - **Binário Pascal (Padrão para Dev & FPC Toolchain)**: Compilado nativamente com o Free Pascal (`aetherc --target=pascal`), garantindo perfeita depuração, integração nativa com o ecossistema BlaiseVue e sem dependência de toolchains externas.
+    - **Binário C (Modo Produção de Máxima Performance)**: Compilado via GCC C99 (`aetherc --target=c`) com otimizações LTO (`-O3 -flto -s`), gerando binários ultra-compactos e o mais alto throughput de requisições por segundo.
 - [ ] **Arquitetura Modular Não-Invasiva**:
   - Preservação do core do BlaiseVue (`core/*.pas` e `bin/bv.pas`) em Object Pascal puro, garantindo estabilidade operacional, sem dependências circulares e sem necessidade de dois compiladores para desenvolver o framework.
   - O Aether atua como linguagem de desenvolvimento de primeira classe para o desenvolvedor de aplicações.
@@ -435,9 +443,6 @@ Este documento traça o status oficial de desenvolvimento do compilador e as pr�
   - O `bv` invoca `aetherc --target=wasm` gerando `dist/wasm/<NomeComponente>.wasm` via Clang wasm32.
   - Resolução automática em runtime: o `bv` gera o código de carregamento inicial automático no ciclo `mounted` via `TBVWasm.LoadFromUrl('<NomeComponente>', '/wasm/<NomeComponente>.wasm')` utilizando o motor `core/BVWasm.pas` já existente no BlaiseVue.
   - Despacho direto de métodos exportados do Wasm no template (`@click="executar"`) sem necessidade de bindings manuais.
-- [ ] **Backend e Serviços de Negócio com mORMot 2**:
-  - Suporte a serviços em `.aeth` (`backend/services/*.aeth`) transpilados para units Pascal consumidas diretamente pelos endpoints e controllers do Synopse mORMot 2.
-  - Blindagem das regras de negócio contra data races e vazamento de memória via Borrow Checker.
 
 ---
 
@@ -537,3 +542,19 @@ Este documento traça o status oficial de desenvolvimento do compilador e as pr�
 - [ ] **Atributos de Otimização e Controle de Inlining**:
   - Atributos `@inline(always)` e `@inline(never)` mapeados para diretivas nativas nos backends (FPC `inline` / GCC `__attribute__((always_inline))`).
   - Atributo `@cold` para rotinas de tratamento de erro ou caminhos raros de execução, instruindo os compiladores de backend a otimizar o *branch prediction* do processador.
+
+---
+
+### ⏳ Marco de Lançamento Open-Source: Build 1-Click & Internacionalização (Inglês)
+- [ ] **Scripts Canônicos de Bootstrap e Compilação 1-Click**:
+  - `build.bat`: Script para Windows (CMD/Explorer) com compilação direta via FPC e execução de testes.
+  - `build.ps1`: Script PowerShell avançado com detecção automática do toolchain (`fpc`, `gcc`), validação de PATH e execução de `aetherc --doctor`.
+  - `build.sh`: Script executável para Linux e macOS (`chmod +x build.sh && ./build.sh`).
+  - Facilidade absoluta: o desenvolvedor baixa o código-fonte e em um comando tem o `bin/aetherc` pronto e testado.
+- [ ] **Internacionalização Integral da Documentação (Inglês como Padrão Global)**:
+  - Criação do `README.md` raiz internacional em inglês (com badges, quickstart, exemplos de código, garantias de memória e benchmarks).
+  - Documentação canônica técnica em inglês (`docs/`): especificação de sintaxe, guia da CLI, borrow checker e guia de interoperabilidade.
+  - Preservação da versão em Português (`docs/pt-br/`) para suporte bilíngue da comunidade lusófona.
+- [ ] **Auditoria de Higiene do Repositório**:
+  - Verificação rigorosa do `.gitignore` garantindo que nenhum binário (`.exe`, `.o`, `.ppu`, `.wasm`) ou arquivo temporário seja rastreado.
+  - Licença open-source padrão (`LICENSE`) e guia de contribuição (`CONTRIBUTING.md`).
