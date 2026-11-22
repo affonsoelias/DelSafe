@@ -35,10 +35,15 @@ type
     procedure EmitEnumDecl(Enm: TASTEnumDecl);
     procedure EmitFunction(Func: TASTFunction);
     procedure EmitProgramBlock(Prog: TASTProgramBlock);
+
+    function BuildFuncSig(Func: TASTFunction): string;
+    function BuildRecordConstructorSig(Rec: TASTRecordDecl): string;
+    procedure EmitRuntimeHelpersInterface;
+    procedure EmitRuntimeHelpersImplementation;
   public
     constructor Create;
     destructor Destroy; override;
-    function Generate(AModule: TASTModule): string;
+    function Generate(AModule: TASTModule; AsUnit: Boolean = False): string;
   end;
 
 implementation
@@ -852,98 +857,112 @@ begin
   Emit('end.');
 end;
 
-function TAetherEmitterPascal.Generate(AModule: TASTModule): string;
+function TAetherEmitterPascal.BuildFuncSig(Func: TASTFunction): string;
 var
-  I, J: Integer;
-  UsesClause: string;
-  Func: TASTFunction;
+  J: Integer;
   Param: TASTParam;
-  ParamListStr, ModStr: string;
+  ParamListStr, ModStr, LibClause, ParamType: string;
 begin
-  FModule := AModule;
-  FOutput.Clear;
-  FIndent := 0;
-
-  Emit('// Codigo gerado automaticamente pelo Compilador Aether (aetherc)');
-  Emit('// Alvo: Object Pascal (Free Pascal)');
-  Emit('program ' + AModule.Name + ';');
-  Emit('');
-  Emit('{$mode objfpc}{$H+}{$assertions on}');
-  Emit('');
-
-  UsesClause := '  SysUtils, Sockets, Math';
-  for I := 0 to AModule.PascalImports.Count - 1 do
+  if Func.IsExtern then
   begin
-    if Pos(LowerCase(AModule.PascalImports[I]), LowerCase(UsesClause)) = 0 then
-      UsesClause := UsesClause + ', ' + AModule.PascalImports[I];
-  end;
-  UsesClause := UsesClause + ';';
+    if (Func.ExternLib = '') and ((Func.Name = 'sin') or (Func.Name = 'cos') or (Func.Name = 'sqrt')) then
+      Exit('');
 
-  Emit('uses');
-  Emit(UsesClause);
-  Emit('');
+    if Func.ExternLib <> '' then
+      LibClause := Format(' external ''%s'';', [Func.ExternLib])
+    else
+      LibClause := ' external ''msvcrt'';';
 
-  // Helpers nativos do Aether para Result<T, E>
-  Emit('// --- Aether Runtime Helpers ---');
-  Emit('type');
-  Emit('  generic TAetherResult<TVal, TErr> = record');
-  Emit('    is_ok: Boolean;');
-  Emit('    is_err: Boolean;');
-  Emit('    value: TVal;');
-  Emit('    error: TErr;');
-  Emit('  end;');
-  Emit('');
-  Emit('// Definicao de Result padrao para compatibilidade de tipos');
-  Emit('type');
-  Emit('  TResultDoubleError = specialize TAetherResult<Double, Integer>;');
-  Emit('  function AetherOk(const V: Double): TResultDoubleError;');
-  Emit('  begin Result.is_ok := True; Result.is_err := False; Result.value := V; end;');
-  Emit('  function AetherErr(const E: Integer): TResultDoubleError;');
-  Emit('  begin Result.is_ok := False; Result.is_err := True; Result.error := E; end;');
-  Emit('');
-
-  // Seção Type
-  if AModule.Types.Count > 0 then
-  begin
-    Emit('type');
-    IncIndent;
-    // 1. Declaracao de ponteiros antecipados (PTRecord = ^TRecord) para permitir records recursivos
-    for I := 0 to AModule.Types.Count - 1 do
+    ParamListStr := '';
+    for J := 0 to Func.Params.Count - 1 do
     begin
-      if AModule.Types[I] is TASTRecordDecl then
-      begin
-        Emit(Format('P%s = ^T%s;', [TASTRecordDecl(AModule.Types[I]).Name, TASTRecordDecl(AModule.Types[I]).Name]));
-        Emit(Format('PT%s = ^T%s;', [TASTRecordDecl(AModule.Types[I]).Name, TASTRecordDecl(AModule.Types[I]).Name]));
+      Param := TASTParam(Func.Params[J]);
+      case Param.Ownership of
+        owMutBorrow: ModStr := 'var ';
+        owBorrow:    ModStr := 'const ';
+      else
+        ModStr := 'const ';
       end;
+      ParamType := EmitTypeRef(Param.TypeName);
+      if Param.TypeName = 'String' then ParamType := 'PChar';
+      ParamListStr := ParamListStr + Format('%s%s: %s', [ModStr, Param.Name, ParamType]);
+      if J < Func.Params.Count - 1 then
+        ParamListStr := ParamListStr + '; ';
     end;
 
-    for I := 0 to AModule.Types.Count - 1 do
-    begin
-      if AModule.Types[I] is TASTRecordDecl then
-        EmitRecordType(TASTRecordDecl(AModule.Types[I]))
-      else if AModule.Types[I] is TASTEnumDecl then
-        EmitEnumDecl(TASTEnumDecl(AModule.Types[I]));
-    end;
-    DecIndent;
-    Emit('');
-
-    // Construtores de records e construtores de Box
-    for I := 0 to AModule.Types.Count - 1 do
-    begin
-      if AModule.Types[I] is TASTRecordDecl then
-      begin
-        EmitRecordConstructor(TASTRecordDecl(AModule.Types[I]));
-        Emit(Format('function AetherBox(const V: T%s): P%s; overload;', [TASTRecordDecl(AModule.Types[I]).Name, TASTRecordDecl(AModule.Types[I]).Name]));
-        Emit('begin');
-        Emit('  New(Result);');
-        Emit('  Result^ := V;');
-        Emit('end;');
-        Emit('');
-      end;
-    end;
+    if (Func.ReturnType = 'Void') or (Func.ReturnType = '') then
+      Result := Format('procedure %s(%s); cdecl;%s', [Func.Name, ParamListStr, LibClause])
+    else
+      Result := Format('function %s(%s): %s; cdecl;%s', [Func.Name, ParamListStr, EmitTypeRef(Func.ReturnType), LibClause]);
+    Exit;
   end;
 
-  // Runtime Helpers para I/O e Strings
+  ParamListStr := '';
+  for J := 0 to Func.Params.Count - 1 do
+  begin
+    Param := TASTParam(Func.Params[J]);
+    case Param.Ownership of
+      owMutBorrow: ModStr := 'var ';
+      owBorrow:    ModStr := 'const ';
+      owTake:      ModStr := '';
+    else
+      ModStr := 'const ';
+    end;
+    ParamListStr := ParamListStr + Format('%s%s: %s', [ModStr, Param.Name, EmitTypeRef(Param.TypeName)]);
+    if J < Func.Params.Count - 1 then
+      ParamListStr := ParamListStr + '; ';
+  end;
+
+  if (Func.ReturnType = 'Void') or (Func.ReturnType = '') then
+    Result := Format('procedure %s(%s);', [Func.Name, ParamListStr])
+  else
+    Result := Format('function %s(%s): %s;', [Func.Name, ParamListStr, EmitTypeRef(Func.ReturnType)]);
+end;
+
+function TAetherEmitterPascal.BuildRecordConstructorSig(Rec: TASTRecordDecl): string;
+var
+  I: Integer;
+  Field: TASTRecordField;
+  CtorParams: string;
+begin
+  CtorParams := '';
+  for I := 0 to Rec.Fields.Count - 1 do
+  begin
+    Field := TASTRecordField(Rec.Fields[I]);
+    CtorParams := CtorParams + Format('const A_%s: %s', [Field.Name, EmitTypeRef(Field.TypeName)]);
+    if I < Rec.Fields.Count - 1 then
+      CtorParams := CtorParams + '; ';
+  end;
+  Result := Format('function %s(%s): T%s;', [Rec.Name, CtorParams, Rec.Name]);
+end;
+
+procedure TAetherEmitterPascal.EmitRuntimeHelpersInterface;
+begin
+  Emit('function AetherOk(const V: Double): TResultDoubleError;');
+  Emit('function AetherErr(const E: Integer): TResultDoubleError;');
+  Emit('function AetherCharAt(const S: string; Index: Cardinal): string;');
+  Emit('function AetherSubstring(const S: string; Start, Len: Cardinal): string;');
+  Emit('function AetherFileExists(const APath: string): Boolean;');
+  Emit('function AetherReadFile(const APath: string): string;');
+  Emit('function AetherWriteFile(const APath: string; const AContent: string): Boolean;');
+  Emit('function AetherSocketCreate(): LongInt;');
+  Emit('function AetherSocketListen(Port: Word; Backlog: LongInt): LongInt;');
+  Emit('function AetherSocketAccept(ListenFd: LongInt): LongInt;');
+  Emit('function AetherSocketConnect(const Host: String; Port: Word): LongInt;');
+  Emit('function AetherSocketSend(Fd: LongInt; const Data: String): LongInt;');
+  Emit('function AetherSocketRecv(Fd: LongInt; MaxLen: LongInt): String;');
+  Emit('procedure AetherSocketClose(Fd: LongInt);');
+  Emit('');
+end;
+
+procedure TAetherEmitterPascal.EmitRuntimeHelpersImplementation;
+begin
+  Emit('function AetherOk(const V: Double): TResultDoubleError;');
+  Emit('begin Result.is_ok := True; Result.is_err := False; Result.value := V; end;');
+  Emit('');
+  Emit('function AetherErr(const E: Integer): TResultDoubleError;');
+  Emit('begin Result.is_ok := False; Result.is_err := True; Result.error := E; end;');
+  Emit('');
   Emit('function AetherCharAt(const S: string; Index: Cardinal): string;');
   Emit('begin');
   Emit('  if (Index + 1 <= Cardinal(Length(S))) then Result := S[Index + 1] else Result := '''';');
@@ -1067,43 +1086,225 @@ begin
   Emit('  if Fd >= 0 then Sockets.CloseSocket(Fd);');
   Emit('end;');
   Emit('');
+end;
 
-  // Declaracoes antecipadas (forward) de todas as funcoes
-  for I := 0 to AModule.Functions.Count - 1 do
+function TAetherEmitterPascal.Generate(AModule: TASTModule; AsUnit: Boolean = False): string;
+var
+  I: Integer;
+  UsesClause, Sig: string;
+  Func: TASTFunction;
+  Rec: TASTRecordDecl;
+begin
+  FModule := AModule;
+  FOutput.Clear;
+  FIndent := 0;
+
+  UsesClause := '  SysUtils, Sockets, Math';
+  for I := 0 to AModule.PascalImports.Count - 1 do
   begin
-    Func := TASTFunction(AModule.Functions[I]);
-    if (not Func.IsExtern) and (Func.GenericParam = '') then
-    begin
-      ParamListStr := '';
-      for J := 0 to Func.Params.Count - 1 do
-      begin
-        Param := TASTParam(Func.Params[J]);
-        case Param.Ownership of
-          owMutBorrow: ModStr := 'var ';
-          owBorrow:    ModStr := 'const ';
-          owTake:      ModStr := '';
-        else
-          ModStr := 'const ';
-        end;
-        ParamListStr := ParamListStr + Format('%s%s: %s', [ModStr, Param.Name, EmitTypeRef(Param.TypeName)]);
-        if J < Func.Params.Count - 1 then
-          ParamListStr := ParamListStr + '; ';
-      end;
-      if (Func.ReturnType = 'Void') or (Func.ReturnType = '') then
-        Emit(Format('procedure %s(%s); forward;', [Func.Name, ParamListStr]))
-      else
-        Emit(Format('function %s(%s): %s; forward;', [Func.Name, ParamListStr, EmitTypeRef(Func.ReturnType)]));
-    end;
+    if Pos(LowerCase(AModule.PascalImports[I]), LowerCase(UsesClause)) = 0 then
+      UsesClause := UsesClause + ', ' + AModule.PascalImports[I];
   end;
-  Emit('');
+  UsesClause := UsesClause + ';';
 
-  // Funções
-  for I := 0 to AModule.Functions.Count - 1 do
-    EmitFunction(TASTFunction(AModule.Functions[I]));
+  if AsUnit then
+  begin
+    Emit('// Codigo gerado automaticamente pelo Compilador Aether (aetherc)');
+    Emit('// Alvo: Object Pascal Unit (Free Pascal / BlaiseVue)');
+    Emit('unit ' + AModule.Name + ';');
+    Emit('');
+    Emit('{$mode objfpc}{$H+}{$assertions on}');
+    Emit('');
+    Emit('interface');
+    Emit('');
+    Emit('uses');
+    Emit(UsesClause);
+    Emit('');
 
-  // Bloco do Programa
-  if Assigned(AModule.ProgramBlock) then
-    EmitProgramBlock(AModule.ProgramBlock);
+    Emit('// --- Aether Runtime Helpers & Monads ---');
+    Emit('type');
+    Emit('  generic TAetherResult<TVal, TErr> = record');
+    Emit('    is_ok: Boolean;');
+    Emit('    is_err: Boolean;');
+    Emit('    value: TVal;');
+    Emit('    error: TErr;');
+    Emit('  end;');
+    Emit('');
+    Emit('type');
+    Emit('  TResultDoubleError = specialize TAetherResult<Double, Integer>;');
+    Emit('');
+
+    if AModule.Types.Count > 0 then
+    begin
+      Emit('type');
+      IncIndent;
+      for I := 0 to AModule.Types.Count - 1 do
+      begin
+        if AModule.Types[I] is TASTRecordDecl then
+        begin
+          Emit(Format('P%s = ^T%s;', [TASTRecordDecl(AModule.Types[I]).Name, TASTRecordDecl(AModule.Types[I]).Name]));
+          Emit(Format('PT%s = ^T%s;', [TASTRecordDecl(AModule.Types[I]).Name, TASTRecordDecl(AModule.Types[I]).Name]));
+        end;
+      end;
+
+      for I := 0 to AModule.Types.Count - 1 do
+      begin
+        if AModule.Types[I] is TASTRecordDecl then
+          EmitRecordType(TASTRecordDecl(AModule.Types[I]))
+        else if AModule.Types[I] is TASTEnumDecl then
+          EmitEnumDecl(TASTEnumDecl(AModule.Types[I]));
+      end;
+      DecIndent;
+      Emit('');
+
+      for I := 0 to AModule.Types.Count - 1 do
+      begin
+        if AModule.Types[I] is TASTRecordDecl then
+        begin
+          Rec := TASTRecordDecl(AModule.Types[I]);
+          Emit(BuildRecordConstructorSig(Rec));
+          Emit(Format('function AetherBox(const V: T%s): P%s;', [Rec.Name, Rec.Name]));
+        end;
+      end;
+      Emit('');
+    end;
+
+    EmitRuntimeHelpersInterface;
+
+    for I := 0 to AModule.Functions.Count - 1 do
+    begin
+      Func := TASTFunction(AModule.Functions[I]);
+      if (not Func.IsExtern) and (Func.GenericParam = '') then
+      begin
+        Sig := BuildFuncSig(Func);
+        if Sig <> '' then
+          Emit(Sig);
+      end;
+    end;
+    Emit('');
+
+    Emit('implementation');
+    Emit('');
+
+    if AModule.Types.Count > 0 then
+    begin
+      for I := 0 to AModule.Types.Count - 1 do
+      begin
+        if AModule.Types[I] is TASTRecordDecl then
+        begin
+          EmitRecordConstructor(TASTRecordDecl(AModule.Types[I]));
+          Emit(Format('function AetherBox(const V: T%s): P%s;', [TASTRecordDecl(AModule.Types[I]).Name, TASTRecordDecl(AModule.Types[I]).Name]));
+          Emit('begin');
+          Emit('  New(Result);');
+          Emit('  Result^ := V;');
+          Emit('end;');
+          Emit('');
+        end;
+      end;
+    end;
+
+    EmitRuntimeHelpersImplementation;
+
+    for I := 0 to AModule.Functions.Count - 1 do
+      EmitFunction(TASTFunction(AModule.Functions[I]));
+
+    if Assigned(AModule.ProgramBlock) then
+    begin
+      Emit('');
+      Emit('initialization');
+      IncIndent;
+      for I := 0 to AModule.ProgramBlock.Body.Count - 1 do
+        EmitStmt(TASTStmt(AModule.ProgramBlock.Body[I]));
+      DecIndent;
+    end;
+
+    Emit('end.');
+  end
+  else
+  begin
+    Emit('// Codigo gerado automaticamente pelo Compilador Aether (aetherc)');
+    Emit('// Alvo: Object Pascal (Free Pascal)');
+    Emit('program ' + AModule.Name + ';');
+    Emit('');
+    Emit('{$mode objfpc}{$H+}{$assertions on}');
+    Emit('');
+    Emit('uses');
+    Emit(UsesClause);
+    Emit('');
+
+    Emit('// --- Aether Runtime Helpers ---');
+    Emit('type');
+    Emit('  generic TAetherResult<TVal, TErr> = record');
+    Emit('    is_ok: Boolean;');
+    Emit('    is_err: Boolean;');
+    Emit('    value: TVal;');
+    Emit('    error: TErr;');
+    Emit('  end;');
+    Emit('');
+    Emit('type');
+    Emit('  TResultDoubleError = specialize TAetherResult<Double, Integer>;');
+    Emit('');
+
+    if AModule.Types.Count > 0 then
+    begin
+      Emit('type');
+      IncIndent;
+      for I := 0 to AModule.Types.Count - 1 do
+      begin
+        if AModule.Types[I] is TASTRecordDecl then
+        begin
+          Emit(Format('P%s = ^T%s;', [TASTRecordDecl(AModule.Types[I]).Name, TASTRecordDecl(AModule.Types[I]).Name]));
+          Emit(Format('PT%s = ^T%s;', [TASTRecordDecl(AModule.Types[I]).Name, TASTRecordDecl(AModule.Types[I]).Name]));
+        end;
+      end;
+
+      for I := 0 to AModule.Types.Count - 1 do
+      begin
+        if AModule.Types[I] is TASTRecordDecl then
+          EmitRecordType(TASTRecordDecl(AModule.Types[I]))
+        else if AModule.Types[I] is TASTEnumDecl then
+          EmitEnumDecl(TASTEnumDecl(AModule.Types[I]));
+      end;
+      DecIndent;
+      Emit('');
+
+      for I := 0 to AModule.Types.Count - 1 do
+      begin
+        if AModule.Types[I] is TASTRecordDecl then
+        begin
+          EmitRecordConstructor(TASTRecordDecl(AModule.Types[I]));
+          Emit(Format('function AetherBox(const V: T%s): P%s; overload;', [TASTRecordDecl(AModule.Types[I]).Name, TASTRecordDecl(AModule.Types[I]).Name]));
+          Emit('begin');
+          Emit('  New(Result);');
+          Emit('  Result^ := V;');
+          Emit('end;');
+          Emit('');
+        end;
+      end;
+    end;
+
+    EmitRuntimeHelpersImplementation;
+
+    for I := 0 to AModule.Functions.Count - 1 do
+    begin
+      Func := TASTFunction(AModule.Functions[I]);
+      if (not Func.IsExtern) and (Func.GenericParam = '') then
+      begin
+        Sig := BuildFuncSig(Func);
+        if Sig <> '' then
+          Emit(Copy(Sig, 1, Length(Sig) - 1) + ' forward;');
+      end;
+    end;
+    Emit('');
+
+    for I := 0 to AModule.Functions.Count - 1 do
+      EmitFunction(TASTFunction(AModule.Functions[I]));
+
+    if Assigned(AModule.ProgramBlock) then
+      EmitProgramBlock(AModule.ProgramBlock)
+    else
+      Emit('end.');
+  end;
 
   Result := FOutput.Text;
 end;

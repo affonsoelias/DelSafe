@@ -1,0 +1,36 @@
+// Exemplo da Fase 21.1: Componente / Store para Integracao com BlaiseVue
+// O Aether transpilara este arquivo como uma Unit Free Pascal (unit/interface/implementation)
+module BlaisevueComponentStore;
+
+import pascal SysUtils;
+
+type
+    UserSession = record
+        username: String;
+        counter: Int32;
+        is_authenticated: Bool;
+    end;
+
+function CreateUserSession(borrow name: String): UserSession
+begin
+    return UserSession(name, 0, true);
+end;
+
+function IncrementCounter(mut borrow session: UserSession; borrow delta: Int32): Int32
+begin
+    session.counter := session.counter + delta;
+    return session.counter;
+end;
+
+function GetSessionReport(borrow session: UserSession): String
+var
+    status: String;
+begin
+    if session.is_authenticated then
+        status := "Autenticado";
+    else
+        status := "Anonimo";
+    end;
+
+    return "Usuario: " + session.username + " | Cliques: " + IntToStr(session.counter) + " | Status: " + status;
+end;

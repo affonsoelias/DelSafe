@@ -38,9 +38,15 @@ Begin
   WriteLn('  test [filtro]     Executa testes unitarios da pasta tests/');
   WriteLn('  clean             Limpa artefatos de build (bin/ e generated/) do projeto');
   WriteLn('');
-  WriteLn('Comandos de Emissao e Inspecao de Codigo:');
-  WriteLn('  emit <pascal|c> [arquivo] [--stdout] [-o destino]');
-  WriteLn('                    Emite codigo transpilado organizado em generated/pascal/ ou generated/c/');
+  WriteLn('Comandos de Emissao e Inspecao de Codigo (Integracao BlaiseVue):');
+  WriteLn('  emit <pascal|c> [arquivo] [opcoes]');
+  WriteLn('                    Emite codigo transpilado em generated/ ou diretorio customizado');
+  WriteLn('    --unit          Gera no formato Unit do Free Pascal (unit/interface/implementation)');
+  WriteLn('    --out-dir=<dir> Especifica o diretorio de destino para os arquivos gerados (-d)');
+  WriteLn('    --stdout        Exibe o codigo diretamente no console sem salvar em disco');
+  WriteLn('    --silent, -s    Modo headless silencioso para toolings e pipelines externas');
+  WriteLn('    --watch, -w     Monitora alteracoes no arquivo fonte e regera automaticamente');
+  WriteLn('    -o <arquivo>    Especifica o nome exato do arquivo gerado');
   WriteLn('');
   WriteLn('Comandos de Gerenciamento de Projetos e Pacotes:');
   WriteLn(
@@ -406,6 +412,7 @@ Var
   FileBase, CleanBase, CleanMod: string;
   P: Integer;
 Begin
+  ModuleNode := nil;
   Source := LoadFileContent(SourceFile);
   Lexer := TAetherLexer.Create(Source);
   Parser := TAetherParser.Create(Lexer);
@@ -597,7 +604,8 @@ Finally
 End;
 End;
 
-Procedure EmitFile(Const SourceFile: String; TargetPascal: Boolean; Const CustomOutput: String; ToStdout: Boolean);
+Procedure EmitFile(Const SourceFile: String; TargetPascal: Boolean; Const CustomOutput: String;
+                   Const CustomOutDir: String; AsUnit: Boolean; ToStdout: Boolean; Silent: Boolean);
 Var 
   Source: string;
   Lexer: TAetherLexer;
@@ -611,9 +619,10 @@ Var
   EmitterC: TAetherEmitterC;
   CodeFile: TStringList;
   Visited: TStringList;
-  FileBase, CleanBase, CleanMod: string;
+  FileBase, CleanBase, CleanMod, TargetExt, FinalBaseName: string;
   P: Integer;
 Begin
+  ModuleNode := nil;
   Source := LoadFileContent(SourceFile);
   Lexer := TAetherLexer.Create(Source);
   Parser := TAetherParser.Create(Lexer);
@@ -659,7 +668,7 @@ Begin
     Begin
       EmitterPas := TAetherEmitterPascal.Create;
       Try
-        GeneratedCode := EmitterPas.Generate(ModuleNode);
+        GeneratedCode := EmitterPas.Generate(ModuleNode, AsUnit);
       Finally
         EmitterPas.Free;
       End;
@@ -680,8 +689,28 @@ Begin
       Exit;
     End;
 
+    If TargetPascal Then
+    Begin
+      If AsUnit Then
+        FinalBaseName := ModuleNode.Name
+      Else
+        FinalBaseName := ExtractFileName(SourceFile);
+      TargetExt := '.pas';
+    End
+    Else
+    Begin
+      FinalBaseName := ExtractFileName(SourceFile);
+      TargetExt := '.c';
+    End;
+
     If CustomOutput <> '' Then
       FinalTargetFile := CustomOutput
+    Else If CustomOutDir <> '' Then
+    Begin
+      TargetDir := ExcludeTrailingPathDelimiter(CustomOutDir);
+      ForceDirectories(TargetDir);
+      FinalTargetFile := TargetDir + PathDelim + ChangeFileExt(FinalBaseName, TargetExt);
+    End
     Else
     Begin
       If Not FindProjectRoot(BaseProjDir, Dummy) Then
@@ -694,10 +723,7 @@ Begin
         TargetDir := BaseProjDir + PathDelim + 'generated' + PathDelim + 'c';
 
       ForceDirectories(TargetDir);
-      If TargetPascal Then
-        FinalTargetFile := TargetDir + PathDelim + ChangeFileExt(ExtractFileName(SourceFile), '.pas')
-      Else
-        FinalTargetFile := TargetDir + PathDelim + ChangeFileExt(ExtractFileName(SourceFile), '.c');
+      FinalTargetFile := TargetDir + PathDelim + ChangeFileExt(FinalBaseName, TargetExt);
     End;
 
     ForceDirectories(ExtractFileDir(FinalTargetFile));
@@ -709,17 +735,68 @@ Begin
       CodeFile.Free;
     End;
 
-    WriteLn(Format('[1/3] Analise Sintatica de "%s": OK', [ExtractFileName(SourceFile)]));
-    WriteLn('[2/3] Verificacao de Tipos e Posse: OK');
-    If TargetPascal Then
-      WriteLn('[3/3] Codigo Object Pascal emitido com sucesso:')
-    Else
-      WriteLn('[3/3] Codigo C99 emitido com sucesso:');
-    WriteLn('  --> ' + FinalTargetFile);
+    If Not Silent Then
+    Begin
+      WriteLn(Format('[1/3] Analise Sintatica de "%s": OK', [ExtractFileName(SourceFile)]));
+      WriteLn('[2/3] Verificacao de Tipos e Posse: OK');
+      If TargetPascal Then
+      Begin
+        If AsUnit Then
+          WriteLn('[3/3] Unit Object Pascal (BlaiseVue) emitida com sucesso:')
+        Else
+          WriteLn('[3/3] Codigo Object Pascal emitido com sucesso:');
+      End
+      Else
+        WriteLn('[3/3] Codigo C99 emitido com sucesso:');
+      WriteLn('  --> ' + FinalTargetFile);
+    End;
   Finally
     ModuleNode.Free;
     Parser.Free;
     Lexer.Free;
+  End;
+End;
+
+Procedure WatchEmitFile(Const SourceFile: String; TargetPascal: Boolean; Const CustomOutput: String;
+                        Const CustomOutDir: String; AsUnit: Boolean; Silent: Boolean);
+Var
+  LastAge, NewAge: LongInt;
+  TimeStr: string;
+Begin
+  WriteLn('========================================================');
+  WriteLn('  Aether File Watcher (Hot-Reload / BlaiseVue Ready)    ');
+  WriteLn('========================================================');
+  WriteLn(Format('Observando alteracoes em: "%s"', [SourceFile]));
+  WriteLn('Pressione Ctrl+C para interromper.');
+  WriteLn('');
+
+  // 1. Execucao inicial
+  Try
+    EmitFile(SourceFile, TargetPascal, CustomOutput, CustomOutDir, AsUnit, False, Silent);
+  Except
+    on E: Exception Do
+      WriteLn(ErrOutput, 'Erro na compilacao inicial: ', E.Message);
+  End;
+
+  LastAge := FileAge(SourceFile);
+  While True Do
+  Begin
+    Sleep(250);
+    NewAge := FileAge(SourceFile);
+    If (NewAge <> -1) And (NewAge <> LastAge) Then
+    Begin
+      LastAge := NewAge;
+      DateTimeToString(TimeStr, 'hh:nn:ss', Now);
+      WriteLn(Format('[%s] [WATCH] Alteracao detectada em "%s"...', [TimeStr, ExtractFileName(SourceFile)]));
+      Try
+        EmitFile(SourceFile, TargetPascal, CustomOutput, CustomOutDir, AsUnit, False, Silent);
+        WriteLn('      [OK] Arquivo regenerado com sucesso!');
+      Except
+        on E: Exception Do
+          WriteLn(ErrOutput, Format('      [ERRO] %s', [E.Message]));
+      End;
+      WriteLn('');
+    End;
   End;
 End;
 
@@ -863,8 +940,8 @@ Var
   I: Integer;
   Arg: string;
   PkgName, OptPath, OptGit, OptVer, FilterName, SubCmd: string;
-  EmitTargetPascal, EmitToStdout, HasTargetSpecified: Boolean;
-  EmitSource, EmitOut: string;
+  EmitTargetPascal, EmitToStdout, HasTargetSpecified, EmitAsUnit, EmitSilent, EmitWatch: Boolean;
+  EmitSource, EmitOut, EmitOutDir: string;
 Begin
   InputFile := '';
   OutputExe := '';
@@ -891,13 +968,17 @@ Begin
       End;
     End;
 
-  // Checa comando de emissao: emit <pascal|c> [arquivo] [--stdout] [-o destino]
+  // Checa comando de emissao: emit <pascal|c> [arquivo] [opcoes]
   If (ParamCount >= 1) And (LowerCase(ParamStr(1)) = 'emit') Then
     Begin
       EmitTargetPascal := True;
       EmitSource := '';
       EmitOut := '';
+      EmitOutDir := '';
       EmitToStdout := False;
+      EmitAsUnit := False;
+      EmitSilent := False;
+      EmitWatch := False;
       HasTargetSpecified := False;
 
       I := 2;
@@ -923,6 +1004,21 @@ Begin
             Begin
               EmitTargetPascal := False;
               HasTargetSpecified := True;
+            End
+          Else If Arg = '--unit' Then
+            EmitAsUnit := True
+          Else If (Arg = '--silent') Or (Arg = '-s') Then
+            EmitSilent := True
+          Else If (Arg = '--watch') Or (Arg = '-w') Then
+            EmitWatch := True
+          Else If Pos('--out-dir=', Arg) = 1 Then
+            EmitOutDir := Copy(Arg, 11, Length(Arg))
+          Else If Pos('--outdir=', Arg) = 1 Then
+            EmitOutDir := Copy(Arg, 10, Length(Arg))
+          Else If (Arg = '-d') And (I + 1 <= ParamCount) Then
+            Begin
+              Inc(I);
+              EmitOutDir := ParamStr(I);
             End
           Else If Arg = '--stdout' Then
             EmitToStdout := True
@@ -952,16 +1048,22 @@ Begin
           Else
             Begin
               WriteLn(ErrOutput, 'Erro: Nenhum arquivo fonte especificado e nenhum "aether.json" encontrado.');
-              WriteLn(ErrOutput, 'Uso: aetherc emit <pascal|c> [arquivo.aeth] [--stdout]');
+              WriteLn(ErrOutput, 'Uso: aetherc emit <pascal|c> [arquivo.aeth] [--unit] [--out-dir=dir] [--stdout]');
               Halt(1);
             End;
         End;
 
-      If Not EmitToStdout Then
+      If (Not EmitToStdout) And (Not EmitSilent) And (Not EmitWatch) Then
         PrintBanner;
 
+      If EmitWatch Then
+        Begin
+          WatchEmitFile(EmitSource, EmitTargetPascal, EmitOut, EmitOutDir, EmitAsUnit, EmitSilent);
+          Halt(0);
+        End;
+
       Try
-        EmitFile(EmitSource, EmitTargetPascal, EmitOut, EmitToStdout);
+        EmitFile(EmitSource, EmitTargetPascal, EmitOut, EmitOutDir, EmitAsUnit, EmitToStdout, EmitSilent);
         Halt(0);
       Except
         on E: Exception Do
