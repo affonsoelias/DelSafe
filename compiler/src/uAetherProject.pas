@@ -582,7 +582,7 @@ var
   ConfigFile, MainFile, TestFile, GitignoreFile, ReadmeFile: string;
   ConfigObj: TJSONObject;
 begin
-  if ProjectName <> '' then
+  if (ProjectName <> '') and (ProjectName <> '.') then
   begin
     EffectiveName := ProjectName;
     TargetDir := ExpandFileName(GetCurrentDir + PathDelim + ProjectName);
@@ -724,7 +724,7 @@ begin
   WriteLn('   └── README.md');
   WriteLn('');
   WriteLn(' Proximos passos:');
-  if ProjectName <> '' then
+  if (ProjectName <> '') and (ProjectName <> '.') then
     WriteLn(Format('   cd %s', [ProjectName]));
   WriteLn('   aetherc run');
   WriteLn('--------------------------------------------------------');

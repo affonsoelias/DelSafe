@@ -34,11 +34,7 @@ Begin
   WriteLn('');
   WriteLn('Comandos de Gerenciamento de Projetos e Pacotes:');
   WriteLn(
-
-'  init [nome]       Inicializa um novo projeto Aether com manifesto aether.json'
-  );
-  WriteLn(
-      '  new <nome>        Cria uma nova pasta com o projeto Aether estruturado'
+      '  new [nome | .]    Cria um novo projeto (em uma nova pasta ou no diretorio atual)'
   );
   WriteLn(
       '  pkg <subcomando>  Gerenciador de pacotes (add, remove, update, audit, list, clean)'
