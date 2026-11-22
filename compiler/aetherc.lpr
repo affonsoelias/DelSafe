@@ -28,7 +28,8 @@ uAetherRegistry,
 uAetherHeaderGen,
 uAetherBenchmark,
 uAetherDerives,
-uAetherLinter;
+uAetherLinter,
+uAetherProfiler;
 
 Procedure PrintBanner;
 Begin
@@ -47,6 +48,7 @@ Begin
   WriteLn('  run               Compila e executa imediatamente o binario do projeto');
   WriteLn('  test [filtro]     Executa testes unitarios (arquivos individuais ou pasta tests/)');
   WriteLn('  bench [filtro]    Executa suite de benchmarks (--compare para comparar backends)');
+  WriteLn('  profile <arq>     Executa profiling e auditoria de memoria (--runs=N, --json)');
   WriteLn('  lint [caminho]    Executa analise estatica de qualidade de codigo (--fix para auto-correcao)');
   WriteLn('  fmt [caminho]     Formata codigo Aether segundo as normas canonicas (--check para CI/CD)');
   WriteLn('  doc [caminho]     Gera documentacao canonica do projeto (HTML, Markdown e Doctests)');
@@ -1719,7 +1721,7 @@ Var
   PkgName, OptPath, OptGit, OptVer, FilterName, SubFilter, SubCmd: string;
   OptRegistry, SearchTerm: string;
   IsDryRun, TargetIsLib, OptionCompare, OptionJSON: Boolean;
-  BenchIters: Integer;
+  BenchIters, ProfileRuns: Integer;
   TargetEntry, TargetOut, TargetBackend, TargetCC: string;
   EmitTargetPascal, EmitToStdout, HasTargetSpecified, EmitAsUnit, EmitSilent, EmitWatch: Boolean;
   EmitSource, EmitOut, EmitOutDir: string;
@@ -2366,6 +2368,44 @@ If (ParamCount >= 1) And (LowerCase(ParamStr(1)) = 'bench') Then
       on E: Exception Do
         Begin
           WriteLn(ErrOutput, 'Erro durante execucao dos benchmarks: ', E.Message);
+          Halt(1);
+        End;
+    End;
+  End;
+
+// Checa comando de profiling: profile <arquivo.aeth> [--runs=N] [--target=pascal|c] [--json]
+If (ParamCount >= 1) And (LowerCase(ParamStr(1)) = 'profile') Then
+  Begin
+    FilterName := '';
+    OptionTargetPascal := True;
+    OptionJSON := False;
+    ProfileRuns := 3;
+    I := 2;
+    While I <= ParamCount Do
+      Begin
+        Arg := ParamStr(I);
+        If Arg = '--target=pascal' Then OptionTargetPascal := True
+        Else If Arg = '--target=c' Then OptionTargetPascal := False
+        Else If (Arg = '--format=json') Or (Arg = '--json') Then OptionJSON := True
+        Else If Pos('--runs=', Arg) = 1 Then ProfileRuns := StrToIntDef(Copy(Arg, 8, Length(Arg)), 3)
+        Else If FilterName = '' Then FilterName := Arg;
+        Inc(I);
+      End;
+
+    If FilterName = '' Then
+      Begin
+        WriteLn(ErrOutput, 'Erro: Nenhum arquivo fonte especificado para profiling.');
+        WriteLn(ErrOutput, 'Uso: aetherc profile <arquivo.aeth> [--runs=N] [--target=pascal|c] [--json]');
+        Halt(1);
+      End;
+
+    Try
+      TAetherProfiler.HandleProfileCommand(FilterName, OptionTargetPascal, ProfileRuns, OptionJSON);
+      Halt(0);
+    Except
+      on E: Exception Do
+        Begin
+          WriteLn(ErrOutput, 'Erro durante execucao do profiling: ', E.Message);
           Halt(1);
         End;
     End;

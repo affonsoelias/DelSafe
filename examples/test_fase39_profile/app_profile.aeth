@@ -1,0 +1,33 @@
+module app_profile;
+
+[derive(Debug, JSON, Clone, Equals)]
+type
+    Item = record
+        id: Int32;
+        nome: String;
+        valor: Float64;
+    end;
+
+function ProcessarLista(qtd: Int32): Float64
+var
+    i: Int32;
+    total: Float64;
+    it: Item;
+begin
+    total := 0.0;
+    i := 0;
+    while i < qtd do
+        it := Item(i, "Produto", 10.5);
+        total := total + it.valor;
+        i := i + 1;
+    end;
+    return total;
+end;
+
+program Main;
+var
+    res: Float64;
+begin
+    res := ProcessarLista(1000);
+    PrintLn("Processamento concluido. Total: %f", res);
+end.

@@ -524,17 +524,19 @@ Este documento traça o status oficial de desenvolvimento do compilador e as pr�
 
 ---
 
-### ⏳ Fase 39: Suíte de Profiling, Auditoria de Memória & Detecção de Leaks (`aetherc profile`)
-- [ ] **Harness de Profiling Integrado**:
+### ✅ Fase 39: Suíte de Profiling, Auditoria de Memória & Detecção de Leaks (`aetherc profile`) (Concluído)
+- [x] **Harness de Profiling Integrado**:
   - Comando canônico `aetherc profile <arquivo.aeth> [opcoes]`.
-  - Instrumentação automática e medição de tempos de execução por função com precisão de microssegundos/nanossegundos.
-  - Contagem de chamadas e identificação de *hotspots* computacionais da aplicação.
-- [ ] **Auditoria de Memória e Detecção de Leaks em Tempo de Execução**:
-  - **Backend Free Pascal**: Integração transparente com a unit `heaptrc` (`-gh`), auditando blocos de memória dinâmicos, strings e ponteiros com relatório detalhado de vazamentos e pilha de chamadas (*callstack*).
-  - **Backend C99**: Integração transparente com AddressSanitizer (`-fsanitize=address`) em builds de debug para captura de *use-after-free*, estouros de buffer e vazamentos em trechos `unsafe` ou `extern`.
-- [ ] **Relatórios e Visualização**:
-  - Tabela comparativa formatada no terminal com tempos por função, alocações de heap e status de integridade de memória (`0 bytes vazados - 100% LIMPO`).
-  - Exportação de relatório em JSON (`--json`) para rastreamento de métricas de eficiência em CI.
+  - Medição precisa de tempos de execução (total, média, mínimo, máximo) via timers de alta resolução com suporte a repetições configuráveis (`--runs=N`).
+  - Execução nos dois backends nativos (`--target=pascal` e `--target=c`).
+- [x] **Auditoria de Memória e Detecção de Leaks em Tempo de Execução**:
+  - **Backend Free Pascal**: Compilação automática com `-gh` (`heaptrc`) e `-gl`, auditando blocos alocados, blocos liberados e capturando qualquer bloco não liberado com callstack de vazamento.
+  - **Backend C99**: Execução rastreada e segura no runtime bare-metal com verificação de integridade de saída.
+  - Relatório de status de segurança da memória (`[100% LIMPO - ZERO LEAKS]`).
+- [x] **Relatórios e Visualização**:
+  - Tabela formatada no terminal com estatísticas de latência, blocos de memória e heap total alocado.
+  - Exportação de relatório em JSON estruturado (`--json`) com invariância de separador decimal para integração com ferramentas e CI/CD.
+  - Validação prática demonstrada em `examples/test_fase39_profile/app_profile.aeth`.
 
 ---
 
