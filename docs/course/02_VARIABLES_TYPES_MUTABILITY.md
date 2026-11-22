@@ -366,14 +366,53 @@ end.
 
 You can define aliases for primitives and pointers inside `type` (`type UserId = Int64;`, `type IntPtr = ^Int32;`), and use `Option<T>` for value types (`Option<Int32>`, `Option<String>`, `Option<Bool>`) as well as typed `Result<T, E>` with `.is_some`, `.is_none`, `.is_ok`, `.is_err`, `.value`, and `.error`.
 
+### 5.12 Built-in String & Math Functions (`Trim`, `Replace`, `Abs`, `Clamp`, etc.)
+
+Strings include rich standard operations callable either in UFCS (`s.Trim()`) or standalone form:
+- **Text helpers:** `Trim`, `UpperCase`, `LowerCase`, `StartsWith`, `EndsWith`, `Contains`, `IndexOf` (0-based, `-1` if absent), and `Replace`.
+- **Numeric helpers:** `Abs`, `Min`, `Max`, and `Clamp(val, low, high)` for signed/unsigned integers and floating-point values.
+
+```aether
+var
+    cleaned := "  Aether Lang  ".Trim(); // "Aether Lang"
+    idx := cleaned.IndexOf("Lang");        // 7
+    ok := cleaned.StartsWith("Aether") and cleaned.Contains("Lang");
+    bounded := Clamp(150, 0, 100);         // 100
+```
+
+### 5.13 Dynamic Array `.Slice()`, `.Insert()`, `.Delete()`, Named Constructors & `Default(T)`
+
+Dynamic arrays support inserting elements at any index (`.Insert(idx, val)`), deleting by index (`.Delete(idx)`), and non-mutating range extraction (`.Slice(start, len)`). Records also support reordered **named field constructors** (`Ponto(y: 20, x: 10)`), and any value/record/enum type can be zero-initialized using **`Default(TypeName)`**:
+
+```aether
+type
+    Point = record
+        x: Int32;
+        y: Int32;
+    end;
+
+var
+    nums := [10, 20, 30, 40];
+    sub: array of Int32;
+    pt, zeroPt: Point;
+begin
+    nums.Delete(1);       // [10, 30, 40]
+    nums.Insert(1, 99);   // [10, 99, 30, 40]
+    sub := nums.Slice(1, 2); // [99, 30]
+
+    pt := Point(y: 20, x: 10);
+    zeroPt := Default(Point); // { x = 0, y = 0 }
+end.
+```
+
 ---
 
 ## 6. Summary
 1. Prefer immutable bindings (`let`) where possible; use `var` only for variables that must mutate, and omit redundant types via `:=` inference when initialized.
-2. Integers and floats support explicit casts (`Int32(x)`), `Ord`, `Chr`, `SizeOf`, `$`/`0x` hex, `%`/`0b` binary literals, and bitwise operators (`shl`, `shr`, `xor`, `and`, `or`, `not`).
-3. Strings are UTF-8, support 0-based `s[i]` (`Char`) indexing, and provide zero-overhead compile-time interpolation via `$"..."`.
-4. Arrays support `[...]` literals, `.Pop()`/`.Clear()`, `SetLength`/`Push`, while `map[K]V` provides `Contains`, `Remove`, `Clear`, `Count`/`Length`, and `for k, v in map` iteration.
-5. Value `Option<T>`, `Result<T, E>`, sets (`set of`), subranges (`1..31`), and simple type aliases (`type UserId = Int64;`) express rich domain invariants statically.
+2. Integers and floats support explicit casts (`Int32(x)`), `Ord`, `Chr`, `SizeOf`, `$`/`0x` hex, `%`/`0b` binary literals, bitwise operators, and `Abs`/`Min`/`Max`/`Clamp`.
+3. Strings are UTF-8, support 0-based `s[i]` (`Char`) indexing, zero-overhead `$"..."` interpolation, and `Trim`, `UpperCase`, `LowerCase`, `StartsWith`, `EndsWith`, `Contains`, `IndexOf`, `Replace`.
+4. Dynamic arrays support `[...]` literals, `.Push()`, `.Pop()`, `.Clear()`, `.Insert()`, `.Delete()`, and `.Slice()`, while `map[K]V` provides `Contains`, `Remove`, `Clear`, `Count`/`Length`, and `for k, v in map` iteration.
+5. Value `Option<T>`, `Result<T, E>`, sets (`set of`), subranges (`1..31`), simple type aliases, named record constructors, and `Default(T)` express rich domain invariants statically.
 6. Raw pointers (`^T`, `@var`, `nil`) require an explicit `unsafe ... end;` block for dereferencing (`ptr^`).
 
 ➡️ **Next:** **[Chapter 03: Control Flow & Pattern Matching](03_CONTROL_FLOW_AND_MATCH.md)**

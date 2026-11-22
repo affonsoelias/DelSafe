@@ -348,6 +348,14 @@ begin
       CheckExpr(TASTExpr(TASTSetLiteralExpr(Expr).Elements[I]), accRead);
     Exit;
   end;
+
+  if Expr is TASTIfExpr then
+  begin
+    CheckExpr(TASTIfExpr(Expr).Condition, accRead);
+    CheckExpr(TASTIfExpr(Expr).ThenExpr, accRead);
+    CheckExpr(TASTIfExpr(Expr).ElseExpr, accRead);
+    Exit;
+  end;
 end;
 
 procedure TAetherBorrowChecker.CheckCallArg(Arg: TASTCallArg);

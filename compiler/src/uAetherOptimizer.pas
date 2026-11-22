@@ -519,6 +519,12 @@ begin
         TASTSetLiteralExpr(Expr).Elements[I] := NewExpr;
       end;
     end;
+  end
+  else if Expr is TASTIfExpr then
+  begin
+    OptimizeExpr(TASTIfExpr(Expr).Condition);
+    OptimizeExpr(TASTIfExpr(Expr).ThenExpr);
+    OptimizeExpr(TASTIfExpr(Expr).ElseExpr);
   end;
 end;
 

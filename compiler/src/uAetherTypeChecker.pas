@@ -749,9 +749,12 @@ var
   FuncNode, MonoFunc: TASTFunction;
   RecDecl: TASTRecordDecl;
   SubSym: TSymbol;
-  I: Integer;
+  I, K: Integer;
   Arg: TASTCallArg;
+  HasNamed, HasPositional, FoundField: Boolean;
+  ReorderedArgs: array of TASTCallArg;
   ArgType, ExpectedType, Mangled, MonomorphedName, ElemType, KeyType, ValType: string;
+  T1, T2, T3: string;
 begin
   if Call.Callee = '__InterpToStr' then
   begin
@@ -860,13 +863,66 @@ begin
     end;
   end;
 
-  // Construtor de Record: DataBuffer(id: 101, size: 2048)
+  // Construtor de Record: DataBuffer(id: 101, size: 2048) ou posicional
   if (Sym.Kind = skType) and (Sym.Node is TASTRecordDecl) then
   begin
     RecDecl := TASTRecordDecl(Sym.Node);
+    HasNamed := False;
+    HasPositional := False;
+    for I := 0 to Call.Args.Count - 1 do
+      if TASTCallArg(Call.Args[I]).FieldName <> '' then
+        HasNamed := True
+      else
+        HasPositional := True;
+
+    if HasNamed and HasPositional then
+      Error('E0061', Format('Construtor do record "%s" nao pode misturar argumentos posicionais e nomeados',
+        [RecDecl.Name]), Call.Line, Call.Col);
+
     if Call.Args.Count <> RecDecl.Fields.Count then
       Error('E0061', Format('Construtor do record "%s" espera %d campos, mas recebeu %d',
         [RecDecl.Name, RecDecl.Fields.Count, Call.Args.Count]), Call.Line, Call.Col);
+
+    if HasNamed then
+    begin
+      SetLength(ReorderedArgs, RecDecl.Fields.Count);
+      for K := 0 to High(ReorderedArgs) do
+        ReorderedArgs[K] := nil;
+      for I := 0 to Call.Args.Count - 1 do
+      begin
+        Arg := TASTCallArg(Call.Args[I]);
+        FoundField := False;
+        for K := 0 to RecDecl.Fields.Count - 1 do
+        begin
+          if SameText(TASTRecordField(RecDecl.Fields[K]).Name, Arg.FieldName) then
+          begin
+            FoundField := True;
+            if ReorderedArgs[K] <> nil then
+              Error('E0061', Format('Campo "%s" duplicado no construtor do record "%s"',
+                [Arg.FieldName, RecDecl.Name]), Arg.Line, Arg.Col);
+            ReorderedArgs[K] := Arg;
+            Break;
+          end;
+        end;
+        if not FoundField then
+          Error('E0609', Format('Record "%s" nao possui o campo "%s"',
+            [RecDecl.Name, Arg.FieldName]), Arg.Line, Arg.Col);
+      end;
+      FoundField := True;
+      for K := 0 to High(ReorderedArgs) do
+        if ReorderedArgs[K] = nil then
+          FoundField := False;
+      if FoundField then
+      begin
+        while Call.Args.Count > 0 do
+          Call.Args.ExtractIndex(0);
+        for K := 0 to High(ReorderedArgs) do
+        begin
+          ReorderedArgs[K].FieldName := '';
+          Call.Args.Add(ReorderedArgs[K]);
+        end;
+      end;
+    end;
 
     for I := 0 to Call.Args.Count - 1 do
     begin
@@ -953,13 +1009,200 @@ begin
         Error('E0308', Format('Funcao "%s" espera String, Array ou Mapa, recebeu: "%s"', [Call.Callee, ArgType]), Call.Line, Call.Col);
     end;
 
+    if SameText(Call.Callee, 'Default') then
+    begin
+      if Call.Args.Count <> 1 then
+        Error('E0061', 'Funcao "Default" espera 1 argumento (NomeDoTipo)', Call.Line, Call.Col);
+      if not (TASTCallArg(Call.Args[0]).Expr is TASTIdentifierExpr) then
+        Error('E0308', 'Argumento de "Default" deve ser o nome de um tipo valido', Call.Line, Call.Col);
+      ExpectedType := TASTIdentifierExpr(TASTCallArg(Call.Args[0]).Expr).Name;
+      if not FSymbols.ResolveType(ExpectedType) then
+        Error('E0412', Format('Tipo desconhecido em "Default": "%s"', [ExpectedType]), Call.Line, Call.Col);
+      Exit(ExpectedType);
+    end;
+
+    if SameText(Call.Callee, 'Trim') or SameText(Call.Callee, 'UpperCase') or SameText(Call.Callee, 'LowerCase') then
+    begin
+      if Call.Args.Count <> 1 then
+        Error('E0061', Format('Funcao "%s" espera 1 argumento (String)', [Call.Callee]), Call.Line, Call.Col);
+      ArgType := ResolveAliasType(CheckExpr(TASTCallArg(Call.Args[0]).Expr));
+      if ArgType <> 'String' then
+        Error('E0308', Format('Argumento de "%s" deve ser String, recebeu: "%s"', [Call.Callee, ArgType]), Call.Line, Call.Col);
+      Exit('String');
+    end;
+
+    if SameText(Call.Callee, 'StartsWith') or SameText(Call.Callee, 'EndsWith') then
+    begin
+      if Call.Args.Count <> 2 then
+        Error('E0061', Format('Funcao "%s" espera 2 argumentos (String, String)', [Call.Callee]), Call.Line, Call.Col);
+      ArgType := ResolveAliasType(CheckExpr(TASTCallArg(Call.Args[0]).Expr));
+      if ArgType <> 'String' then
+        Error('E0308', Format('Primeiro argumento de "%s" deve ser String, recebeu: "%s"', [Call.Callee, ArgType]), Call.Line, Call.Col);
+      ArgType := ResolveAliasType(CheckExpr(TASTCallArg(Call.Args[1]).Expr));
+      if ArgType <> 'String' then
+        Error('E0308', Format('Segundo argumento de "%s" deve ser String, recebeu: "%s"', [Call.Callee, ArgType]), Call.Line, Call.Col);
+      Exit('Bool');
+    end;
+
+    if SameText(Call.Callee, 'IndexOf') then
+    begin
+      if Call.Args.Count <> 2 then
+        Error('E0061', 'Funcao "IndexOf" espera 2 argumentos (String, Substring)', Call.Line, Call.Col);
+      ArgType := ResolveAliasType(CheckExpr(TASTCallArg(Call.Args[0]).Expr));
+      if ArgType <> 'String' then
+        Error('E0308', Format('Primeiro argumento de "IndexOf" deve ser String, recebeu: "%s"', [ArgType]), Call.Line, Call.Col);
+      ArgType := ResolveAliasType(CheckExpr(TASTCallArg(Call.Args[1]).Expr));
+      if ArgType <> 'String' then
+        Error('E0308', Format('Segundo argumento de "IndexOf" deve ser String, recebeu: "%s"', [ArgType]), Call.Line, Call.Col);
+      Exit('Int32');
+    end;
+
+    if SameText(Call.Callee, 'Replace') then
+    begin
+      if Call.Args.Count <> 3 then
+        Error('E0061', 'Funcao "Replace" espera 3 argumentos (String, Antigo, Novo)', Call.Line, Call.Col);
+      for K := 0 to 2 do
+      begin
+        ArgType := ResolveAliasType(CheckExpr(TASTCallArg(Call.Args[K]).Expr));
+        if ArgType <> 'String' then
+          Error('E0308', Format('Argumento %d de "Replace" deve ser String, recebeu: "%s"', [K + 1, ArgType]), Call.Line, Call.Col);
+      end;
+      Exit('String');
+    end;
+
+    if SameText(Call.Callee, 'Abs') then
+    begin
+      if Call.Args.Count <> 1 then
+        Error('E0061', 'Funcao "Abs" espera 1 argumento numerico', Call.Line, Call.Col);
+      T1 := ResolveAliasType(CheckExpr(TASTCallArg(Call.Args[0]).Expr));
+      if (not IsNumericType(T1)) and (T1 <> 'IntLiteral') and (T1 <> 'FloatLiteral') then
+        Error('E0308', Format('Argumento de "Abs" deve ser numerico, recebeu: "%s"', [T1]), Call.Line, Call.Col);
+      if T1 = 'IntLiteral' then Exit('Int32')
+      else if T1 = 'FloatLiteral' then Exit('Float64')
+      else Exit(T1);
+    end;
+
+    if SameText(Call.Callee, 'Min') or SameText(Call.Callee, 'Max') then
+    begin
+      if Call.Args.Count <> 2 then
+        Error('E0061', Format('Funcao "%s" espera 2 argumentos numericos', [Call.Callee]), Call.Line, Call.Col);
+      T1 := ResolveAliasType(CheckExpr(TASTCallArg(Call.Args[0]).Expr));
+      T2 := ResolveAliasType(CheckExpr(TASTCallArg(Call.Args[1]).Expr));
+      if (not IsNumericType(T1)) and (T1 <> 'IntLiteral') and (T1 <> 'FloatLiteral') then
+        Error('E0308', Format('Primeiro argumento de "%s" deve ser numerico, recebeu: "%s"', [Call.Callee, T1]), Call.Line, Call.Col);
+      if (not IsNumericType(T2)) and (T2 <> 'IntLiteral') and (T2 <> 'FloatLiteral') then
+        Error('E0308', Format('Segundo argumento de "%s" deve ser numerico, recebeu: "%s"', [Call.Callee, T2]), Call.Line, Call.Col);
+      if (not TypesAreCompatible(T1, T2)) and (not TypesAreCompatible(T2, T1)) then
+        Error('E0308', Format('Argumentos incompativeis em "%s": "%s" e "%s"', [Call.Callee, T1, T2]), Call.Line, Call.Col);
+      if (T1 = 'Float64') or (T2 = 'Float64') then Exit('Float64')
+      else if (T1 = 'Float32') or (T2 = 'Float32') then Exit('Float32')
+      else if (T1 = 'FloatLiteral') or (T2 = 'FloatLiteral') then Exit('Float64')
+      else if (T1 = 'Int64') or (T2 = 'Int64') then Exit('Int64')
+      else if (T1 = 'UInt64') or (T2 = 'UInt64') then Exit('UInt64')
+      else if T1 = 'IntLiteral' then
+      begin
+        if T2 = 'IntLiteral' then Exit('Int32')
+        else Exit(T2);
+      end
+      else Exit(T1);
+    end;
+
+    if SameText(Call.Callee, 'Clamp') then
+    begin
+      if Call.Args.Count <> 3 then
+        Error('E0061', 'Funcao "Clamp" espera 3 argumentos numericos (Valor, Min, Max)', Call.Line, Call.Col);
+      T1 := ResolveAliasType(CheckExpr(TASTCallArg(Call.Args[0]).Expr));
+      T2 := ResolveAliasType(CheckExpr(TASTCallArg(Call.Args[1]).Expr));
+      T3 := ResolveAliasType(CheckExpr(TASTCallArg(Call.Args[2]).Expr));
+      if ((not IsNumericType(T1)) and (T1 <> 'IntLiteral') and (T1 <> 'FloatLiteral')) or
+         ((not IsNumericType(T2)) and (T2 <> 'IntLiteral') and (T2 <> 'FloatLiteral')) or
+         ((not IsNumericType(T3)) and (T3 <> 'IntLiteral') and (T3 <> 'FloatLiteral')) then
+        Error('E0308', 'Todos os argumentos de "Clamp" devem ser numericos', Call.Line, Call.Col);
+      if ((not TypesAreCompatible(T1, T2)) and (not TypesAreCompatible(T2, T1))) or
+         ((not TypesAreCompatible(T1, T3)) and (not TypesAreCompatible(T3, T1))) then
+        Error('E0308', Format('Tipos incompativeis em "Clamp": "%s", "%s", "%s"', [T1, T2, T3]), Call.Line, Call.Col);
+      if (T1 = 'Float64') or (T2 = 'Float64') or (T3 = 'Float64') then Exit('Float64')
+      else if (T1 = 'Float32') or (T2 = 'Float32') or (T3 = 'Float32') then Exit('Float32')
+      else if (T1 = 'FloatLiteral') or (T2 = 'FloatLiteral') or (T3 = 'FloatLiteral') then Exit('Float64')
+      else if (T1 = 'Int64') or (T2 = 'Int64') or (T3 = 'Int64') then Exit('Int64')
+      else if (T1 = 'UInt64') or (T2 = 'UInt64') or (T3 = 'UInt64') then Exit('UInt64')
+      else if T1 <> 'IntLiteral' then Exit(T1)
+      else if T2 <> 'IntLiteral' then Exit(T2)
+      else if T3 <> 'IntLiteral' then Exit(T3)
+      else Exit('Int32');
+    end;
+
+    if SameText(Call.Callee, 'Delete') then
+    begin
+      if Call.Args.Count <> 2 then
+        Error('E0061', 'Funcao "Delete" espera 2 argumentos (ArrayDinamico, Indice)', Call.Line, Call.Col);
+      if TASTCallArg(Call.Args[0]).Expr is TASTIdentifierExpr then
+      begin
+        SubSym := FSymbols.Resolve(TASTIdentifierExpr(TASTCallArg(Call.Args[0]).Expr).Name);
+        if Assigned(SubSym) and (not SubSym.IsMutable) then
+          Error('E0384', Format('Nao e possivel remover elemento de array imutavel (declarado com "let"): "%s"', [SubSym.Name]), Call.Line, Call.Col);
+      end;
+      ArgType := CheckExpr(TASTCallArg(Call.Args[0]).Expr);
+      if not IsDynamicArrayType(ArgType, ElemType) then
+        Error('E0308', Format('Primeiro argumento de "Delete" deve ser Array Dinamico, recebeu: "%s"', [ArgType]), Call.Line, Call.Col);
+      ArgType := CheckExpr(TASTCallArg(Call.Args[1]).Expr);
+      if not IsIntegerType(ArgType) then
+        Error('E0308', Format('Segundo argumento de "Delete" (indice) deve ser inteiro, recebeu: "%s"', [ArgType]), Call.Line, Call.Col);
+      Exit('Void');
+    end;
+
+    if SameText(Call.Callee, 'Insert') then
+    begin
+      if Call.Args.Count <> 3 then
+        Error('E0061', 'Funcao "Insert" espera 3 argumentos (ArrayDinamico, Indice, Valor)', Call.Line, Call.Col);
+      if TASTCallArg(Call.Args[0]).Expr is TASTIdentifierExpr then
+      begin
+        SubSym := FSymbols.Resolve(TASTIdentifierExpr(TASTCallArg(Call.Args[0]).Expr).Name);
+        if Assigned(SubSym) and (not SubSym.IsMutable) then
+          Error('E0384', Format('Nao e possivel inserir elemento em array imutavel (declarado com "let"): "%s"', [SubSym.Name]), Call.Line, Call.Col);
+      end;
+      ArgType := CheckExpr(TASTCallArg(Call.Args[0]).Expr);
+      if not IsDynamicArrayType(ArgType, ElemType) then
+        Error('E0308', Format('Primeiro argumento de "Insert" deve ser Array Dinamico, recebeu: "%s"', [ArgType]), Call.Line, Call.Col);
+      ArgType := CheckExpr(TASTCallArg(Call.Args[1]).Expr);
+      if not IsIntegerType(ArgType) then
+        Error('E0308', Format('Segundo argumento de "Insert" (indice) deve ser inteiro, recebeu: "%s"', [ArgType]), Call.Line, Call.Col);
+      ArgType := CheckExpr(TASTCallArg(Call.Args[2]).Expr);
+      if not TypesAreCompatible(ElemType, ArgType) then
+        Error('E0308', Format('Tipo do elemento em "Insert" incompativel: esperado "%s", recebeu "%s"', [ElemType, ArgType]), Call.Line, Call.Col);
+      Exit('Void');
+    end;
+
+    if SameText(Call.Callee, 'Slice') then
+    begin
+      if Call.Args.Count <> 3 then
+        Error('E0061', 'Funcao "Slice" espera 3 argumentos (ArrayDinamico, Inicio, Comprimento)', Call.Line, Call.Col);
+      ArgType := CheckExpr(TASTCallArg(Call.Args[0]).Expr);
+      if not IsDynamicArrayType(ArgType, ElemType) then
+        Error('E0308', Format('Primeiro argumento de "Slice" deve ser Array Dinamico, recebeu: "%s"', [ArgType]), Call.Line, Call.Col);
+      ArgType := CheckExpr(TASTCallArg(Call.Args[1]).Expr);
+      if not IsIntegerType(ArgType) then
+        Error('E0308', Format('Segundo argumento de "Slice" (inicio) deve ser inteiro, recebeu: "%s"', [ArgType]), Call.Line, Call.Col);
+      ArgType := CheckExpr(TASTCallArg(Call.Args[2]).Expr);
+      if not IsIntegerType(ArgType) then
+        Error('E0308', Format('Terceiro argumento de "Slice" (comprimento) deve ser inteiro, recebeu: "%s"', [ArgType]), Call.Line, Call.Col);
+      Exit('array of ' + ElemType);
+    end;
+
     if SameText(Call.Callee, 'Contains') then
     begin
       if Call.Args.Count <> 2 then
-        Error('E0061', 'Funcao "Contains" espera 2 argumentos (Mapa, Chave)', Call.Line, Call.Col);
+        Error('E0061', 'Funcao "Contains" espera 2 argumentos', Call.Line, Call.Col);
       ArgType := CheckExpr(TASTCallArg(Call.Args[0]).Expr);
+      if ResolveAliasType(ArgType) = 'String' then
+      begin
+        ArgType := CheckExpr(TASTCallArg(Call.Args[1]).Expr);
+        if ResolveAliasType(ArgType) <> 'String' then
+          Error('E0308', Format('Segundo argumento de "Contains" em String deve ser String, recebeu: "%s"', [ArgType]), Call.Line, Call.Col);
+        Exit('Bool');
+      end;
       if not IsMapType(ArgType, KeyType, ValType) then
-        Error('E0308', Format('Primeiro argumento de "Contains" deve ser Mapa, recebeu: "%s"', [ArgType]), Call.Line, Call.Col);
+        Error('E0308', Format('Primeiro argumento de "Contains" deve ser Mapa ou String, recebeu: "%s"', [ArgType]), Call.Line, Call.Col);
       ArgType := CheckExpr(TASTCallArg(Call.Args[1]).Expr);
       if not TypesAreCompatible(KeyType, ArgType) then
         Error('E0308', Format('Chave de "Contains" incompativel: esperado "%s", recebeu "%s"', [KeyType, ArgType]), Call.Line, Call.Col);
@@ -1356,6 +1599,9 @@ begin
 end;
 
 function TAetherTypeChecker.CheckExpr(Expr: TASTExpr): string;
+var
+  IfExpr: TASTIfExpr;
+  CondT, T1, T2: string;
 begin
   if Expr is TASTLiteralExpr then
     Result := CheckLiteral(TASTLiteralExpr(Expr))
@@ -1377,6 +1623,34 @@ begin
     Result := CheckIndexExpr(TASTIndexExpr(Expr))
   else if Expr is TASTSetLiteralExpr then
     Result := CheckSetLiteral(TASTSetLiteralExpr(Expr))
+  else if Expr is TASTIfExpr then
+  begin
+    IfExpr := TASTIfExpr(Expr);
+    CondT := ResolveAliasType(CheckExpr(IfExpr.Condition));
+    if CondT <> 'Bool' then
+      Error('E0308', Format('Condicao da expressao "if..then..else" deve ser Bool, recebeu: "%s"', [CondT]),
+        IfExpr.Line, IfExpr.Col);
+    T1 := ResolveAliasType(CheckExpr(IfExpr.ThenExpr));
+    T2 := ResolveAliasType(CheckExpr(IfExpr.ElseExpr));
+    if (not TypesAreCompatible(T1, T2)) and (not TypesAreCompatible(T2, T1)) then
+      Error('E0308', Format('Ramos de "if..then..else" possuem tipos incompativeis: "%s" e "%s"', [T1, T2]),
+        IfExpr.Line, IfExpr.Col);
+    if T1 = 'NilLiteral' then Exit(T2);
+    if T2 = 'NilLiteral' then Exit(T1);
+    if T1 = 'Option<GenericNone>' then Exit(T2);
+    if T2 = 'Option<GenericNone>' then Exit(T1);
+    if (T1 = 'Float64') or (T2 = 'Float64') then Exit('Float64')
+    else if (T1 = 'Float32') or (T2 = 'Float32') then Exit('Float32')
+    else if (T1 = 'FloatLiteral') and (T2 = 'FloatLiteral') then Exit('FloatLiteral')
+    else if T1 = 'FloatLiteral' then Exit(T2)
+    else if T2 = 'FloatLiteral' then Exit(T1)
+    else if (T1 = 'Int64') or (T2 = 'Int64') then Exit('Int64')
+    else if (T1 = 'UInt64') or (T2 = 'UInt64') then Exit('UInt64')
+    else if (T1 = 'IntLiteral') and (T2 = 'IntLiteral') then Exit('IntLiteral')
+    else if T1 = 'IntLiteral' then Exit(T2)
+    else if T2 = 'IntLiteral' then Exit(T1)
+    else Exit(T1);
+  end
   else
     Result := 'Unknown';
 end;
@@ -1652,13 +1926,37 @@ var
   MatchedType: string;
   Sym: TSymbol;
   EnumDecl: TASTEnumDecl;
-  I, J, PDot: Integer;
+  I, J, K, PDot, P2: Integer;
   CaseNode: TASTMatchCase;
-  PatternVal, Prefix, InnerType, ErrType, PatType: string;
+  PatternVal, Prefix, InnerType, ErrType, PatType, PatItem, LoStr, HiStr, LoT, HiT: string;
   HasWildcard, FoundVariant: Boolean;
   CoveredVariants: TStringList;
   VariantName, MissingVariant: string;
   HasOk, HasErr, HasSome, HasNone: Boolean;
+
+  function ClassifyMatchAtomType(const S: string; ALine, ACol: Integer): string;
+  var
+    TempId: TASTIdentifierExpr;
+  begin
+    if (Length(S) >= 2) and (S[1] = '"') then
+      Result := 'String'
+    else if (Length(S) >= 2) and (S[1] = '''') then
+      Result := 'Char'
+    else if (S = 'true') or (S = 'false') then
+      Result := 'Bool'
+    else if (S <> '') and ((S[1] in ['0'..'9', '$', '%']) or ((S[1] = '-') and (Length(S) > 1))) then
+      Result := 'IntLiteral'
+    else
+    begin
+      TempId := TASTIdentifierExpr.Create(ALine, ACol, S);
+      try
+        Result := CheckIdentifier(TempId);
+      finally
+        TempId.Free;
+      end;
+    end;
+  end;
+
 begin
   MatchedType := ResolveAliasType(CheckExpr(MatchStmt.Expr));
   HasWildcard := False;
@@ -1673,30 +1971,37 @@ begin
       for I := 0 to MatchStmt.Cases.Count - 1 do
       begin
         CaseNode := TASTMatchCase(MatchStmt.Cases[I]);
-        PatternVal := CaseNode.Pattern.Value;
-
-        if PatternVal = '_' then
+        if CaseNode.Pattern.Value = '_' then
           HasWildcard := True
         else
         begin
-          PDot := Pos('.', PatternVal);
-          if PDot > 0 then
+          for K := 0 to CaseNode.Pattern.Items.Count - 1 do
           begin
-            Prefix := Copy(PatternVal, 1, PDot - 1);
-            if not SameText(Prefix, EnumDecl.Name) then
-              Error('E0308', Format('Padrao "%s" nao pertence ao enum "%s"', [PatternVal, EnumDecl.Name]), CaseNode.Line, CaseNode.Col);
-            PatternVal := Copy(PatternVal, PDot + 1, Length(PatternVal));
-          end;
-          FoundVariant := False;
-          for J := 0 to EnumDecl.Variants.Count - 1 do
-            if SameText(TASTEnumVariant(EnumDecl.Variants[J]).Name, PatternVal) then
+            PatternVal := Trim(CaseNode.Pattern.Items[K]);
+            if PatternVal = '_' then
             begin
-              FoundVariant := True;
-              Break;
+              HasWildcard := True;
+              Continue;
             end;
-          if not FoundVariant then
-            Error('E0425', Format('Variante "%s" nao existe no enum "%s"', [PatternVal, EnumDecl.Name]), CaseNode.Line, CaseNode.Col);
-          CoveredVariants.Add(UpperCase(PatternVal));
+            PDot := Pos('.', PatternVal);
+            if PDot > 0 then
+            begin
+              Prefix := Copy(PatternVal, 1, PDot - 1);
+              if not SameText(Prefix, EnumDecl.Name) then
+                Error('E0308', Format('Padrao "%s" nao pertence ao enum "%s"', [PatternVal, EnumDecl.Name]), CaseNode.Line, CaseNode.Col);
+              PatternVal := Copy(PatternVal, PDot + 1, Length(PatternVal));
+            end;
+            FoundVariant := False;
+            for J := 0 to EnumDecl.Variants.Count - 1 do
+              if SameText(TASTEnumVariant(EnumDecl.Variants[J]).Name, PatternVal) then
+              begin
+                FoundVariant := True;
+                Break;
+              end;
+            if not FoundVariant then
+              Error('E0425', Format('Variante "%s" nao existe no enum "%s"', [PatternVal, EnumDecl.Name]), CaseNode.Line, CaseNode.Col);
+            CoveredVariants.Add(UpperCase(PatternVal));
+          end;
         end;
 
         FSymbols.EnterScope;
@@ -1798,26 +2103,35 @@ begin
     Exit;
   end;
 
-  // Para tipos simples (Int, String, Char, Bool), valida compatibilidade de padroes literais e corpos
+  // Para tipos simples (Int, String, Char, Bool), valida multiplos padroes, faixas e corpos
   for I := 0 to MatchStmt.Cases.Count - 1 do
   begin
     CaseNode := TASTMatchCase(MatchStmt.Cases[I]);
-    PatternVal := CaseNode.Pattern.Value;
-    if PatternVal <> '_' then
+    if CaseNode.Pattern.Value <> '_' then
     begin
-      if (Length(PatternVal) >= 2) and (PatternVal[1] = '"') then
-        PatType := 'String'
-      else if (Length(PatternVal) >= 2) and (PatternVal[1] = '''') then
-        PatType := 'Char'
-      else if (PatternVal = 'true') or (PatternVal = 'false') then
-        PatType := 'Bool'
-      else if (PatternVal <> '') and ((PatternVal[1] in ['0'..'9', '$', '%']) or ((PatternVal[1] = '-') and (Length(PatternVal) > 1))) then
-        PatType := 'IntLiteral'
-      else
-        PatType := CheckIdentifier(TASTIdentifierExpr.Create(CaseNode.Line, CaseNode.Col, PatternVal));
-
-      if not TypesAreCompatible(MatchedType, PatType) then
-        Error('E0308', Format('Padrao "%s" (%s) incompativel com expressao do tipo "%s"', [PatternVal, PatType, MatchedType]), CaseNode.Line, CaseNode.Col);
+      for K := 0 to CaseNode.Pattern.Items.Count - 1 do
+      begin
+        PatItem := Trim(CaseNode.Pattern.Items[K]);
+        if PatItem = '_' then Continue;
+        if (Pos('..', PatItem) > 0) and (PatItem[1] <> '"') then
+        begin
+          P2 := Pos('..', PatItem);
+          LoStr := Trim(Copy(PatItem, 1, P2 - 1));
+          HiStr := Trim(Copy(PatItem, P2 + 2, Length(PatItem)));
+          if (MatchedType <> 'Char') and (not IsIntegerType(MatchedType)) then
+            Error('E0308', Format('Padrao de faixa "%s" exige expressao inteira ou Char, recebeu "%s"', [PatItem, MatchedType]), CaseNode.Line, CaseNode.Col);
+          LoT := ClassifyMatchAtomType(LoStr, CaseNode.Line, CaseNode.Col);
+          HiT := ClassifyMatchAtomType(HiStr, CaseNode.Line, CaseNode.Col);
+          if (not TypesAreCompatible(MatchedType, LoT)) or (not TypesAreCompatible(MatchedType, HiT)) then
+            Error('E0308', Format('Limites da faixa "%s" (%s..%s) incompativeis com tipo "%s"', [PatItem, LoT, HiT, MatchedType]), CaseNode.Line, CaseNode.Col);
+        end
+        else
+        begin
+          PatType := ClassifyMatchAtomType(PatItem, CaseNode.Line, CaseNode.Col);
+          if not TypesAreCompatible(MatchedType, PatType) then
+            Error('E0308', Format('Padrao "%s" (%s) incompativel com expressao do tipo "%s"', [PatItem, PatType, MatchedType]), CaseNode.Line, CaseNode.Col);
+        end;
+      end;
     end;
 
     FSymbols.EnterScope;

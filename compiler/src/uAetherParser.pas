@@ -1227,13 +1227,73 @@ var
   begin
     if Check(tokCase) then Exit(True);
     if Check(tokEnd) or Check(tokEOF) then Exit(False);
-    if (Check(tokUnderscore) or Check(tokIntLiteral) or Check(tokStringLiteral) or
-        Check(tokCharLiteral) or Check(tokTrue) or Check(tokFalse) or Check(tokIdentifier)) and
-       ((FPeekTok.Kind = tokColon) or (FPeekTok.Kind = tokFatArrow)) then
+    if Check(tokUnderscore) or Check(tokIntLiteral) or Check(tokStringLiteral) or
+       Check(tokCharLiteral) or Check(tokTrue) or Check(tokFalse) then
       Exit(True);
     if Check(tokMinus) and (FPeekTok.Kind = tokIntLiteral) then
       Exit(True);
+    if Check(tokIdentifier) and
+       ((FPeekTok.Kind = tokColon) or (FPeekTok.Kind = tokFatArrow) or (FPeekTok.Kind = tokComma)) then
+      Exit(True);
     Result := False;
+  end;
+
+  function ParseSinglePatternItem: string;
+  var
+    HiVal: string;
+  begin
+    if Match(tokUnderscore) then
+      Result := '_'
+    else if Check(tokIntLiteral) then
+    begin
+      Result := FCurTok.Value;
+      Advance;
+    end
+    else if Match(tokMinus) then
+      Result := '-' + Expect(tokIntLiteral, 'Esperado literal inteiro apos "-" no case').Value
+    else if Check(tokStringLiteral) then
+    begin
+      Result := '"' + FCurTok.Value + '"';
+      Advance;
+    end
+    else if Check(tokCharLiteral) then
+    begin
+      Result := '''' + FCurTok.Value + '''';
+      Advance;
+    end
+    else if Match(tokTrue) then
+      Result := 'true'
+    else if Match(tokFalse) then
+      Result := 'false'
+    else
+    begin
+      Result := Expect(tokIdentifier, 'Esperado padrao no case').Value;
+      if Match(tokDot) then
+        Result := Result + '.' + Expect(tokIdentifier).Value;
+    end;
+
+    if Match(tokDotDot) then
+    begin
+      if Check(tokIntLiteral) then
+      begin
+        HiVal := FCurTok.Value;
+        Advance;
+      end
+      else if Match(tokMinus) then
+        HiVal := '-' + Expect(tokIntLiteral, 'Esperado literal inteiro apos "-" na faixa').Value
+      else if Check(tokCharLiteral) then
+      begin
+        HiVal := '''' + FCurTok.Value + '''';
+        Advance;
+      end
+      else
+      begin
+        HiVal := Expect(tokIdentifier, 'Esperado limite superior da faixa no case').Value;
+        if Match(tokDot) then
+          HiVal := HiVal + '.' + Expect(tokIdentifier).Value;
+      end;
+      Result := Result + '..' + HiVal;
+    end;
   end;
 begin
   MLine := FCurTok.Line;
@@ -1251,38 +1311,7 @@ begin
       PLine := FCurTok.Line;
       PCol := FCurTok.Col;
 
-      if Match(tokUnderscore) then
-        PatVal := '_'
-      else if Check(tokIntLiteral) then
-      begin
-        PatVal := FCurTok.Value;
-        Advance;
-      end
-      else if Match(tokMinus) then
-      begin
-        PatVal := '-' + Expect(tokIntLiteral, 'Esperado literal inteiro apos "-" no case').Value;
-      end
-      else if Check(tokStringLiteral) then
-      begin
-        PatVal := '"' + FCurTok.Value + '"';
-        Advance;
-      end
-      else if Check(tokCharLiteral) then
-      begin
-        PatVal := '''' + FCurTok.Value + '''';
-        Advance;
-      end
-      else if Match(tokTrue) then
-        PatVal := 'true'
-      else if Match(tokFalse) then
-        PatVal := 'false'
-      else
-      begin
-        PatVal := Expect(tokIdentifier, 'Esperado padrao no case').Value;
-        // Suporte a Enum.Variante
-        if Match(tokDot) then
-          PatVal := PatVal + '.' + Expect(tokIdentifier).Value;
-      end;
+      PatVal := ParseSinglePatternItem;
 
       SubVal := '';
       IsLet := False;
@@ -1307,6 +1336,8 @@ begin
       end;
 
       PatternNode := TASTPattern.Create(PLine, PCol, PatVal, SubVal, IsLet);
+      while Match(tokComma) do
+        PatternNode.Items.Add(ParseSinglePatternItem);
       CaseNode := TASTMatchCase.Create(PLine, PCol, PatternNode);
       Result.Cases.Add(CaseNode);
 
@@ -1576,15 +1607,27 @@ end;
 
 function TAetherParser.ParsePrimaryExpr: TASTExpr;
 var
-  Id: string;
+  Id, ArgFieldName: string;
   Line, Col: Integer;
   CallExpr: TASTCallExpr;
-  ArgExpr: TASTExpr;
+  ArgExpr, CondExpr, ThenExpr, ElseExpr: TASTExpr;
   ArgOwn: TOwnershipKind;
   IdxExpr: TASTIndexExpr;
+  CallArg: TASTCallArg;
 begin
   Line := FCurTok.Line;
   Col := FCurTok.Col;
+
+  // Expressao condicional inline: if cond then a else b
+  if Match(tokIf) then
+  begin
+    CondExpr := ParseExpr;
+    Expect(tokThen, 'Esperado "then" na expressao condicional "if"');
+    ThenExpr := ParseExpr;
+    Expect(tokElse, 'Esperado "else" na expressao condicional "if"');
+    ElseExpr := ParseExpr;
+    Exit(TASTIfExpr.Create(Line, Col, CondExpr, ThenExpr, ElseExpr));
+  end;
 
   // Literais
   if Check(tokIntLiteral) then
@@ -1677,14 +1720,18 @@ begin
           end;
 
           // Suporte a argumentos nomeados estilo DataBuffer(id: 101, size: 2048)
+          ArgFieldName := '';
           if Check(tokIdentifier) and (FPeekTok.Kind = tokColon) then
           begin
+            ArgFieldName := FCurTok.Value;
             Advance; // consome nome do campo
             Advance; // consome ':'
           end;
 
           ArgExpr := ParseExpr;
-          CallExpr.Args.Add(TASTCallArg.Create(Line, Col, ArgOwn, ArgExpr));
+          CallArg := TASTCallArg.Create(Line, Col, ArgOwn, ArgExpr);
+          CallArg.FieldName := ArgFieldName;
+          CallExpr.Args.Add(CallArg);
         until not Match(tokComma);
       end;
       Expect(tokRParen, 'Esperado ")" no fechamento dos argumentos');

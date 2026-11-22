@@ -758,3 +758,20 @@ Este documento traça o status oficial de desenvolvimento do compilador e as pr�
 - [x] **6. Suíte de Testes Automatizada & Documentação**:
   - Criação de `tests/09_fase47_arrlit_mapfor_casts_compassign_option_alias_test.aeth` validando todos os recursos nos backends FPC e GCC C99 (`9/9` testes aprovados em ambos os backends e `aetherc lint` limpo).
   - Atualização do Masterclass Course (`docs/course/02_VARIABLES_TYPES_MUTABILITY.md` e `docs/course/03_CONTROL_FLOW_AND_MATCH.md`).
+
+---
+
+### ✅ Fase 48: Padrões Multi-Valor/Intervalo no `match`, `if..then..else` Expressão, Strings/Matemática, `Slice`/`Insert`/`Delete` & Construtor Nomeado / `Default(T)` - CONCLUÍDA
+- [x] **1. Padrões Múltiplos e Intervalos no `match`**:
+  - Listas separadas por vírgula (`case 1, 3, 5 =>`, `Status.Idle, Status.Done =>`) e intervalos inclusivos `low..high` (`200..299 =>`, `'a'..'z' =>`).
+- [x] **2. Expressão Condicional Inline (`if cond then exprA else exprB`)**:
+  - Suporte a `if ... then ... else ...` diretamente em expressões, declarações `let`/`var` e argumentos, emitindo ternário C99 e `AetherIfThen<T>` no Free Pascal.
+- [x] **3. Métodos Embutidos de `String` & Matemática (`Trim`, `UpperCase`, `LowerCase`, `StartsWith`, `EndsWith`, `IndexOf`, `Replace`, `Abs`, `Min`, `Max`, `Clamp`)**:
+  - Métodos UFCS/funcionais completos para manipulação de texto e funções matemáticas inteiras/ponto flutuante em ambos os backends.
+- [x] **4. Operações de Slice em Arrays Dinâmicos (`.Delete(idx)`, `.Insert(idx, val)`, `.Slice(start, len)`)**:
+  - Remoção e inserção em qualquer posição e fatiamento de arrays dinâmicos no Free Pascal e no GCC C99.
+- [x] **5. Construtor Nomeado de `record` & Intrínseco `Default(Tipo)`**:
+  - Reordenação automática de argumentos nomeados (`Ponto(y: 20, x: 10)`) no TypeChecker e inicializador zero `Default(Tipo)`.
+- [x] **6. Suíte de Testes Automatizada & Documentação**:
+  - Criação de `tests/10_fase48_matchrange_ifexpr_strmath_arrslice_default_test.aeth` validando todos os recursos nos backends FPC e GCC C99 (`10/10` testes aprovados em ambos os backends e `aetherc lint` limpo).
+  - Atualização do Masterclass Course (`docs/course/02_VARIABLES_TYPES_MUTABILITY.md` e `docs/course/03_CONTROL_FLOW_AND_MATCH.md`).

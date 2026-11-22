@@ -104,6 +104,7 @@ type
 
   TASTCallArg = class(TASTNode)
   public
+    FieldName: string;
     Ownership: TOwnershipKind;
     Expr: TASTExpr;
     constructor Create(ALine, ACol: Integer; AOwnership: TOwnershipKind; AExpr: TASTExpr);
@@ -133,6 +134,16 @@ type
   public
     Elements: TASTNodeList; // lista de TASTExpr
     constructor Create(ALine, ACol: Integer);
+    destructor Destroy; override;
+    function Dump(Indent: Integer = 0): string; override;
+  end;
+
+  TASTIfExpr = class(TASTExpr)
+  public
+    Condition: TASTExpr;
+    ThenExpr: TASTExpr;
+    ElseExpr: TASTExpr;
+    constructor Create(ALine, ACol: Integer; ACond, AThen, AElse: TASTExpr);
     destructor Destroy; override;
     function Dump(Indent: Integer = 0): string; override;
   end;
@@ -214,7 +225,9 @@ type
     Value: string;
     SubPattern: string;
     IsLet: Boolean;
+    Items: TStringList;
     constructor Create(ALine, ACol: Integer; const AValue: string; const ASub: string = ''; AIsLet: Boolean = False);
+    destructor Destroy; override;
     function Dump(Indent: Integer = 0): string; override;
   end;
 
@@ -745,6 +758,7 @@ end;
 constructor TASTCallArg.Create(ALine, ACol: Integer; AOwnership: TOwnershipKind; AExpr: TASTExpr);
 begin
   inherited Create(ALine, ACol);
+  FieldName := '';
   Ownership := AOwnership;
   Expr := AExpr;
 end;
@@ -757,8 +771,12 @@ end;
 
 function TASTCallArg.Dump(Indent: Integer): string;
 begin
-  Result := MakeIndent(Indent) + Format('Argumento [%s]:' + LineEnding, [Trim(OwnershipToString(Ownership))]) +
-            Expr.Dump(Indent + 1);
+  if FieldName <> '' then
+    Result := MakeIndent(Indent) + Format('Argumento [%s] (%s):' + LineEnding, [Trim(OwnershipToString(Ownership)), FieldName]) +
+              Expr.Dump(Indent + 1)
+  else
+    Result := MakeIndent(Indent) + Format('Argumento [%s]:' + LineEnding, [Trim(OwnershipToString(Ownership))]) +
+              Expr.Dump(Indent + 1);
 end;
 
 { TASTCallExpr }
@@ -845,6 +863,32 @@ begin
     Result := Result + Elements[I].Dump(0);
   end;
   Result := Result + ']';
+end;
+
+{ TASTIfExpr }
+
+constructor TASTIfExpr.Create(ALine, ACol: Integer; ACond, AThen, AElse: TASTExpr);
+begin
+  inherited Create(ALine, ACol);
+  Condition := ACond;
+  ThenExpr := AThen;
+  ElseExpr := AElse;
+end;
+
+destructor TASTIfExpr.Destroy;
+begin
+  Condition.Free;
+  ThenExpr.Free;
+  ElseExpr.Free;
+  inherited Destroy;
+end;
+
+function TASTIfExpr.Dump(Indent: Integer): string;
+begin
+  Result := MakeIndent(Indent) + 'Expressao Condicional (if..then..else):' + LineEnding +
+            Condition.Dump(Indent + 1) + LineEnding +
+            ThenExpr.Dump(Indent + 1) + LineEnding +
+            ElseExpr.Dump(Indent + 1);
 end;
 
 { TASTAssignStmt }
@@ -1054,6 +1098,15 @@ begin
   Value := AValue;
   SubPattern := ASub;
   IsLet := AIsLet;
+  Items := TStringList.Create;
+  if AValue <> '' then
+    Items.Add(AValue);
+end;
+
+destructor TASTPattern.Destroy;
+begin
+  Items.Free;
+  inherited Destroy;
 end;
 
 function TASTPattern.Dump(Indent: Integer): string;
@@ -1065,6 +1118,8 @@ begin
     else
       Result := MakeIndent(Indent) + Format('Padrao: %s(%s)', [Value, SubPattern]);
   end
+  else if (Assigned(Items)) and (Items.Count > 1) then
+    Result := MakeIndent(Indent) + Format('Padrao: %s', [Items.CommaText])
   else
     Result := MakeIndent(Indent) + Format('Padrao: %s', [Value]);
 end;
@@ -1814,7 +1869,11 @@ begin
   else if Node is TASTSpawnExpr then
     Exit(TASTSpawnExpr.Create(Node.Line, Node.Col, TASTExpr(CloneASTNode(TASTSpawnExpr(Node).CallExpr))))
   else if Node is TASTCallArg then
-    Exit(TASTCallArg.Create(Node.Line, Node.Col, TASTCallArg(Node).Ownership, TASTExpr(CloneASTNode(TASTCallArg(Node).Expr))))
+  begin
+    Result := TASTCallArg.Create(Node.Line, Node.Col, TASTCallArg(Node).Ownership, TASTExpr(CloneASTNode(TASTCallArg(Node).Expr)));
+    TASTCallArg(Result).FieldName := TASTCallArg(Node).FieldName;
+    Exit;
+  end
   else if Node is TASTCallExpr then
   begin
     Result := TASTCallExpr.Create(Node.Line, Node.Col, TASTCallExpr(Node).Callee);
@@ -1836,6 +1895,11 @@ begin
       TASTSetLiteralExpr(Result).Elements.Add(CloneASTNode(TASTSetLiteralExpr(Node).Elements[I]));
     Exit;
   end
+  else if Node is TASTIfExpr then
+    Exit(TASTIfExpr.Create(Node.Line, Node.Col,
+      TASTExpr(CloneASTNode(TASTIfExpr(Node).Condition)),
+      TASTExpr(CloneASTNode(TASTIfExpr(Node).ThenExpr)),
+      TASTExpr(CloneASTNode(TASTIfExpr(Node).ElseExpr))))
 
   // Instruções
   else if Node is TASTAssignStmt then
@@ -1883,7 +1947,16 @@ begin
   else if Node is TASTContinueStmt then
     Exit(TASTContinueStmt.Create(Node.Line, Node.Col))
   else if Node is TASTPattern then
-    Exit(TASTPattern.Create(Node.Line, Node.Col, TASTPattern(Node).Value, TASTPattern(Node).SubPattern, TASTPattern(Node).IsLet))
+  begin
+    Result := TASTPattern.Create(Node.Line, Node.Col, TASTPattern(Node).Value, TASTPattern(Node).SubPattern, TASTPattern(Node).IsLet);
+    if Assigned(TASTPattern(Node).Items) then
+    begin
+      TASTPattern(Result).Items.Clear;
+      for I := 0 to TASTPattern(Node).Items.Count - 1 do
+        TASTPattern(Result).Items.Add(TASTPattern(Node).Items[I]);
+    end;
+    Exit;
+  end
   else if Node is TASTMatchCase then
   begin
     Result := TASTMatchCase.Create(Node.Line, Node.Col, TASTPattern(CloneASTNode(TASTMatchCase(Node).Pattern)));

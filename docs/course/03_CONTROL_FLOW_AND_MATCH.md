@@ -37,6 +37,16 @@ Notice:
 - No `begin` keyword required after `then`.
 - Clean closing `end;`.
 
+### 1.1 Inline Conditional Expressions (`if ... then ... else ...`)
+
+Aether also supports single-expression `if <cond> then <exprA> else <exprB>` directly inside assignments, initializers, arithmetic, and function calls (without `end;`), requiring compatible types on both branches:
+
+```aether
+let limit := if score >= 90 then 100 else 50;
+let badge := if limit = 100 then "GOLD" else "STANDARD";
+let adjusted := (if score > 0 then score else 0) + 10;
+```
+
 ---
 
 ## 2. Iteration: `while` Loops
@@ -347,12 +357,47 @@ match optVal with
 end;
 ```
 
+### 4.2 Multi-Value & Inclusive Range Patterns (`a, b, c` and `low..high`)
+
+`match` arms also accept comma-separated pattern lists (including `Enum` variants, which participate in exhaustiveness checking) as well as inclusive `low..high` ranges for integers and characters:
+
+```aether
+match httpCode do
+    1, 3, 5 =>
+        category := "odd-small";
+    200..299 =>
+        category := "success";
+    -10..-1, 0 =>
+        category := "non-positive";
+    _ =>
+        category := "other";
+end;
+
+match ch do
+    'a'..'z' =>
+        kind := "lowercase";
+    'A'..'Z' =>
+        kind := "uppercase";
+    '0', '1', '2' =>
+        kind := "small-digit";
+    _ =>
+        kind := "symbol";
+end;
+
+match st with
+    case OrderStatus.Draft, OrderStatus.Paid:
+        group := 1;
+    case OrderStatus.Shipped, OrderStatus.Delivered, OrderStatus.Cancelled:
+        group := 2;
+end;
+```
+
 ---
 
 ## 5. Summary
-1. `if...then...else...end;` provides unambiguous nesting without `begin`.
+1. `if...then...else...end;` provides unambiguous nesting without `begin`, and inline `if <cond> then <exprA> else <exprB>` evaluates conditional expressions cleanly inside initializers and arguments.
 2. Loops use `while <cond> do ... end;`, `for` (`to` / `downto` / `in` over arrays, `String`, and `map[K]V`), and `repeat ... until` with `break` and `continue`, plus `+=`/`-=`/`*=` and `Inc`/`Dec`.
 3. `defer` ensures deterministic LIFO cleanup, while `try ... except` and `raise` handle system faults.
-4. Enums are algebraic types, and `match` handles `Enum`, value `Option<T>`, typed `Result<T, E>`, primitives, and `_` wildcards with compile-time exhaustiveness checking.
+4. Enums are algebraic types, and `match` handles `Enum`, value `Option<T>`, typed `Result<T, E>`, primitives, multi-value comma lists, inclusive `low..high` ranges, and `_` wildcards with compile-time exhaustiveness checking.
 
 ➡️ **Next:** **[Chapter 04: Functions & Contracts](04_FUNCTIONS_AND_CONTRACTS.md)**

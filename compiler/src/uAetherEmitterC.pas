@@ -871,13 +871,51 @@ begin
     else if SameText(TASTUnaryExpr(Expr).Op, 'not') or (TASTUnaryExpr(Expr).Op = '-') then
       Exit(TargetType);
   end
+  else if Expr is TASTIfExpr then
+  begin
+    LeftType := ResolveAliasType(GetExprTypeName(TASTIfExpr(Expr).ThenExpr));
+    CleanTarget := ResolveAliasType(GetExprTypeName(TASTIfExpr(Expr).ElseExpr));
+    if (LeftType = 'Float64') or (CleanTarget = 'Float64') then Exit('Float64');
+    if (LeftType = 'Float32') or (CleanTarget = 'Float32') then Exit('Float32');
+    if (LeftType = 'Int64') or (CleanTarget = 'Int64') then Exit('Int64');
+    if (LeftType = 'UInt64') or (CleanTarget = 'UInt64') then Exit('UInt64');
+    if LeftType <> '' then Exit(LeftType);
+    Exit(CleanTarget);
+  end
   else if Expr is TASTCallExpr then
   begin
     Call := TASTCallExpr(Expr);
     if Call.Callee = 'Box' then Exit('Box');
     if Call.Callee = 'Some' then Exit('Option');
-    if (Call.Callee = 'ReadFile') or (Call.Callee = 'CharAt') or (Call.Callee = 'Substring') or (Call.Callee = 'ToString') or (Call.Callee = 'IntToStr') or (Call.Callee = 'FloatToStr') or (Call.Callee = 'BoolToStr') or (Call.Callee = 'CharToStr') or (Call.Callee = '__InterpToStr') or (Call.Callee = 'SocketRecv') or (Call.Callee = 'ParamStr') then Exit('String');
+    if SameText(Call.Callee, 'Default') and (Call.Args.Count = 1) and (TASTCallArg(Call.Args[0]).Expr is TASTIdentifierExpr) then
+      Exit(TASTIdentifierExpr(TASTCallArg(Call.Args[0]).Expr).Name);
+    if (Call.Callee = 'ReadFile') or (Call.Callee = 'CharAt') or (Call.Callee = 'Substring') or (Call.Callee = 'ToString') or
+       (Call.Callee = 'IntToStr') or (Call.Callee = 'FloatToStr') or (Call.Callee = 'BoolToStr') or (Call.Callee = 'CharToStr') or
+       (Call.Callee = '__InterpToStr') or (Call.Callee = 'SocketRecv') or (Call.Callee = 'ParamStr') or
+       SameText(Call.Callee, 'Trim') or SameText(Call.Callee, 'UpperCase') or SameText(Call.Callee, 'LowerCase') or SameText(Call.Callee, 'Replace') then Exit('String');
     if SameText(Call.Callee, 'Chr') or SameText(Call.Callee, 'Char') then Exit('Char');
+    if SameText(Call.Callee, 'Slice') and (Call.Args.Count >= 1) then
+    begin
+      TargetType := ResolveAliasType(GetExprTypeName(TASTCallArg(Call.Args[0]).Expr));
+      Exit(TargetType);
+    end;
+    if SameText(Call.Callee, 'Abs') and (Call.Args.Count = 1) then
+    begin
+      TargetType := ResolveAliasType(GetExprTypeName(TASTCallArg(Call.Args[0]).Expr));
+      if TargetType = '' then Exit('Int32');
+      Exit(TargetType);
+    end;
+    if (SameText(Call.Callee, 'Min') or SameText(Call.Callee, 'Max') or SameText(Call.Callee, 'Clamp')) and (Call.Args.Count >= 2) then
+    begin
+      LeftType := ResolveAliasType(GetExprTypeName(TASTCallArg(Call.Args[0]).Expr));
+      CleanTarget := ResolveAliasType(GetExprTypeName(TASTCallArg(Call.Args[1]).Expr));
+      if (LeftType = 'Float64') or (CleanTarget = 'Float64') then Exit('Float64');
+      if (LeftType = 'Float32') or (CleanTarget = 'Float32') then Exit('Float32');
+      if (LeftType = 'Int64') or (CleanTarget = 'Int64') then Exit('Int64');
+      if (LeftType = 'UInt64') or (CleanTarget = 'UInt64') then Exit('UInt64');
+      if LeftType <> '' then Exit(LeftType);
+      Exit(CleanTarget);
+    end;
     if SameText(Call.Callee, 'Pop') and (Call.Args.Count = 1) then
     begin
       TargetType := ResolveAliasType(GetExprTypeName(TASTCallArg(Call.Args[0]).Expr));
@@ -889,12 +927,18 @@ begin
             Exit(TASTArrayDecl(FModule.Types[I]).ElemType);
     end;
     if SameText(Call.Callee, 'Length') or SameText(Call.Callee, 'Count') or SameText(Call.Callee, 'Ord') or SameText(Call.Callee, 'SizeOf') or
-       (Call.Callee = 'StrToInt') or (Call.Callee = 'SocketCreate') or (Call.Callee = 'SocketListen') or (Call.Callee = 'SocketAccept') or (Call.Callee = 'SocketConnect') or (Call.Callee = 'SocketSend') or (Call.Callee = 'ParamCount') then Exit('Int32');
+       SameText(Call.Callee, 'IndexOf') or (Call.Callee = 'StrToInt') or (Call.Callee = 'SocketCreate') or
+       (Call.Callee = 'SocketListen') or (Call.Callee = 'SocketAccept') or (Call.Callee = 'SocketConnect') or
+       (Call.Callee = 'SocketSend') or (Call.Callee = 'ParamCount') then Exit('Int32');
     if (Call.Callee = 'sin') or (Call.Callee = 'cos') or (Call.Callee = 'tan') or (Call.Callee = 'sqrt') or (Call.Callee = 'Now') then Exit('Float64');
     if (Call.Callee = 'GetTickCount64') or (Call.Callee = 'GetNanoseconds') then Exit('UInt64');
     if (Call.Callee = 'FileSize') then Exit('Int64');
-    if SameText(Call.Callee, 'Contains') or (Call.Callee = 'FileExists') or (Call.Callee = 'WriteFile') or (Call.Callee = 'CreateDir') or (Call.Callee = 'RemoveDir') or (Call.Callee = 'DeleteFile') or (Call.Callee = 'DirExists') then Exit('Bool');
-    if SameText(Call.Callee, 'Clear') or SameText(Call.Callee, 'Inc') or SameText(Call.Callee, 'Dec') or SameText(Call.Callee, 'Remove') or (Call.Callee = 'SocketClose') or (Call.Callee = 'Assert') or (Call.Callee = 'SleepMs') then Exit('Void');
+    if SameText(Call.Callee, 'Contains') or SameText(Call.Callee, 'StartsWith') or SameText(Call.Callee, 'EndsWith') or
+       (Call.Callee = 'FileExists') or (Call.Callee = 'WriteFile') or (Call.Callee = 'CreateDir') or (Call.Callee = 'RemoveDir') or
+       (Call.Callee = 'DeleteFile') or (Call.Callee = 'DirExists') then Exit('Bool');
+    if SameText(Call.Callee, 'Clear') or SameText(Call.Callee, 'Delete') or SameText(Call.Callee, 'Insert') or
+       SameText(Call.Callee, 'Inc') or SameText(Call.Callee, 'Dec') or SameText(Call.Callee, 'Remove') or
+       (Call.Callee = 'SocketClose') or (Call.Callee = 'Assert') or (Call.Callee = 'SleepMs') then Exit('Void');
     if IsTypeIdentifier(Call.Callee) then Exit(Call.Callee);
     if Assigned(FModule) then
     begin
@@ -1015,11 +1059,12 @@ var
   CalleeName: string;
   ArgsStr: string;
   ArgVal: string;
-  I: Integer;
+  I, J: Integer;
   OpStr, LType, RType, KeyT, ValT, TargetT, ValF, ErrF, ArgStr: string;
   TargetStr: string;
   ArgType: string;
   TName: string;
+  Rec: TASTRecordDecl;
 begin
   if not Assigned(Expr) then Exit('');
 
@@ -1483,10 +1528,169 @@ begin
       Exit;
     end;
 
+    if SameText(Call.Callee, 'Default') then
+    begin
+      TargetStr := Trim(TASTIdentifierExpr(TASTCallArg(Call.Args[0]).Expr).Name);
+      TargetT := ResolveAliasType(TargetStr);
+      if TargetT = 'String' then
+        Result := '((const char*)"")'
+      else if TargetT = 'Bool' then
+        Result := 'false'
+      else if (TargetT = 'Pointer') or (Pos('^', TargetT) = 1) or IsDynamicArrayType(TargetT) then
+        Result := Format('((%s)NULL)', [EmitTypeRef(TargetStr)])
+      else if (TargetT = 'Int8') or (TargetT = 'Int16') or (TargetT = 'Int32') or (TargetT = 'Int64') or
+              (TargetT = 'UInt8') or (TargetT = 'UInt16') or (TargetT = 'UInt32') or (TargetT = 'UInt64') or
+              (TargetT = 'Float32') or (TargetT = 'Float64') or (TargetT = 'Char') then
+        Result := Format('((%s)0)', [EmitTypeRef(TargetStr)])
+      else
+      begin
+        Rec := nil;
+        if Assigned(FModule) then
+          for I := 0 to FModule.Types.Count - 1 do
+            if (FModule.Types[I] is TASTRecordDecl) and SameText(TASTRecordDecl(FModule.Types[I]).Name, TargetT) then
+            begin
+              Rec := TASTRecordDecl(FModule.Types[I]);
+              Break;
+            end;
+        if Assigned(Rec) then
+        begin
+          ArgsStr := '';
+          for J := 0 to Rec.Fields.Count - 1 do
+            if ResolveAliasType(TASTRecordField(Rec.Fields[J]).TypeName) = 'String' then
+            begin
+              if ArgsStr <> '' then ArgsStr := ArgsStr + ', ';
+              ArgsStr := ArgsStr + Format('.%s = ""', [TASTRecordField(Rec.Fields[J]).Name]);
+            end;
+          if ArgsStr <> '' then
+            Result := Format('((%s){ %s })', [EmitTypeRef(TargetStr), ArgsStr])
+          else
+            Result := Format('((%s){0})', [EmitTypeRef(TargetStr)]);
+        end
+        else
+          Result := Format('((%s)0)', [EmitTypeRef(TargetStr)]);
+      end;
+      Exit;
+    end;
+
     if SameText(Call.Callee, 'Contains') then
     begin
-      IsMapType(GetExprTypeName(TASTCallArg(Call.Args[0]).Expr), KeyT, ValT);
-      Result := Format('AetherMapContains_%s(&(%s), %s)', [MapTag(KeyT, ValT), EmitExpr(TASTCallArg(Call.Args[0]).Expr), EmitExpr(TASTCallArg(Call.Args[1]).Expr)]);
+      TargetT := ResolveAliasType(GetExprTypeName(TASTCallArg(Call.Args[0]).Expr));
+      if TargetT = 'String' then
+        Result := Format('AetherStrContains(%s, %s)', [EmitExpr(TASTCallArg(Call.Args[0]).Expr), EmitExpr(TASTCallArg(Call.Args[1]).Expr)])
+      else
+      begin
+        IsMapType(GetExprTypeName(TASTCallArg(Call.Args[0]).Expr), KeyT, ValT);
+        Result := Format('AetherMapContains_%s(&(%s), %s)', [MapTag(KeyT, ValT), EmitExpr(TASTCallArg(Call.Args[0]).Expr), EmitExpr(TASTCallArg(Call.Args[1]).Expr)]);
+      end;
+      Exit;
+    end;
+
+    if SameText(Call.Callee, 'Trim') then
+    begin
+      Result := Format('AetherStrTrim(%s)', [EmitExpr(TASTCallArg(Call.Args[0]).Expr)]);
+      Exit;
+    end;
+
+    if SameText(Call.Callee, 'UpperCase') then
+    begin
+      Result := Format('AetherUpperCase(%s)', [EmitExpr(TASTCallArg(Call.Args[0]).Expr)]);
+      Exit;
+    end;
+
+    if SameText(Call.Callee, 'LowerCase') then
+    begin
+      Result := Format('AetherLowerCase(%s)', [EmitExpr(TASTCallArg(Call.Args[0]).Expr)]);
+      Exit;
+    end;
+
+    if SameText(Call.Callee, 'StartsWith') then
+    begin
+      Result := Format('AetherStartsWith(%s, %s)', [EmitExpr(TASTCallArg(Call.Args[0]).Expr), EmitExpr(TASTCallArg(Call.Args[1]).Expr)]);
+      Exit;
+    end;
+
+    if SameText(Call.Callee, 'EndsWith') then
+    begin
+      Result := Format('AetherEndsWith(%s, %s)', [EmitExpr(TASTCallArg(Call.Args[0]).Expr), EmitExpr(TASTCallArg(Call.Args[1]).Expr)]);
+      Exit;
+    end;
+
+    if SameText(Call.Callee, 'IndexOf') then
+    begin
+      Result := Format('AetherStrIndexOf(%s, %s)', [EmitExpr(TASTCallArg(Call.Args[0]).Expr), EmitExpr(TASTCallArg(Call.Args[1]).Expr)]);
+      Exit;
+    end;
+
+    if SameText(Call.Callee, 'Replace') then
+    begin
+      Result := Format('AetherStrReplace(%s, %s, %s)', [EmitExpr(TASTCallArg(Call.Args[0]).Expr), EmitExpr(TASTCallArg(Call.Args[1]).Expr), EmitExpr(TASTCallArg(Call.Args[2]).Expr)]);
+      Exit;
+    end;
+
+    if SameText(Call.Callee, 'Abs') then
+    begin
+      TargetT := ResolveAliasType(GetExprTypeName(TASTCallArg(Call.Args[0]).Expr));
+      if TargetT = '' then TargetT := 'Int32';
+      ValF := EmitTypeRef(TargetT);
+      if Pos('UInt', TargetT) = 1 then
+        Result := Format('((%s)(%s))', [ValF, EmitExpr(TASTCallArg(Call.Args[0]).Expr)])
+      else
+        Result := Format('({ %s _ax = (%s); _ax < 0 ? (%s)(-_ax) : _ax; })', [ValF, EmitExpr(TASTCallArg(Call.Args[0]).Expr), ValF]);
+      Exit;
+    end;
+
+    if SameText(Call.Callee, 'Min') then
+    begin
+      TargetT := ResolveAliasType(GetExprTypeName(Call));
+      if TargetT = '' then TargetT := 'Int32';
+      ValF := EmitTypeRef(TargetT);
+      Result := Format('({ %s _ma = (%s); %s _mb = (%s); _ma < _mb ? _ma : _mb; })',
+        [ValF, EmitExpr(TASTCallArg(Call.Args[0]).Expr), ValF, EmitExpr(TASTCallArg(Call.Args[1]).Expr)]);
+      Exit;
+    end;
+
+    if SameText(Call.Callee, 'Max') then
+    begin
+      TargetT := ResolveAliasType(GetExprTypeName(Call));
+      if TargetT = '' then TargetT := 'Int32';
+      ValF := EmitTypeRef(TargetT);
+      Result := Format('({ %s _ma = (%s); %s _mb = (%s); _ma > _mb ? _ma : _mb; })',
+        [ValF, EmitExpr(TASTCallArg(Call.Args[0]).Expr), ValF, EmitExpr(TASTCallArg(Call.Args[1]).Expr)]);
+      Exit;
+    end;
+
+    if SameText(Call.Callee, 'Clamp') then
+    begin
+      TargetT := ResolveAliasType(GetExprTypeName(Call));
+      if TargetT = '' then TargetT := 'Int32';
+      ValF := EmitTypeRef(TargetT);
+      Result := Format('({ %s _cx = (%s); %s _clo = (%s); %s _chi = (%s); _cx < _clo ? _clo : (_cx > _chi ? _chi : _cx); })',
+        [ValF, EmitExpr(TASTCallArg(Call.Args[0]).Expr), ValF, EmitExpr(TASTCallArg(Call.Args[1]).Expr), ValF, EmitExpr(TASTCallArg(Call.Args[2]).Expr)]);
+      Exit;
+    end;
+
+    if SameText(Call.Callee, 'Delete') then
+    begin
+      TargetStr := EmitExpr(TASTCallArg(Call.Args[0]).Expr);
+      Result := Format('%s = (__typeof__(%s))AetherDynDelete(%s, sizeof(*(%s)), (int64_t)(%s))',
+        [TargetStr, TargetStr, TargetStr, TargetStr, EmitExpr(TASTCallArg(Call.Args[1]).Expr)]);
+      Exit;
+    end;
+
+    if SameText(Call.Callee, 'Insert') then
+    begin
+      TargetStr := EmitExpr(TASTCallArg(Call.Args[0]).Expr);
+      Result := Format('do { size_t _len = AetherDynLen(%s); int64_t _idx = (int64_t)(%s); __typeof__(*(%s)) _iv = (%s); if (_idx < 0) _idx = 0; if ((size_t)_idx > _len) _idx = (int64_t)_len; %s = (__typeof__(%s))AetherDynSetLength(%s, sizeof(*(%s)), _len + 1); for (size_t _k = _len; _k > (size_t)_idx; _k--) (%s)[_k] = (%s)[_k - 1]; (%s)[_idx] = _iv; } while (0)',
+        [TargetStr, EmitExpr(TASTCallArg(Call.Args[1]).Expr), TargetStr, EmitExpr(TASTCallArg(Call.Args[2]).Expr),
+         TargetStr, TargetStr, TargetStr, TargetStr, TargetStr, TargetStr, TargetStr]);
+      Exit;
+    end;
+
+    if SameText(Call.Callee, 'Slice') then
+    begin
+      TargetStr := EmitExpr(TASTCallArg(Call.Args[0]).Expr);
+      Result := Format('((__typeof__(%s))AetherDynSlice(%s, sizeof(*(%s)), (int64_t)(%s), (int64_t)(%s)))',
+        [TargetStr, TargetStr, TargetStr, EmitExpr(TASTCallArg(Call.Args[1]).Expr), EmitExpr(TASTCallArg(Call.Args[2]).Expr)]);
       Exit;
     end;
 
@@ -1696,6 +1900,12 @@ begin
     end;
     Result := CalleeName + '(' + ArgsStr + ')';
     Exit;
+  end
+  else if Expr is TASTIfExpr then
+  begin
+    Result := Format('((%s) ? (%s) : (%s))',
+      [EmitExpr(TASTIfExpr(Expr).Condition), EmitExpr(TASTIfExpr(Expr).ThenExpr), EmitExpr(TASTIfExpr(Expr).ElseExpr)]);
+    Exit;
   end;
 
   Result := '';
@@ -1742,8 +1952,26 @@ var
   Ret: TASTReturnStmt;
   Lines: TStringList;
   LineStr: string;
-  I, J: Integer;
+  I, J, K, P2: Integer;
   PatStr, TName, KeyT, ValT, ColStr, ColType, ElemT, LoopId, MatchedType, ExprStr, Prefix, CondStr, BindStmt, TargetT, ValF, ErrF: string;
+  PatItem, LoStr, HiStr, LoExpr, HiExpr, ItemCond: string;
+
+  function FormatMatchAtom(const S, MT: string): string;
+  begin
+    if (Length(S) >= 2) and (S[1] = '''') then
+      Result := S
+    else if (S = 'true') or (S = 'false') then
+      Result := S
+    else if (S <> '') and ((S[1] in ['0'..'9', '$', '%']) or ((S[1] = '-') and (Length(S) > 1))) then
+      Result := NormalizeIntLit(S)
+    else if Pos('.', S) > 0 then
+      Result := StringReplace(S, '.', '_', [rfReplaceAll])
+    else if IsEnumName(MT) then
+      Result := MT + '_' + S
+    else
+      Result := S;
+  end;
+
 begin
   if Stmt is TASTAssignStmt then
   begin
@@ -2088,27 +2316,36 @@ begin
             end;
           end;
         end
-        else if PatStr = 'None' then
+        else if (CaseNode.Pattern.Items.Count <= 1) and (PatStr = 'None') then
         begin
           if IsValueOptionType(MatchedType) then
             CondStr := Format('%s.is_none', [ExprStr])
           else
             CondStr := Format('%s == NULL', [ExprStr]);
         end
-        else if (Length(PatStr) >= 2) and (PatStr[1] = '"') then
-          CondStr := Format('strcmp(%s, %s) == 0', [ExprStr, EscapeCString(Copy(PatStr, 2, Length(PatStr) - 2))])
-        else if (Length(PatStr) >= 2) and (PatStr[1] = '''') then
-          CondStr := Format('%s == %s', [ExprStr, PatStr])
-        else if (PatStr = 'true') or (PatStr = 'false') then
-          CondStr := Format('%s == %s', [ExprStr, PatStr])
-        else if (PatStr <> '') and ((PatStr[1] in ['0'..'9', '$', '%']) or ((PatStr[1] = '-') and (Length(PatStr) > 1))) then
-          CondStr := Format('%s == %s', [ExprStr, NormalizeIntLit(PatStr)])
-        else if Pos('.', PatStr) > 0 then
-          CondStr := Format('%s == %s', [ExprStr, StringReplace(PatStr, '.', '_', [rfReplaceAll])])
-        else if IsEnumName(MatchedType) then
-          CondStr := Format('%s == %s_%s', [ExprStr, MatchedType, PatStr])
         else
-          CondStr := Format('%s == %s', [ExprStr, PatStr]);
+        begin
+          CondStr := '';
+          for K := 0 to CaseNode.Pattern.Items.Count - 1 do
+          begin
+            PatItem := Trim(CaseNode.Pattern.Items[K]);
+            if (Pos('..', PatItem) > 0) and (Length(PatItem) > 0) and (PatItem[1] <> '"') then
+            begin
+              P2 := Pos('..', PatItem);
+              LoStr := Trim(Copy(PatItem, 1, P2 - 1));
+              HiStr := Trim(Copy(PatItem, P2 + 2, Length(PatItem)));
+              LoExpr := FormatMatchAtom(LoStr, MatchedType);
+              HiExpr := FormatMatchAtom(HiStr, MatchedType);
+              ItemCond := Format('(%s >= %s && %s <= %s)', [ExprStr, LoExpr, ExprStr, HiExpr]);
+            end
+            else if (Length(PatItem) >= 2) and (PatItem[1] = '"') then
+              ItemCond := Format('strcmp(%s, %s) == 0', [ExprStr, EscapeCString(Copy(PatItem, 2, Length(PatItem) - 2))])
+            else
+              ItemCond := Format('%s == %s', [ExprStr, FormatMatchAtom(PatItem, MatchedType)]);
+            if K > 0 then CondStr := CondStr + ' || ';
+            CondStr := CondStr + ItemCond;
+          end;
+        end;
 
         Emit(Prefix + CondStr + ') {');
         IncIndent;
@@ -2691,6 +2928,103 @@ begin
   Emit('    return res;');
   Emit('}');
   Emit('');
+  Emit('static inline char* AetherStrTrim(const char* s) {');
+  Emit('    if (!s) { char* e = (char*)malloc(1); e[0] = ''\0''; return e; }');
+  Emit('    size_t start = 0; size_t len = strlen(s);');
+  Emit('    while (start < len && (s[start] == '' '' || s[start] == ''\t'' || s[start] == ''\n'' || s[start] == ''\r'')) start++;');
+  Emit('    while (len > start && (s[len - 1] == '' '' || s[len - 1] == ''\t'' || s[len - 1] == ''\n'' || s[len - 1] == ''\r'')) len--;');
+  Emit('    size_t out_len = len - start;');
+  Emit('    char* res = (char*)malloc(out_len + 1);');
+  Emit('    if (out_len > 0) memcpy(res, s + start, out_len);');
+  Emit('    res[out_len] = ''\0'';');
+  Emit('    return res;');
+  Emit('}');
+  Emit('');
+  Emit('static inline char* AetherUpperCase(const char* s) {');
+  Emit('    if (!s) { char* e = (char*)malloc(1); e[0] = ''\0''; return e; }');
+  Emit('    size_t len = strlen(s);');
+  Emit('    char* res = (char*)malloc(len + 1);');
+  Emit('    for (size_t i = 0; i < len; i++) {');
+  Emit('        char c = s[i];');
+  Emit('        res[i] = (c >= ''a'' && c <= ''z'') ? (char)(c - 32) : c;');
+  Emit('    }');
+  Emit('    res[len] = ''\0'';');
+  Emit('    return res;');
+  Emit('}');
+  Emit('');
+  Emit('static inline char* AetherLowerCase(const char* s) {');
+  Emit('    if (!s) { char* e = (char*)malloc(1); e[0] = ''\0''; return e; }');
+  Emit('    size_t len = strlen(s);');
+  Emit('    char* res = (char*)malloc(len + 1);');
+  Emit('    for (size_t i = 0; i < len; i++) {');
+  Emit('        char c = s[i];');
+  Emit('        res[i] = (c >= ''A'' && c <= ''Z'') ? (char)(c + 32) : c;');
+  Emit('    }');
+  Emit('    res[len] = ''\0'';');
+  Emit('    return res;');
+  Emit('}');
+  Emit('');
+  Emit('static inline bool AetherStartsWith(const char* s, const char* prefix) {');
+  Emit('    if (!s || !prefix) return false;');
+  Emit('    size_t sl = strlen(s), pl = strlen(prefix);');
+  Emit('    if (pl > sl) return false;');
+  Emit('    for (size_t i = 0; i < pl; i++) if (s[i] != prefix[i]) return false;');
+  Emit('    return true;');
+  Emit('}');
+  Emit('');
+  Emit('static inline bool AetherEndsWith(const char* s, const char* suffix) {');
+  Emit('    if (!s || !suffix) return false;');
+  Emit('    size_t sl = strlen(s), sufl = strlen(suffix);');
+  Emit('    if (sufl > sl) return false;');
+  Emit('    for (size_t i = 0; i < sufl; i++) if (s[sl - sufl + i] != suffix[i]) return false;');
+  Emit('    return true;');
+  Emit('}');
+  Emit('');
+  Emit('static inline int32_t AetherStrIndexOf(const char* s, const char* sub) {');
+  Emit('    if (!s || !sub) return -1;');
+  Emit('    size_t sl = strlen(s), subl = strlen(sub);');
+  Emit('    if (subl == 0) return 0;');
+  Emit('    if (subl > sl) return -1;');
+  Emit('    for (size_t i = 0; i <= sl - subl; i++) {');
+  Emit('        bool ok = true;');
+  Emit('        for (size_t j = 0; j < subl; j++) {');
+  Emit('            if (s[i + j] != sub[j]) { ok = false; break; }');
+  Emit('        }');
+  Emit('        if (ok) return (int32_t)i;');
+  Emit('    }');
+  Emit('    return -1;');
+  Emit('}');
+  Emit('');
+  Emit('static inline bool AetherStrContains(const char* s, const char* sub) {');
+  Emit('    return AetherStrIndexOf(s, sub) >= 0;');
+  Emit('}');
+  Emit('');
+  Emit('static inline char* AetherStrReplace(const char* s, const char* old_s, const char* new_s) {');
+  Emit('    if (!s) { char* e = (char*)malloc(1); e[0] = ''\0''; return e; }');
+  Emit('    size_t sl = strlen(s);');
+  Emit('    if (!old_s || old_s[0] == ''\0'') {');
+  Emit('        char* cp = (char*)malloc(sl + 1); memcpy(cp, s, sl + 1); return cp;');
+  Emit('    }');
+  Emit('    const char* rep = new_s ? new_s : "";');
+  Emit('    size_t oldl = strlen(old_s), repl = strlen(rep), count = 0;');
+  Emit('    for (size_t i = 0; i + oldl <= sl; ) {');
+  Emit('        bool m = true;');
+  Emit('        for (size_t j = 0; j < oldl; j++) if (s[i + j] != old_s[j]) { m = false; break; }');
+  Emit('        if (m) { count++; i += oldl; } else i++;');
+  Emit('    }');
+  Emit('    size_t out_len = sl + count * repl - count * oldl;');
+  Emit('    char* res = (char*)malloc(out_len + 1);');
+  Emit('    size_t pos = 0;');
+  Emit('    for (size_t i = 0; i < sl; ) {');
+  Emit('        bool m = (i + oldl <= sl);');
+  Emit('        if (m) for (size_t j = 0; j < oldl; j++) if (s[i + j] != old_s[j]) { m = false; break; }');
+  Emit('        if (m) { if (repl > 0) { memcpy(res + pos, rep, repl); pos += repl; } i += oldl; }');
+  Emit('        else { res[pos++] = s[i++]; }');
+  Emit('    }');
+  Emit('    res[pos] = ''\0'';');
+  Emit('    return res;');
+  Emit('}');
+  Emit('');
   Emit('#if defined(__wasm__)');
   Emit('static inline bool AetherFileExists(const char* path) { (void)path; return false; }');
   Emit('static inline char* AetherReadFile(const char* path) { (void)path; char* empty = (char*)malloc(1); if (empty) empty[0] = ''\0''; return empty; }');
@@ -2851,6 +3185,31 @@ begin
   Emit('    }');
   Emit('    hdr->len = new_len;');
   Emit('    return (void*)(hdr + 1);');
+  Emit('}');
+  Emit('');
+  Emit('static inline void* AetherDynDelete(void* arr, size_t elem_size, int64_t idx) {');
+  Emit('    size_t n = AetherDynLen(arr);');
+  Emit('    if (!arr || idx < 0 || (size_t)idx >= n) return arr;');
+  Emit('    char* p = (char*)arr;');
+  Emit('    size_t tail = (n - 1 - (size_t)idx) * elem_size;');
+  Emit('    char* dst = p + (size_t)idx * elem_size;');
+  Emit('    char* src = dst + elem_size;');
+  Emit('    for (size_t i = 0; i < tail; i++) dst[i] = src[i];');
+  Emit('    return AetherDynSetLength(arr, elem_size, n - 1);');
+  Emit('}');
+  Emit('');
+  Emit('static inline void* AetherDynSlice(const void* arr, size_t elem_size, int64_t start, int64_t count) {');
+  Emit('    size_t n = AetherDynLen(arr);');
+  Emit('    if (!arr || count <= 0 || start >= (int64_t)n) {');
+  Emit('        return AetherDynSetLength(NULL, elem_size, 0);');
+  Emit('    }');
+  Emit('    if (start < 0) { count += start; start = 0; }');
+  Emit('    if (count <= 0) return AetherDynSetLength(NULL, elem_size, 0);');
+  Emit('    size_t actual = (size_t)count;');
+  Emit('    if ((size_t)start + actual > n) actual = n - (size_t)start;');
+  Emit('    void* res = AetherDynSetLength(NULL, elem_size, actual);');
+  Emit('    memcpy(res, (const char*)arr + (size_t)start * elem_size, actual * elem_size);');
+  Emit('    return res;');
   Emit('}');
   Emit('');
   Emit('#if defined(__wasm__)');

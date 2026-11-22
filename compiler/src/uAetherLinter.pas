@@ -146,6 +146,12 @@ begin
   begin
     for I := 0 to TASTSetLiteralExpr(Expr).Elements.Count - 1 do
       CollectIdentifiersInExpr(TASTExpr(TASTSetLiteralExpr(Expr).Elements[I]), IdentList);
+  end
+  else if Expr is TASTIfExpr then
+  begin
+    CollectIdentifiersInExpr(TASTIfExpr(Expr).Condition, IdentList);
+    CollectIdentifiersInExpr(TASTIfExpr(Expr).ThenExpr, IdentList);
+    CollectIdentifiersInExpr(TASTIfExpr(Expr).ElseExpr, IdentList);
   end;
 end;
 
@@ -352,7 +358,13 @@ var
         CheckExprForRedundancies(TASTCallArg(CallNode.Args[SubI]).Expr);
     end
     else if Expr is TASTMemberAccessExpr then
-      CheckExprForRedundancies(TASTMemberAccessExpr(Expr).Target);
+      CheckExprForRedundancies(TASTMemberAccessExpr(Expr).Target)
+    else if Expr is TASTIfExpr then
+    begin
+      CheckExprForRedundancies(TASTIfExpr(Expr).Condition);
+      CheckExprForRedundancies(TASTIfExpr(Expr).ThenExpr);
+      CheckExprForRedundancies(TASTIfExpr(Expr).ElseExpr);
+    end;
   end;
 
   procedure CheckStmtListForDeadCode(List: TASTNodeList);
