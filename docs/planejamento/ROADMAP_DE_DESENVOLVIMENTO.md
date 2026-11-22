@@ -441,22 +441,22 @@ Este documento traça o status oficial de desenvolvimento do compilador e as pr�
 
 ---
 
-### ⏳ Fase 35: Exportação de Bibliotecas Nativas Compartilhadas (`.dll` / `.so` / `.dylib`) & Gerador de Headers C (`.h`)
-- [ ] **Compilação de Shared Libraries (`cdylib` / `--lib`)**:
+### ✅ Fase 35: Exportação de Bibliotecas Nativas Compartilhadas (`.dll` / `.so` / `.dylib`) & Gerador de Headers C (`.h`)
+- [x] **Compilação de Shared Libraries (`cdylib` / `--lib`)**:
   - Configuração no manifesto `aether.json` (`"type": "cdylib"` ou `"type": "lib"`) e flags de linha de comando (`aetherc build --lib`, `--shared`).
   - Suporte de backend duplo:
     - **Free Pascal**: Emissão de arquivo `library <Nome>; ... exports ... end.` compilando para `.dll` (Windows), `.so` (Linux) ou `.dylib` (macOS).
     - **C99 (GCC / Clang)**: Emissão com decoradores de exportação (`__declspec(dllexport)` no Windows, `__attribute__((visibility("default")))` no Linux) e compilação com `-shared -fPIC`.
   - Anotação/palavra-chave `export function` com convenção de chamada explícita (`cdecl` / `stdcall`).
-- [ ] **Gerador Canônico de Cabeçalhos C (`.h`)**:
+- [x] **Gerador Canônico de Cabeçalhos C (`.h`)**:
   - Subcomando `aetherc emit-header [arquivo] [opcoes]` ou flag `aetherc build --emit-header`.
   - Geração automática de arquivo `.h` compatível com C99 e C++ (`#ifdef __cplusplus extern "C" { #endif`).
-  - Mapeamento estrito de tipos: inteiros (`int32_t`, `int64_t`, `uint32_t`), floats (`float`, `double`), booleanos (`bool`), records exportados (`typedef struct { ... } Nome_t;`) e ponteiros com checagem de posse.
-- [ ] **Interoperabilidade Externa Validada**:
+  - Mapeamento estrito de tipos: inteiros (`int32_t`, `int64_t`, `uint32_t`), floats (`float`, `double`), booleanos (`bool`), records exportados (`typedef struct { ... } Nome;`) e ponteiros com checagem de posse.
+- [x] **Interoperabilidade Externa Validada**:
   - Validação prática de consumo da DLL/SO compilada em Aether a partir de outras linguagens:
-    - Script em Python via `ctypes`.
-    - Executável C puro consumindo o `.h` gerado.
-    - Programa Object Pascal nativo via `external`.
+    - Script em Python via `ctypes` testando chamadas diretas e troca de structs (`Ponto2D`).
+    - Executável C puro consumindo a DLL e o `.h` gerado.
+    - Suporte bidirecional verificado em ambos os backends (Free Pascal e GCC).
 
 ---
 

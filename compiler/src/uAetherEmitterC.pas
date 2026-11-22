@@ -921,7 +921,7 @@ end;
 
 procedure TAetherEmitterC.EmitFunction(Func: TASTFunction);
 var
-  ParamListStr: string;
+  ParamListStr, ExportPrefix: string;
   I: Integer;
   Param: TASTParam;
   ModStr: string;
@@ -994,12 +994,16 @@ begin
 
   if ParamListStr = '' then ParamListStr := 'void';
 
+  ExportPrefix := '';
+  if Func.IsExport then
+    ExportPrefix := 'AETHER_EXPORT ';
+
   if Func.IsAsync then
-    Emit(Format('AetherTask %s(%s) {', [Func.Name, ParamListStr]))
+    Emit(Format('%sAetherTask %s(%s) {', [ExportPrefix, Func.Name, ParamListStr]))
   else if (Func.ReturnType = 'Void') or (Func.ReturnType = '') then
-    Emit(Format('void %s(%s) {', [Func.Name, ParamListStr]))
+    Emit(Format('%svoid %s(%s) {', [ExportPrefix, Func.Name, ParamListStr]))
   else
-    Emit(Format('%s %s(%s) {', [EmitTypeRef(Func.ReturnType), Func.Name, ParamListStr]));
+    Emit(Format('%s%s %s(%s) {', [ExportPrefix, EmitTypeRef(Func.ReturnType), Func.Name, ParamListStr]));
   IncIndent;
 
   // Asserts de Pre-condicao
@@ -1007,6 +1011,12 @@ begin
     Emit(Format('assert(%s);', [EmitExpr(TASTExpr(Func.Requires[I]))]));
 
   // Variaveis Locais
+  if (Func.ReturnType <> 'Void') and (Func.ReturnType <> '') and (not Func.IsAsync) then
+  begin
+    Emit(Format('%s result;', [EmitTypeRef(Func.ReturnType)]));
+    Emit('memset(&result, 0, sizeof(result));');
+  end;
+
   for I := 0 to Func.LocalVars.Count - 1 do
   begin
     VarDecl := TASTVarDecl(Func.LocalVars[I]);
@@ -1016,6 +1026,11 @@ begin
   // Corpo
   for I := 0 to Func.Body.Count - 1 do
     EmitStmt(TASTStmt(Func.Body[I]));
+
+  if (Func.ReturnType <> 'Void') and (Func.ReturnType <> '') and (not Func.IsAsync) then
+  begin
+    Emit('return result;');
+  end;
 
   DecIndent;
   Emit('}');
@@ -1053,11 +1068,20 @@ var
   I, J: Integer;
   Func: TASTFunction;
   Param: TASTParam;
-  ParamListStr, ModStr: string;
+  ParamListStr, ModStr, ExportPrefix: string;
+  HasExports: Boolean;
 begin
   FModule := AModule;
   FOutput.Clear;
   FIndent := 0;
+
+  HasExports := False;
+  for I := 0 to AModule.Functions.Count - 1 do
+    if TASTFunction(AModule.Functions[I]).IsExport then
+    begin
+      HasExports := True;
+      Break;
+    end;
 
   Emit('// Codigo gerado automaticamente pelo Compilador Aether (aetherc)');
   Emit('// Alvo: C99 / GCC (MSYS2)');
@@ -1130,6 +1154,12 @@ begin
   Emit('    const char* str_val;');
   Emit('    void* ptr_val;');
   Emit('} AetherTask;');
+  Emit('');
+  Emit('#if defined(_WIN32) || defined(__CYGWIN__)');
+  Emit('  #define AETHER_EXPORT __declspec(dllexport)');
+  Emit('#else');
+  Emit('  #define AETHER_EXPORT __attribute__((visibility("default")))');
+  Emit('#endif');
   Emit('');
 
   // Headers adicionais de C (import c)
@@ -1546,12 +1576,14 @@ begin
         if J < Func.Params.Count - 1 then
           ParamListStr := ParamListStr + ', ';
       end;
+      ExportPrefix := '';
+      if Func.IsExport then ExportPrefix := 'AETHER_EXPORT ';
       if Func.IsAsync then
-        Emit(Format('AetherTask %s(%s);', [Func.Name, ParamListStr]))
+        Emit(Format('%sAetherTask %s(%s);', [ExportPrefix, Func.Name, ParamListStr]))
       else if (Func.ReturnType = 'Void') or (Func.ReturnType = '') then
-        Emit(Format('void %s(%s);', [Func.Name, ParamListStr]))
+        Emit(Format('%svoid %s(%s);', [ExportPrefix, Func.Name, ParamListStr]))
       else
-        Emit(Format('%s %s(%s);', [EmitTypeRef(Func.ReturnType), Func.Name, ParamListStr]));
+        Emit(Format('%s%s %s(%s);', [ExportPrefix, EmitTypeRef(Func.ReturnType), Func.Name, ParamListStr]));
     end;
   end;
   Emit('');
@@ -1563,7 +1595,7 @@ begin
   // Bloco do Programa
   if Assigned(AModule.ProgramBlock) then
     EmitProgramBlock(AModule.ProgramBlock)
-  else
+  else if not HasExports then
   begin
     Emit('#ifndef __wasm__');
     Emit('int main(int argc, char** argv) {');

@@ -24,7 +24,8 @@ uAetherIncremental,
 uAetherOptimizer,
 uAetherBootstrap,
 uAetherDoc,
-uAetherRegistry;
+uAetherRegistry,
+uAetherHeaderGen;
 
 Procedure PrintBanner;
 Begin
@@ -44,6 +45,7 @@ Begin
   WriteLn('  test [filtro]     Executa testes unitarios (arquivos individuais ou pasta tests/)');
   WriteLn('  fmt [caminho]     Formata codigo Aether segundo as normas canonicas (--check para CI/CD)');
   WriteLn('  doc [caminho]     Gera documentacao canonica do projeto (HTML, Markdown e Doctests)');
+  WriteLn('  emit-header <arq> Gera cabecalho C (.h) compativel com ANSI C/C++');
   WriteLn('  clean             Limpa artefatos de build (bin/ e generated/) do projeto');
   WriteLn('  bootstrap         Executa ciclo completo de auto-hospedagem (Stage 1, 2 e 3)');
   WriteLn('');
@@ -212,6 +214,8 @@ Var
   GlobalTargetKind: string = 'pascal';
   GlobalBackendOverride: string = '';
   GlobalEmitHtmlWrapper: Boolean = False;
+  GlobalOptionSharedLib: Boolean = False;
+  GlobalEmitHeader: Boolean = False;
 
 Procedure InitGlobalPaths;
 Begin
@@ -627,7 +631,8 @@ Procedure CompileFile(Const SourceFile: String; Const TargetMode: String; CheckO
                       SilentBanner: Boolean; Incremental: Boolean = False;
                       ForceRebuild: Boolean = False; ReleaseMode: Boolean = False;
                       RunOptimizer: Boolean = False; Const BackendChoice: String = '';
-                      Const CCompilerChoice: String = '');
+                      Const CCompilerChoice: String = ''; AsLibrary: Boolean = False;
+                      EmitHeader: Boolean = False);
 
 Var 
   Source: string;
@@ -703,6 +708,17 @@ Begin
       FinalExe := BaseProjDir + PathDelim + 'bin' + PathDelim + ChangeFileExt(ExtractFileName(SourceFile), '.js')
     Else
       FinalExe := BaseProjDir + PathDelim + 'bin' + PathDelim + ChangeFileExt(ExtractFileName(SourceFile), '.exe');
+  End;
+
+  If AsLibrary Or GlobalOptionSharedLib Then
+  Begin
+    {$IFDEF MSWINDOWS}
+    If LowerCase(ExtractFileExt(FinalExe)) <> '.dll' Then
+      FinalExe := ChangeFileExt(FinalExe, '.dll');
+    {$ELSE}
+    If (LowerCase(ExtractFileExt(FinalExe)) <> '.so') and (LowerCase(ExtractFileExt(FinalExe)) <> '.dylib') Then
+      FinalExe := ExtractFileDir(FinalExe) + PathDelim + 'lib' + ChangeFileExt(ExtractFileName(FinalExe), '.so');
+    {$ENDIF}
   End;
 
   // Checagem antecipada de cache incremental (0 ms rebuild)
@@ -1010,10 +1026,23 @@ Begin
     CopySharedLibraries(BaseProjDir, FinalExe, GlobalSharedLibs);
     If Incremental Then
       SaveBuildCache(BaseProjDir, SourceFile, TargetBackendStr, FinalExe, DependencyFiles);
+    If EmitHeader Or GlobalEmitHeader Or AsLibrary Or GlobalOptionSharedLib Then
+    Begin
+      SaveCHeaderToFile(ModuleNode, ChangeFileExt(FinalExe, '.h'));
+      If Not SilentBanner Then
+        WriteLn('  --> ' + ChangeFileExt(FinalExe, '.h') + ' (C Header)');
+    End;
     If Not SilentBanner Then
     Begin
       WriteLn('');
-      If EffectiveCComp = 'clang' Then
+      If AsLibrary Or GlobalOptionSharedLib Or (LowerCase(ExtractFileExt(FinalExe)) = '.dll') Or (LowerCase(ExtractFileExt(FinalExe)) = '.so') Or (LowerCase(ExtractFileExt(FinalExe)) = '.dylib') Then
+      Begin
+        If EffectiveCComp = 'clang' Then
+          WriteLn('SUCESSO! Shared Library nativa gerada via Clang:')
+        Else
+          WriteLn('SUCESSO! Shared Library nativa gerada via GCC:');
+      End
+      Else If EffectiveCComp = 'clang' Then
         WriteLn('SUCESSO! Executavel nativo gerado via Clang:')
       Else
         WriteLn('SUCESSO! Executavel nativo gerado via GCC:');
@@ -1036,7 +1065,7 @@ Begin
   IntermediateFile := GenDir + PathDelim + ChangeFileExt(ExtractFileName(SourceFile), '.pas');
   EmitterPas := TAetherEmitterPascal.Create;
   Try
-    GeneratedCode := EmitterPas.Generate(ModuleNode, GlobalAsUnit);
+    GeneratedCode := EmitterPas.Generate(ModuleNode, GlobalAsUnit, AsLibrary Or GlobalOptionSharedLib);
   Finally
     EmitterPas.Free;
   End;
@@ -1079,10 +1108,19 @@ Begin
       CopySharedLibraries(BaseProjDir, FinalExe, GlobalSharedLibs);
       If Incremental Then
         SaveBuildCache(BaseProjDir, SourceFile, TargetBackendStr, FinalExe, DependencyFiles);
+      If EmitHeader Or GlobalEmitHeader Or AsLibrary Or GlobalOptionSharedLib Then
+      Begin
+        SaveCHeaderToFile(ModuleNode, ChangeFileExt(FinalExe, '.h'));
+        If Not SilentBanner Then
+          WriteLn('  --> ' + ChangeFileExt(FinalExe, '.h') + ' (C Header)');
+      End;
       If Not SilentBanner Then
       Begin
         WriteLn('');
-        WriteLn('SUCESSO! Executavel nativo gerado:');
+        If AsLibrary Or GlobalOptionSharedLib Or (LowerCase(ExtractFileExt(FinalExe)) = '.dll') Or (LowerCase(ExtractFileExt(FinalExe)) = '.so') Or (LowerCase(ExtractFileExt(FinalExe)) = '.dylib') Then
+          WriteLn('SUCESSO! Shared Library nativa gerada via Free Pascal:')
+        Else
+          WriteLn('SUCESSO! Executavel nativo gerado:');
         WriteLn('  --> ' + FinalExe);
       End;
     End;
@@ -1107,12 +1145,13 @@ Procedure CompileFile(Const SourceFile: String; TargetPascal: Boolean; CheckOnly
                       , DumpASTOnly: Boolean; Const OutputExeName: String;
                       SilentBanner: Boolean; Incremental: Boolean = False;
                       ForceRebuild: Boolean = False; ReleaseMode: Boolean = False;
-                      RunOptimizer: Boolean = False);
+                      RunOptimizer: Boolean = False; AsLibrary: Boolean = False;
+                      EmitHeader: Boolean = False);
 Begin
   If TargetPascal Then
-    CompileFile(SourceFile, 'pascal', CheckOnly, DumpASTOnly, OutputExeName, SilentBanner, Incremental, ForceRebuild, ReleaseMode, RunOptimizer, '', '')
+    CompileFile(SourceFile, 'pascal', CheckOnly, DumpASTOnly, OutputExeName, SilentBanner, Incremental, ForceRebuild, ReleaseMode, RunOptimizer, '', '', AsLibrary, EmitHeader)
   Else
-    CompileFile(SourceFile, 'c', CheckOnly, DumpASTOnly, OutputExeName, SilentBanner, Incremental, ForceRebuild, ReleaseMode, RunOptimizer, '', '');
+    CompileFile(SourceFile, 'c', CheckOnly, DumpASTOnly, OutputExeName, SilentBanner, Incremental, ForceRebuild, ReleaseMode, RunOptimizer, '', '', AsLibrary, EmitHeader);
 End;
 
 Procedure EmitFile(Const SourceFile: String; TargetPascal: Boolean; Const CustomOutput: String;
@@ -1528,6 +1567,34 @@ Begin
   End;
 End;
 
+Procedure HandleEmitHeaderCommand(Const SourcePath, OutPath: String);
+Var
+  Source, DestPath: string;
+  Lexer: TAetherLexer;
+  Parser: TAetherParser;
+  ModuleNode: TASTModule;
+Begin
+  ModuleNode := nil;
+  DestPath := OutPath;
+  If DestPath = '' Then
+    DestPath := ChangeFileExt(SourcePath, '.h');
+
+  Source := LoadFileContent(SourcePath);
+  Lexer := TAetherLexer.Create(Source);
+  Parser := TAetherParser.Create(Lexer);
+  Try
+    ModuleNode := Parser.ParseModule;
+    SaveCHeaderToFile(ModuleNode, DestPath);
+    PrintBanner;
+    WriteLn('Cabecalho C (C99/C++) gerado com sucesso:');
+    WriteLn('  --> ' + DestPath);
+  Finally
+    ModuleNode.Free;
+    Parser.Free;
+    Lexer.Free;
+  End;
+End;
+
 Var 
   InputFile: string;
   OutputExe: string;
@@ -1540,13 +1607,15 @@ Var
   OptionForce: Boolean;
   OptionRelease: Boolean;
   OptionOptimize: Boolean;
+  OptionSharedLib: Boolean;
+  OptionEmitHeader: Boolean;
   IsRunCommand: Boolean;
   ProjConfig: TAetherProjectConfig;
   I, J: Integer;
   Arg: string;
   PkgName, OptPath, OptGit, OptVer, FilterName, SubCmd: string;
   OptRegistry, SearchTerm: string;
-  IsDryRun: Boolean;
+  IsDryRun, TargetIsLib: Boolean;
   TargetEntry, TargetOut, TargetBackend, TargetCC: string;
   EmitTargetPascal, EmitToStdout, HasTargetSpecified, EmitAsUnit, EmitSilent, EmitWatch: Boolean;
   EmitSource, EmitOut, EmitOutDir: string;
@@ -1563,6 +1632,8 @@ Begin
   OptionForce := False;
   OptionRelease := False;
   OptionOptimize := False;
+  OptionSharedLib := False;
+  OptionEmitHeader := False;
   IsRunCommand := False;
 
   // Checa comando de formatacao: fmt [caminho] [--check]
@@ -1624,6 +1695,51 @@ Begin
         on E: Exception Do
           Begin
             WriteLn(ErrOutput, 'Erro durante o processo de bootstrap: ', E.Message);
+            Halt(1);
+          End;
+      End;
+    End;
+
+  // Checa comando de emissao de cabecalho C: emit-header <arquivo> [opcoes]
+  If (ParamCount >= 1) And ((LowerCase(ParamStr(1)) = 'emit-header') Or ((LowerCase(ParamStr(1)) = 'emit') And (ParamCount >= 2) And (LowerCase(ParamStr(2)) = 'header'))) Then
+    Begin
+      EmitSource := '';
+      EmitOut := '';
+      I := 2;
+      If LowerCase(ParamStr(1)) = 'emit' Then Inc(I);
+      While I <= ParamCount Do
+        Begin
+          Arg := ParamStr(I);
+          If (Arg = '-o') And (I + 1 <= ParamCount) Then
+            Begin
+              Inc(I);
+              EmitOut := ParamStr(I);
+            End
+          Else If Pos('--output=', Arg) = 1 Then
+            EmitOut := Copy(Arg, 10, Length(Arg))
+          Else If EmitSource = '' Then
+            EmitSource := Arg;
+          Inc(I);
+        End;
+
+      If EmitSource = '' Then
+        Begin
+          PrintBanner;
+          WriteLn(ErrOutput, 'Erro: Nenhum arquivo fonte .aeth especificado.');
+          WriteLn('Uso: aetherc emit-header <arquivo.aeth> [-o <saida.h>]');
+          Halt(1);
+        End;
+
+      If EmitOut = '' Then
+        EmitOut := ChangeFileExt(EmitSource, '.h');
+
+      Try
+        HandleEmitHeaderCommand(EmitSource, EmitOut);
+        Halt(0);
+      Except
+        on E: Exception Do
+          Begin
+            WriteLn(ErrOutput, 'Erro ao gerar cabecalho C: ', E.Message);
             Halt(1);
           End;
       End;
@@ -2176,6 +2292,8 @@ If (ParamCount >= 1) And ((LowerCase(ParamStr(1)) = 'build') Or (LowerCase(
         Else If Arg = '--incremental' Then OptionIncremental := True
         Else If Arg = '--no-incremental' Then OptionIncremental := False
         Else If Arg = '--force' Then OptionForce := True
+        Else If (Arg = '--lib') Or (Arg = '--shared') Then OptionSharedLib := True
+        Else If Arg = '--emit-header' Then OptionEmitHeader := True
         Else If Arg = '--release' Then
         Begin
           OptionRelease := True;
@@ -2191,6 +2309,9 @@ If (ParamCount >= 1) And ((LowerCase(ParamStr(1)) = 'build') Or (LowerCase(
                End;
         Inc(I);
       End;
+
+    If (ProjConfig.ProjectType = 'cdylib') Or (ProjConfig.ProjectType = 'lib') Then
+      OptionSharedLib := True;
 
     If (GlobalOutBinDir <> '') And (OutputExe = ProjConfig.RootDir + PathDelim + StringReplace(ProjConfig.Output, '/', PathDelim, [rfReplaceAll])) Then
       OutputExe := IncludeTrailingPathDelimiter(GlobalOutBinDir) + ExtractFileName(OutputExe);
@@ -2216,25 +2337,29 @@ If (ParamCount >= 1) And ((LowerCase(ParamStr(1)) = 'build') Or (LowerCase(
           Else
             TargetCC := ProjConfig.CCompiler;
 
+          TargetIsLib := (ProjConfig.Targets[J].TargetType = 'cdylib') Or (ProjConfig.Targets[J].TargetType = 'lib') Or OptionSharedLib;
+
           CompileFile(TargetEntry, ProjConfig.Targets[J].Target, OptionCheckOnly, False,
                       TargetOut, OptionJSONDiag, OptionIncremental, OptionForce,
-                      OptionRelease, OptionOptimize, ProjConfig.Targets[J].Backend, TargetCC);
+                      OptionRelease, OptionOptimize, ProjConfig.Targets[J].Backend, TargetCC,
+                      TargetIsLib, OptionEmitHeader);
         End;
       End
       Else
       Begin
         CompileFile(InputFile, GlobalTargetKind, OptionCheckOnly, False,
                     OutputExe, OptionJSONDiag, OptionIncremental, OptionForce,
-                    OptionRelease, OptionOptimize, GlobalBackendOverride, ProjConfig.CCompiler);
+                    OptionRelease, OptionOptimize, GlobalBackendOverride, ProjConfig.CCompiler,
+                    OptionSharedLib, OptionEmitHeader);
       End;
 
       If IsRunCommand And Not OptionCheckOnly Then
         Begin
-          If GlobalAsUnit Or (GlobalTargetKind = 'wasm') Or (GlobalTargetKind = 'js') Then
+          If OptionSharedLib Or (LowerCase(ExtractFileExt(OutputExe)) = '.dll') Or (LowerCase(ExtractFileExt(OutputExe)) = '.so') Or (LowerCase(ExtractFileExt(OutputExe)) = '.dylib') Or GlobalAsUnit Or (GlobalTargetKind = 'wasm') Or (GlobalTargetKind = 'js') Then
             Begin
               WriteLn('');
-              WriteLn(Format('Aviso: Projeto compilado para target "%s".', [GlobalTargetKind]));
-              WriteLn('Modulos Web e Units nao possuem ponto de entrada executavel nativo direto para "run".');
+              WriteLn('Aviso: Projeto compilado para biblioteca compartilhada, unit ou modulo Web.');
+              WriteLn('Bibliotecas compartilhadas nao possuem ponto de entrada executavel nativo direto para "run".');
             End
           Else
             Begin
@@ -2334,6 +2459,10 @@ While I <= ParamCount Do
            OptionIncremental := False
     Else If Arg = '--force' Then
            OptionForce := True
+    Else If (Arg = '--lib') Or (Arg = '--shared') Then
+           OptionSharedLib := True
+    Else If Arg = '--emit-header' Then
+           OptionEmitHeader := True
     Else If Arg = '--release' Then
            Begin
              OptionRelease := True;
@@ -2382,7 +2511,8 @@ Try
 
   CompileFile(InputFile, GlobalTargetKind, OptionCheckOnly, OptionDumpAST,
               OutputExe, OptionJSONDiag, OptionIncremental, OptionForce,
-              OptionRelease, OptionOptimize, GlobalBackendOverride, GlobalCCompiler);
+              OptionRelease, OptionOptimize, GlobalBackendOverride, GlobalCCompiler,
+              OptionSharedLib, OptionEmitHeader);
 Except
   on E: EAetherBorrowError Do
         Begin

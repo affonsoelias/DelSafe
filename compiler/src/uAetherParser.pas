@@ -398,39 +398,59 @@ var
   FuncName, ReturnType, ParamName, ParamType, FDoc: string;
   FLine, FCol: Integer;
   Ownership: TOwnershipKind;
-  IsExt, IsAsyncFunc: Boolean;
-  ExtLib, ExtAbi: string;
+  IsExt, IsAsyncFunc, IsExportFunc: Boolean;
+  ExtLib, ExtAbi, ExportAbi: string;
 begin
   FLine := FCurTok.Line;
   FCol := FCurTok.Col;
   FDoc := FCurTok.DocComment;
   IsExt := False;
   IsAsyncFunc := False;
+  IsExportFunc := False;
   ExtLib := '';
   ExtAbi := 'c';
+  ExportAbi := 'cdecl';
 
-  if Match(tokAsync) then
+  while Check(tokAsync) or Check(tokExtern) or Check(tokExport) do
   begin
-    IsAsyncFunc := True;
-    if (FDoc = '') and (FCurTok.DocComment <> '') then
-      FDoc := FCurTok.DocComment;
-  end;
-
-  if Match(tokExtern) then
-  begin
-    IsExt := True;
-    if (FDoc = '') and (FCurTok.DocComment <> '') then
-      FDoc := FCurTok.DocComment;
-    if Match(tokPascal) then
-      ExtAbi := 'pascal'
-    else if Check(tokIdentifier) and SameText(FCurTok.Value, 'c') then
+    if Match(tokAsync) then
     begin
-      Advance;
-      ExtAbi := 'c';
-    end;
+      IsAsyncFunc := True;
+      if (FDoc = '') and (FCurTok.DocComment <> '') then
+        FDoc := FCurTok.DocComment;
+    end
+    else if Match(tokExport) then
+    begin
+      IsExportFunc := True;
+      if (FDoc = '') and (FCurTok.DocComment <> '') then
+        FDoc := FCurTok.DocComment;
+      if Match(tokCdecl) or (Check(tokIdentifier) and SameText(FCurTok.Value, 'cdecl')) then
+      begin
+        if Check(tokIdentifier) then Advance;
+        ExportAbi := 'cdecl';
+      end
+      else if Check(tokIdentifier) and SameText(FCurTok.Value, 'stdcall') then
+      begin
+        Advance;
+        ExportAbi := 'stdcall';
+      end;
+    end
+    else if Match(tokExtern) then
+    begin
+      IsExt := True;
+      if (FDoc = '') and (FCurTok.DocComment <> '') then
+        FDoc := FCurTok.DocComment;
+      if Match(tokPascal) then
+        ExtAbi := 'pascal'
+      else if Check(tokIdentifier) and SameText(FCurTok.Value, 'c') then
+      begin
+        Advance;
+        ExtAbi := 'c';
+      end;
 
-    if Check(tokStringLiteral) then
-      ExtLib := Expect(tokStringLiteral).Value;
+      if Check(tokStringLiteral) then
+        ExtLib := Expect(tokStringLiteral).Value;
+    end;
   end;
 
   if (FDoc = '') and (FCurTok.DocComment <> '') then
@@ -443,8 +463,10 @@ begin
   Result.DocComment := FDoc;
   Result.IsAsync := IsAsyncFunc;
   Result.IsExtern := IsExt;
+  Result.IsExport := IsExportFunc;
   Result.ExternLib := ExtLib;
   Result.ExternAbi := ExtAbi;
+  Result.ExportAbi := ExportAbi;
   try
     // Parametro generico com bound opcional: function Imprimir<T: Printable>(...)
     if Match(tokLess) then
@@ -486,6 +508,31 @@ begin
     Expect(tokColon, 'Esperado ":" apos parametros da funcao');
     ReturnType := ParseTypeRef;
     Result.ReturnType := ReturnType;
+
+    // Modificadores opcionais apos retorno: export; cdecl; stdcall;
+    while Check(tokSemicolon) or Check(tokExport) or Check(tokCdecl) or (Check(tokIdentifier) and (SameText(FCurTok.Value, 'export') or SameText(FCurTok.Value, 'cdecl') or SameText(FCurTok.Value, 'stdcall'))) do
+    begin
+      if Match(tokSemicolon) then
+      begin
+        if not (Check(tokExport) or Check(tokCdecl) or (Check(tokIdentifier) and (SameText(FCurTok.Value, 'export') or SameText(FCurTok.Value, 'cdecl') or SameText(FCurTok.Value, 'stdcall')))) then
+          Break;
+      end
+      else if Match(tokExport) or (Check(tokIdentifier) and SameText(FCurTok.Value, 'export')) then
+      begin
+        if not Match(tokExport) then Advance;
+        Result.IsExport := True;
+      end
+      else if Match(tokCdecl) or (Check(tokIdentifier) and SameText(FCurTok.Value, 'cdecl')) then
+      begin
+        if not Match(tokCdecl) then Advance;
+        Result.ExportAbi := 'cdecl';
+      end
+      else if Check(tokIdentifier) and SameText(FCurTok.Value, 'stdcall') then
+      begin
+        Advance;
+        Result.ExportAbi := 'stdcall';
+      end;
+    end;
 
     // Se for assinatura de trait, nao possui contratos nem corpo
     if IsSignatureOnly then
@@ -1016,7 +1063,7 @@ begin
         Result.Traits.Add(ParseTraitDecl('', FCurTok.Line, FCurTok.Col))
       else if Check(tokImpl) then
         Result.Impls.Add(ParseImplDecl)
-      else if Check(tokFunction) or Check(tokExtern) or Check(tokAsync) then
+      else if Check(tokFunction) or Check(tokExtern) or Check(tokAsync) or Check(tokExport) then
         Result.Functions.Add(ParseFunction(False))
       else if Check(tokProgram) then
       begin

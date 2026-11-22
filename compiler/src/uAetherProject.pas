@@ -31,6 +31,7 @@ type
     Entry: string;
     Target: string;    // 'pascal', 'c', 'wasm', 'js'
     Backend: string;   // 'clang', 'fpc', 'gcc', 'pas2js'
+    TargetType: string; // 'bin', 'lib', 'cdylib'
     Output: string;
   end;
   TAetherTargetArray = array of TAetherTargetConfig;
@@ -39,6 +40,7 @@ type
     Name: string;
     Version: string;
     Description: string;
+    ProjectType: string; // 'bin' (default), 'lib', 'cdylib'
     Backend: string;
     CCompiler: string; // 'gcc' ou 'clang'
     Entry: string;
@@ -685,10 +687,20 @@ begin
         Config.Name := Obj.Get('name', ExtractFileName(RootDir));
         Config.Version := Obj.Get('version', '0.1.0');
         Config.Description := Obj.Get('description', '');
+        Config.ProjectType := LowerCase(Obj.Get('type', 'bin'));
         Config.Backend := LowerCase(Obj.Get('backend', 'pascal'));
         Config.CCompiler := LowerCase(Obj.Get('c_compiler', 'gcc'));
         Config.Entry := Obj.Get('entry', 'src' + PathDelim + 'main.aeth');
-        Config.Output := Obj.Get('output', 'bin' + PathDelim + Config.Name + '.exe');
+        if (Config.ProjectType = 'cdylib') or (Config.ProjectType = 'lib') then
+        begin
+          {$IFDEF MSWINDOWS}
+          Config.Output := Obj.Get('output', 'bin' + PathDelim + Config.Name + '.dll');
+          {$ELSE}
+          Config.Output := Obj.Get('output', 'bin' + PathDelim + 'lib' + Config.Name + '.so');
+          {$ENDIF}
+        end
+        else
+          Config.Output := Obj.Get('output', 'bin' + PathDelim + Config.Name + '.exe');
 
         DepsData := Obj.Find('dependencies');
         if Assigned(DepsData) and (DepsData is TJSONObject) then
@@ -756,6 +768,7 @@ begin
               Config.Targets[I].Entry := ItemObj.Get('entry', '');
               Config.Targets[I].Target := LowerCase(ItemObj.Get('target', 'pascal'));
               Config.Targets[I].Backend := LowerCase(ItemObj.Get('backend', ''));
+              Config.Targets[I].TargetType := LowerCase(ItemObj.Get('type', ''));
               Config.Targets[I].Output := ItemObj.Get('output', '');
             end;
           end;

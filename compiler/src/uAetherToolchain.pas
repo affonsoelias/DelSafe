@@ -422,7 +422,7 @@ function CompileWithGCC(const CSource, OutExe: string; var OutputLog: string; Re
                         LibDirs: TStrings = nil; Libs: TStrings = nil): Boolean;
 var
   Info: TToolchainInfo;
-  Params, ExtraIncludes, ExtraSources, ExtraLibs: string;
+  Params, ExtraIncludes, ExtraSources, ExtraLibs, SharedFlag: string;
   Code, I: Integer;
 begin
   Info := DetectToolchain;
@@ -431,6 +431,12 @@ begin
     OutputLog := 'Compilador C (GCC) nao encontrado no sistema.';
     Exit(False);
   end;
+
+  SharedFlag := '';
+  if (LowerCase(ExtractFileExt(OutExe)) = '.dll') or
+     (LowerCase(ExtractFileExt(OutExe)) = '.so') or
+     (LowerCase(ExtractFileExt(OutExe)) = '.dylib') then
+    SharedFlag := ' -shared -fPIC';
 
   ExtraIncludes := '';
   if Assigned(IncludePaths) then
@@ -466,17 +472,17 @@ begin
   if ReleaseMode then
   begin
     {$IFDEF MSWINDOWS}
-    Params := Format('-O3 -flto -s%s "%s"%s -o "%s"%s -lws2_32 -lm', [ExtraIncludes, CSource, ExtraSources, OutExe, ExtraLibs]);
+    Params := Format('-O3 -flto -s%s%s "%s"%s -o "%s"%s -lws2_32 -lm', [SharedFlag, ExtraIncludes, CSource, ExtraSources, OutExe, ExtraLibs]);
     {$ELSE}
-    Params := Format('-O3 -flto -s%s "%s"%s -o "%s"%s -lm', [ExtraIncludes, CSource, ExtraSources, OutExe, ExtraLibs]);
+    Params := Format('-O3 -flto -s%s%s "%s"%s -o "%s"%s -lm', [SharedFlag, ExtraIncludes, CSource, ExtraSources, OutExe, ExtraLibs]);
     {$ENDIF}
   end
   else
   begin
     {$IFDEF MSWINDOWS}
-    Params := Format('-O2%s "%s"%s -o "%s"%s -lws2_32 -lm', [ExtraIncludes, CSource, ExtraSources, OutExe, ExtraLibs]);
+    Params := Format('-O2%s%s "%s"%s -o "%s"%s -lws2_32 -lm', [SharedFlag, ExtraIncludes, CSource, ExtraSources, OutExe, ExtraLibs]);
     {$ELSE}
-    Params := Format('-O2%s "%s"%s -o "%s"%s -lm', [ExtraIncludes, CSource, ExtraSources, OutExe, ExtraLibs]);
+    Params := Format('-O2%s%s "%s"%s -o "%s"%s -lm', [SharedFlag, ExtraIncludes, CSource, ExtraSources, OutExe, ExtraLibs]);
     {$ENDIF}
   end;
   Code := RunCommandCapture(Info.GCCPath, Params, Info.MSYS2BinDir, OutputLog);
@@ -488,7 +494,7 @@ function CompileWithClang(const CSource, OutExe: string; var OutputLog: string; 
                           LibDirs: TStrings = nil; Libs: TStrings = nil): Boolean;
 var
   Info: TToolchainInfo;
-  Params, ExtraIncludes, ExtraSources, ExtraLibs: string;
+  Params, ExtraIncludes, ExtraSources, ExtraLibs, SharedFlag: string;
   Code, I: Integer;
 begin
   Info := DetectToolchain;
@@ -497,6 +503,12 @@ begin
     OutputLog := 'Compilador Clang nao encontrado no sistema.';
     Exit(False);
   end;
+
+  SharedFlag := '';
+  if (LowerCase(ExtractFileExt(OutExe)) = '.dll') or
+     (LowerCase(ExtractFileExt(OutExe)) = '.so') or
+     (LowerCase(ExtractFileExt(OutExe)) = '.dylib') then
+    SharedFlag := ' -shared -fPIC';
 
   if ExtractFileDir(OutExe) <> '' then
     ForceDirectories(ExtractFileDir(OutExe));
@@ -535,17 +547,17 @@ begin
   if ReleaseMode then
   begin
     {$IFDEF MSWINDOWS}
-    Params := Format('-O3 -flto -s%s "%s"%s -o "%s"%s -lws2_32 -lm', [ExtraIncludes, CSource, ExtraSources, OutExe, ExtraLibs]);
+    Params := Format('-O3 -flto -s%s%s "%s"%s -o "%s"%s -lws2_32 -lm', [SharedFlag, ExtraIncludes, CSource, ExtraSources, OutExe, ExtraLibs]);
     {$ELSE}
-    Params := Format('-O3 -flto -s%s "%s"%s -o "%s"%s -lm', [ExtraIncludes, CSource, ExtraSources, OutExe, ExtraLibs]);
+    Params := Format('-O3 -flto -s%s%s "%s"%s -o "%s"%s -lm', [SharedFlag, ExtraIncludes, CSource, ExtraSources, OutExe, ExtraLibs]);
     {$ENDIF}
   end
   else
   begin
     {$IFDEF MSWINDOWS}
-    Params := Format('-O2%s "%s"%s -o "%s"%s -lws2_32 -lm', [ExtraIncludes, CSource, ExtraSources, OutExe, ExtraLibs]);
+    Params := Format('-O2%s%s "%s"%s -o "%s"%s -lws2_32 -lm', [SharedFlag, ExtraIncludes, CSource, ExtraSources, OutExe, ExtraLibs]);
     {$ELSE}
-    Params := Format('-O2%s "%s"%s -o "%s"%s -lm', [ExtraIncludes, CSource, ExtraSources, OutExe, ExtraLibs]);
+    Params := Format('-O2%s%s "%s"%s -o "%s"%s -lm', [SharedFlag, ExtraIncludes, CSource, ExtraSources, OutExe, ExtraLibs]);
     {$ENDIF}
   end;
   Code := RunCommandCapture(Info.ClangPath, Params, Info.MSYS2BinDir, OutputLog);

@@ -275,8 +275,10 @@ type
     Body: TASTNodeList;        // TASTStmt
     IsExtern: Boolean;
     IsAsync: Boolean;
+    IsExport: Boolean;
     ExternAbi: string;
     ExternLib: string;
+    ExportAbi: string;
     DocComment: string;
     constructor Create(ALine, ACol: Integer; const AName, AReturnType: string);
     destructor Destroy; override;
@@ -987,7 +989,9 @@ begin
   Body := TASTNodeList.Create;
   IsExtern := False;
   IsAsync := False;
+  IsExport := False;
   ExternAbi := 'c';
+  ExportAbi := 'cdecl';
   ExternLib := '';
 end;
 

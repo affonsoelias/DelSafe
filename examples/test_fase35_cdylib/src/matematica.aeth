@@ -1,0 +1,39 @@
+module matematica;
+
+type
+    Ponto2D = record
+        x: Float64;
+        y: Float64;
+    end;
+
+/// Cria e inicializa uma coordenada 2D
+export function CriarPonto(x: Float64, y: Float64): Ponto2D; cdecl;
+begin
+    result.x := x;
+    result.y := y;
+end;
+
+/// Soma dois pontos 2D
+export function SomarPontos(p1: Ponto2D, p2: Ponto2D): Ponto2D; cdecl;
+begin
+    result.x := p1.x + p2.x;
+    result.y := p1.y + p2.y;
+end;
+
+/// Retorna a norma euclidiana ao quadrado de um ponto
+export function NormaAoQuadrado(p: Ponto2D): Float64; cdecl;
+begin
+    result := (p.x * p.x) + (p.y * p.y);
+end;
+
+/// Funcao simples para somar dois inteiros de 32 bits
+export function SomarInteiros(a: Int32, b: Int32): Int32; cdecl;
+begin
+    result := a + b;
+end;
+
+/// Multiplica dois inteiros de 32 bits
+export function MultiplicarInteiros(a: Int32, b: Int32): Int32; cdecl;
+begin
+    result := a * b;
+end;

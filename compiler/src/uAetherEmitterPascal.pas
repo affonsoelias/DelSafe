@@ -43,7 +43,7 @@ type
   public
     constructor Create;
     destructor Destroy; override;
-    function Generate(AModule: TASTModule; AsUnit: Boolean = False): string;
+    function Generate(AModule: TASTModule; AsUnit: Boolean = False; AsLibrary: Boolean = False): string;
   end;
 
 implementation
@@ -810,7 +810,7 @@ var
   ParamListStr: string;
   I: Integer;
   Param: TASTParam;
-  ModStr: string;
+  ModStr, ExportClause: string;
   VarDecl: TASTVarDecl;
   LibClause: string;
   ParamType: string;
@@ -881,12 +881,16 @@ begin
       ParamListStr := ParamListStr + '; ';
   end;
 
+  ExportClause := '';
+  if Func.IsExport then
+    ExportClause := ' cdecl;';
+
   if Func.IsAsync then
-    Emit(Format('function %s(%s): specialize TAetherTask<%s>;', [Func.Name, ParamListStr, EmitTypeRef(Func.ReturnType)]))
+    Emit(Format('function %s(%s): specialize TAetherTask<%s>;%s', [Func.Name, ParamListStr, EmitTypeRef(Func.ReturnType), ExportClause]))
   else if (Func.ReturnType = 'Void') or (Func.ReturnType = '') then
-    Emit(Format('procedure %s(%s);', [Func.Name, ParamListStr]))
+    Emit(Format('procedure %s(%s);%s', [Func.Name, ParamListStr, ExportClause]))
   else
-    Emit(Format('function %s(%s): %s;', [Func.Name, ParamListStr, EmitTypeRef(Func.ReturnType)]));
+    Emit(Format('function %s(%s): %s;%s', [Func.Name, ParamListStr, EmitTypeRef(Func.ReturnType), ExportClause]));
 
   // Variaveis Locais
   if Func.LocalVars.Count > 0 then
@@ -991,7 +995,7 @@ function TAetherEmitterPascal.BuildFuncSig(Func: TASTFunction): string;
 var
   J: Integer;
   Param: TASTParam;
-  ParamListStr, ModStr, LibClause, ParamType: string;
+  ParamListStr, ModStr, LibClause, ParamType, ExportClause: string;
 begin
   if Func.IsExtern then
   begin
@@ -1046,12 +1050,16 @@ begin
       ParamListStr := ParamListStr + '; ';
   end;
 
+  ExportClause := '';
+  if Func.IsExport then
+    ExportClause := ' cdecl;';
+
   if Func.IsAsync then
-    Result := Format('function %s(%s): specialize TAetherTask<%s>;', [Func.Name, ParamListStr, EmitTypeRef(Func.ReturnType)])
+    Result := Format('function %s(%s): specialize TAetherTask<%s>;%s', [Func.Name, ParamListStr, EmitTypeRef(Func.ReturnType), ExportClause])
   else if (Func.ReturnType = 'Void') or (Func.ReturnType = '') then
-    Result := Format('procedure %s(%s);', [Func.Name, ParamListStr])
+    Result := Format('procedure %s(%s);%s', [Func.Name, ParamListStr, ExportClause])
   else
-    Result := Format('function %s(%s): %s;', [Func.Name, ParamListStr, EmitTypeRef(Func.ReturnType)]);
+    Result := Format('function %s(%s): %s;%s', [Func.Name, ParamListStr, EmitTypeRef(Func.ReturnType), ExportClause]);
 end;
 
 function TAetherEmitterPascal.BuildRecordConstructorSig(Rec: TASTRecordDecl): string;
@@ -1296,16 +1304,30 @@ begin
   Emit('');
 end;
 
-function TAetherEmitterPascal.Generate(AModule: TASTModule; AsUnit: Boolean = False): string;
+function TAetherEmitterPascal.Generate(AModule: TASTModule; AsUnit: Boolean = False; AsLibrary: Boolean = False): string;
 var
-  I: Integer;
+  I, ExportCount, CurExp: Integer;
   UsesClause, Sig: string;
   Func: TASTFunction;
   Rec: TASTRecordDecl;
+  EffectiveLibrary: Boolean;
 begin
   FModule := AModule;
   FOutput.Clear;
   FIndent := 0;
+
+  EffectiveLibrary := AsLibrary;
+  if not EffectiveLibrary then
+  begin
+    for I := 0 to AModule.Functions.Count - 1 do
+    begin
+      if TASTFunction(AModule.Functions[I]).IsExport then
+      begin
+        EffectiveLibrary := True;
+        Break;
+      end;
+    end;
+  end;
 
   UsesClause := '  SysUtils, Math{$IFNDEF PAS2JS}, Sockets{$IFDEF WINDOWS}, Windows{$ENDIF}{$ENDIF}';
   for I := 0 to AModule.PascalImports.Count - 1 do
@@ -1438,7 +1460,10 @@ begin
   begin
     Emit('// Codigo gerado automaticamente pelo Compilador Aether (aetherc)');
     Emit('// Alvo: Object Pascal (Free Pascal)');
-    Emit('program ' + AModule.Name + ';');
+    if EffectiveLibrary then
+      Emit('library ' + AModule.Name + ';')
+    else
+      Emit('program ' + AModule.Name + ';');
     Emit('');
     Emit('{$mode objfpc}{$H+}{$assertions on}');
     Emit('');
@@ -1520,7 +1545,37 @@ begin
     for I := 0 to AModule.Functions.Count - 1 do
       EmitFunction(TASTFunction(AModule.Functions[I]));
 
-    if Assigned(AModule.ProgramBlock) then
+    if EffectiveLibrary then
+    begin
+      ExportCount := 0;
+      for I := 0 to AModule.Functions.Count - 1 do
+        if TASTFunction(AModule.Functions[I]).IsExport then Inc(ExportCount);
+
+      if ExportCount > 0 then
+      begin
+        Emit('');
+        Emit('exports');
+        IncIndent;
+        CurExp := 0;
+        for I := 0 to AModule.Functions.Count - 1 do
+        begin
+          Func := TASTFunction(AModule.Functions[I]);
+          if Func.IsExport then
+          begin
+            Inc(CurExp);
+            if CurExp = ExportCount then
+              Emit(Format('%s name ''%s'';', [Func.Name, Func.Name]))
+            else
+              Emit(Format('%s name ''%s'',', [Func.Name, Func.Name]));
+          end;
+        end;
+        DecIndent;
+      end;
+      Emit('');
+      Emit('begin');
+      Emit('end.');
+    end
+    else if Assigned(AModule.ProgramBlock) then
       EmitProgramBlock(AModule.ProgramBlock)
     else
     begin

@@ -1,0 +1,7 @@
+{
+  "name": "aether_math",
+  "version": "1.0.0",
+  "type": "cdylib",
+  "entry": "src/matematica.aeth",
+  "output": "bin/aether_math.dll"
+}

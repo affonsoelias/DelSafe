@@ -167,7 +167,19 @@ aetherc emit pascal src/Store.aeth --unit --watch
 
 # 4. Inspeciona o código C99 gerado direto no console via pipe
 aetherc emit c src/main.aeth --stdout | head -n 30
+
+# 5. Gera cabeçalho C (.h) com tipos e funções exportadas para consumo FFI
+aetherc emit-header src/matematica.aeth -o include/matematica.h
 ```
+
+---
+
+### `aetherc emit-header <arquivo.aeth> [-o <saida.h>]`
+Gera um arquivo de cabeçalho C (`.h`) padrão **ANSI C99 / C++** (`extern "C"`) contendo:
+- Guardas de inclusão (`#ifndef AETHER_<MODULO>_H`);
+- Definição de macro de exportação compatível com Windows e Linux (`AETHER_API` / `__declspec(dllexport)`);
+- Definição de `structs` e `records` exportados com mapeamento estrito de tipos (`int32_t`, `double`, `bool`, etc.);
+- Protótipos de todas as funções marcadas com `export function ...; cdecl;` acompanhadas de seus comentários de documentação originais.
 
 ---
 
@@ -315,6 +327,8 @@ Você também pode passar essas configurações diretamente na linha de comando:
 - `-l <lib>`: Linka com biblioteca do sistema (ex: `-lraylib`, `-lws2_32`).
 - `--c-source <arquivo.c>`: Compila arquivo C adicional junto ao executável final.
 - `--shared-lib <arquivo.dll/.so>`: Copia biblioteca compartilhada para a pasta do executável gerado.
+- `--lib` ou `--shared`: Compila o projeto como **biblioteca dinâmica compartilhada** (`.dll` no Windows, `.so` no Linux/macOS) exportando símbolos com convenção de chamada C (`cdecl`).
+- `--emit-header`: Gera automaticamente o arquivo de cabeçalho C (`.h`) correspondente na mesma pasta do binário.
 
 ### `aetherc pkg <subcomando>`
 Gerenciador nativo de pacotes do Aether:
