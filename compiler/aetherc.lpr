@@ -32,6 +32,16 @@ Procedure PrintUsage;
 Begin
   WriteLn('Uso: aetherc <comando | arquivo.aeth> [opcoes]');
   WriteLn('');
+  WriteLn('Comandos de Construcao e Execucao:');
+  WriteLn('  build             Compila o projeto atual baseado no manifesto aether.json');
+  WriteLn('  run               Compila e executa imediatamente o binario do projeto');
+  WriteLn('  test [filtro]     Executa testes unitarios da pasta tests/');
+  WriteLn('  clean             Limpa artefatos de build (bin/ e generated/) do projeto');
+  WriteLn('');
+  WriteLn('Comandos de Emissao e Inspecao de Codigo:');
+  WriteLn('  emit <pascal|c> [arquivo] [--stdout] [-o destino]');
+  WriteLn('                    Emite codigo transpilado organizado em generated/pascal/ ou generated/c/');
+  WriteLn('');
   WriteLn('Comandos de Gerenciamento de Projetos e Pacotes:');
   WriteLn(
       '  new [nome | .]    Cria um novo projeto (em uma nova pasta ou no diretorio atual)'
@@ -385,6 +395,7 @@ Var
   BorrowChecker: TAetherBorrowChecker;
   ModuleNode: TASTModule;
   GenDir, IntermediateFile, FinalExe: string;
+  BaseProjDir, Dummy: string;
   GeneratedCode: string;
   EmitterPas: TAetherEmitterPascal;
   EmitterC: TAetherEmitterC;
@@ -468,14 +479,21 @@ If CheckOnly Then
   End;
 
 // 4. Emissao de Codigo e Geracao do Executavel
-GenDir := ExtractFilePath(ParamStr(0)) + 'generated';
-If Not DirectoryExists(GenDir) Then
-  CreateDir(GenDir);
+If Not FindProjectRoot(BaseProjDir, Dummy) Then
+  BaseProjDir := GetCurrentDir;
+BaseProjDir := ExcludeTrailingPathDelimiter(BaseProjDir);
+
+If TargetPascal Then
+  GenDir := BaseProjDir + PathDelim + 'generated' + PathDelim + 'pascal'
+Else
+  GenDir := BaseProjDir + PathDelim + 'generated' + PathDelim + 'c';
+
+ForceDirectories(GenDir);
 
 If OutputExeName <> '' Then
   FinalExe := OutputExeName
 Else
-  FinalExe := ExtractFilePath(ParamStr(0)) + ChangeFileExt(ExtractFileName(
+  FinalExe := BaseProjDir + PathDelim + 'bin' + PathDelim + ChangeFileExt(ExtractFileName(
               SourceFile), '.exe');
 
 ForceDirectories(ExtractFileDir(FinalExe));
@@ -577,6 +595,132 @@ Finally
   Parser.Free;
   Lexer.Free;
 End;
+End;
+
+Procedure EmitFile(Const SourceFile: String; TargetPascal: Boolean; Const CustomOutput: String; ToStdout: Boolean);
+Var 
+  Source: string;
+  Lexer: TAetherLexer;
+  Parser: TAetherParser;
+  TypeChecker: TAetherTypeChecker;
+  BorrowChecker: TAetherBorrowChecker;
+  ModuleNode: TASTModule;
+  BaseProjDir, Dummy, TargetDir, FinalTargetFile: string;
+  GeneratedCode: string;
+  EmitterPas: TAetherEmitterPascal;
+  EmitterC: TAetherEmitterC;
+  CodeFile: TStringList;
+  Visited: TStringList;
+  FileBase, CleanBase, CleanMod: string;
+  P: Integer;
+Begin
+  Source := LoadFileContent(SourceFile);
+  Lexer := TAetherLexer.Create(Source);
+  Parser := TAetherParser.Create(Lexer);
+  Try
+    ModuleNode := Parser.ParseModule;
+
+    FileBase := ChangeFileExt(ExtractFileName(SourceFile), '');
+    CleanBase := FileBase;
+    P := 1;
+    While (P <= Length(CleanBase)) And (CleanBase[P] In ['0'..'9', '_']) Do
+      Inc(P);
+    If P <= Length(CleanBase) Then
+      CleanBase := Copy(CleanBase, P, Length(CleanBase));
+    CleanBase := StringReplace(CleanBase, '_', '', [rfReplaceAll]);
+    CleanMod := StringReplace(ModuleNode.Name, '_', '', [rfReplaceAll]);
+
+    If Not SameText(FileBase, ModuleNode.Name) And Not SameText(CleanBase, CleanMod) Then
+      raise Exception.CreateFmt(
+        '[Erro de Modulo E0005 em %s]: Nome do modulo declarado "%s" difere do nome do arquivo "%s.aeth". Em Aether, o nome do modulo deve corresponder ao nome do arquivo.',
+        [ExtractFileName(SourceFile), ModuleNode.Name, FileBase]);
+
+    Visited := TStringList.Create;
+    Try
+      ResolveModuleImports(ModuleNode, ExtractFilePath(ExpandFileName(SourceFile)), Visited);
+    Finally
+      Visited.Free;
+    End;
+
+    TypeChecker := TAetherTypeChecker.Create;
+    Try
+      TypeChecker.CheckModule(ModuleNode);
+      BorrowChecker := TAetherBorrowChecker.Create(TypeChecker.Symbols);
+      Try
+        BorrowChecker.CheckModule(ModuleNode);
+      Finally
+        BorrowChecker.Free;
+      End;
+    Finally
+      TypeChecker.Free;
+    End;
+
+    If TargetPascal Then
+    Begin
+      EmitterPas := TAetherEmitterPascal.Create;
+      Try
+        GeneratedCode := EmitterPas.Generate(ModuleNode);
+      Finally
+        EmitterPas.Free;
+      End;
+    End
+    Else
+    Begin
+      EmitterC := TAetherEmitterC.Create;
+      Try
+        GeneratedCode := EmitterC.Generate(ModuleNode);
+      Finally
+        EmitterC.Free;
+      End;
+    End;
+
+    If ToStdout Then
+    Begin
+      Write(GeneratedCode);
+      Exit;
+    End;
+
+    If CustomOutput <> '' Then
+      FinalTargetFile := CustomOutput
+    Else
+    Begin
+      If Not FindProjectRoot(BaseProjDir, Dummy) Then
+        BaseProjDir := GetCurrentDir;
+      BaseProjDir := ExcludeTrailingPathDelimiter(BaseProjDir);
+
+      If TargetPascal Then
+        TargetDir := BaseProjDir + PathDelim + 'generated' + PathDelim + 'pascal'
+      Else
+        TargetDir := BaseProjDir + PathDelim + 'generated' + PathDelim + 'c';
+
+      ForceDirectories(TargetDir);
+      If TargetPascal Then
+        FinalTargetFile := TargetDir + PathDelim + ChangeFileExt(ExtractFileName(SourceFile), '.pas')
+      Else
+        FinalTargetFile := TargetDir + PathDelim + ChangeFileExt(ExtractFileName(SourceFile), '.c');
+    End;
+
+    ForceDirectories(ExtractFileDir(FinalTargetFile));
+    CodeFile := TStringList.Create;
+    Try
+      CodeFile.Text := GeneratedCode;
+      CodeFile.SaveToFile(FinalTargetFile);
+    Finally
+      CodeFile.Free;
+    End;
+
+    WriteLn(Format('[1/3] Analise Sintatica de "%s": OK', [ExtractFileName(SourceFile)]));
+    WriteLn('[2/3] Verificacao de Tipos e Posse: OK');
+    If TargetPascal Then
+      WriteLn('[3/3] Codigo Object Pascal emitido com sucesso:')
+    Else
+      WriteLn('[3/3] Codigo C99 emitido com sucesso:');
+    WriteLn('  --> ' + FinalTargetFile);
+  Finally
+    ModuleNode.Free;
+    Parser.Free;
+    Lexer.Free;
+  End;
 End;
 
 Procedure HandleProjectTest(Const Filter: String; TargetPascal: Boolean);
@@ -719,6 +863,8 @@ Var
   I: Integer;
   Arg: string;
   PkgName, OptPath, OptGit, OptVer, FilterName, SubCmd: string;
+  EmitTargetPascal, EmitToStdout, HasTargetSpecified: Boolean;
+  EmitSource, EmitOut: string;
 Begin
   InputFile := '';
   OutputExe := '';
@@ -728,6 +874,103 @@ Begin
   OptionTargetPascal := True;
   OptionJSONDiag := False;
   IsRunCommand := False;
+
+  // Checa comando de limpeza: clean
+  If (ParamCount >= 1) And (LowerCase(ParamStr(1)) = 'clean') Then
+    Begin
+      PrintBanner;
+      Try
+        HandleProjectClean();
+        Halt(0);
+      Except
+        on E: Exception Do
+          Begin
+            WriteLn(ErrOutput, 'Erro ao limpar projeto: ', E.Message);
+            Halt(1);
+          End;
+      End;
+    End;
+
+  // Checa comando de emissao: emit <pascal|c> [arquivo] [--stdout] [-o destino]
+  If (ParamCount >= 1) And (LowerCase(ParamStr(1)) = 'emit') Then
+    Begin
+      EmitTargetPascal := True;
+      EmitSource := '';
+      EmitOut := '';
+      EmitToStdout := False;
+      HasTargetSpecified := False;
+
+      I := 2;
+      While I <= ParamCount Do
+        Begin
+          Arg := ParamStr(I);
+          If LowerCase(Arg) = 'pascal' Then
+            Begin
+              EmitTargetPascal := True;
+              HasTargetSpecified := True;
+            End
+          Else If LowerCase(Arg) = 'c' Then
+            Begin
+              EmitTargetPascal := False;
+              HasTargetSpecified := True;
+            End
+          Else If Arg = '--target=pascal' Then
+            Begin
+              EmitTargetPascal := True;
+              HasTargetSpecified := True;
+            End
+          Else If Arg = '--target=c' Then
+            Begin
+              EmitTargetPascal := False;
+              HasTargetSpecified := True;
+            End
+          Else If Arg = '--stdout' Then
+            EmitToStdout := True
+          Else If Arg = '-o' Then
+            Begin
+              Inc(I);
+              If I <= ParamCount Then EmitOut := ParamStr(I);
+            End
+          Else If Pos('-o', Arg) = 1 Then
+            EmitOut := Copy(Arg, 3, Length(Arg))
+          Else If (Length(Arg) > 0) And (Arg[1] <> '-') Then
+            Begin
+              If EmitSource = '' Then EmitSource := Arg;
+            End;
+          Inc(I);
+        End;
+
+      If EmitSource = '' Then
+        Begin
+          If LoadProjectConfig(ProjConfig) Then
+            Begin
+              EmitSource := ProjConfig.RootDir + PathDelim + StringReplace(ProjConfig.Entry, '/', PathDelim, [rfReplaceAll]);
+              If Not HasTargetSpecified Then
+                EmitTargetPascal := ProjConfig.Backend <> 'c';
+              RestoreProjectDependencies(ProjConfig);
+            End
+          Else
+            Begin
+              WriteLn(ErrOutput, 'Erro: Nenhum arquivo fonte especificado e nenhum "aether.json" encontrado.');
+              WriteLn(ErrOutput, 'Uso: aetherc emit <pascal|c> [arquivo.aeth] [--stdout]');
+              Halt(1);
+            End;
+        End;
+
+      If Not EmitToStdout Then
+        PrintBanner;
+
+      Try
+        EmitFile(EmitSource, EmitTargetPascal, EmitOut, EmitToStdout);
+        Halt(0);
+      Except
+        on E: Exception Do
+          Begin
+            WriteLn(ErrOutput, 'Erro na geracao de codigo: ', E.Message);
+            Halt(1);
+          End;
+      End;
+    End;
 
   // 1. Checa comandos de projeto: init / new
   If (ParamCount >= 1) And ((LowerCase(ParamStr(1)) = 'init') Or (LowerCase(

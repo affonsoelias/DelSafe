@@ -907,9 +907,12 @@ begin
   Emit('#include <math.h>');
   Emit('#include <time.h>');
   Emit('#ifdef _WIN32');
+  Emit('#define WIN32_LEAN_AND_MEAN');
+  Emit('#define NOGDI');
   Emit('#include <winsock2.h>');
   Emit('#include <ws2tcpip.h>');
   Emit('#include <windows.h>');
+  Emit('#undef Rectangle');
   Emit('typedef int socklen_t;');
   Emit('#else');
   Emit('#include <sys/socket.h>');

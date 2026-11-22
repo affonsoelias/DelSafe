@@ -41,6 +41,7 @@ procedure HandleProjectUpdate(const PkgName: string);
 procedure HandleProjectAudit();
 procedure HandleProjectList();
 procedure HandleProjectCleanCache();
+procedure HandleProjectClean();
 
 implementation
 
@@ -154,8 +155,10 @@ end;
 procedure DeleteDirectoryTree(const DirPath: string);
 var
   Info: TSearchRec;
+  CurrentExe: string;
 begin
   if not DirectoryExists(DirPath) then Exit;
+  CurrentExe := ExpandFileName(ParamStr(0));
   if FindFirst(DirPath + PathDelim + '*', faAnyFile, Info) = 0 then
   begin
     try
@@ -165,7 +168,10 @@ begin
           if (Info.Attr and faDirectory) <> 0 then
             DeleteDirectoryTree(DirPath + PathDelim + Info.Name)
           else
-            DeleteFile(DirPath + PathDelim + Info.Name);
+          begin
+            if not SameText(ExpandFileName(DirPath + PathDelim + Info.Name), CurrentExe) then
+              DeleteFile(DirPath + PathDelim + Info.Name);
+          end;
         end;
       until FindNext(Info) <> 0;
     finally
@@ -1188,6 +1194,42 @@ begin
   end
   else
     WriteLn('[OK] Cache ja estava vazio.');
+  WriteLn('========================================================');
+end;
+
+procedure HandleProjectClean();
+var
+  RootDir, Dummy: string;
+  GenDir, BinDir: string;
+begin
+  if not FindProjectRoot(RootDir, Dummy) then
+    RootDir := GetCurrentDir;
+
+  WriteLn('========================================================');
+  WriteLn('  Aether Project Cleaner (aetherc clean)                ');
+  WriteLn('========================================================');
+  WriteLn('Limpando artefatos de build em: ' + RootDir);
+
+  GenDir := RootDir + PathDelim + 'generated';
+  if DirectoryExists(GenDir) then
+  begin
+    DeleteDirectoryTree(GenDir);
+    WriteLn('  • generated/ ... [REMOVIDO]');
+  end
+  else
+    WriteLn('  • generated/ ... [JA LIMPO]');
+
+  BinDir := RootDir + PathDelim + 'bin';
+  if DirectoryExists(BinDir) then
+  begin
+    DeleteDirectoryTree(BinDir);
+    WriteLn('  • bin/       ... [REMOVIDO]');
+  end
+  else
+    WriteLn('  • bin/       ... [JA LIMPO]');
+
+  WriteLn('');
+  WriteLn('SUCESSO! O projeto foi limpo.');
   WriteLn('========================================================');
 end;
 
