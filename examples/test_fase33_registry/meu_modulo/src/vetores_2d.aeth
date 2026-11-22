@@ -1,0 +1,24 @@
+module vetores_2d;
+
+type
+    Ponto2D = record
+        x: Float64;
+        y: Float64;
+    end;
+
+function CriarPonto(x: Float64, y: Float64): Ponto2D
+begin
+    result.x := x;
+    result.y := y;
+end;
+
+function SomarPontos(p1: Ponto2D, p2: Ponto2D): Ponto2D
+begin
+    result.x := p1.x + p2.x;
+    result.y := p1.y + p2.y;
+end;
+
+function NormaAoQuadrado(p: Ponto2D): Float64
+begin
+    result := (p.x * p.x) + (p.y * p.y);
+end;

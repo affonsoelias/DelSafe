@@ -412,13 +412,14 @@ Este documento traça o status oficial de desenvolvimento do compilador e as pr�
 - [x] **Validação Prática**:
   - Módulo completo de demonstração `examples/test_fase32_doc/geometria.aeth` criado com docstrings, contratos, types, traits, async functions e doctests aprovados com 100% de sucesso.
 
-### ⏳ Fase 33: Registry Central de Pacotes Comunitários (`aetherc pkg publish`)
-- [ ] **Infraestrutura do Registro Central**:
-  - Especificação e cliente de API para o repositório público de pacotes do Aether.
-  - Auditoria criptográfica de autoria via assinaturas digitais.
-- [ ] **Comandos de Publicação e Descoberta**:
-  - Subcomandos na CLI: `aetherc pkg publish` e `aetherc pkg search <termo>`.
-  - Sincronização automatizada de dependências e resolução de conflitos semânticos (SemVer).
+### ✅ Fase 33: Registry Central de Pacotes Comunitários (`aetherc pkg publish`)
+- [x] **Infraestrutura do Registro Central**:
+  - Especificação e cliente de API para o repositório público de pacotes do Aether (`~/.aether/registry/index.json` e storage de versões).
+  - Auditoria criptográfica de integridade com SHA-256 e assinaturas digitais por pacote publicado.
+- [x] **Comandos de Publicação e Descoberta**:
+  - Subcomandos na CLI: `aetherc pkg publish [--dry-run]` e `aetherc pkg search <termo>` (também via `aetherc publish` e `aetherc search`).
+  - Sincronização automatizada de dependências e resolução de compatibilidade semântica (SemVer `^`, `~`, `*` e exata).
+  - Integração transparente com `aetherc add <pacote>` e `RestoreProjectDependencies` gravando integridade no `aether.lock`.
 
 ### ⏳ Fase 34: Integração de Primeira Classe com BlaiseVue (SFC `<script lang="aether">` & Wasm por Convenção)
 - [ ] **Arquitetura Modular Não-Invasiva**:

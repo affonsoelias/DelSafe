@@ -23,7 +23,8 @@ uAetherFormatter,
 uAetherIncremental,
 uAetherOptimizer,
 uAetherBootstrap,
-uAetherDoc;
+uAetherDoc,
+uAetherRegistry;
 
 Procedure PrintBanner;
 Begin
@@ -61,8 +62,10 @@ Begin
       '  new [nome | .]    Cria um novo projeto (em uma nova pasta ou no diretorio atual)'
   );
   WriteLn(
-      '  pkg <subcomando>  Gerenciador de pacotes (add, remove, update, audit, list, clean)'
+      '  pkg <subcomando>  Gerenciador de pacotes (add, remove, update, publish, search, audit, list, clean)'
   );
+  WriteLn('  publish           Publica o pacote atual no Registry oficial do Aether (--dry-run)');
+  WriteLn('  search <termo>    Pesquisa pacotes comunitarios disponiveis no Registry');
   WriteLn('  test [filtro]     Executa testes unitarios da pasta tests/');
   WriteLn(
       '  build             Compila o projeto atual baseado no manifesto aether.json'
@@ -1542,6 +1545,8 @@ Var
   I, J: Integer;
   Arg: string;
   PkgName, OptPath, OptGit, OptVer, FilterName, SubCmd: string;
+  OptRegistry, SearchTerm: string;
+  IsDryRun: Boolean;
   TargetEntry, TargetOut, TargetBackend, TargetCC: string;
   EmitTargetPascal, EmitToStdout, HasTargetSpecified, EmitAsUnit, EmitSilent, EmitWatch: Boolean;
   EmitSource, EmitOut, EmitOutDir: string;
@@ -1862,6 +1867,52 @@ If (ParamCount >= 1) And (LowerCase(ParamStr(1)) = 'pkg') Then
         End;
       End;
     End
+    Else If SubCmd = 'publish' Then
+    Begin
+      OptRegistry := '';
+      IsDryRun := False;
+      I := 3;
+      While I <= ParamCount Do
+      Begin
+        Arg := ParamStr(I);
+        If Pos('--registry=', Arg) = 1 Then OptRegistry := Copy(Arg, 12, Length(Arg))
+        Else If (Arg = '--dry-run') Or (Arg = '-n') Then IsDryRun := True;
+        Inc(I);
+      End;
+      Try
+        HandlePkgPublish(OptRegistry, IsDryRun);
+        Halt(0);
+      Except
+        on E: Exception Do
+        Begin
+          WriteLn(ErrOutput, 'Erro ao publicar pacote: ', E.Message);
+          Halt(1);
+        End;
+      End;
+    End
+    Else If (SubCmd = 'search') Or (SubCmd = 'find') Then
+    Begin
+      SearchTerm := '';
+      OptRegistry := '';
+      I := 3;
+      While I <= ParamCount Do
+      Begin
+        Arg := ParamStr(I);
+        If Pos('--registry=', Arg) = 1 Then OptRegistry := Copy(Arg, 12, Length(Arg))
+        Else If SearchTerm = '' Then SearchTerm := Arg;
+        Inc(I);
+      End;
+      Try
+        HandlePkgSearch(SearchTerm, OptRegistry);
+        Halt(0);
+      Except
+        on E: Exception Do
+        Begin
+          WriteLn(ErrOutput, 'Erro ao buscar pacotes: ', E.Message);
+          Halt(1);
+        End;
+      End;
+    End
     Else
     Begin
       WriteLn('Uso: aetherc pkg <subcomando> [opcoes]');
@@ -1870,6 +1921,8 @@ If (ParamCount >= 1) And (LowerCase(ParamStr(1)) = 'pkg') Then
       WriteLn('  add <pacote>     Adiciona uma dependencia ao projeto (Git, Local ou Registry)');
       WriteLn('  remove <pacote>  Remove uma dependencia de aether.json e limpa caches (rm)');
       WriteLn('  update [pacote]  Atualiza dependencias Git e sincroniza o lockfile (upgrade)');
+      WriteLn('  publish          Publica o pacote atual no Registry oficial do Aether (--dry-run)');
+      WriteLn('  search <termo>   Pesquisa pacotes comunitarios disponiveis no Registry');
       WriteLn('  audit            Inspeciona a integridade criptografica e seguranca TLS');
       WriteLn('  list             Exibe a lista de todas as dependencias do projeto (ls)');
       WriteLn('  clean            Limpa o cache global de pacotes (~/.aether/cache)');
@@ -1968,6 +2021,58 @@ If (ParamCount >= 1) And (LowerCase(ParamStr(1)) = 'audit') Then
             End;
   End;
 End;
+
+// Checa comando de publicacao no Registry: publish
+If (ParamCount >= 1) And (LowerCase(ParamStr(1)) = 'publish') Then
+  Begin
+    PrintBanner;
+    OptRegistry := '';
+    IsDryRun := False;
+    I := 2;
+    While I <= ParamCount Do
+      Begin
+        Arg := ParamStr(I);
+        If Pos('--registry=', Arg) = 1 Then OptRegistry := Copy(Arg, 12, Length(Arg))
+        Else If (Arg = '--dry-run') Or (Arg = '-n') Then IsDryRun := True;
+        Inc(I);
+      End;
+    Try
+      HandlePkgPublish(OptRegistry, IsDryRun);
+      Halt(0);
+    Except
+      on E: Exception Do
+        Begin
+          WriteLn(ErrOutput, 'Erro ao publicar pacote: ', E.Message);
+          Halt(1);
+        End;
+    End;
+  End;
+
+// Checa comando de busca no Registry: search / find
+If (ParamCount >= 1) And ((LowerCase(ParamStr(1)) = 'search') Or (LowerCase(ParamStr(1)) = 'find')) Then
+  Begin
+    PrintBanner;
+    SearchTerm := '';
+    OptRegistry := '';
+    I := 2;
+    While I <= ParamCount Do
+      Begin
+        Arg := ParamStr(I);
+        If Pos('--registry=', Arg) = 1 Then OptRegistry := Copy(Arg, 12, Length(Arg))
+        Else If SearchTerm = '' Then SearchTerm := Arg;
+        Inc(I);
+      End;
+    Try
+      HandlePkgSearch(SearchTerm, OptRegistry);
+      Halt(0);
+    Except
+      on E: Exception Do
+        Begin
+          WriteLn(ErrOutput, 'Erro ao buscar pacotes: ', E.Message);
+          Halt(1);
+        End;
+    End;
+  End;
 
 // 3. Checa comando de testes: test
 If (ParamCount >= 1) And (LowerCase(ParamStr(1)) = 'test') Then

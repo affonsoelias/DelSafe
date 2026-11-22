@@ -318,12 +318,16 @@ Você também pode passar essas configurações diretamente na linha de comando:
 
 ### `aetherc pkg <subcomando>`
 Gerenciador nativo de pacotes do Aether:
-- `aetherc pkg add <pacote>`: Adiciona dependência Git ou local ao `aether.json` e `aether.lock`.
+- `aetherc pkg add <pacote>`: Adiciona dependência do Registry oficial, Git (`--git=...`) ou local (`--path=...`) ao `aether.json` e `aether.lock`.
 - `aetherc pkg remove <pacote>` (ou `rm`): Remove dependência e limpa caches locais.
-- `aetherc pkg update [pacote]` (ou `upgrade`): Atualiza dependências Git e sincroniza o lockfile.
+- `aetherc pkg update [pacote]` (ou `upgrade`): Atualiza dependências Git ou Registry e sincroniza o lockfile.
+- `aetherc pkg publish [--registry=<url>] [--dry-run]`: Publica o pacote atual no Registry oficial do Aether com validação de manifesto, SemVer, checksum SHA-256 e assinatura digital.
+- `aetherc pkg search <termo>` (ou `find`): Pesquisa pacotes comunitários disponíveis no catálogo do Registry.
 - `aetherc pkg audit`: Inspeciona a integridade criptográfica SHA e validação TLS.
 - `aetherc pkg list` (ou `ls`): Exibe a árvore de dependências declaradas no projeto.
 - `aetherc pkg clean`: Limpa o cache global compartilhado em `~/.aether/cache`.
+
+> **Dica**: `publish` e `search` também podem ser invocados diretamente na raiz: `aetherc publish` e `aetherc search <termo>`.
 
 ---
 

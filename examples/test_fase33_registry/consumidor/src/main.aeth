@@ -1,0 +1,19 @@
+module main;
+
+import vetores_2d;
+
+program Main;
+var
+    p1: Ponto2D;
+    p2: Ponto2D;
+    p3: Ponto2D;
+    n: Float64;
+begin
+    p1 := CriarPonto(3.0, 4.0);
+    p2 := CriarPonto(1.0, 2.0);
+    p3 := SomarPontos(p1, p2);
+    n := NormaAoQuadrado(p1);
+
+    PrintLn("P3 X = %f, Y = %f", p3.x, p3.y);
+    PrintLn("Norma p1 = %f", n);
+end.

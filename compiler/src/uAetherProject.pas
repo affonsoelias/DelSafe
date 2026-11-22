@@ -6,7 +6,7 @@ unit uAetherProject;
 interface
 
 uses
-  SysUtils, Classes, fpjson, jsonparser, Process;
+  SysUtils, Classes, fpjson, jsonparser, Process, uAetherRegistry;
 
 type
   TAetherDependency = record
@@ -466,7 +466,7 @@ end;
 procedure RestoreProjectDependencies(const Config: TAetherProjectConfig);
 var
   I: Integer;
-  CacheDir, LocalDepDir: string;
+  CacheDir, LocalDepDir, ResolvedVer: string;
 begin
   if Length(Config.Dependencies) = 0 then Exit;
 
@@ -485,6 +485,22 @@ begin
         if not DirectoryExists(LocalDepDir) then
         begin
           WriteLn(Format('   Instalando "%s" em ".aether/deps/%s"...', [Config.Dependencies[I].Name, Config.Dependencies[I].Name]));
+          CopyDirectoryTree(CacheDir, LocalDepDir);
+        end;
+      end;
+    end
+    else if Config.Dependencies[I].Path = '' then
+    begin
+      // Dependencia via Registry Central
+      if FetchPackageFromRegistry(Config.Dependencies[I].Name,
+                                 Config.Dependencies[I].Version,
+                                 CacheDir, ResolvedVer) then
+      begin
+        LocalDepDir := Config.RootDir + PathDelim + '.aether' + PathDelim + 'deps' + PathDelim + Config.Dependencies[I].Name;
+        if not DirectoryExists(LocalDepDir) then
+        begin
+          WriteLn(Format('   Instalando "%s@%s" do Registry em ".aether/deps/%s"...',
+            [Config.Dependencies[I].Name, ResolvedVer, Config.Dependencies[I].Name]));
           CopyDirectoryTree(CacheDir, LocalDepDir);
         end;
       end;
@@ -942,7 +958,7 @@ var
   StringStream: TStringStream;
   JSON, DepsData: TJSONData;
   Obj, DepsObj, SubObj: TJSONObject;
-  CachePkgDir, LocalDepDir: string;
+  CachePkgDir, LocalDepDir, ResolvedVer: string;
   EffectivePkg, EffectiveGit, EffectiveVer: string;
   Idx, AtPos, HashPos, StartIdx, P: Integer;
 begin
@@ -1054,14 +1070,25 @@ begin
     end
     else
     begin
-      if EffectiveVer <> '' then
-        DepsObj.Add(EffectivePkg, EffectiveVer)
+      ResolvedVer := EffectiveVer;
+      // Busca e instala do Registry Central
+      if FetchPackageFromRegistry(EffectivePkg, EffectiveVer, CachePkgDir, ResolvedVer) then
+      begin
+        LocalDepDir := RootDir + PathDelim + '.aether' + PathDelim + 'deps' + PathDelim + EffectivePkg;
+        CopyDirectoryTree(CachePkgDir, LocalDepDir);
+        if EffectiveVer <> '' then
+          DepsObj.Add(EffectivePkg, EffectiveVer)
+        else
+          DepsObj.Add(EffectivePkg, '^' + ResolvedVer);
+        WriteLn(Format('   Pacote "%s@%s" instalado com sucesso do Registry!', [EffectivePkg, ResolvedVer]));
+      end
       else
-        DepsObj.Add(EffectivePkg, '*');
-
-      CachePkgDir := GetAetherCacheDir + PathDelim + EffectivePkg;
-      if not DirectoryExists(CachePkgDir) then
-        ForceDirectories(CachePkgDir);
+      begin
+        if EffectiveVer <> '' then
+          DepsObj.Add(EffectivePkg, EffectiveVer)
+        else
+          DepsObj.Add(EffectivePkg, '*');
+      end;
     end;
 
     WriteStringToFile(ConfigFile, Obj.FormatJSON);
@@ -1072,7 +1099,7 @@ begin
     else if EffectiveGit <> '' then
       UpdateLockfile(RootDir, EffectivePkg, 'git', EffectiveGit, EffectiveVer, GetGitCommitHash(CachePkgDir))
     else
-      UpdateLockfile(RootDir, EffectivePkg, 'registry', '*', EffectiveVer, 'verified');
+      UpdateLockfile(RootDir, EffectivePkg, 'registry', ResolvedVer, ResolvedVer, 'verified');
   finally
     JSON.Free;
   end;
