@@ -229,7 +229,7 @@ begin
     if (Call.Callee = 'sin') or (Call.Callee = 'cos') or (Call.Callee = 'tan') or (Call.Callee = 'sqrt') or (Call.Callee = 'Now') then Exit('Float64');
     if Call.Callee = 'GetTickCount64' then Exit('UInt64');
     if (Call.Callee = 'FileExists') or (Call.Callee = 'WriteFile') then Exit('Bool');
-    if Call.Callee = 'SocketClose' then Exit('Void');
+    if (Call.Callee = 'SocketClose') or (Call.Callee = 'Assert') then Exit('Void');
   end;
 end;
 
@@ -461,6 +461,15 @@ begin
     if Call.Callee = 'ParamStr' then
     begin
       Result := 'ParamStr(' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + ')';
+      Exit;
+    end;
+
+    if Call.Callee = 'Assert' then
+    begin
+      if Call.Args.Count = 1 then
+        Result := 'Assert(' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + ')'
+      else
+        Result := 'Assert(' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + ', ' + EmitExpr(TASTCallArg(Call.Args[1]).Expr) + ')';
       Exit;
     end;
 

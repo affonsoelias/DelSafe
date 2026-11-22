@@ -636,6 +636,22 @@ begin
       Exit('String');
     end;
 
+    if Call.Callee = 'Assert' then
+    begin
+      if (Call.Args.Count < 1) or (Call.Args.Count > 2) then
+        Error('E0061', 'Funcao "Assert" espera 1 ou 2 argumentos (Condicao: Bool [, Mensagem: String])', Call.Line, Call.Col);
+      ArgType := CheckExpr(TASTCallArg(Call.Args[0]).Expr);
+      if ArgType <> 'Bool' then
+        Error('E0308', Format('Primeiro argumento de "Assert" deve ser Bool, recebido: "%s"', [ArgType]), Call.Line, Call.Col);
+      if Call.Args.Count = 2 then
+      begin
+        ArgType := CheckExpr(TASTCallArg(Call.Args[1]).Expr);
+        if ArgType <> 'String' then
+          Error('E0308', Format('Segundo argumento de "Assert" deve ser String, recebido: "%s"', [ArgType]), Call.Line, Call.Col);
+      end;
+      Exit('Void');
+    end;
+
     if Call.Callee = 'SocketCreate' then
     begin
       if Call.Args.Count <> 0 then

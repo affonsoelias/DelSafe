@@ -229,7 +229,7 @@ begin
     if (Call.Callee = 'sin') or (Call.Callee = 'cos') or (Call.Callee = 'tan') or (Call.Callee = 'sqrt') or (Call.Callee = 'Now') then Exit('Float64');
     if Call.Callee = 'GetTickCount64' then Exit('UInt64');
     if (Call.Callee = 'FileExists') or (Call.Callee = 'WriteFile') then Exit('Bool');
-    if Call.Callee = 'SocketClose' then Exit('Void');
+    if (Call.Callee = 'SocketClose') or (Call.Callee = 'Assert') then Exit('Void');
     if Assigned(FModule) then
     begin
       for I := 0 to FModule.Functions.Count - 1 do
@@ -528,6 +528,12 @@ begin
     if Call.Callee = 'ParamStr' then
     begin
       Result := 'AetherParamStr(' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + ')';
+      Exit;
+    end;
+
+    if Call.Callee = 'Assert' then
+    begin
+      Result := 'assert(' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + ')';
       Exit;
     end;
 

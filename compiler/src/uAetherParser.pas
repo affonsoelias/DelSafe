@@ -440,7 +440,7 @@ begin
           raise EAetherParserError.Create('Esperado ":" apos nome do parametro', FCurTok.Line, FCurTok.Col);
 
         Result.Params.Add(TASTParam.Create(FCurTok.Line, FCurTok.Col, ParamName, ParamType, Ownership));
-      until not Match(tokSemicolon);
+      until (not Match(tokSemicolon)) and (not Match(tokComma));
     end;
     Expect(tokRParen, 'Esperado ")" no fechamento dos parametros');
 

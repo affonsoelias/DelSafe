@@ -1,0 +1,29 @@
+module SuiteMatematicaTest;
+
+function Somar(a: Int32, b: Int32): Int32
+begin
+    return a + b;
+end;
+
+function Multiplicar(a: Int32, b: Int32): Int32
+begin
+    return a * b;
+end;
+
+program SuiteMatematicaTest;
+var
+    soma: Int32;
+    mult: Int32;
+begin
+    PrintLn("Executando Suite de Testes Matematicos...");
+
+    soma := Somar(20, 22);
+    Assert(soma = 42, "A soma de 20 e 22 deve ser 42");
+
+    mult := Multiplicar(6, 7);
+    Assert(mult = 42, "A multiplicacao de 6 por 7 deve ser 42");
+
+    Assert(soma = mult, "Soma e Multiplicacao devem ter o mesmo resultado");
+
+    PrintLn("Todos os testes matematicos foram aprovados com sucesso!");
+end.

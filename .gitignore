@@ -1,6 +1,8 @@
 # Compilador e executáveis gerados
 bin/*
 !bin/.gitkeep
+generated/
+build/
 *.exe
 *.o
 *.a

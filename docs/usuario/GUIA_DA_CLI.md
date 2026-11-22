@@ -33,8 +33,8 @@ aetherc run
 aetherc run --target=c
 ```
 
-### `aetherc test [filtro]`
-Executa a suíte de testes unitários automatizados da pasta `tests/`:
+### `aetherc test [filtro | caminho] [opcoes]`
+Executa a suíte de testes unitários automatizados da pasta `tests/` ou executa um arquivo de teste específico diretamente:
 ```bash
 # Executa todos os testes (*.aeth em tests/)
 aetherc test
@@ -42,8 +42,15 @@ aetherc test
 # Executa testes com o backend C99 nativo
 aetherc test --target=c
 
-# Executa apenas testes que contenham "banco" no nome do arquivo
-aetherc test banco
+# Executa apenas testes que contenham "matematica" no nome do arquivo
+aetherc test matematica
+
+# Executa um arquivo de teste diretamente (com ou sem aether.json)
+aetherc test tests/01_suite_matematica_test.aeth
+```
+Os testes utilizam a instrução nativa de asserção:
+```aether
+Assert(condicao, "Mensagem descritiva de falha");
 ```
 
 ### `aetherc clean`
@@ -126,6 +133,25 @@ aetherc build --emit-json-diag
 
 ### `aetherc --check-only`
 Valida apenas sintaxe, tipos e regras do Borrow Checker sem gerar executáveis nem código intermediário (ideal para linters e checagens ultrarrápidas).
+
+### `aetherc fmt [arquivo | pasta] [--check]`
+Formatador canônico oficial do Aether. Padroniza a formatação do código-fonte de acordo com o guia de estilo oficial da linguagem:
+- Indentação canônica de 4 espaços por nível de escopo.
+- Espaçamento padronizado em operadores (`:=`, `:`, `,`, `;`, `=`, `<`, `>`, `+`, `-`).
+- Preservação intacta de strings literais, comentários de linha (`//`) e comentários em bloco (`/* ... */`).
+- Quebras de linha e alinhamento em declarações e blocos (`module`, `type`, `var`, `begin ... end`).
+- Suporte a modo verificação `--check` para pipelines de CI/CD (retorna exit code 1 se houver desvios).
+
+```bash
+# Formata um arquivo especifico
+aetherc fmt src/main.aeth
+
+# Formata recursivamente todos os arquivos .aeth do projeto ou pasta
+aetherc fmt src/
+
+# Apenas verifica se os fontes estao no padrao oficial (CI/CD)
+aetherc fmt src/ --check
+```
 
 ### `aetherc --dump-tokens` e `aetherc --dump-ast`
 Exibe a lista de tokens do Lexer ou a árvore sintática abstrata (AST) para análise interna e estudo do compilador.

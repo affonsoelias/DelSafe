@@ -268,16 +268,25 @@ Este documento traça o status oficial de desenvolvimento do compilador e as pr�
   - Compilado via `bin\aetherc-core.exe` emitindo código C99, compilado com GCC (MSYS2) e executado com 100% de sucesso.
   - Testes de regressão do `examples/13_self_hosted_compiler_demo.aeth` aprovados com 100% de paridade.
 
-### ⏳ Fase 24: Tooling Nativo & Developer Experience (`aetherc fmt` e `aetherc test`)
-- [ ] **Formatador Canônico Oficial (`aetherc fmt`)**:
-  - Implementação do comando `aetherc fmt [arquivo | pasta] [--check]`.
-  - Padronização automática de indentação (4 espaços), quebras de linha em blocos `begin ... end`, alinhamento de seções `var`, `type` e pontuação Pascal.
-  - Modo `--check` para uso em pipelines de CI/CD (retorna exit code 1 se houver desvios de formatação).
-- [ ] **Test Runner Embutido (`aetherc test`)**:
-  - Implementação do comando `aetherc test [arquivo | pasta]`.
-  - Reconhecimento de blocos ou arquivos de teste (`tests/*.aeth` ou `*_test.aeth`).
-  - Primitivas de asserção nativas (`Assert(cond, "msg")`, `AssertEq(a, b)`).
-  - Execução sequencial e relatório no terminal com cores, tempos de execução e rastreio de falhas.
+### ✅ Fase 24: Tooling Nativo & Developer Experience (`aetherc fmt` e `aetherc test`) (Concluído)
+- [x] **Formatador Canônico Oficial (`aetherc fmt`)**:
+  - Implementada a unit dedicada `compiler/src/uAetherFormatter.pas`.
+  - Padronização automática de indentação com 4 espaços por nível de escopo.
+  - Normalização de espaçamento de operadores (`:=`, `:`, `,`, `;`, `=`, `<`, `>`, `+`, `-`).
+  - Preservação estrita e transparente de literais de texto, comentários de linha (`//`) e de bloco (`/* ... */`).
+  - Suporte ao modo `--check` para pipelines de CI/CD (retorna exit code 1 se algum arquivo precisar de formatação).
+  - Suporte a formatação de arquivos individuais ou diretórios inteiros recursivamente.
+- [x] **Primitivas de Asserção Nativas (`Assert`)**:
+  - Implementada função intrínseca `Assert(cond: Bool [, msg: String])` em `uAetherSymbols.pas` e `uAetherTypeChecker.pas`.
+  - Suporte dual-backend completo: `Assert` em Free Pascal e `assert(...)` (com `<assert.h>`) em C99 GCC.
+  - Parser flexibilizado para aceitar tanto `;` quanto `,` na separação de parâmetros e argumentos de funções.
+- [x] **Test Runner Embutido e Flexível (`aetherc test`)**:
+  - Comando `aetherc test [arquivo | filtro] [--target=pascal|c]`.
+  - Suporte à execução de arquivos de teste individuais diretamente (`aetherc test tests/01_suite_matematica_test.aeth`) mesmo fora da raiz de projetos `aether.json`.
+  - Relatório no terminal com status `[ PASS ]` / `[ FAIL ]`, tempos de compilação/execução em milissegundos e código de saída refletindo o sucesso ou falha da asserção.
+  - Suíte modelo `tests/01_suite_matematica_test.aeth` criada e aprovada nos backends Free Pascal e GCC C99.
+
+### ⏳ Fase 25: Biblioteca Padrão Canônica Expandida (`std/`)
 
 ### ⏳ Fase 25: Biblioteca Padrão Canônica Expandida (`std/`)
 - [ ] **`std.fs` (Sistema de Arquivos & Diretórios)**:

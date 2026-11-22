@@ -18,7 +18,8 @@ uAetherEmitterC,
 uAetherToolchain,
 uAetherJSONDiag,
 uAetherLSP,
-uAetherProject;
+uAetherProject,
+uAetherFormatter;
 
 Procedure PrintBanner;
 Begin
@@ -35,7 +36,8 @@ Begin
   WriteLn('Comandos de Construcao e Execucao:');
   WriteLn('  build             Compila o projeto atual baseado no manifesto aether.json');
   WriteLn('  run               Compila e executa imediatamente o binario do projeto');
-  WriteLn('  test [filtro]     Executa testes unitarios da pasta tests/');
+  WriteLn('  test [filtro]     Executa testes unitarios (arquivos individuais ou pasta tests/)');
+  WriteLn('  fmt [caminho]     Formata codigo Aether segundo as normas canonicas (--check para CI/CD)');
   WriteLn('  clean             Limpa artefatos de build (bin/ e generated/) do projeto');
   WriteLn('');
   WriteLn('Comandos de Emissao e Inspecao de Codigo (Integracao BlaiseVue):');
@@ -801,10 +803,9 @@ Begin
 End;
 
 Procedure HandleProjectTest(Const Filter: String; TargetPascal: Boolean);
-
 Var 
   ProjConfig: TAetherProjectConfig;
-  TestsDir, TestFile, TestExe: string;
+  TestsDir, TestFile, TestExe, BaseDir: string;
   SearchRec: TSearchRec;
   TestFiles: TStringList;
   I, ExitCode: Integer;
@@ -812,54 +813,66 @@ Var
   StartTime, ElapsedTime: TDateTime;
   ElapsedMs: Int64;
   BackendName: string;
+  HasConfig: Boolean;
 Begin
-  If Not LoadProjectConfig(ProjConfig) Then
-    Begin
-      WriteLn(ErrOutput,
-
-    'Erro: Nenhum projeto Aether ("aether.json") encontrado no diretorio atual.'
-      );
-      Halt(1);
-    End;
-
-  RestoreProjectDependencies(ProjConfig);
-
-  TestsDir := ProjConfig.RootDir + PathDelim + 'tests';
-  If Not DirectoryExists(TestsDir) Then
-    Begin
-      WriteLn(Format('Aviso: Diretorio de testes "%s" nao encontrado.', [
-              TestsDir]));
-      Halt(0);
-    End;
+  HasConfig := LoadProjectConfig(ProjConfig);
+  If HasConfig Then
+  Begin
+    RestoreProjectDependencies(ProjConfig);
+    BaseDir := ProjConfig.RootDir;
+  End
+  Else
+    BaseDir := GetCurrentDir;
 
   TestFiles := TStringList.Create;
   Try
-    If FindFirst(TestsDir + PathDelim + '*.aeth', faAnyFile, SearchRec) = 0 Then
+    // 1. Se o filtro for um arquivo que existe diretamente
+    If FileExists(Filter) Then
+    Begin
+      TestFiles.Add(ExpandFileName(Filter));
+    End
+    Else If DirectoryExists(Filter) Then
+    Begin
+      TestsDir := ExpandFileName(Filter);
+      If FindFirst(TestsDir + PathDelim + '*.aeth', faAnyFile, SearchRec) = 0 Then
       Begin
         Repeat
           If (SearchRec.Attr And faDirectory) = 0 Then
-            Begin
-              If (Filter = '') Or (Pos(LowerCase(Filter), LowerCase(SearchRec.
-                 Name)) > 0) Then
-                TestFiles.Add(TestsDir + PathDelim + SearchRec.Name);
-            End;
+            TestFiles.Add(TestsDir + PathDelim + SearchRec.Name);
         Until FindNext(SearchRec) <> 0;
         FindClose(SearchRec);
       End;
+    End
+    Else
+    Begin
+      TestsDir := BaseDir + PathDelim + 'tests';
+      If Not DirectoryExists(TestsDir) Then
+        TestsDir := BaseDir;
+
+      If FindFirst(TestsDir + PathDelim + '*.aeth', faAnyFile, SearchRec) = 0 Then
+      Begin
+        Repeat
+          If (SearchRec.Attr And faDirectory) = 0 Then
+          Begin
+            If (Filter = '') Or (Pos(LowerCase(Filter), LowerCase(SearchRec.Name)) > 0) Then
+            Begin
+              If (Filter <> '') Or (Pos('test', LowerCase(SearchRec.Name)) > 0) Or (TestsDir <> BaseDir) Then
+                TestFiles.Add(TestsDir + PathDelim + SearchRec.Name);
+            End;
+          End;
+        Until FindNext(SearchRec) <> 0;
+        FindClose(SearchRec);
+      End;
+    End;
 
     If TestFiles.Count = 0 Then
-      Begin
-        If Filter <> '' Then
-          WriteLn(Format(
-                  'Nenhum teste encontrado correspondendo ao filtro "%s".', [
-                  Filter]))
-        Else
-          WriteLn(
-
-            'Nenhum arquivo de teste (*.aeth) encontrado no diretorio "tests/".'
-          );
-        Exit;
-      End;
+    Begin
+      If Filter <> '' Then
+        WriteLn(Format('Nenhum teste encontrado correspondendo ao filtro "%s".', [Filter]))
+      Else
+        WriteLn('Nenhum arquivo de teste (*.aeth) encontrado no diretorio "tests/".');
+      Exit;
+    End;
 
     If TargetPascal Then
       BackendName := 'Free Pascal'
@@ -875,56 +888,135 @@ Begin
     FailedCount := 0;
 
     For I := 0 To TestFiles.Count - 1 Do
-      Begin
-        TestFile := TestFiles[I];
-        TestExe := ProjConfig.RootDir + PathDelim + 'bin' + PathDelim + 'tests'
-                   + PathDelim + ChangeFileExt(ExtractFileName(TestFile), '.exe'
-                   );
-        ForceDirectories(ExtractFileDir(TestExe));
+    Begin
+      TestFile := TestFiles[I];
+      TestExe := BaseDir + PathDelim + 'bin' + PathDelim + 'tests'
+                 + PathDelim + ChangeFileExt(ExtractFileName(TestFile), '.exe');
+      ForceDirectories(ExtractFileDir(TestExe));
 
-        Write(Format('  [TEST] %s ... ', [ExtractFileName(TestFile)]));
+      Write(Format('  [TEST] %s ... ', [ExtractFileName(TestFile)]));
 
-        Try
-          // 1. Compila o teste de forma silenciosa
-          CompileFile(TestFile, TargetPascal, False, False, TestExe, True);
+      Try
+        CompileFile(TestFile, TargetPascal, False, False, TestExe, True);
 
-          // 2. Executa o teste medindo tempo
-          StartTime := Now;
-          ExitCode := ExecuteProcess(TestExe, '');
-          ElapsedTime := Now - StartTime;
-          ElapsedMs := Round(ElapsedTime * 86400 * 1000);
+        StartTime := Now;
+        ExitCode := ExecuteProcess(TestExe, '');
+        ElapsedTime := Now - StartTime;
+        ElapsedMs := Round(ElapsedTime * 86400 * 1000);
 
-          If ExitCode = 0 Then
-            Begin
-              Inc(PassedCount);
-              WriteLn(Format('PASS (%d ms)', [ElapsedMs]));
-            End
-          Else
-            Begin
-              Inc(FailedCount);
-              WriteLn(Format('FAIL! (ExitCode: %d)', [ExitCode]));
-            End;
-        Except
-          on E: Exception Do
-                Begin
-                  Inc(FailedCount);
-                  WriteLn('ERRO DE COMPILACAO: ' + E.Message);
-                End;
+        If ExitCode = 0 Then
+        Begin
+          Inc(PassedCount);
+          WriteLn(Format('PASS (%d ms)', [ElapsedMs]));
+        End
+        Else
+        Begin
+          Inc(FailedCount);
+          WriteLn(Format('FAIL! (ExitCode: %d)', [ExitCode]));
+        End;
+      Except
+        on E: Exception Do
+        Begin
+          Inc(FailedCount);
+          WriteLn('ERRO DE COMPILACAO: ' + E.Message);
+        End;
       End;
+    End;
+
+    WriteLn('--------------------------------------------------------');
+    WriteLn(Format('  Resultados: %d executados | %d passaram | %d falharam', [
+            TestFiles.Count, PassedCount, FailedCount]));
+    WriteLn('========================================================');
+
+    If FailedCount > 0 Then
+      Halt(1)
+    Else
+      Halt(0);
+  Finally
+    TestFiles.Free;
+  End;
 End;
 
-WriteLn('--------------------------------------------------------');
-WriteLn(Format('  Resultados: %d executados | %d passaram | %d falharam', [
-        TestFiles.Count, PassedCount, FailedCount]));
-WriteLn('========================================================');
+Procedure HandleFmtCommand;
+Var
+  I: Integer;
+  Arg, TargetPath: string;
+  CheckOnly: Boolean;
+  TotalFiles, FormattedFiles: Integer;
+  IsClean: Boolean;
+Begin
+  TargetPath := '.';
+  CheckOnly := False;
+  I := 2;
+  While I <= ParamCount Do
+  Begin
+    Arg := ParamStr(I);
+    If Arg = '--check' Then
+      CheckOnly := True
+    Else If (Length(Arg) > 0) And (Arg[1] <> '-') Then
+      TargetPath := Arg;
+    Inc(I);
+  End;
 
-If FailedCount > 0 Then
-  Halt(1)
-Else
-  Halt(0);
-Finally
-  TestFiles.Free;
-End;
+  WriteLn('========================================================');
+  WriteLn('  Aether Code Formatter (aetherc fmt)                   ');
+  If CheckOnly Then
+    WriteLn('  Modo: Verificacao (--check)')
+  Else
+    WriteLn('  Modo: Formatacao automatica');
+  WriteLn('========================================================');
+
+  TotalFiles := 0;
+  FormattedFiles := 0;
+
+  If FileExists(TargetPath) Then
+  Begin
+    TotalFiles := 1;
+    IsClean := TAetherFormatter.FormatFile(TargetPath, CheckOnly);
+    If Not IsClean Then
+    Begin
+      FormattedFiles := 1;
+      If CheckOnly Then
+        WriteLn(Format('  [DESFORMATADO] %s precisa ser formatado.', [TargetPath]))
+      Else
+        WriteLn(Format('  [FORMATADO] %s', [TargetPath]));
+    End
+    Else
+      WriteLn(Format('  [OK] %s ja esta devidamente formatado.', [TargetPath]));
+  End
+  Else If DirectoryExists(TargetPath) Then
+  Begin
+    TAetherFormatter.FormatDirectory(TargetPath, TotalFiles, FormattedFiles, CheckOnly);
+  End
+  Else
+  Begin
+    WriteLn(ErrOutput, Format('Erro: Arquivo ou diretorio "%s" nao encontrado.', [TargetPath]));
+    Halt(1);
+  End;
+
+  WriteLn('--------------------------------------------------------');
+  If CheckOnly Then
+  Begin
+    If FormattedFiles > 0 Then
+    Begin
+      WriteLn(Format('  FALHA: %d de %d arquivos precisam de formatacao.', [FormattedFiles, TotalFiles]));
+      WriteLn('  Execute "aetherc fmt" para formata-los automaticamente.');
+      WriteLn('========================================================');
+      Halt(1);
+    End
+    Else
+    Begin
+      WriteLn(Format('  SUCESSO: Todos os %d arquivos estao devidamente formatados!', [TotalFiles]));
+      WriteLn('========================================================');
+      Halt(0);
+    End;
+  End
+  Else
+  Begin
+    WriteLn(Format('  Concluido: %d arquivos verificados | %d formatados.', [TotalFiles, FormattedFiles]));
+    WriteLn('========================================================');
+    Halt(0);
+  End;
 End;
 
 Var 
@@ -951,6 +1043,22 @@ Begin
   OptionTargetPascal := True;
   OptionJSONDiag := False;
   IsRunCommand := False;
+
+  // Checa comando de formatacao: fmt [caminho] [--check]
+  If (ParamCount >= 1) And (LowerCase(ParamStr(1)) = 'fmt') Then
+    Begin
+      PrintBanner;
+      Try
+        HandleFmtCommand;
+        Halt(0);
+      Except
+        on E: Exception Do
+          Begin
+            WriteLn(ErrOutput, 'Erro ao formatar: ', E.Message);
+            Halt(1);
+          End;
+      End;
+    End;
 
   // Checa comando de limpeza: clean
   If (ParamCount >= 1) And (LowerCase(ParamStr(1)) = 'clean') Then
