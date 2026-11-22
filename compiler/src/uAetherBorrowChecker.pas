@@ -470,12 +470,24 @@ begin
   else if Stmt is TASTForStmt then
   begin
     ForStmt := TASTForStmt(Stmt);
-    CheckExpr(ForStmt.StartExpr, accRead);
-    CheckExpr(ForStmt.EndExpr, accRead);
+    if Assigned(ForStmt.CollectionExpr) then
+      CheckExpr(ForStmt.CollectionExpr, accRead)
+    else
+    begin
+      CheckExpr(ForStmt.StartExpr, accRead);
+      CheckExpr(ForStmt.EndExpr, accRead);
+    end;
     if Assigned(FCurrentScope) then
       FCurrentScope.ReleaseTemporaryBorrows;
-    for I := 0 to ForStmt.Body.Count - 1 do
-      CheckStmt(TASTStmt(ForStmt.Body[I]));
+    EnterScope;
+    try
+      if Assigned(ForStmt.CollectionExpr) then
+        FCurrentScope.AddVar(ForStmt.VarName, vsOwned, ForStmt.Line, ForStmt.Col, True);
+      for I := 0 to ForStmt.Body.Count - 1 do
+        CheckStmt(TASTStmt(ForStmt.Body[I]));
+    finally
+      LeaveScope;
+    end;
   end
   else if Stmt is TASTRepeatStmt then
   begin

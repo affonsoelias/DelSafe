@@ -177,6 +177,14 @@ begin
     Result := 'set of ' + ParseTypeRef();
     Exit;
   end;
+  if Match(tokMap) then
+  begin
+    Expect(tokLBracket, 'Esperado "[" apos "map"');
+    BaseType := 'map[' + ParseTypeRef() + ']';
+    Expect(tokRBracket, 'Esperado "]" apos tipo da chave do mapa');
+    Result := BaseType + ParseTypeRef();
+    Exit;
+  end;
 
   BaseType := Expect(tokIdentifier, 'Esperado identificador de tipo').Value;
   if Match(tokLess) then
@@ -513,7 +521,7 @@ end;
 
 procedure TAetherParser.ParseTypeSection(AModule: TASTModule; var SectionAttrs: TParsedAttributes);
 var
-  TypeName, TypeDoc, EffectiveCfg, LowBound, HighBound, BaseType: string;
+  TypeName, TypeDoc, EffectiveCfg, LowBound, HighBound, BaseType, KeyType, ValType: string;
   TLine, TCol: Integer;
   RecDecl: TASTRecordDecl;
   EnumDecl: TASTEnumDecl;
@@ -521,6 +529,7 @@ var
   ArrDecl: TASTArrayDecl;
   SetDecl: TASTSetDecl;
   SubDecl: TASTSubrangeDecl;
+  MapDecl: TASTMapDecl;
   CurrentAttrs: TParsedAttributes;
 begin
   Expect(tokType);
@@ -612,6 +621,18 @@ begin
           SetDecl.DocComment := TypeDoc;
           SetDecl.CfgCondition := EffectiveCfg;
           AModule.Types.Add(SetDecl);
+        end
+        else if Check(tokMap) then
+        begin
+          Advance; // consome 'map'
+          Expect(tokLBracket, 'Esperado "[" apos "map"');
+          KeyType := ParseTypeRef();
+          Expect(tokRBracket, 'Esperado "]" apos tipo da chave do mapa');
+          ValType := ParseTypeRef();
+          MapDecl := TASTMapDecl.Create(TLine, TCol, TypeName, KeyType, ValType);
+          MapDecl.DocComment := TypeDoc;
+          MapDecl.CfgCondition := EffectiveCfg;
+          AModule.Types.Add(MapDecl);
         end
         else if (Check(tokIntLiteral) or Check(tokCharLiteral)) and (FPeekTok.Kind = tokDotDot) then
         begin
@@ -744,28 +765,51 @@ end;
 
 procedure TAetherParser.ParseVarSection(ALocalVars: TASTNodeList);
 var
-  VarName, VarType: string;
-  InitExpr: TASTExpr;
-  VLine, VCol: Integer;
+  VarNames: TStringList;
+  VarType: string;
+  InitExpr, ClonedInit: TASTExpr;
+  VLine, VCol, I: Integer;
   IsMut: Boolean;
 begin
   IsMut := Check(tokVar);
   Advance; // consome 'var' ou 'let'
 
-  while Check(tokIdentifier) do
-  begin
-    VLine := FCurTok.Line;
-    VCol := FCurTok.Col;
-    VarName := Expect(tokIdentifier).Value;
-    Expect(tokColon, 'Esperado ":" apos nome da variavel');
-    VarType := ParseTypeRef;
+  VarNames := TStringList.Create;
+  try
+    while Check(tokIdentifier) do
+    begin
+      VarNames.Clear;
+      VLine := FCurTok.Line;
+      VCol := FCurTok.Col;
+      VarNames.Add(Expect(tokIdentifier).Value);
+      while Match(tokComma) do
+        VarNames.Add(Expect(tokIdentifier, 'Esperado identificador apos "," na declaracao de variaveis').Value);
 
-    InitExpr := nil;
-    if Match(tokAssign) then
-      InitExpr := ParseExpr;
+      VarType := '';
+      if Match(tokColon) then
+        VarType := ParseTypeRef();
 
-    Expect(tokSemicolon, 'Esperado ";" apos declaracao de variavel');
-    ALocalVars.Add(TASTVarDecl.Create(VLine, VCol, VarName, VarType, InitExpr, IsMut));
+      InitExpr := nil;
+      if Match(tokAssign) or Match(tokEqual) then
+        InitExpr := ParseExpr;
+
+      if (VarType = '') and not Assigned(InitExpr) then
+        raise EAetherParserError.Create('Esperado ": <Tipo>" ou ":= <Valor>" na declaracao de variavel', FCurTok.Line, FCurTok.Col);
+
+      Expect(tokSemicolon, 'Esperado ";" apos declaracao de variavel');
+      for I := 0 to VarNames.Count - 1 do
+      begin
+        if I = 0 then
+          ClonedInit := InitExpr
+        else if Assigned(InitExpr) then
+          ClonedInit := TASTExpr(CloneASTNode(InitExpr))
+        else
+          ClonedInit := nil;
+        ALocalVars.Add(TASTVarDecl.Create(VLine, VCol, VarNames[I], VarType, ClonedInit, IsMut));
+      end;
+    end;
+  finally
+    VarNames.Free;
   end;
 end;
 
@@ -951,7 +995,7 @@ begin
     end;
 
     // Variaveis Locais
-    if Check(tokVar) or Check(tokLet) then
+    while Check(tokVar) or Check(tokLet) do
       ParseVarSection(Result.LocalVars);
 
     // Corpo begin...end;
@@ -996,7 +1040,7 @@ begin
 
   Result := TASTProgramBlock.Create(PLine, PCol, ProgName);
   try
-    if Check(tokVar) or Check(tokLet) then
+    while Check(tokVar) or Check(tokLet) do
       ParseVarSection(Result.LocalVars);
 
     Expect(tokBegin, 'Esperado "begin" para iniciar o bloco do programa');
@@ -1076,7 +1120,7 @@ end;
 function TAetherParser.ParseForStmt: TASTForStmt;
 var
   VarName: string;
-  StartExpr, EndExpr: TASTExpr;
+  StartExpr, EndExpr, ColExpr: TASTExpr;
   FLine, FCol: Integer;
   IsDownTo: Boolean;
 begin
@@ -1084,7 +1128,28 @@ begin
   FCol := FCurTok.Col;
   Expect(tokFor);
   VarName := Expect(tokIdentifier, 'Esperado nome da variavel contadora do for').Value;
-  Expect(tokAssign, 'Esperado ":=" apos nome da variavel no for');
+
+  if Match(tokIn) then
+  begin
+    ColExpr := ParseExpr;
+    Expect(tokDo, 'Esperado "do" apos colecao do laco for..in');
+    Result := TASTForStmt.Create(FLine, FCol, VarName, nil, nil, False);
+    Result.CollectionExpr := ColExpr;
+    try
+      while not Check(tokEnd) and not Check(tokEOF) do
+      begin
+        Result.Body.Add(ParseStatement);
+        Expect(tokSemicolon, 'Esperado ";" apos instrucao do for');
+      end;
+      Expect(tokEnd, 'Esperado "end" no fechamento do for');
+    except
+      Result.Free;
+      raise;
+    end;
+    Exit;
+  end;
+
+  Expect(tokAssign, 'Esperado ":=" ou "in" apos nome da variavel no for');
   StartExpr := ParseExpr;
   IsDownTo := False;
   if Match(tokTo) then
@@ -1141,26 +1206,69 @@ var
   CaseNode: TASTMatchCase;
   PatternNode: TASTPattern;
   PatVal, SubVal: string;
-  IsLet: Boolean;
+  IsLet, UseCaseKeyword: Boolean;
   MLine, MCol, PLine, PCol: Integer;
+
+  function IsShorthandCaseStart: Boolean;
+  begin
+    if Check(tokCase) then Exit(True);
+    if Check(tokEnd) or Check(tokEOF) then Exit(False);
+    if (Check(tokUnderscore) or Check(tokIntLiteral) or Check(tokStringLiteral) or
+        Check(tokCharLiteral) or Check(tokTrue) or Check(tokFalse) or Check(tokIdentifier)) and
+       ((FPeekTok.Kind = tokColon) or (FPeekTok.Kind = tokFatArrow)) then
+      Exit(True);
+    if Check(tokMinus) and (FPeekTok.Kind = tokIntLiteral) then
+      Exit(True);
+    Result := False;
+  end;
 begin
   MLine := FCurTok.Line;
   MCol := FCurTok.Col;
   Expect(tokMatch);
   MatchExpr := ParseExpr;
-  Expect(tokDo, 'Esperado "do" apos expressao do match');
+  if not Match(tokDo) and not Match(tokWith) then
+    Expect(tokDo, 'Esperado "do" ou "with" apos expressao do match');
 
   Result := TASTMatchStmt.Create(MLine, MCol, MatchExpr);
   try
-    while Match(tokCase) do
+    UseCaseKeyword := Check(tokCase);
+    while (UseCaseKeyword and Match(tokCase)) or ((not UseCaseKeyword) and IsShorthandCaseStart) do
     begin
       PLine := FCurTok.Line;
       PCol := FCurTok.Col;
-      PatVal := Expect(tokIdentifier, 'Esperado identificador do padrao no case').Value;
 
-      // Suporte a MathError.DivisaoPorZero
-      if Match(tokDot) then
-        PatVal := PatVal + '.' + Expect(tokIdentifier).Value;
+      if Match(tokUnderscore) then
+        PatVal := '_'
+      else if Check(tokIntLiteral) then
+      begin
+        PatVal := FCurTok.Value;
+        Advance;
+      end
+      else if Match(tokMinus) then
+      begin
+        PatVal := '-' + Expect(tokIntLiteral, 'Esperado literal inteiro apos "-" no case').Value;
+      end
+      else if Check(tokStringLiteral) then
+      begin
+        PatVal := '"' + FCurTok.Value + '"';
+        Advance;
+      end
+      else if Check(tokCharLiteral) then
+      begin
+        PatVal := '''' + FCurTok.Value + '''';
+        Advance;
+      end
+      else if Match(tokTrue) then
+        PatVal := 'true'
+      else if Match(tokFalse) then
+        PatVal := 'false'
+      else
+      begin
+        PatVal := Expect(tokIdentifier, 'Esperado padrao no case').Value;
+        // Suporte a Enum.Variante
+        if Match(tokDot) then
+          PatVal := PatVal + '.' + Expect(tokIdentifier).Value;
+      end;
 
       SubVal := '';
       IsLet := False;
@@ -1173,7 +1281,10 @@ begin
         else if Match(tokUnderscore) then
           SubVal := '_'
         else if Check(tokIntLiteral) or Check(tokStringLiteral) then
+        begin
           SubVal := FCurTok.Value;
+          Advance;
+        end;
 
         if Match(tokDot) then
           SubVal := SubVal + '.' + Expect(tokIdentifier).Value;
@@ -1185,8 +1296,11 @@ begin
       CaseNode := TASTMatchCase.Create(PLine, PCol, PatternNode);
       Result.Cases.Add(CaseNode);
 
-      Expect(tokColon, 'Esperado ":" apos padrao do case');
-      while not Check(tokCase) and not Check(tokEnd) and not Check(tokEOF) do
+      if not Match(tokColon) and not Match(tokFatArrow) then
+        Expect(tokColon, 'Esperado ":" ou "=>" apos padrao do case');
+
+      while ((UseCaseKeyword and not Check(tokCase)) or ((not UseCaseKeyword) and not IsShorthandCaseStart)) and
+            not Check(tokEnd) and not Check(tokEOF) do
       begin
         CaseNode.Body.Add(ParseStatement);
         Expect(tokSemicolon, 'Esperado ";" apos instrucao do case');
@@ -1643,7 +1757,7 @@ var
   Line, Col: Integer;
 begin
   Left := ParseUnaryExpr;
-  while Check(tokStar) or Check(tokSlash) or Check(tokMod) do
+  while Check(tokStar) or Check(tokSlash) or Check(tokMod) or Check(tokShl) or Check(tokShr) do
   begin
     Line := FCurTok.Line;
     Col := FCurTok.Col;
@@ -1698,7 +1812,7 @@ var
   Line, Col: Integer;
 begin
   Left := ParseRelationalExpr;
-  while Check(tokAnd) or Check(tokOr) or Check(tokImplies) do
+  while Check(tokAnd) or Check(tokOr) or Check(tokXor) or Check(tokImplies) do
   begin
     Line := FCurTok.Line;
     Col := FCurTok.Col;

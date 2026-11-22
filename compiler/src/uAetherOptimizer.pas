@@ -575,8 +575,13 @@ begin
   else if Stmt is TASTForStmt then
   begin
     ForStmt := TASTForStmt(Stmt);
-    OptimizeExpr(ForStmt.StartExpr);
-    OptimizeExpr(ForStmt.EndExpr);
+    if Assigned(ForStmt.CollectionExpr) then
+      OptimizeExpr(ForStmt.CollectionExpr)
+    else
+    begin
+      OptimizeExpr(ForStmt.StartExpr);
+      OptimizeExpr(ForStmt.EndExpr);
+    end;
     if Assigned(ForStmt.Body) then
       OptimizeBlock(ForStmt.Body);
   end

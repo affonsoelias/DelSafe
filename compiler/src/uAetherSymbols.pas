@@ -222,6 +222,9 @@ begin
   FGlobalScope.Define(TSymbol.Create('Some', skFunction, 'Option', 0, 0));
   FGlobalScope.Define(TSymbol.Create('None', skFunction, 'Option', 0, 0));
   FGlobalScope.Define(TSymbol.Create('Length', skFunction, 'UInt32', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('Count', skFunction, 'Int32', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('Contains', skFunction, 'Bool', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('Remove', skFunction, 'Void', 0, 0));
   FGlobalScope.Define(TSymbol.Create('SetLength', skFunction, 'Void', 0, 0));
   FGlobalScope.Define(TSymbol.Create('Push', skFunction, 'Void', 0, 0));
   FGlobalScope.Define(TSymbol.Create('__InterpToStr', skFunction, 'String', 0, 0));
@@ -310,7 +313,8 @@ begin
     Exit(ResolveType(Copy(CleanName, 2, Length(CleanName))));
 
   if (CleanName = 'Result') or (CleanName = 'Option') or (CleanName = 'Box') or (CleanName = 'Task') or
-     (Pos('array[', CleanName) = 1) or (Pos('array of ', CleanName) = 1) or (Pos('set of', CleanName) = 1) then
+     (Pos('array[', CleanName) = 1) or (Pos('array of ', CleanName) = 1) or (Pos('set of', CleanName) = 1) or
+     (Pos('map[', CleanName) = 1) then
     Exit(True);
 
   Sym := ResolveTypeSymbol(CleanName);

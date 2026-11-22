@@ -717,3 +717,24 @@ Este documento traça o status oficial de desenvolvimento do compilador e as pr�
 - [x] **6. Suíte de Testes Automatizada & Documentação**:
   - Criação de `tests/07_fase45_dynarray_defer_interp_try_ptr_test.aeth` validando todos os recursos nos backends FPC e GCC C99 (7/7 testes aprovados em ambos os backends).
   - Atualização dos capítulos correspondentes do Masterclass Course em `docs/course/02_VARIABLES_TYPES_MUTABILITY.md` e `docs/course/03_CONTROL_FLOW_AND_MATCH.md`.
+
+---
+
+### ✅ Fase 46: Operadores Bitwise, Iteração `for..in`, Pattern Matching Universal, Ergonomia `var`/`let` & Mapas (`map[K]V`) - CONCLUÍDA
+- [x] **1. Operadores Bitwise e Literais Hex/Bin (`shl`, `shr`, `xor`, `and`/`or`/`not`)**:
+  - Suporte completo a `shl`, `shr`, `xor` e uso de `and`, `or`, `not` sobre tipos inteiros em ambos os backends (`<<`, `>>`, `^`, `&`, `|`, `~` no C99; `shl`, `shr`, `xor`, `and`, `or`, `not` no Free Pascal).
+  - Conversão automática de literais hexadecimais (`$FF` / `0xFF`) e binários (`%1010` / `0b1010`).
+- [x] **2. Laço Iterador `for item in colecao`**:
+  - Sintaxe: `for item in colecao do ... end;` para Arrays Fixos, Arrays Dinâmicos (`array of T`) e `String`.
+  - Tipagem automática da variável iteradora no escopo e emissão nativa no Free Pascal / indexada no GCC C99.
+- [x] **3. Emissão Completa de Pattern Matching (`match`)**:
+  - Suporte completo nos backends Free Pascal e GCC C99 para Enums (`Enum.Variante`), `Option<T>` (`Some`/`None`), `Result<T, E>` (`Ok`/`Err`), Inteiros, Strings, Chars, Booleans e Wildcard (`_`), com separador `:` ou `=>`.
+- [x] **4. Ergonomia de Declarações `var` e `let`**:
+  - Declaração múltipla na mesma linha: `var a, b, c: Int32;`.
+  - Inferência automática de tipo na inicialização: `var total := 100;` e `let nome := "Aether";`.
+- [x] **5. Mapas Associativos / Dicionários (`map[K]V`)**:
+  - Sintaxe: `type Tabela = map[String]Int32;` ou inline `var mapa: map[String]Int32;`.
+  - Operações e UFCS: indexação de escrita/leitura `m[k] := v` / `m[k]`, `m.Contains(k)`, `m.Remove(k)`, `m.Length()` / `m.Count()`.
+- [x] **6. Suíte de Testes Automatizada & Documentação**:
+  - Criação de `tests/08_fase46_bitwise_forin_match_var_map_test.aeth` validando todos os recursos nos backends FPC e GCC C99 (`8/8` testes aprovados em ambos os backends e `aetherc lint` limpo).
+  - Atualização do Masterclass Course (`docs/course/02_VARIABLES_TYPES_MUTABILITY.md` e `docs/course/03_CONTROL_FLOW_AND_MATCH.md`).

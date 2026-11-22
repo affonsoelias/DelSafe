@@ -181,6 +181,7 @@ type
     VarName: string;
     StartExpr: TASTExpr;
     EndExpr: TASTExpr;
+    CollectionExpr: TASTExpr;
     IsDownTo: Boolean;
     Body: TASTNodeList;
     constructor Create(ALine, ACol: Integer; const AVarName: string; AStart, AEnd: TASTExpr; AIsDownTo: Boolean = False);
@@ -385,6 +386,17 @@ type
     DocComment: string;
     CfgCondition: string;
     constructor Create(ALine, ACol: Integer; const AName, ALow, AHigh, ABase: string);
+    function Dump(Indent: Integer = 0): string; override;
+  end;
+
+  TASTMapDecl = class(TASTNode)
+  public
+    Name: string;
+    KeyType: string;
+    ValType: string;
+    DocComment: string;
+    CfgCondition: string;
+    constructor Create(ALine, ACol: Integer; const AName, AKeyType, AValType: string);
     function Dump(Indent: Integer = 0): string; override;
   end;
 
@@ -937,6 +949,7 @@ begin
   VarName := AVarName;
   StartExpr := AStart;
   EndExpr := AEnd;
+  CollectionExpr := nil;
   IsDownTo := AIsDownTo;
   Body := TASTNodeList.Create;
 end;
@@ -945,6 +958,7 @@ destructor TASTForStmt.Destroy;
 begin
   StartExpr.Free;
   EndExpr.Free;
+  CollectionExpr.Free;
   Body.Free;
   inherited Destroy;
 end;
@@ -954,12 +968,21 @@ var
   I: Integer;
   DirStr: string;
 begin
-  if IsDownTo then DirStr := 'downto' else DirStr := 'to';
-  Result := MakeIndent(Indent) + Format('Para (For) %s := ', [VarName]) + LineEnding +
-            StartExpr.Dump(Indent + 1) + LineEnding +
-            MakeIndent(Indent) + DirStr + LineEnding +
-            EndExpr.Dump(Indent + 1) + LineEnding +
-            MakeIndent(Indent) + 'Faca (Do):';
+  if Assigned(CollectionExpr) then
+  begin
+    Result := MakeIndent(Indent) + Format('Para (For-In) %s in:', [VarName]) + LineEnding +
+              CollectionExpr.Dump(Indent + 1) + LineEnding +
+              MakeIndent(Indent) + 'Faca (Do):';
+  end
+  else
+  begin
+    if IsDownTo then DirStr := 'downto' else DirStr := 'to';
+    Result := MakeIndent(Indent) + Format('Para (For) %s := ', [VarName]) + LineEnding +
+              StartExpr.Dump(Indent + 1) + LineEnding +
+              MakeIndent(Indent) + DirStr + LineEnding +
+              EndExpr.Dump(Indent + 1) + LineEnding +
+              MakeIndent(Indent) + 'Faca (Do):';
+  end;
   for I := 0 to Body.Count - 1 do
     Result := Result + LineEnding + Body[I].Dump(Indent + 1);
 end;
@@ -1447,6 +1470,23 @@ begin
   Result := MakeIndent(Indent) + Format('Tipo Subfaixa: %s = %s..%s (base: %s)', [Name, LowBound, HighBound, BaseType]);
 end;
 
+{ TASTMapDecl }
+
+constructor TASTMapDecl.Create(ALine, ACol: Integer; const AName, AKeyType, AValType: string);
+begin
+  inherited Create(ALine, ACol);
+  Name := AName;
+  KeyType := AKeyType;
+  ValType := AValType;
+  DocComment := '';
+  CfgCondition := '';
+end;
+
+function TASTMapDecl.Dump(Indent: Integer): string;
+begin
+  Result := MakeIndent(Indent) + Format('Tipo Mapa: %s = map[%s]%s', [Name, KeyType, ValType]);
+end;
+
 { TASTParam }
 
 constructor TASTParam.Create(ALine, ACol: Integer; const AName, AType: string; AOwnership: TOwnershipKind);
@@ -1791,6 +1831,8 @@ begin
                                  TASTExpr(CloneASTNode(TASTForStmt(Node).StartExpr)),
                                  TASTExpr(CloneASTNode(TASTForStmt(Node).EndExpr)),
                                  TASTForStmt(Node).IsDownTo);
+    if Assigned(TASTForStmt(Node).CollectionExpr) then
+      TASTForStmt(Result).CollectionExpr := TASTExpr(CloneASTNode(TASTForStmt(Node).CollectionExpr));
     for I := 0 to TASTForStmt(Node).Body.Count - 1 do
       TASTForStmt(Result).Body.Add(CloneASTNode(TASTForStmt(Node).Body[I]));
     Exit;

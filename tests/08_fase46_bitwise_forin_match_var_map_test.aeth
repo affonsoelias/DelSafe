@@ -1,0 +1,239 @@
+module Fase46BitwiseForInMatchVarMapTest;
+
+type
+    HttpStatus = (OkStatus, NotFound, ServerError);
+    ListaInt = array of Int32;
+    Vetor4 = array[4] of Int32;
+    Placar = map[String]Int32;
+
+function ExtractNibble(val: UInt32): UInt32
+begin
+    return (val shr 4) and $0F;
+end;
+
+function ClassifyCode(code: Int32): Int32
+var
+    res: Int32;
+begin
+    res := 0;
+    match code do
+        200 =>
+            res := 1;
+        404 =>
+            res := 2;
+        -1 =>
+            res := -1;
+        _ =>
+            res := 99;
+    end;
+    return res;
+end;
+
+function StatusToNumber(s: HttpStatus): Int32
+var
+    outVal: Int32;
+begin
+    outVal := 0;
+    match s with
+        case HttpStatus.OkStatus:
+            outVal := 200;
+        case HttpStatus.NotFound:
+            outVal := 404;
+        case HttpStatus.ServerError:
+            outVal := 500;
+    end;
+    return outVal;
+end;
+
+function AddScore(mut borrow tabela: Placar, nome: String, delta: Int32): Void
+begin
+    if tabela.Contains(nome) then
+        tabela[nome] := tabela[nome] + delta;
+    else
+        tabela[nome] := delta;
+    end;
+end;
+
+function MakeOk(v: Float64): Result<Float64, Int32>
+begin
+    return Ok(v);
+end;
+
+function MakeErr(e: Int32): Result<Float64, Int32>
+begin
+    return Err(e);
+end;
+
+program Main;
+var
+    a, b, c: Int32;
+    hexA, hexB, binA, binB, mask, bits: UInt32;
+    dynNums: ListaInt;
+    fixedArr: Vetor4;
+    item, sumDyn, sumFixed: Int32;
+    ch: Char;
+    word: String;
+    aCount, cmdCode, charCode, boolCode, matchResSum: Int32;
+    infInt := 42;
+    infFloat := 2.5;
+    scores: Placar;
+    names: map[Int32]String;
+    rOk, rErr: Result<Float64, Int32>;
+let
+    infStr := "Aether";
+    infBool := true;
+begin
+    // 1. Bitwise & Hex/Bin literals ($FF, 0xFF, %1010, 0b1010)
+    hexA := $FF;
+    hexB := 0x0F;
+    binA := %1010;
+    binB := 0b0101;
+    Assert(hexA = 255);
+    Assert(hexB = 15);
+    Assert(binA = 10);
+    Assert(binB = 5);
+    Assert((binA or binB) = %1111);
+    Assert((hexA and $F0) = 240);
+    Assert((binA xor 0b1100) = 0b0110);
+    Assert((1 shl 5) = 32);
+    Assert(($80 shr 3) = 16);
+    mask := $0F;
+    bits := (not mask) and $FF;
+    Assert(bits = $F0);
+    Assert(ExtractNibble($A5) = $0A);
+    Assert(true xor false);
+    Assert(not (true xor true));
+
+    // 2. var/let multi-var & type inference
+    a := 10;
+    b := 20;
+    c := a + b;
+    Assert(c = 30);
+    Assert(infInt = 42);
+    Assert(infFloat > 2.0);
+    Assert(infStr = "Aether");
+    Assert(infBool);
+
+    // 3. for item in colecao (dynamic array, fixed array, String)
+    dynNums.Push(3);
+    dynNums.Push(7);
+    dynNums.Push(11);
+    sumDyn := 0;
+    for item in dynNums do
+        sumDyn := sumDyn + item;
+    end;
+    Assert(sumDyn = 21);
+
+    fixedArr[0] := 2;
+    fixedArr[1] := 4;
+    fixedArr[2] := 6;
+    fixedArr[3] := 8;
+    sumFixed := 0;
+    for item in fixedArr do
+        if item = 6 then
+            continue;
+        end;
+        sumFixed := sumFixed + item;
+    end;
+    Assert(sumFixed = 14);
+
+    word := "banana";
+    aCount := 0;
+    for ch in word do
+        if ch = 'a' then
+            aCount := aCount + 1;
+        end;
+    end;
+    Assert(aCount = 3);
+
+    // 4. Complete match code emission
+    Assert(ClassifyCode(200) = 1);
+    Assert(ClassifyCode(404) = 2);
+    Assert(ClassifyCode(-1) = -1);
+    Assert(ClassifyCode(123) = 99);
+    Assert(StatusToNumber(HttpStatus.OkStatus) = 200);
+    Assert(StatusToNumber(HttpStatus.NotFound) = 404);
+    Assert(StatusToNumber(HttpStatus.ServerError) = 500);
+
+    cmdCode := 0;
+    match infStr with
+        "Rust":
+            cmdCode := 1;
+        "Aether":
+            cmdCode := 7;
+        _:
+            cmdCode := -1;
+    end;
+    Assert(cmdCode = 7);
+
+    charCode := 0;
+    match 'x' do
+        'a' =>
+            charCode := 1;
+        'x' =>
+            charCode := 42;
+        _ =>
+            charCode := 0;
+    end;
+    Assert(charCode = 42);
+
+    boolCode := 0;
+    match infBool do
+        true =>
+            boolCode := 10;
+        false =>
+            boolCode := 20;
+    end;
+    Assert(boolCode = 10);
+
+    matchResSum := 0;
+    rOk := MakeOk(15.0);
+    match rOk with
+        case Ok(let val):
+            if val > 14.0 then
+                matchResSum := matchResSum + 100;
+            end;
+        case Err(let errCode):
+            matchResSum := matchResSum + errCode;
+    end;
+    rErr := MakeErr(7);
+    match rErr with
+        case Ok(let ignored):
+            if ignored > 0.0 then
+                matchResSum := matchResSum + 1;
+            end;
+        case Err(let errNum):
+            matchResSum := matchResSum + errNum;
+    end;
+    Assert(matchResSum = 107);
+
+    // 5. Associative maps map[K]V
+    scores["Alice"] := 10;
+    scores["Bob"] := 25;
+    Assert(scores.Count() = 2);
+    Assert(scores.Length() = 2);
+    Assert(scores.Contains("Alice"));
+    Assert(not scores.Contains("Carol"));
+    Assert(scores["Alice"] = 10);
+    Assert(scores["Bob"] = 25);
+    Assert(scores["Missing"] = 0);
+
+    AddScore(mut borrow scores, "Alice", 5);
+    AddScore(mut borrow scores, "Carol", 40);
+    Assert(scores["Alice"] = 15);
+    Assert(scores["Carol"] = 40);
+    Assert(scores.Count() = 3);
+
+    scores.Remove("Bob");
+    Assert(not scores.Contains("Bob"));
+    Assert(scores.Count() = 2);
+    Assert(scores["Bob"] = 0);
+
+    names[1] := "Um";
+    names[2] := "Dois";
+    Assert(names.Contains(1));
+    Assert(names[2] = "Dois");
+    Assert(names[99] = "");
+
+    PrintLn("=== FASE 46 TEST PASSOU (BITWISE, FOR..IN, MATCH, VAR/LET, MAP) ===");
+end.

@@ -291,13 +291,68 @@ begin
 end.
 ```
 
+### 5.7 Multi-Variable Declarations & Type Inference (`var` / `let`)
+
+Related variables of the same type can share a declaration line, and variables initialized inline can omit the type annotation to infer their concrete type (`Int32`, `Float64`, `String`, `Bool`, etc.):
+
+```aether
+var
+    a, b, c: Int32;
+    total := 100;       // Inferred as Int32
+    ratio := 2.5;       // Inferred as Float64
+let
+    appName := "Aether"; // Immutable, inferred as String
+    enabled := true;     // Immutable, inferred as Bool
+```
+
+### 5.8 Associative Maps (`map[K]V`)
+
+Aether includes first-class associative dictionaries using `map[KeyType]ValueType`, declared either as a named `type` alias or inline in `var` sections. Supported operations use bracket indexing and UFCS methods:
+
+```aether
+type
+    ScoreBoard = map[String]Int32;
+
+program Main;
+var
+    scores: ScoreBoard;
+    labels: map[Int32]String;
+begin
+    scores["Alice"] := 10;
+    scores["Bob"] := 25;
+
+    if scores.Contains("Alice") then
+        PrintLn(scores["Alice"]); // 10
+    end;
+
+    scores.Remove("Bob");
+    PrintLn(scores.Count()); // 1 (scores.Length() is also supported)
+    labels[1] := "Primary";
+end.
+```
+
+### 5.9 Bitwise Operators & Hex/Binary Literals
+
+Integer types support both Pascal (`$FF`, `%1010`) and C-style (`0xFF`, `0b1010`) hexadecimal and binary literals alongside bitwise operators `shl`, `shr`, `xor`, `and`, `or`, and `not`:
+
+```aether
+var
+    flags, mask, nibble: UInt32;
+begin
+    flags := $A5;
+    mask := 0x0F;
+    nibble := (flags shr 4) and mask; // 10
+    flags := ((1 shl 3) or 0b0001) xor %0101;
+end.
+```
+
 ---
 
 ## 6. Summary
-1. Prefer immutable bindings where possible; use `var` only for variables that must mutate.
-2. Integers and floats require explicit casts (`Int32(x)`) to avoid accidental precision truncation.
+1. Prefer immutable bindings (`let`) where possible; use `var` only for variables that must mutate, and omit redundant types via `:=` inference when initialized.
+2. Integers and floats require explicit casts (`Int32(x)`) to avoid accidental precision truncation, and support `$`/`0x` hex, `%`/`0b` binary literals, and bitwise operators (`shl`, `shr`, `xor`, `and`, `or`, `not`).
 3. Strings are UTF-8, type-safe, and support zero-overhead compile-time interpolation via `$"..."`.
-4. Fixed arrays support $N$-D indexing, while dynamic arrays (`array of T`) resize at runtime with `SetLength` and `Push`.
+4. Fixed arrays support $N$-D indexing, dynamic arrays (`array of T`) resize at runtime with `SetLength` and `Push`, and associative maps (`map[K]V`) provide key-value lookup (`Contains`, `Remove`, `Count`/`Length`).
 5. Sets (`set of`) and subranges (`1..31`) provide bitmask collections and strict numerical bounds.
 6. Raw pointers (`^T`, `@var`, `nil`) require an explicit `unsafe ... end;` block for dereferencing (`ptr^`).
 

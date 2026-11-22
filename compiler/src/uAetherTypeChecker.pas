@@ -40,6 +40,7 @@ type
     function IsIntegerType(const AType: string): Boolean;
     function IsSetType(const AType: string): Boolean;
     function IsDynamicArrayType(const AType: string; out ElemType: string): Boolean;
+    function IsMapType(const AType: string; out KeyType, ValType: string): Boolean;
     function TypesAreCompatible(const TargetType, SourceType: string): Boolean;
 
     function CheckExpr(Expr: TASTExpr): string;
@@ -77,6 +78,7 @@ type
     function InferForeignFunctionReturnType(const FuncName: string): string;
     procedure CheckFunction(Func: TASTFunction);
     procedure CheckProgramBlock(Prog: TASTProgramBlock);
+    procedure CheckVarDecl(VarDecl: TASTVarDecl);
   public
     constructor Create;
     destructor Destroy; override;
@@ -177,11 +179,46 @@ begin
   Result := False;
 end;
 
+function TAetherTypeChecker.IsMapType(const AType: string; out KeyType, ValType: string): Boolean;
+var
+  Sym: TSymbol;
+  MapDecl: TASTMapDecl;
+  PClose: Integer;
+begin
+  KeyType := '';
+  ValType := '';
+  if Pos('map[', AType) = 1 then
+  begin
+    PClose := Pos(']', AType);
+    if PClose > 4 then
+    begin
+      KeyType := Trim(Copy(AType, 5, PClose - 5));
+      ValType := Trim(Copy(AType, PClose + 1, Length(AType)));
+      Exit(True);
+    end;
+  end;
+  if Assigned(FSymbols) then
+  begin
+    Sym := FSymbols.Resolve(AType);
+    if (Sym <> nil) and (Sym.Kind = skType) and (Sym.Node is TASTMapDecl) then
+    begin
+      MapDecl := TASTMapDecl(Sym.Node);
+      KeyType := MapDecl.KeyType;
+      ValType := MapDecl.ValType;
+      Exit(True);
+    end;
+  end;
+  Result := False;
+end;
+
 function TAetherTypeChecker.TypesAreCompatible(const TargetType, SourceType: string): Boolean;
 var
-  TargetElem, SourceElem: string;
+  TargetElem, SourceElem, TargetKey, TargetVal, SourceKey, SourceVal: string;
 begin
   if TargetType = SourceType then Exit(True);
+  // Mapas associativos
+  if IsMapType(TargetType, TargetKey, TargetVal) and IsMapType(SourceType, SourceKey, SourceVal) then
+    Exit(TypesAreCompatible(TargetKey, SourceKey) and TypesAreCompatible(TargetVal, SourceVal));
   // Ponteiros e nil
   if (SourceType = 'NilLiteral') and ((Pos('^', TargetType) = 1) or (TargetType = 'Pointer')) then Exit(True);
   if (TargetType = 'NilLiteral') and ((Pos('^', SourceType) = 1) or (SourceType = 'Pointer')) then Exit(True);
@@ -411,9 +448,29 @@ begin
     Exit('Bool');
   end;
 
-  // Operacoes Logicas: and, or, implies
-  if (Bin.Op = 'and') or (Bin.Op = 'or') or (Bin.Op = 'implies') then
+  // Operacoes de deslocamento de bits: shl, shr
+  if SameText(Bin.Op, 'shl') or SameText(Bin.Op, 'shr') then
   begin
+    if not IsIntegerType(LeftType) then
+      Error('E0369', Format('Operando esquerdo de "%s" deve ser inteiro, encontrado: "%s"', [Bin.Op, LeftType]), Bin.Line, Bin.Col);
+    if not IsIntegerType(RightType) then
+      Error('E0369', Format('Operando direito de "%s" deve ser inteiro, encontrado: "%s"', [Bin.Op, RightType]), Bin.Line, Bin.Col);
+    if LeftType = 'IntLiteral' then Exit('Int32')
+    else Exit(LeftType);
+  end;
+
+  // Operacoes Logicas e Bitwise: and, or, xor, implies
+  if SameText(Bin.Op, 'and') or SameText(Bin.Op, 'or') or SameText(Bin.Op, 'xor') or SameText(Bin.Op, 'implies') then
+  begin
+    if (not SameText(Bin.Op, 'implies')) and IsIntegerType(LeftType) and IsIntegerType(RightType) then
+    begin
+      if LeftType = 'IntLiteral' then
+      begin
+        if RightType = 'IntLiteral' then Exit('Int32')
+        else Exit(RightType);
+      end;
+      Exit(LeftType);
+    end;
     if (LeftType <> 'Bool') then
       Error('E0308', Format('Operando de "%s" deve ser Bool, encontrado: "%s"', [Bin.Op, LeftType]), Bin.Line, Bin.Col);
     if (RightType <> 'Bool') then
@@ -456,10 +513,15 @@ begin
       Error('E0369', Format('Operador unario "-" exige tipo numerico, encontrado: "%s"', [OperandType]), Un.Line, Un.Col);
     Exit(OperandType);
   end
-  else if Un.Op = 'not' then
+  else if SameText(Un.Op, 'not') then
   begin
+    if IsIntegerType(OperandType) then
+    begin
+      if OperandType = 'IntLiteral' then Exit('Int32')
+      else Exit(OperandType);
+    end;
     if OperandType <> 'Bool' then
-      Error('E0308', Format('Operador "not" exige tipo Bool, encontrado: "%s"', [OperandType]), Un.Line, Un.Col);
+      Error('E0308', Format('Operador "not" exige tipo Bool ou Inteiro, encontrado: "%s"', [OperandType]), Un.Line, Un.Col);
     Exit('Bool');
   end;
   Result := OperandType;
@@ -529,7 +591,7 @@ var
   SubSym: TSymbol;
   I: Integer;
   Arg: TASTCallArg;
-  ArgType, ExpectedType, Mangled, MonomorphedName, ElemType: string;
+  ArgType, ExpectedType, Mangled, MonomorphedName, ElemType, KeyType, ValType: string;
 begin
   if Call.Callee = '__InterpToStr' then
   begin
@@ -717,18 +779,50 @@ begin
       Exit('Void');
     end;
 
-    if SameText(Call.Callee, 'Length') then
+    if SameText(Call.Callee, 'Length') or SameText(Call.Callee, 'Count') then
     begin
       if Call.Args.Count <> 1 then
-        Error('E0061', 'Funcao "Length" espera 1 argumento (String ou Array)', Call.Line, Call.Col);
+        Error('E0061', Format('Funcao "%s" espera 1 argumento (String, Array ou Mapa)', [Call.Callee]), Call.Line, Call.Col);
       ArgType := CheckExpr(TASTCallArg(Call.Args[0]).Expr);
-      if ArgType = 'String' then
+      if (ArgType = 'String') and SameText(Call.Callee, 'Length') then
         Exit('UInt32')
-      else if IsDynamicArrayType(ArgType, ElemType) or (Pos('array[', ArgType) = 1) or
+      else if IsDynamicArrayType(ArgType, ElemType) or IsMapType(ArgType, KeyType, ValType) or (Pos('array[', ArgType) = 1) or
               (Assigned(FSymbols.Resolve(ArgType)) and (FSymbols.Resolve(ArgType).Node is TASTArrayDecl)) then
         Exit('Int32')
       else
-        Error('E0308', Format('Funcao "Length" espera String ou Array, recebeu: "%s"', [ArgType]), Call.Line, Call.Col);
+        Error('E0308', Format('Funcao "%s" espera String, Array ou Mapa, recebeu: "%s"', [Call.Callee, ArgType]), Call.Line, Call.Col);
+    end;
+
+    if SameText(Call.Callee, 'Contains') then
+    begin
+      if Call.Args.Count <> 2 then
+        Error('E0061', 'Funcao "Contains" espera 2 argumentos (Mapa, Chave)', Call.Line, Call.Col);
+      ArgType := CheckExpr(TASTCallArg(Call.Args[0]).Expr);
+      if not IsMapType(ArgType, KeyType, ValType) then
+        Error('E0308', Format('Primeiro argumento de "Contains" deve ser Mapa, recebeu: "%s"', [ArgType]), Call.Line, Call.Col);
+      ArgType := CheckExpr(TASTCallArg(Call.Args[1]).Expr);
+      if not TypesAreCompatible(KeyType, ArgType) then
+        Error('E0308', Format('Chave de "Contains" incompativel: esperado "%s", recebeu "%s"', [KeyType, ArgType]), Call.Line, Call.Col);
+      Exit('Bool');
+    end;
+
+    if SameText(Call.Callee, 'Remove') then
+    begin
+      if Call.Args.Count <> 2 then
+        Error('E0061', 'Funcao "Remove" espera 2 argumentos (Mapa, Chave)', Call.Line, Call.Col);
+      if TASTCallArg(Call.Args[0]).Expr is TASTIdentifierExpr then
+      begin
+        SubSym := FSymbols.Resolve(TASTIdentifierExpr(TASTCallArg(Call.Args[0]).Expr).Name);
+        if Assigned(SubSym) and (not SubSym.IsMutable) then
+          Error('E0384', Format('Nao e possivel remover chave de mapa imutavel (declarado com "let"): "%s"', [SubSym.Name]), Call.Line, Call.Col);
+      end;
+      ArgType := CheckExpr(TASTCallArg(Call.Args[0]).Expr);
+      if not IsMapType(ArgType, KeyType, ValType) then
+        Error('E0308', Format('Primeiro argumento de "Remove" deve ser Mapa, recebeu: "%s"', [ArgType]), Call.Line, Call.Col);
+      ArgType := CheckExpr(TASTCallArg(Call.Args[1]).Expr);
+      if not TypesAreCompatible(KeyType, ArgType) then
+        Error('E0308', Format('Chave de "Remove" incompativel: esperado "%s", recebeu "%s"', [KeyType, ArgType]), Call.Line, Call.Col);
+      Exit('Void');
     end;
 
     if SameText(Call.Callee, 'SetLength') then
@@ -1039,7 +1133,7 @@ end;
 
 function TAetherTypeChecker.CheckIndexExpr(Idx: TASTIndexExpr): string;
 var
-  TargetType, IdxType, ElemType: string;
+  TargetType, IdxType, ElemType, KeyType, ValType: string;
   I, DimSize, ValInt: Integer;
   Sym: TSymbol;
   ArrDecl: TASTArrayDecl;
@@ -1047,6 +1141,16 @@ var
 begin
   TargetType := CheckExpr(Idx.Target);
   ElemType := 'Int32';
+
+  if IsMapType(TargetType, KeyType, ValType) then
+  begin
+    if Idx.Indices.Count <> 1 then
+      Error('E0061', Format('Acesso ao mapa espera exatamente 1 chave, encontrado %d', [Idx.Indices.Count]), Idx.Line, Idx.Col);
+    IdxType := CheckExpr(TASTExpr(Idx.Indices[0]));
+    if not TypesAreCompatible(KeyType, IdxType) then
+      Error('E0308', Format('Chave do mapa espera tipo "%s", mas recebeu "%s"', [KeyType, IdxType]), Idx.Line, Idx.Col);
+    Exit(ValType);
+  end;
 
   ArrDecl := nil;
   Sym := FSymbols.Resolve(TargetType);
@@ -1156,24 +1260,64 @@ end;
 
 procedure TAetherTypeChecker.CheckFor(ForStmt: TASTForStmt);
 var
-  VarSym: TSymbol;
-  StartType, EndType: string;
-  I: Integer;
+  VarSym, ColSym: TSymbol;
+  StartType, EndType, ColType, ElemType: string;
+  ArrDecl: TASTArrayDecl;
+  P1, I: Integer;
 begin
-  VarSym := FSymbols.Resolve(ForStmt.VarName);
-  if not Assigned(VarSym) then
+  if Assigned(ForStmt.CollectionExpr) then
   begin
-    FSymbols.Define(TSymbol.Create(ForStmt.VarName, skVariable, 'Int32', ForStmt.Line, ForStmt.Col, True));
+    ColType := CheckExpr(ForStmt.CollectionExpr);
+    ElemType := '';
+    if IsDynamicArrayType(ColType, ElemType) then
+    begin
+      // ElemType preenchido
+    end
+    else if ColType = 'String' then
+      ElemType := 'Char'
+    else if Pos('array[', ColType) = 1 then
+    begin
+      P1 := Pos('] of ', ColType);
+      if P1 > 0 then
+        ElemType := Trim(Copy(ColType, P1 + 5, Length(ColType)));
+    end
+    else
+    begin
+      ColSym := FSymbols.Resolve(ColType);
+      if Assigned(ColSym) and (ColSym.Kind = skType) and (ColSym.Node is TASTArrayDecl) then
+      begin
+        ArrDecl := TASTArrayDecl(ColSym.Node);
+        ElemType := ArrDecl.ElemType;
+      end;
+    end;
+
+    if ElemType = '' then
+      Error('E0308', Format('Tipo "%s" nao e iteravel em laco "for..in"', [ColType]), ForStmt.Line, ForStmt.Col);
+
+    VarSym := FSymbols.Resolve(ForStmt.VarName);
+    if not Assigned(VarSym) then
+      FSymbols.Define(TSymbol.Create(ForStmt.VarName, skVariable, ElemType, ForStmt.Line, ForStmt.Col, True))
+    else if not TypesAreCompatible(VarSym.TypeName, ElemType) then
+      Error('E0308', Format('Variavel "%s" do laco "for..in" tem tipo "%s", incompativel com "%s"',
+        [ForStmt.VarName, VarSym.TypeName, ElemType]), ForStmt.Line, ForStmt.Col);
+  end
+  else
+  begin
+    VarSym := FSymbols.Resolve(ForStmt.VarName);
+    if not Assigned(VarSym) then
+    begin
+      FSymbols.Define(TSymbol.Create(ForStmt.VarName, skVariable, 'Int32', ForStmt.Line, ForStmt.Col, True));
+    end;
+
+    StartType := CheckExpr(ForStmt.StartExpr);
+    EndType := CheckExpr(ForStmt.EndExpr);
+
+    if not IsIntegerType(StartType) and (StartType <> 'IntLiteral') then
+      Error('E0308', Format('Limite inicial do laco "for" deve ser inteiro, encontrado: "%s"', [StartType]), ForStmt.Line, ForStmt.Col);
+
+    if not IsIntegerType(EndType) and (EndType <> 'IntLiteral') then
+      Error('E0308', Format('Limite final do laco "for" deve ser inteiro, encontrado: "%s"', [EndType]), ForStmt.Line, ForStmt.Col);
   end;
-
-  StartType := CheckExpr(ForStmt.StartExpr);
-  EndType := CheckExpr(ForStmt.EndExpr);
-
-  if not IsIntegerType(StartType) and (StartType <> 'IntLiteral') then
-    Error('E0308', Format('Limite inicial do laco "for" deve ser inteiro, encontrado: "%s"', [StartType]), ForStmt.Line, ForStmt.Col);
-
-  if not IsIntegerType(EndType) and (EndType <> 'IntLiteral') then
-    Error('E0308', Format('Limite final do laco "for" deve ser inteiro, encontrado: "%s"', [EndType]), ForStmt.Line, ForStmt.Col);
 
   Inc(FLoopDepth);
   try
@@ -1206,14 +1350,13 @@ var
   MatchedType: string;
   Sym: TSymbol;
   EnumDecl: TASTEnumDecl;
-  I, J: Integer;
+  I, J, PDot, PComma: Integer;
   CaseNode: TASTMatchCase;
-  PatternVal: string;
-  HasWildcard: Boolean;
+  PatternVal, Prefix, InnerType, PatType: string;
+  HasWildcard, FoundVariant: Boolean;
   CoveredVariants: TStringList;
-  VariantName: string;
-  MissingVariant: string;
-  HasOk, HasErr: Boolean;
+  VariantName, MissingVariant: string;
+  HasOk, HasErr, HasSome, HasNone: Boolean;
 begin
   MatchedType := CheckExpr(MatchStmt.Expr);
   HasWildcard := False;
@@ -1234,20 +1377,30 @@ begin
           HasWildcard := True
         else
         begin
-          // Se for Enum.Variante
-          if Pos('.', PatternVal) > 0 then
-            PatternVal := Copy(PatternVal, Pos('.', PatternVal) + 1, Length(PatternVal));
+          PDot := Pos('.', PatternVal);
+          if PDot > 0 then
+          begin
+            Prefix := Copy(PatternVal, 1, PDot - 1);
+            if not SameText(Prefix, EnumDecl.Name) then
+              Error('E0308', Format('Padrao "%s" nao pertence ao enum "%s"', [PatternVal, EnumDecl.Name]), CaseNode.Line, CaseNode.Col);
+            PatternVal := Copy(PatternVal, PDot + 1, Length(PatternVal));
+          end;
+          FoundVariant := False;
+          for J := 0 to EnumDecl.Variants.Count - 1 do
+            if SameText(TASTEnumVariant(EnumDecl.Variants[J]).Name, PatternVal) then
+            begin
+              FoundVariant := True;
+              Break;
+            end;
+          if not FoundVariant then
+            Error('E0425', Format('Variante "%s" nao existe no enum "%s"', [PatternVal, EnumDecl.Name]), CaseNode.Line, CaseNode.Col);
           CoveredVariants.Add(UpperCase(PatternVal));
         end;
 
-        // Verifica o corpo do caso
         FSymbols.EnterScope;
         try
-          if CaseNode.Pattern.SubPattern <> '' then
-          begin
-            // Variavel introduzida pelo case: Ok(let v)
+          if (CaseNode.Pattern.SubPattern <> '') and (CaseNode.Pattern.SubPattern <> '_') then
             FSymbols.Define(TSymbol.Create(CaseNode.Pattern.SubPattern, skVariable, 'Any', CaseNode.Line, CaseNode.Col, False));
-          end;
           for J := 0 to CaseNode.Body.Count - 1 do
             CheckStmt(TASTStmt(CaseNode.Body[J]));
         finally
@@ -1255,7 +1408,6 @@ begin
         end;
       end;
 
-      // Se nao tem wildcard '_', checa se todas as variantes foram cobertas
       if not HasWildcard then
       begin
         for I := 0 to EnumDecl.Variants.Count - 1 do
@@ -1278,6 +1430,11 @@ begin
   // Verificacao Exaustiva para Result<T, E>
   if Pos('Result', MatchedType) = 1 then
   begin
+    InnerType := 'Float64';
+    PDot := Pos('<', MatchedType);
+    PComma := Pos(',', MatchedType);
+    if (PDot > 0) and (PComma > PDot) then
+      InnerType := Trim(Copy(MatchedType, PDot + 1, PComma - PDot - 1));
     HasOk := False;
     HasErr := False;
     for I := 0 to MatchStmt.Cases.Count - 1 do
@@ -1290,9 +1447,12 @@ begin
 
       FSymbols.EnterScope;
       try
-        if CaseNode.Pattern.SubPattern <> '' then
+        if (CaseNode.Pattern.SubPattern <> '') and (CaseNode.Pattern.SubPattern <> '_') then
         begin
-          FSymbols.Define(TSymbol.Create(CaseNode.Pattern.SubPattern, skVariable, 'Any', CaseNode.Line, CaseNode.Col, False));
+          if (PatternVal = 'Ok') or (Pos('Ok', PatternVal) = 1) then
+            FSymbols.Define(TSymbol.Create(CaseNode.Pattern.SubPattern, skVariable, InnerType, CaseNode.Line, CaseNode.Col, False))
+          else
+            FSymbols.Define(TSymbol.Create(CaseNode.Pattern.SubPattern, skVariable, 'Int32', CaseNode.Line, CaseNode.Col, False));
         end;
         for J := 0 to CaseNode.Body.Count - 1 do
           CheckStmt(TASTStmt(CaseNode.Body[J]));
@@ -1307,10 +1467,61 @@ begin
     Exit;
   end;
 
-  // Para outros tipos simples, apenas verifica os corpos
+  // Verificacao Exaustiva para Option<T>
+  if Pos('Option<', MatchedType) = 1 then
+  begin
+    InnerType := Trim(Copy(MatchedType, 8, Length(MatchedType) - 8));
+    HasSome := False;
+    HasNone := False;
+    for I := 0 to MatchStmt.Cases.Count - 1 do
+    begin
+      CaseNode := TASTMatchCase(MatchStmt.Cases[I]);
+      PatternVal := CaseNode.Pattern.Value;
+      if PatternVal = 'Some' then HasSome := True
+      else if PatternVal = 'None' then HasNone := True
+      else if PatternVal = '_' then HasWildcard := True
+      else
+        Error('E0308', Format('Padrao invalido "%s" para tipo "%s"; esperado Some, None ou _', [PatternVal, MatchedType]), CaseNode.Line, CaseNode.Col);
+
+      FSymbols.EnterScope;
+      try
+        if (CaseNode.Pattern.SubPattern <> '') and (CaseNode.Pattern.SubPattern <> '_') then
+          FSymbols.Define(TSymbol.Create(CaseNode.Pattern.SubPattern, skVariable, InnerType, CaseNode.Line, CaseNode.Col, False));
+        for J := 0 to CaseNode.Body.Count - 1 do
+          CheckStmt(TASTStmt(CaseNode.Body[J]));
+      finally
+        FSymbols.LeaveScope;
+      end;
+    end;
+
+    if not HasWildcard and (not HasSome or not HasNone) then
+      Error('E0004', Format('Match nao-exaustivo em "%s". Cubra "Some" e "None" (ou adicione "_:")', [MatchedType]),
+        MatchStmt.Line, MatchStmt.Col);
+    Exit;
+  end;
+
+  // Para tipos simples (Int, String, Char, Bool), valida compatibilidade de padroes literais e corpos
   for I := 0 to MatchStmt.Cases.Count - 1 do
   begin
     CaseNode := TASTMatchCase(MatchStmt.Cases[I]);
+    PatternVal := CaseNode.Pattern.Value;
+    if PatternVal <> '_' then
+    begin
+      if (Length(PatternVal) >= 2) and (PatternVal[1] = '"') then
+        PatType := 'String'
+      else if (Length(PatternVal) >= 2) and (PatternVal[1] = '''') then
+        PatType := 'Char'
+      else if (PatternVal = 'true') or (PatternVal = 'false') then
+        PatType := 'Bool'
+      else if (PatternVal <> '') and ((PatternVal[1] in ['0'..'9', '$', '%']) or ((PatternVal[1] = '-') and (Length(PatternVal) > 1))) then
+        PatType := 'IntLiteral'
+      else
+        PatType := CheckIdentifier(TASTIdentifierExpr.Create(CaseNode.Line, CaseNode.Col, PatternVal));
+
+      if not TypesAreCompatible(MatchedType, PatType) then
+        Error('E0308', Format('Padrao "%s" (%s) incompativel com expressao do tipo "%s"', [PatternVal, PatType, MatchedType]), CaseNode.Line, CaseNode.Col);
+    end;
+
     FSymbols.EnterScope;
     try
       for J := 0 to CaseNode.Body.Count - 1 do
@@ -1448,6 +1659,7 @@ var
   Arr: TASTArrayDecl;
   SetD: TASTSetDecl;
   SubR: TASTSubrangeDecl;
+  MapD: TASTMapDecl;
   VariantNode: TASTEnumVariant;
 begin
   for I := 0 to AModule.Types.Count - 1 do
@@ -1487,6 +1699,11 @@ begin
     begin
       SubR := TASTSubrangeDecl(Node);
       FSymbols.Define(TSymbol.Create(SubR.Name, skType, SubR.Name, SubR.Line, SubR.Col, True, owNone, SubR));
+    end
+    else if Node is TASTMapDecl then
+    begin
+      MapD := TASTMapDecl(Node);
+      FSymbols.Define(TSymbol.Create(MapD.Name, skType, MapD.Name, MapD.Line, MapD.Col, True, owNone, MapD));
     end;
   end;
 end;
@@ -1503,12 +1720,46 @@ begin
   end;
 end;
 
+procedure TAetherTypeChecker.CheckVarDecl(VarDecl: TASTVarDecl);
+var
+  VarInitType: string;
+begin
+  if VarDecl.TypeName = '' then
+  begin
+    if not Assigned(VarDecl.InitialExpr) then
+      Error('E0282', Format('Variavel "%s" precisa de tipo explicito ou expressao inicializadora', [VarDecl.Name]), VarDecl.Line, VarDecl.Col);
+    VarInitType := CheckExpr(VarDecl.InitialExpr);
+    if VarInitType = 'IntLiteral' then
+      VarDecl.TypeName := 'Int32'
+    else if VarInitType = 'FloatLiteral' then
+      VarDecl.TypeName := 'Float64'
+    else if VarInitType = 'NilLiteral' then
+      Error('E0282', Format('Nao e possivel inferir o tipo de "%s" apenas a partir de "nil"; declare o tipo explicitamente', [VarDecl.Name]), VarDecl.Line, VarDecl.Col)
+    else
+      VarDecl.TypeName := VarInitType;
+  end
+  else
+    VarInitType := '';
+
+  if not FSymbols.ResolveType(VarDecl.TypeName) then
+    Error('E0412', Format('Tipo "%s" da variavel "%s" nao encontrado', [VarDecl.TypeName, VarDecl.Name]), VarDecl.Line, VarDecl.Col);
+
+  if Assigned(VarDecl.InitialExpr) then
+  begin
+    if VarInitType = '' then
+      VarInitType := CheckExpr(VarDecl.InitialExpr);
+    if not TypesAreCompatible(VarDecl.TypeName, VarInitType) then
+      Error('E0308', Format('Inicializacao de "%s" espera "%s", mas recebeu "%s"',
+        [VarDecl.Name, VarDecl.TypeName, VarInitType]), VarDecl.Line, VarDecl.Col);
+  end;
+
+  FSymbols.Define(TSymbol.Create(VarDecl.Name, skVariable, VarDecl.TypeName, VarDecl.Line, VarDecl.Col, VarDecl.IsMutable));
+end;
+
 procedure TAetherTypeChecker.CheckFunction(Func: TASTFunction);
 var
   I: Integer;
   Param: TASTParam;
-  VarDecl: TASTVarDecl;
-  VarInitType: string;
 begin
   FCurrentFunction := Func;
   FSymbols.EnterScope;
@@ -1542,21 +1793,7 @@ begin
 
     // Registra variaveis locais
     for I := 0 to Func.LocalVars.Count - 1 do
-    begin
-      VarDecl := TASTVarDecl(Func.LocalVars[I]);
-      if not FSymbols.ResolveType(VarDecl.TypeName) then
-        Error('E0412', Format('Tipo "%s" da variavel "%s" nao encontrado', [VarDecl.TypeName, VarDecl.Name]), VarDecl.Line, VarDecl.Col);
-
-      if Assigned(VarDecl.InitialExpr) then
-      begin
-        VarInitType := CheckExpr(VarDecl.InitialExpr);
-        if not TypesAreCompatible(VarDecl.TypeName, VarInitType) then
-          Error('E0308', Format('Inicializacao de "%s" espera "%s", mas recebeu "%s"',
-            [VarDecl.Name, VarDecl.TypeName, VarInitType]), VarDecl.Line, VarDecl.Col);
-      end;
-
-      FSymbols.Define(TSymbol.Create(VarDecl.Name, skVariable, VarDecl.TypeName, VarDecl.Line, VarDecl.Col, VarDecl.IsMutable));
-    end;
+      CheckVarDecl(TASTVarDecl(Func.LocalVars[I]));
 
     // Verifica corpo da funcao
     for I := 0 to Func.Body.Count - 1 do
@@ -1570,27 +1807,11 @@ end;
 procedure TAetherTypeChecker.CheckProgramBlock(Prog: TASTProgramBlock);
 var
   I: Integer;
-  VarDecl: TASTVarDecl;
-  VarInitType: string;
 begin
   FSymbols.EnterScope;
   try
     for I := 0 to Prog.LocalVars.Count - 1 do
-    begin
-      VarDecl := TASTVarDecl(Prog.LocalVars[I]);
-      if not FSymbols.ResolveType(VarDecl.TypeName) then
-        Error('E0412', Format('Tipo "%s" da variavel "%s" nao encontrado', [VarDecl.TypeName, VarDecl.Name]), VarDecl.Line, VarDecl.Col);
-
-      if Assigned(VarDecl.InitialExpr) then
-      begin
-        VarInitType := CheckExpr(VarDecl.InitialExpr);
-        if not TypesAreCompatible(VarDecl.TypeName, VarInitType) then
-          Error('E0308', Format('Inicializacao de "%s" espera "%s", mas recebeu "%s"',
-            [VarDecl.Name, VarDecl.TypeName, VarInitType]), VarDecl.Line, VarDecl.Col);
-      end;
-
-      FSymbols.Define(TSymbol.Create(VarDecl.Name, skVariable, VarDecl.TypeName, VarDecl.Line, VarDecl.Col, VarDecl.IsMutable));
-    end;
+      CheckVarDecl(TASTVarDecl(Prog.LocalVars[I]));
 
     for I := 0 to Prog.Body.Count - 1 do
       CheckStmt(TASTStmt(Prog.Body[I]));

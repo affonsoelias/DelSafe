@@ -98,6 +98,20 @@ begin
 end.
 ```
 
+You can also iterate directly over fixed arrays, dynamic arrays (`array of T`), and `String` values (`Char` elements) using `for item in collection do ... end;`:
+
+```aether
+for n in numbers do
+    total := total + n;
+end;
+
+for ch in "Aether" do
+    if ch = 'A' then
+        PrintLn("Found A!");
+    end;
+end;
+```
+
 ---
 
 ## 2.2 Post-Test Loops: `repeat ... until <condition>;`
@@ -291,12 +305,36 @@ If you omit any variant (e.g., forget `Cancelled`), the Aether compiler will ref
 Error: Non-exhaustive match pattern! Missing variant: OrderStatus.Cancelled
 ```
 
+### 4.1 Matching Primitives, `Result`, `Option`, and Wildcards (`_`)
+
+In addition to `Enum` variants with `with` or `do`, `match` supports integers (including negative values), strings, characters, booleans, `Option<T>` (`Some`/`None`), `Result<T, E>` (`Ok`/`Err`), optional `case` labels, `:` or `=>` arm separators, and `_` catch-all arms across both Free Pascal and GCC C99 backends:
+
+```aether
+match statusCode do
+    200 =>
+        PrintLn("OK");
+    -1 =>
+        PrintLn("Error");
+    _ =>
+        PrintLn("Other");
+end;
+
+match command with
+    "start":
+        BeginWork();
+    "stop":
+        HaltWork();
+    _:
+        PrintLn("Unknown command");
+end;
+```
+
 ---
 
 ## 5. Summary
 1. `if...then...else...end;` provides unambiguous nesting without `begin`.
-2. Loops use `while <cond> do ... end;`, `for`, and `repeat ... until` with `break` and `continue`.
+2. Loops use `while <cond> do ... end;`, `for` (`to` / `downto` / `in`), and `repeat ... until` with `break` and `continue`.
 3. `defer` ensures deterministic LIFO cleanup, while `try ... except` and `raise` handle system faults.
-4. Enums are algebraic types, and `match` enforces that every single possibility is handled at compile time.
+4. Enums are algebraic types, and `match` handles `Enum`, `Option<T>`, `Result<T, E>`, primitives, and `_` wildcards with compile-time exhaustiveness checking.
 
 ➡️ **Next:** **[Chapter 04: Functions & Contracts](04_FUNCTIONS_AND_CONTRACTS.md)**

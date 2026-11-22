@@ -19,6 +19,7 @@ type
     FActiveDefers: TFPList;
     FLoopDeferBase: Integer;
     FTryDepth: Integer;
+    FLoopCounter: Integer;
 
     procedure Emit(const Line: string = '');
     procedure IncIndent;
@@ -30,6 +31,17 @@ type
     function IsEnumName(const AName: string): Boolean;
     function IsSetType(const AName: string): Boolean;
     function IsDynamicArrayType(const AName: string): Boolean;
+    function IsMapType(const AType: string; out KeyType, ValType: string): Boolean;
+    function MapTag(const K, V: string): string;
+    function NormalizeIntLit(const Val: string): string;
+    function IsIntCType(const AType: string): Boolean;
+    function GetCollectionElemType(Expr: TASTExpr): string;
+    function IsBuiltinMapSideType(const AType: string): Boolean;
+    procedure CollectAutoForVars(Stmts: TASTNodeList; VarNames, VarTypes: TStrings; const SkipNames: TStrings);
+    procedure CollectMapsFromType(const AType: string; Tags, Keys, Vals: TStrings);
+    procedure CollectMapsFromModule(AModule: TASTModule; Tags, Keys, Vals: TStrings);
+    procedure EmitMapRuntimeDecls(Tags, Keys, Vals: TStrings; BuiltinOnly: Boolean);
+    procedure EmitMapRuntimeHelpers(Tags, Keys, Vals: TStrings);
     function IsVarModifiedInTry(const AVarName: string; Nodes: TASTNodeList; InTry: Boolean = False): Boolean;
     function IsMutBorrowParam(const AName: string): Boolean;
     function FindFunction(const AName: string): TASTFunction;
@@ -46,6 +58,7 @@ type
     procedure EmitArrayDecl(Arr: TASTArrayDecl);
     procedure EmitSetDecl(SetD: TASTSetDecl);
     procedure EmitSubrangeDecl(SubR: TASTSubrangeDecl);
+    procedure EmitMapDecl(MapD: TASTMapDecl);
     procedure EmitFunction(Func: TASTFunction);
     procedure EmitProgramBlock(Prog: TASTProgramBlock);
   public
@@ -64,6 +77,7 @@ begin
   FActiveDefers := TFPList.Create;
   FLoopDeferBase := 0;
   FTryDepth := 0;
+  FLoopCounter := 0;
 end;
 
 destructor TAetherEmitterC.Destroy;
@@ -233,13 +247,317 @@ begin
   Result := Result + '"';
 end;
 
+function TAetherEmitterC.IsMapType(const AType: string; out KeyType, ValType: string): Boolean;
+var
+  PClose, I: Integer;
+  MapD: TASTMapDecl;
+begin
+  KeyType := '';
+  ValType := '';
+  if Pos('map[', AType) = 1 then
+  begin
+    PClose := Pos(']', AType);
+    if PClose > 4 then
+    begin
+      KeyType := Trim(Copy(AType, 5, PClose - 5));
+      ValType := Trim(Copy(AType, PClose + 1, Length(AType)));
+      Exit(True);
+    end;
+  end;
+  if Assigned(FModule) then
+  begin
+    for I := 0 to FModule.Types.Count - 1 do
+      if (FModule.Types[I] is TASTMapDecl) and SameText(TASTMapDecl(FModule.Types[I]).Name, AType) then
+      begin
+        MapD := TASTMapDecl(FModule.Types[I]);
+        KeyType := MapD.KeyType;
+        ValType := MapD.ValType;
+        Exit(True);
+      end;
+  end;
+  Result := False;
+end;
+
+function SanitizeCTagPart(const S: string): string;
+var
+  I: Integer;
+begin
+  Result := '';
+  for I := 1 to Length(S) do
+    if S[I] in ['a'..'z', 'A'..'Z', '0'..'9', '_'] then
+      Result := Result + S[I]
+    else if S[I] = '^' then
+      Result := Result + 'Ptr_'
+    else
+      Result := Result + '_';
+end;
+
+function TAetherEmitterC.MapTag(const K, V: string): string;
+begin
+  Result := SanitizeCTagPart(K) + '_' + SanitizeCTagPart(V);
+end;
+
+function TAetherEmitterC.NormalizeIntLit(const Val: string): string;
+var
+  Prefix, Rest: string;
+begin
+  Prefix := '';
+  Rest := Val;
+  if (Length(Rest) > 1) and (Rest[1] = '-') then
+  begin
+    Prefix := '-';
+    Rest := Copy(Rest, 2, Length(Rest));
+  end;
+  if (Length(Rest) >= 1) and (Rest[1] = '$') then
+    Result := Prefix + '0x' + Copy(Rest, 2, Length(Rest))
+  else if (Length(Rest) >= 1) and (Rest[1] = '%') then
+    Result := Prefix + '0b' + Copy(Rest, 2, Length(Rest))
+  else
+    Result := Val;
+end;
+
+function TAetherEmitterC.IsIntCType(const AType: string): Boolean;
+var
+  I: Integer;
+begin
+  Result := (AType = 'Int8') or (AType = 'Int16') or (AType = 'Int32') or (AType = 'Int64') or
+            (AType = 'UInt8') or (AType = 'UInt16') or (AType = 'UInt32') or (AType = 'UInt64') or
+            (AType = 'IntLiteral');
+  if (not Result) and Assigned(FModule) then
+  begin
+    for I := 0 to FModule.Types.Count - 1 do
+      if (FModule.Types[I] is TASTSubrangeDecl) and SameText(TASTSubrangeDecl(FModule.Types[I]).Name, AType) then
+        Exit(TASTSubrangeDecl(FModule.Types[I]).BaseType <> 'Char');
+  end;
+end;
+
+function TAetherEmitterC.IsBuiltinMapSideType(const AType: string): Boolean;
+begin
+  Result := (AType = 'Int8') or (AType = 'Int16') or (AType = 'Int32') or (AType = 'Int64') or
+            (AType = 'UInt8') or (AType = 'UInt16') or (AType = 'UInt32') or (AType = 'UInt64') or
+            (AType = 'Float32') or (AType = 'Float64') or (AType = 'Bool') or (AType = 'Char') or
+            (AType = 'String') or (AType = 'Pointer');
+end;
+
+function TAetherEmitterC.GetCollectionElemType(Expr: TASTExpr): string;
+var
+  ColType: string;
+  P1, I: Integer;
+begin
+  Result := '';
+  ColType := GetExprTypeName(Expr);
+  if ColType = 'String' then
+    Exit('Char')
+  else if Pos('array of ', ColType) = 1 then
+    Exit(Trim(Copy(ColType, 10, Length(ColType))))
+  else if Pos('] of ', ColType) > 0 then
+  begin
+    P1 := Pos('] of ', ColType);
+    Exit(Trim(Copy(ColType, P1 + 5, Length(ColType))));
+  end
+  else if Assigned(FModule) then
+  begin
+    for I := 0 to FModule.Types.Count - 1 do
+      if (FModule.Types[I] is TASTArrayDecl) and SameText(TASTArrayDecl(FModule.Types[I]).Name, ColType) then
+        Exit(TASTArrayDecl(FModule.Types[I]).ElemType);
+  end;
+end;
+
+procedure TAetherEmitterC.CollectAutoForVars(Stmts: TASTNodeList; VarNames, VarTypes: TStrings; const SkipNames: TStrings);
+var
+  I, K: Integer;
+  S: TASTStmt;
+  ForStmt: TASTForStmt;
+  ElemT: string;
+
+  procedure AddAutoVar(const AName, AType: string);
+  var
+    J: Integer;
+  begin
+    for J := 0 to SkipNames.Count - 1 do
+      if SameText(SkipNames[J], AName) then Exit;
+    for J := 0 to VarNames.Count - 1 do
+      if SameText(VarNames[J], AName) then Exit;
+    VarNames.Add(AName);
+    VarTypes.Add(AType);
+  end;
+begin
+  if not Assigned(Stmts) then Exit;
+  for I := 0 to Stmts.Count - 1 do
+  begin
+    S := TASTStmt(Stmts[I]);
+    if S is TASTForStmt then
+    begin
+      ForStmt := TASTForStmt(S);
+      if Assigned(ForStmt.CollectionExpr) then
+      begin
+        ElemT := GetCollectionElemType(ForStmt.CollectionExpr);
+        if ElemT <> '' then
+          AddAutoVar(ForStmt.VarName, EmitTypeRef(ElemT))
+        else
+          AddAutoVar(ForStmt.VarName, 'int32_t');
+      end
+      else
+        AddAutoVar(ForStmt.VarName, 'int32_t');
+      CollectAutoForVars(ForStmt.Body, VarNames, VarTypes, SkipNames);
+    end
+    else if S is TASTIfStmt then
+    begin
+      CollectAutoForVars(TASTIfStmt(S).ThenBranch, VarNames, VarTypes, SkipNames);
+      CollectAutoForVars(TASTIfStmt(S).ElseBranch, VarNames, VarTypes, SkipNames);
+    end
+    else if S is TASTWhileStmt then
+      CollectAutoForVars(TASTWhileStmt(S).Body, VarNames, VarTypes, SkipNames)
+    else if S is TASTRepeatStmt then
+      CollectAutoForVars(TASTRepeatStmt(S).Body, VarNames, VarTypes, SkipNames)
+    else if S is TASTUnsafeStmt then
+      CollectAutoForVars(TASTUnsafeStmt(S).Body, VarNames, VarTypes, SkipNames)
+    else if S is TASTTryStmt then
+    begin
+      CollectAutoForVars(TASTTryStmt(S).TryBody, VarNames, VarTypes, SkipNames);
+      CollectAutoForVars(TASTTryStmt(S).ExceptBody, VarNames, VarTypes, SkipNames);
+    end
+    else if S is TASTMatchStmt then
+    begin
+      for K := 0 to TASTMatchStmt(S).Cases.Count - 1 do
+        CollectAutoForVars(TASTMatchCase(TASTMatchStmt(S).Cases[K]).Body, VarNames, VarTypes, SkipNames);
+    end;
+  end;
+end;
+
+procedure TAetherEmitterC.CollectMapsFromType(const AType: string; Tags, Keys, Vals: TStrings);
+var
+  K, V, Tag: string;
+begin
+  if IsMapType(AType, K, V) then
+  begin
+    Tag := MapTag(K, V);
+    if Tags.IndexOf(Tag) = -1 then
+    begin
+      Tags.Add(Tag);
+      Keys.Add(K);
+      Vals.Add(V);
+    end;
+  end;
+end;
+
+procedure TAetherEmitterC.CollectMapsFromModule(AModule: TASTModule; Tags, Keys, Vals: TStrings);
+var
+  I, J: Integer;
+  Rec: TASTRecordDecl;
+  Func: TASTFunction;
+begin
+  for I := 0 to AModule.Types.Count - 1 do
+  begin
+    if AModule.Types[I] is TASTMapDecl then
+      CollectMapsFromType(TASTMapDecl(AModule.Types[I]).Name, Tags, Keys, Vals)
+    else if AModule.Types[I] is TASTRecordDecl then
+    begin
+      Rec := TASTRecordDecl(AModule.Types[I]);
+      for J := 0 to Rec.Fields.Count - 1 do
+        CollectMapsFromType(TASTRecordField(Rec.Fields[J]).TypeName, Tags, Keys, Vals);
+    end
+    else if AModule.Types[I] is TASTArrayDecl then
+      CollectMapsFromType(TASTArrayDecl(AModule.Types[I]).ElemType, Tags, Keys, Vals);
+  end;
+  for I := 0 to AModule.Functions.Count - 1 do
+  begin
+    Func := TASTFunction(AModule.Functions[I]);
+    CollectMapsFromType(Func.ReturnType, Tags, Keys, Vals);
+    for J := 0 to Func.Params.Count - 1 do
+      CollectMapsFromType(TASTParam(Func.Params[J]).TypeName, Tags, Keys, Vals);
+    for J := 0 to Func.LocalVars.Count - 1 do
+      CollectMapsFromType(TASTVarDecl(Func.LocalVars[J]).TypeName, Tags, Keys, Vals);
+  end;
+  if Assigned(AModule.ProgramBlock) then
+    for I := 0 to AModule.ProgramBlock.LocalVars.Count - 1 do
+      CollectMapsFromType(TASTVarDecl(AModule.ProgramBlock.LocalVars[I]).TypeName, Tags, Keys, Vals);
+end;
+
+procedure TAetherEmitterC.EmitMapRuntimeDecls(Tags, Keys, Vals: TStrings; BuiltinOnly: Boolean);
+var
+  I: Integer;
+  IsBuiltin: Boolean;
+begin
+  for I := 0 to Tags.Count - 1 do
+  begin
+    IsBuiltin := IsBuiltinMapSideType(Keys[I]) and IsBuiltinMapSideType(Vals[I]);
+    if IsBuiltin = BuiltinOnly then
+    begin
+      Emit(Format('typedef struct { %s key; %s val; } TAetherMapEntry_%s;', [EmitTypeRef(Keys[I]), EmitTypeRef(Vals[I]), Tags[I]]));
+      Emit(Format('typedef struct { TAetherMapEntry_%s* entries; int32_t count; int32_t capacity; } TAetherMap_%s;', [Tags[I], Tags[I]]));
+    end;
+  end;
+  if Tags.Count > 0 then Emit('');
+end;
+
+procedure TAetherEmitterC.EmitMapRuntimeHelpers(Tags, Keys, Vals: TStrings);
+var
+  I: Integer;
+  Tag, CK, CV, KeyEq, DefRet: string;
+begin
+  for I := 0 to Tags.Count - 1 do
+  begin
+    Tag := Tags[I];
+    CK := EmitTypeRef(Keys[I]);
+    CV := EmitTypeRef(Vals[I]);
+    if Keys[I] = 'String' then
+      KeyEq := '(m->entries[i].key == k || (m->entries[i].key && k && strcmp(m->entries[i].key, k) == 0))'
+    else
+      KeyEq := '(m->entries[i].key == k)';
+
+    if Vals[I] = 'String' then DefRet := 'return "";'
+    else if Vals[I] = 'Bool' then DefRet := 'return false;'
+    else if Vals[I] = 'Char' then DefRet := 'return ''\0'';'
+    else if (Vals[I] = 'Float32') or (Vals[I] = 'Float64') then DefRet := 'return 0.0;'
+    else if IsIntCType(Vals[I]) then DefRet := 'return 0;'
+    else if (Pos('^', Vals[I]) = 1) or (Vals[I] = 'Pointer') or (Pos('Box<', Vals[I]) > 0) then DefRet := 'return NULL;'
+    else DefRet := Format('%s zero; memset(&zero, 0, sizeof(zero)); return zero;', [CV]);
+
+    Emit(Format('static inline void AetherMapSet_%s(TAetherMap_%s* m, %s k, %s v) {', [Tag, Tag, CK, CV]));
+    Emit('    for (int32_t i = 0; i < m->count; i++) {');
+    Emit(Format('        if %s { m->entries[i].val = v; return; }', [KeyEq]));
+    Emit('    }');
+    Emit('    if (m->count >= m->capacity) {');
+    Emit('        int32_t nc = (m->capacity == 0) ? 8 : m->capacity * 2;');
+    Emit(Format('        m->entries = (TAetherMapEntry_%s*)realloc(m->entries, (size_t)nc * sizeof(TAetherMapEntry_%s));', [Tag, Tag]));
+    Emit('        m->capacity = nc;');
+    Emit('    }');
+    Emit('    m->entries[m->count].key = k;');
+    Emit('    m->entries[m->count].val = v;');
+    Emit('    m->count++;');
+    Emit('}');
+
+    Emit(Format('static inline %s AetherMapGet_%s(const TAetherMap_%s* m, %s k) {', [CV, Tag, Tag, CK]));
+    Emit('    for (int32_t i = 0; i < m->count; i++) {');
+    Emit(Format('        if %s return m->entries[i].val;', [KeyEq]));
+    Emit('    }');
+    Emit('    ' + DefRet);
+    Emit('}');
+
+    Emit(Format('static inline bool AetherMapContains_%s(const TAetherMap_%s* m, %s k) {', [Tag, Tag, CK]));
+    Emit('    for (int32_t i = 0; i < m->count; i++) {');
+    Emit(Format('        if %s return true;', [KeyEq]));
+    Emit('    }');
+    Emit('    return false;');
+    Emit('}');
+
+    Emit(Format('static inline void AetherMapRemove_%s(TAetherMap_%s* m, %s k) {', [Tag, Tag, CK]));
+    Emit('    for (int32_t i = 0; i < m->count; i++) {');
+    Emit(Format('        if %s { m->count--; m->entries[i] = m->entries[m->count]; return; }', [KeyEq]));
+    Emit('    }');
+    Emit('}');
+    Emit('');
+  end;
+end;
+
 function TAetherEmitterC.GetExprTypeName(Expr: TASTExpr): string;
 var
   Id: TASTIdentifierExpr;
   Acc: TASTMemberAccessExpr;
   Call: TASTCallExpr;
   Bin: TASTBinaryExpr;
-  TargetType, CleanTarget: string;
+  TargetType, CleanTarget, KeyType, ValType, LeftType: string;
   I, J, P1, P2: Integer;
   Rec: TASTRecordDecl;
   V: TASTVarDecl;
@@ -334,11 +652,30 @@ begin
       Exit('String');
     if IsSetType(GetExprTypeName(Bin.Left)) then Exit(GetExprTypeName(Bin.Left));
     if IsSetType(GetExprTypeName(Bin.Right)) then Exit(GetExprTypeName(Bin.Right));
+    if (Bin.Op = '=') or (Bin.Op = '<>') or (Bin.Op = '<') or (Bin.Op = '<=') or
+       (Bin.Op = '>') or (Bin.Op = '>=') or SameText(Bin.Op, 'implies') or SameText(Bin.Op, 'in') then
+      Exit('Bool');
+    if SameText(Bin.Op, 'and') or SameText(Bin.Op, 'or') then
+    begin
+      LeftType := GetExprTypeName(Bin.Left);
+      if LeftType = 'Bool' then Exit('Bool');
+      if IsIntCType(LeftType) then Exit(LeftType);
+    end;
+    if SameText(Bin.Op, 'shl') or SameText(Bin.Op, 'shr') or SameText(Bin.Op, 'xor') or
+       SameText(Bin.Op, 'div') or SameText(Bin.Op, 'mod') or
+       (Bin.Op = '+') or (Bin.Op = '-') or (Bin.Op = '*') or (Bin.Op = '/') then
+    begin
+      LeftType := GetExprTypeName(Bin.Left);
+      if LeftType <> '' then Exit(LeftType);
+      Exit(GetExprTypeName(Bin.Right));
+    end;
   end
   else if Expr is TASTIndexExpr then
   begin
     TargetType := GetExprTypeName(TASTIndexExpr(Expr).Target);
-    if Pos('array of ', TargetType) = 1 then
+    if IsMapType(TargetType, KeyType, ValType) then
+      Exit(ValType)
+    else if Pos('array of ', TargetType) = 1 then
       Exit(Trim(Copy(TargetType, 10, Length(TargetType))))
     else if Pos('] of ', TargetType) > 0 then
       Exit(Trim(Copy(TargetType, Pos('] of ', TargetType) + 5, Length(TargetType))))
@@ -355,7 +692,9 @@ begin
     if TASTUnaryExpr(Expr).Op = '@' then
       Exit('^' + TargetType)
     else if (TASTUnaryExpr(Expr).Op = '^') and (Pos('^', TargetType) = 1) then
-      Exit(Copy(TargetType, 2, Length(TargetType)));
+      Exit(Copy(TargetType, 2, Length(TargetType)))
+    else if SameText(TASTUnaryExpr(Expr).Op, 'not') or (TASTUnaryExpr(Expr).Op = '-') then
+      Exit(TargetType);
   end
   else if Expr is TASTCallExpr then
   begin
@@ -363,12 +702,12 @@ begin
     if Call.Callee = 'Box' then Exit('Box');
     if Call.Callee = 'Some' then Exit('Option');
     if (Call.Callee = 'ReadFile') or (Call.Callee = 'CharAt') or (Call.Callee = 'Substring') or (Call.Callee = 'ToString') or (Call.Callee = 'IntToStr') or (Call.Callee = 'FloatToStr') or (Call.Callee = 'BoolToStr') or (Call.Callee = 'CharToStr') or (Call.Callee = '__InterpToStr') or (Call.Callee = 'SocketRecv') or (Call.Callee = 'ParamStr') then Exit('String');
-    if (Call.Callee = 'Length') or (Call.Callee = 'StrToInt') or (Call.Callee = 'SocketCreate') or (Call.Callee = 'SocketListen') or (Call.Callee = 'SocketAccept') or (Call.Callee = 'SocketConnect') or (Call.Callee = 'SocketSend') or (Call.Callee = 'ParamCount') then Exit('Int32');
+    if SameText(Call.Callee, 'Length') or SameText(Call.Callee, 'Count') or (Call.Callee = 'StrToInt') or (Call.Callee = 'SocketCreate') or (Call.Callee = 'SocketListen') or (Call.Callee = 'SocketAccept') or (Call.Callee = 'SocketConnect') or (Call.Callee = 'SocketSend') or (Call.Callee = 'ParamCount') then Exit('Int32');
     if (Call.Callee = 'sin') or (Call.Callee = 'cos') or (Call.Callee = 'tan') or (Call.Callee = 'sqrt') or (Call.Callee = 'Now') then Exit('Float64');
     if (Call.Callee = 'GetTickCount64') or (Call.Callee = 'GetNanoseconds') then Exit('UInt64');
     if (Call.Callee = 'FileSize') then Exit('Int64');
-    if (Call.Callee = 'FileExists') or (Call.Callee = 'WriteFile') or (Call.Callee = 'CreateDir') or (Call.Callee = 'RemoveDir') or (Call.Callee = 'DeleteFile') or (Call.Callee = 'DirExists') then Exit('Bool');
-    if (Call.Callee = 'SocketClose') or (Call.Callee = 'Assert') or (Call.Callee = 'SleepMs') then Exit('Void');
+    if SameText(Call.Callee, 'Contains') or (Call.Callee = 'FileExists') or (Call.Callee = 'WriteFile') or (Call.Callee = 'CreateDir') or (Call.Callee = 'RemoveDir') or (Call.Callee = 'DeleteFile') or (Call.Callee = 'DirExists') then Exit('Bool');
+    if SameText(Call.Callee, 'Remove') or (Call.Callee = 'SocketClose') or (Call.Callee = 'Assert') or (Call.Callee = 'SleepMs') then Exit('Void');
     if Assigned(FModule) then
     begin
       for I := 0 to FModule.Functions.Count - 1 do
@@ -428,7 +767,7 @@ end;
 
 function TAetherEmitterC.EmitTypeRef(const AType: string): string;
 var
-  Inner: string;
+  Inner, Inner2: string;
   P1, P2: Integer;
 begin
   if AType = 'Bool' then Result := 'bool'
@@ -464,6 +803,8 @@ begin
     Inner := Copy(AType, 8, Length(AType) - 8);
     Result := EmitTypeRef(Inner);
   end
+  else if IsMapType(AType, Inner, Inner2) then
+    Result := 'TAetherMap_' + MapTag(Inner, Inner2)
   else Result := 'T' + AType;
 end;
 
@@ -482,7 +823,7 @@ var
   ArgsStr: string;
   ArgVal: string;
   I: Integer;
-  OpStr: string;
+  OpStr, LType, RType, KeyT, ValT: string;
   TargetStr: string;
   ArgType: string;
   TName: string;
@@ -493,6 +834,7 @@ begin
   begin
     Lit := TASTLiteralExpr(Expr);
     case Lit.Kind of
+      lkInt:    Result := NormalizeIntLit(Lit.Value);
       lkString: Result := EscapeCString(Lit.Value);
       lkChar:   Result := '''' + Lit.Value + '''';
       lkBool:   Result := LowerCase(Lit.Value);
@@ -592,8 +934,35 @@ begin
       if (GetExprTypeName(Bin.Left) = 'String') or (GetExprTypeName(Bin.Right) = 'String') then
         Exit(Format('AetherStringConcat(%s, %s)', [EmitExpr(Bin.Left), EmitExpr(Bin.Right)]));
     end
-    else if OpStr = 'and' then OpStr := '&&'
-    else if OpStr = 'or' then OpStr := '||'
+    else if SameText(OpStr, 'shl') then OpStr := '<<'
+    else if SameText(OpStr, 'shr') then OpStr := '>>'
+    else if SameText(OpStr, 'xor') then
+    begin
+      LType := GetExprTypeName(Bin.Left);
+      RType := GetExprTypeName(Bin.Right);
+      if IsIntCType(LType) or IsIntCType(RType) then
+        OpStr := '^'
+      else
+        OpStr := '!=';
+    end
+    else if SameText(OpStr, 'and') then
+    begin
+      LType := GetExprTypeName(Bin.Left);
+      RType := GetExprTypeName(Bin.Right);
+      if IsIntCType(LType) and IsIntCType(RType) then
+        OpStr := '&'
+      else
+        OpStr := '&&';
+    end
+    else if SameText(OpStr, 'or') then
+    begin
+      LType := GetExprTypeName(Bin.Left);
+      RType := GetExprTypeName(Bin.Right);
+      if IsIntCType(LType) and IsIntCType(RType) then
+        OpStr := '|'
+      else
+        OpStr := '||';
+    end
     else if OpStr = 'mod' then OpStr := '%'
     else if OpStr = 'div' then OpStr := '/'
     else if OpStr = 'implies' then
@@ -626,7 +995,13 @@ begin
       Result := '(*(' + EmitExpr(Un.Expr) + '))';
       Exit;
     end;
-    if OpStr = 'not' then OpStr := '!';
+    if SameText(OpStr, 'not') then
+    begin
+      if IsIntCType(GetExprTypeName(Un.Expr)) then
+        OpStr := '~'
+      else
+        OpStr := '!';
+    end;
     Result := Format('(%s%s)', [OpStr, EmitExpr(Un.Expr)]);
     Exit;
   end;
@@ -653,6 +1028,11 @@ begin
   if Expr is TASTIndexExpr then
   begin
     Idx := TASTIndexExpr(Expr);
+    if IsMapType(GetExprTypeName(Idx.Target), KeyT, ValT) then
+    begin
+      Result := Format('AetherMapGet_%s(&(%s), %s)', [MapTag(KeyT, ValT), EmitExpr(Idx.Target), EmitExpr(TASTExpr(Idx.Indices[0]))]);
+      Exit;
+    end;
     TargetStr := EmitExpr(Idx.Target);
     ArgsStr := '';
     for I := 0 to Idx.Indices.Count - 1 do
@@ -696,6 +1076,8 @@ begin
           Result := 'printf("%f\n", ' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + ')'
         else if (ArgType = 'Bool') then
           Result := 'printf("%s\n", (' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + ') ? "true" : "false")'
+        else if (ArgType = 'Char') then
+          Result := 'printf("%c\n", ' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + ')'
         else
           Result := 'printf("%s\n", ' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + ')';
       end
@@ -768,16 +1150,32 @@ begin
       Exit;
     end;
 
-    if SameText(Call.Callee, 'Length') then
+    if SameText(Call.Callee, 'Length') or SameText(Call.Callee, 'Count') then
     begin
       ArgType := GetExprTypeName(TASTCallArg(Call.Args[0]).Expr);
       TargetStr := EmitExpr(TASTCallArg(Call.Args[0]).Expr);
-      if IsDynamicArrayType(ArgType) then
+      if IsMapType(ArgType, KeyT, ValT) then
+        Result := Format('(%s).count', [TargetStr])
+      else if IsDynamicArrayType(ArgType) then
         Result := '(int32_t)AetherDynLen(' + TargetStr + ')'
       else if (ArgType = 'String') or (ArgType = '') then
         Result := '(int32_t)strlen(' + TargetStr + ')'
       else
         Result := Format('(int32_t)(sizeof(%s) / sizeof((%s)[0]))', [TargetStr, TargetStr]);
+      Exit;
+    end;
+
+    if SameText(Call.Callee, 'Contains') then
+    begin
+      IsMapType(GetExprTypeName(TASTCallArg(Call.Args[0]).Expr), KeyT, ValT);
+      Result := Format('AetherMapContains_%s(&(%s), %s)', [MapTag(KeyT, ValT), EmitExpr(TASTCallArg(Call.Args[0]).Expr), EmitExpr(TASTCallArg(Call.Args[1]).Expr)]);
+      Exit;
+    end;
+
+    if SameText(Call.Callee, 'Remove') then
+    begin
+      IsMapType(GetExprTypeName(TASTCallArg(Call.Args[0]).Expr), KeyT, ValT);
+      Result := Format('AetherMapRemove_%s(&(%s), %s)', [MapTag(KeyT, ValT), EmitExpr(TASTCallArg(Call.Args[0]).Expr), EmitExpr(TASTCallArg(Call.Args[1]).Expr)]);
       Exit;
     end;
 
@@ -1027,13 +1425,18 @@ var
   Lines: TStringList;
   LineStr: string;
   I, J: Integer;
-  PatStr: string;
-  TName: string;
+  PatStr, TName, KeyT, ValT, ColStr, ColType, ElemT, LoopId, MatchedType, ExprStr, Prefix, CondStr, BindStmt: string;
 begin
   if Stmt is TASTAssignStmt then
   begin
     Assign := TASTAssignStmt(Stmt);
-    if (Assign.Target is TASTIdentifierExpr) and IsMutBorrowParam(TASTIdentifierExpr(Assign.Target).Name) then
+    if (Assign.Target is TASTIndexExpr) and IsMapType(GetExprTypeName(TASTIndexExpr(Assign.Target).Target), KeyT, ValT) then
+      Emit(Format('AetherMapSet_%s(&(%s), %s, %s);', [
+        MapTag(KeyT, ValT),
+        EmitExpr(TASTIndexExpr(Assign.Target).Target),
+        EmitExpr(TASTExpr(TASTIndexExpr(Assign.Target).Indices[0])),
+        EmitExpr(Assign.Expr)]))
+    else if (Assign.Target is TASTIdentifierExpr) and IsMutBorrowParam(TASTIdentifierExpr(Assign.Target).Name) then
       Emit(Format('*%s = %s;', [TASTIdentifierExpr(Assign.Target).Name, EmitExpr(Assign.Expr)]))
     else
       Emit(Format('%s = %s;', [EmitExpr(Assign.Target), EmitExpr(Assign.Expr)]));
@@ -1071,14 +1474,64 @@ begin
   else if Stmt is TASTForStmt then
   begin
     ForStmt := TASTForStmt(Stmt);
-    if ForStmt.IsDownTo then
-      Emit(Format('for (%s = %s; %s >= %s; %s--) {', [ForStmt.VarName, EmitExpr(ForStmt.StartExpr), ForStmt.VarName, EmitExpr(ForStmt.EndExpr), ForStmt.VarName]))
+    if Assigned(ForStmt.CollectionExpr) then
+    begin
+      Inc(FLoopCounter);
+      LoopId := IntToStr(FLoopCounter);
+      ColStr := EmitExpr(ForStmt.CollectionExpr);
+      ColType := GetExprTypeName(ForStmt.CollectionExpr);
+      if ColType = 'String' then
+      begin
+        Emit('{');
+        IncIndent;
+        Emit(Format('const char* _aether_col_%s = %s;', [LoopId, ColStr]));
+        Emit(Format('size_t _aether_len_%s = _aether_col_%s ? strlen(_aether_col_%s) : 0;', [LoopId, LoopId, LoopId]));
+        Emit(Format('for (size_t _aether_i_%s = 0; _aether_i_%s < _aether_len_%s; _aether_i_%s++) {', [LoopId, LoopId, LoopId, LoopId]));
+        IncIndent;
+        Emit(Format('%s = _aether_col_%s[_aether_i_%s];', [ForStmt.VarName, LoopId, LoopId]));
+        EmitStmtList(ForStmt.Body, True);
+        DecIndent;
+        Emit('}');
+        DecIndent;
+        Emit('}');
+      end
+      else if IsDynamicArrayType(ColType) then
+      begin
+        ElemT := GetCollectionElemType(ForStmt.CollectionExpr);
+        Emit('{');
+        IncIndent;
+        Emit(Format('%s* _aether_col_%s = %s;', [EmitTypeRef(ElemT), LoopId, ColStr]));
+        Emit(Format('size_t _aether_len_%s = AetherDynLen(_aether_col_%s);', [LoopId, LoopId]));
+        Emit(Format('for (size_t _aether_i_%s = 0; _aether_i_%s < _aether_len_%s; _aether_i_%s++) {', [LoopId, LoopId, LoopId, LoopId]));
+        IncIndent;
+        Emit(Format('%s = _aether_col_%s[_aether_i_%s];', [ForStmt.VarName, LoopId, LoopId]));
+        EmitStmtList(ForStmt.Body, True);
+        DecIndent;
+        Emit('}');
+        DecIndent;
+        Emit('}');
+      end
+      else
+      begin
+        Emit(Format('for (size_t _aether_i_%s = 0; _aether_i_%s < (sizeof(%s) / sizeof((%s)[0])); _aether_i_%s++) {', [LoopId, LoopId, ColStr, ColStr, LoopId]));
+        IncIndent;
+        Emit(Format('%s = (%s)[_aether_i_%s];', [ForStmt.VarName, ColStr, LoopId]));
+        EmitStmtList(ForStmt.Body, True);
+        DecIndent;
+        Emit('}');
+      end;
+    end
     else
-      Emit(Format('for (%s = %s; %s <= %s; %s++) {', [ForStmt.VarName, EmitExpr(ForStmt.StartExpr), ForStmt.VarName, EmitExpr(ForStmt.EndExpr), ForStmt.VarName]));
-    IncIndent;
-    EmitStmtList(ForStmt.Body, True);
-    DecIndent;
-    Emit('}');
+    begin
+      if ForStmt.IsDownTo then
+        Emit(Format('for (%s = %s; %s >= %s; %s--) {', [ForStmt.VarName, EmitExpr(ForStmt.StartExpr), ForStmt.VarName, EmitExpr(ForStmt.EndExpr), ForStmt.VarName]))
+      else
+        Emit(Format('for (%s = %s; %s <= %s; %s++) {', [ForStmt.VarName, EmitExpr(ForStmt.StartExpr), ForStmt.VarName, EmitExpr(ForStmt.EndExpr), ForStmt.VarName]));
+      IncIndent;
+      EmitStmtList(ForStmt.Body, True);
+      DecIndent;
+      Emit('}');
+    end;
   end
   else if Stmt is TASTRepeatStmt then
   begin
@@ -1220,38 +1673,90 @@ begin
   else if Stmt is TASTMatchStmt then
   begin
     MatchStmt := TASTMatchStmt(Stmt);
+    ExprStr := EmitExpr(MatchStmt.Expr);
+    MatchedType := GetExprTypeName(MatchStmt.Expr);
     Emit('// Match gerado pelo compilador Aether');
     for I := 0 to MatchStmt.Cases.Count - 1 do
     begin
       CaseNode := TASTMatchCase(MatchStmt.Cases[I]);
       PatStr := CaseNode.Pattern.Value;
+      if I = 0 then Prefix := 'if ('
+      else Prefix := '} else if (';
 
-      if Pos('Ok', PatStr) = 1 then
+      if PatStr = '_' then
       begin
-        Emit(Format('if (%s.is_ok) {', [EmitExpr(MatchStmt.Expr)]));
-        IncIndent;
-        if CaseNode.Pattern.SubPattern <> '' then
-          Emit(Format('double %s = %s.value;', [CaseNode.Pattern.SubPattern, EmitExpr(MatchStmt.Expr)]));
-        for J := 0 to CaseNode.Body.Count - 1 do
-          EmitStmt(TASTStmt(CaseNode.Body[J]));
-        DecIndent;
-        Emit('}');
-      end
-      else if Pos('Err', PatStr) = 1 then
-      begin
-        if CaseNode.Pattern.SubPattern <> '' then
-          Emit(Format('if (%s.is_err && %s.error == %s) {',
-            [EmitExpr(MatchStmt.Expr), EmitExpr(MatchStmt.Expr), StringReplace(CaseNode.Pattern.SubPattern, '.', '_', [rfReplaceAll])]))
+        if I > 0 then
+          Emit('} else {')
         else
-          Emit(Format('if (%s.is_err) {', [EmitExpr(MatchStmt.Expr)]));
-
+          Emit('{');
         IncIndent;
         for J := 0 to CaseNode.Body.Count - 1 do
           EmitStmt(TASTStmt(CaseNode.Body[J]));
         DecIndent;
-        Emit('}');
+      end
+      else
+      begin
+        BindStmt := '';
+        if Pos('Ok', PatStr) = 1 then
+        begin
+          CondStr := Format('%s.is_ok', [ExprStr]);
+          if CaseNode.Pattern.IsLet and (CaseNode.Pattern.SubPattern <> '') and (CaseNode.Pattern.SubPattern <> '_') then
+            BindStmt := Format('double %s = %s.value;', [CaseNode.Pattern.SubPattern, ExprStr]);
+        end
+        else if Pos('Err', PatStr) = 1 then
+        begin
+          if (CaseNode.Pattern.SubPattern <> '') and (CaseNode.Pattern.SubPattern <> '_') then
+          begin
+            if CaseNode.Pattern.IsLet then
+            begin
+              CondStr := Format('%s.is_err', [ExprStr]);
+              BindStmt := Format('int %s = %s.error;', [CaseNode.Pattern.SubPattern, ExprStr]);
+            end
+            else
+              CondStr := Format('%s.is_err && %s.error == %s',
+                [ExprStr, ExprStr, StringReplace(CaseNode.Pattern.SubPattern, '.', '_', [rfReplaceAll])]);
+          end
+          else
+            CondStr := Format('%s.is_err', [ExprStr]);
+        end
+        else if PatStr = 'Some' then
+        begin
+          CondStr := Format('%s != NULL', [ExprStr]);
+          if CaseNode.Pattern.IsLet and (CaseNode.Pattern.SubPattern <> '') and (CaseNode.Pattern.SubPattern <> '_') then
+          begin
+            if Pos('Option<', MatchedType) = 1 then
+              BindStmt := Format('%s %s = %s;', [EmitTypeRef(Copy(MatchedType, 8, Length(MatchedType) - 8)), CaseNode.Pattern.SubPattern, ExprStr])
+            else
+              BindStmt := Format('void* %s = %s;', [CaseNode.Pattern.SubPattern, ExprStr]);
+          end;
+        end
+        else if PatStr = 'None' then
+          CondStr := Format('%s == NULL', [ExprStr])
+        else if (Length(PatStr) >= 2) and (PatStr[1] = '"') then
+          CondStr := Format('strcmp(%s, %s) == 0', [ExprStr, EscapeCString(Copy(PatStr, 2, Length(PatStr) - 2))])
+        else if (Length(PatStr) >= 2) and (PatStr[1] = '''') then
+          CondStr := Format('%s == %s', [ExprStr, PatStr])
+        else if (PatStr = 'true') or (PatStr = 'false') then
+          CondStr := Format('%s == %s', [ExprStr, PatStr])
+        else if (PatStr <> '') and ((PatStr[1] in ['0'..'9', '$', '%']) or ((PatStr[1] = '-') and (Length(PatStr) > 1))) then
+          CondStr := Format('%s == %s', [ExprStr, NormalizeIntLit(PatStr)])
+        else if Pos('.', PatStr) > 0 then
+          CondStr := Format('%s == %s', [ExprStr, StringReplace(PatStr, '.', '_', [rfReplaceAll])])
+        else if IsEnumName(MatchedType) then
+          CondStr := Format('%s == %s_%s', [ExprStr, MatchedType, PatStr])
+        else
+          CondStr := Format('%s == %s', [ExprStr, PatStr]);
+
+        Emit(Prefix + CondStr + ') {');
+        IncIndent;
+        if BindStmt <> '' then Emit(BindStmt);
+        for J := 0 to CaseNode.Body.Count - 1 do
+          EmitStmt(TASTStmt(CaseNode.Body[J]));
+        DecIndent;
       end;
     end;
+    if MatchStmt.Cases.Count > 0 then
+      Emit('}');
   end;
 end;
 
@@ -1378,14 +1883,21 @@ begin
   Emit('');
 end;
 
+procedure TAetherEmitterC.EmitMapDecl(MapD: TASTMapDecl);
+begin
+  Emit(Format('typedef TAetherMap_%s T%s;', [MapTag(MapD.KeyType, MapD.ValType), MapD.Name]));
+  Emit(Format('typedef T%s %s;', [MapD.Name, MapD.Name]));
+  Emit('');
+end;
+
 procedure TAetherEmitterC.EmitFunction(Func: TASTFunction);
 var
   ParamListStr, ExportPrefix: string;
-  I, K: Integer;
+  I: Integer;
   Param: TASTParam;
-  ModStr, VolQual: string;
+  ModStr, VolQual, KeyT, ValT: string;
   VarDecl: TASTVarDecl;
-  VarExists: Boolean;
+  SkipNames, AutoNames, AutoTypes: TStringList;
 begin
   if Func.GenericParam <> '' then Exit; // Molde generico nao emite codigo diretamente
   if Func.IsExtern then
@@ -1488,7 +2000,14 @@ begin
   for I := 0 to Func.LocalVars.Count - 1 do
   begin
     VarDecl := TASTVarDecl(Func.LocalVars[I]);
-    if Pos('array[', VarDecl.TypeName) = 1 then
+    if IsMapType(VarDecl.TypeName, KeyT, ValT) then
+    begin
+      Emit(Format('%s %s;', [EmitTypeRef(VarDecl.TypeName), VarDecl.Name]));
+      Emit(Format('memset(&%s, 0, sizeof(%s));', [VarDecl.Name, VarDecl.Name]));
+      if Assigned(VarDecl.InitialExpr) then
+        Emit(Format('%s = %s;', [VarDecl.Name, EmitExpr(VarDecl.InitialExpr)]));
+    end
+    else if Pos('array[', VarDecl.TypeName) = 1 then
     begin
       Emit(FormatCArrayVar(VarDecl.TypeName, VarDecl.Name));
       Emit(Format('memset(&%s, 0, sizeof(%s));', [VarDecl.Name, VarDecl.Name]));
@@ -1510,19 +2029,22 @@ begin
     end;
   end;
 
-  for I := 0 to Func.Body.Count - 1 do
-    if Func.Body[I] is TASTForStmt then
-    begin
-      VarExists := False;
-      for K := 0 to Func.LocalVars.Count - 1 do
-        if SameText(TASTVarDecl(Func.LocalVars[K]).Name, TASTForStmt(Func.Body[I]).VarName) then
-        begin
-          VarExists := True;
-          Break;
-        end;
-      if not VarExists then
-        Emit(Format('int32_t %s;', [TASTForStmt(Func.Body[I]).VarName]));
-    end;
+  SkipNames := TStringList.Create;
+  AutoNames := TStringList.Create;
+  AutoTypes := TStringList.Create;
+  try
+    for I := 0 to Func.Params.Count - 1 do
+      SkipNames.Add(TASTParam(Func.Params[I]).Name);
+    for I := 0 to Func.LocalVars.Count - 1 do
+      SkipNames.Add(TASTVarDecl(Func.LocalVars[I]).Name);
+    CollectAutoForVars(Func.Body, AutoNames, AutoTypes, SkipNames);
+    for I := 0 to AutoNames.Count - 1 do
+      Emit(Format('%s %s;', [AutoTypes[I], AutoNames[I]]));
+  finally
+    SkipNames.Free;
+    AutoNames.Free;
+    AutoTypes.Free;
+  end;
 
   // Corpo
   FActiveDefers.Clear;
@@ -1544,10 +2066,10 @@ end;
 
 procedure TAetherEmitterC.EmitProgramBlock(Prog: TASTProgramBlock);
 var
-  I, K: Integer;
+  I: Integer;
   VarDecl: TASTVarDecl;
-  VarExists: Boolean;
-  VolQual: string;
+  VolQual, KeyT, ValT: string;
+  SkipNames, AutoNames, AutoTypes: TStringList;
 begin
   FCurrentFunc := nil;
   FProgramBlock := Prog;
@@ -1558,7 +2080,14 @@ begin
   for I := 0 to Prog.LocalVars.Count - 1 do
   begin
     VarDecl := TASTVarDecl(Prog.LocalVars[I]);
-    if Pos('array[', VarDecl.TypeName) = 1 then
+    if IsMapType(VarDecl.TypeName, KeyT, ValT) then
+    begin
+      Emit(Format('%s %s;', [EmitTypeRef(VarDecl.TypeName), VarDecl.Name]));
+      Emit(Format('memset(&%s, 0, sizeof(%s));', [VarDecl.Name, VarDecl.Name]));
+      if Assigned(VarDecl.InitialExpr) then
+        Emit(Format('%s = %s;', [VarDecl.Name, EmitExpr(VarDecl.InitialExpr)]));
+    end
+    else if Pos('array[', VarDecl.TypeName) = 1 then
     begin
       Emit(FormatCArrayVar(VarDecl.TypeName, VarDecl.Name));
       Emit(Format('memset(&%s, 0, sizeof(%s));', [VarDecl.Name, VarDecl.Name]));
@@ -1580,19 +2109,20 @@ begin
     end;
   end;
 
-  for I := 0 to Prog.Body.Count - 1 do
-    if Prog.Body[I] is TASTForStmt then
-    begin
-      VarExists := False;
-      for K := 0 to Prog.LocalVars.Count - 1 do
-        if SameText(TASTVarDecl(Prog.LocalVars[K]).Name, TASTForStmt(Prog.Body[I]).VarName) then
-        begin
-          VarExists := True;
-          Break;
-        end;
-      if not VarExists then
-        Emit(Format('int32_t %s;', [TASTForStmt(Prog.Body[I]).VarName]));
-    end;
+  SkipNames := TStringList.Create;
+  AutoNames := TStringList.Create;
+  AutoTypes := TStringList.Create;
+  try
+    for I := 0 to Prog.LocalVars.Count - 1 do
+      SkipNames.Add(TASTVarDecl(Prog.LocalVars[I]).Name);
+    CollectAutoForVars(Prog.Body, AutoNames, AutoTypes, SkipNames);
+    for I := 0 to AutoNames.Count - 1 do
+      Emit(Format('%s %s;', [AutoTypes[I], AutoNames[I]]));
+  finally
+    SkipNames.Free;
+    AutoNames.Free;
+    AutoTypes.Free;
+  end;
 
   FActiveDefers.Clear;
   FLoopDeferBase := 0;
@@ -1613,10 +2143,17 @@ var
   ConstDecl: TASTConstDecl;
   ParamListStr, ModStr, ExportPrefix: string;
   HasExports: Boolean;
+  MapTags, MapKeys, MapVals: TStringList;
 begin
   FModule := AModule;
   FOutput.Clear;
   FIndent := 0;
+  FLoopCounter := 0;
+  MapTags := TStringList.Create;
+  MapKeys := TStringList.Create;
+  MapVals := TStringList.Create;
+  try
+  CollectMapsFromModule(AModule, MapTags, MapKeys, MapVals);
 
   HasExports := False;
   for I := 0 to AModule.Functions.Count - 1 do
@@ -2126,6 +2663,7 @@ begin
   Emit('    int error;');
   Emit('} AetherResult;');
   Emit('');
+  EmitMapRuntimeDecls(MapTags, MapKeys, MapVals, True);
 
   // Constantes
   for I := 0 to AModule.Constants.Count - 1 do
@@ -2163,6 +2701,10 @@ begin
     else if AModule.Types[I] is TASTSubrangeDecl then
       EmitSubrangeDecl(TASTSubrangeDecl(AModule.Types[I]));
   end;
+  EmitMapRuntimeDecls(MapTags, MapKeys, MapVals, False);
+  for I := 0 to AModule.Types.Count - 1 do
+    if AModule.Types[I] is TASTMapDecl then
+      EmitMapDecl(TASTMapDecl(AModule.Types[I]));
   Emit('');
 
   // Construtores AetherBox para Records
@@ -2178,6 +2720,8 @@ begin
       Emit('');
     end;
   end;
+
+  EmitMapRuntimeHelpers(MapTags, MapKeys, MapVals);
 
   // Prototipos antecipados de todas as funcoes
   for I := 0 to AModule.Functions.Count - 1 do
@@ -2234,6 +2778,11 @@ begin
   end;
 
   Result := FOutput.Text;
+  finally
+    MapTags.Free;
+    MapKeys.Free;
+    MapVals.Free;
+  end;
 end;
 
 end.

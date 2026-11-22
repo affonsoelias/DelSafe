@@ -522,7 +522,13 @@ begin
     '=':
       begin
         ReadChar;
-        Result := CreateToken(tokEqual, '=', StartLine, StartCol);
+        if PeekChar = '>' then
+        begin
+          ReadChar;
+          Result := CreateToken(tokFatArrow, '=>', StartLine, StartCol);
+        end
+        else
+          Result := CreateToken(tokEqual, '=', StartLine, StartCol);
       end;
     '<':
       begin

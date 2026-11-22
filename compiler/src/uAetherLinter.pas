@@ -192,8 +192,13 @@ begin
   begin
     ForStmt := TASTForStmt(Stmt);
     IdentList.Add(ForStmt.VarName);
-    CollectIdentifiersInExpr(ForStmt.StartExpr, IdentList);
-    CollectIdentifiersInExpr(ForStmt.EndExpr, IdentList);
+    if Assigned(ForStmt.CollectionExpr) then
+      CollectIdentifiersInExpr(ForStmt.CollectionExpr, IdentList)
+    else
+    begin
+      CollectIdentifiersInExpr(ForStmt.StartExpr, IdentList);
+      CollectIdentifiersInExpr(ForStmt.EndExpr, IdentList);
+    end;
     CollectIdentifiersInNodeList(ForStmt.Body, IdentList);
   end
   else if Stmt is TASTRepeatStmt then

@@ -40,6 +40,7 @@ type
     tokArray,
     tokOf,
     tokSet,
+    tokMap,
 
     // Palavras-chave: Concorrencia e Async
     tokAsync,
@@ -75,6 +76,7 @@ type
     tokBreak,
     tokContinue,
     tokMatch,
+    tokWith,
     tokCase,
     tokReturn,
     tokAsm,
@@ -89,10 +91,13 @@ type
     tokBorrow,
     tokMut,
 
-    // Palavras-chave: Lógica e Valores
+    // Palavras-chave: Lógica, Bitwise e Valores
     tokAnd,
     tokOr,
     tokNot,
+    tokXor,
+    tokShl,
+    tokShr,
     tokImplies,
     tokTrue,
     tokFalse,
@@ -107,6 +112,7 @@ type
     tokDotDot,         // ..
     tokAssign,         // :=
     tokEqual,          // =
+    tokFatArrow,       // =>
     tokNotEqual,       // <>
     tokLess,           // <
     tokLessEqual,      // <=
@@ -167,6 +173,7 @@ begin
     tokArray:         Result := 'array';
     tokOf:            Result := 'of';
     tokSet:           Result := 'set';
+    tokMap:           Result := 'map';
     tokFunction:      Result := 'function';
     tokContract:      Result := 'contract';
     tokRequire:       Result := 'require';
@@ -190,6 +197,7 @@ begin
     tokBreak:         Result := 'break';
     tokContinue:      Result := 'continue';
     tokMatch:         Result := 'match';
+    tokWith:          Result := 'with';
     tokCase:          Result := 'case';
     tokReturn:        Result := 'return';
     tokAsm:           Result := 'asm';
@@ -208,6 +216,9 @@ begin
     tokAnd:           Result := 'and';
     tokOr:            Result := 'or';
     tokNot:           Result := 'not';
+    tokXor:           Result := 'xor';
+    tokShl:           Result := 'shl';
+    tokShr:           Result := 'shr';
     tokImplies:       Result := 'implies';
     tokTrue:          Result := 'true';
     tokFalse:         Result := 'false';
@@ -221,6 +232,7 @@ begin
     tokDotDot:        Result := '..';
     tokAssign:        Result := ':=';
     tokEqual:         Result := '=';
+    tokFatArrow:      Result := '=>';
     tokNotEqual:      Result := '<>';
     tokLess:          Result := '<';
     tokLessEqual:     Result := '<=';
@@ -263,6 +275,7 @@ begin
   else if Lower = 'array' then Result := tokArray
   else if Lower = 'of' then Result := tokOf
   else if Lower = 'set' then Result := tokSet
+  else if Lower = 'map' then Result := tokMap
   else if Lower = 'function' then Result := tokFunction
   else if Lower = 'contract' then Result := tokContract
   else if Lower = 'require' then Result := tokRequire
@@ -286,6 +299,7 @@ begin
   else if Lower = 'break' then Result := tokBreak
   else if Lower = 'continue' then Result := tokContinue
   else if Lower = 'match' then Result := tokMatch
+  else if Lower = 'with' then Result := tokWith
   else if Lower = 'case' then Result := tokCase
   else if Lower = 'return' then Result := tokReturn
   else if Lower = 'asm' then Result := tokAsm
@@ -304,6 +318,9 @@ begin
   else if Lower = 'and' then Result := tokAnd
   else if Lower = 'or' then Result := tokOr
   else if Lower = 'not' then Result := tokNot
+  else if Lower = 'xor' then Result := tokXor
+  else if Lower = 'shl' then Result := tokShl
+  else if Lower = 'shr' then Result := tokShr
   else if Lower = 'implies' then Result := tokImplies
   else if Lower = 'true' then Result := tokTrue
   else if Lower = 'false' then Result := tokFalse
