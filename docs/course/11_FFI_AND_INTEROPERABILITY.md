@@ -345,4 +345,4 @@ When bridging between Aether and foreign code, follow these three golden rules:
 - **For safety:** Protect foreign C routines with Aether `contract require`.
 - **For exporting:** Use `export cdecl` and generate C headers with `aetherc emit-header`.
 
-➡️ **Next:** **[Chapter 12: Capstone Project (Building a Real-World Service)](12_CAPSTONE_PROJECT.md)**
+➡️ **Next:** **[Chapter 12: Modules, Multi-File Projects & Package Management](12_MODULES_PACKAGES_AND_DEPENDENCIES.md)**

@@ -9,7 +9,7 @@ Welcome to the official documentation for the **Aether Programming Language (Aet
 ## 📚 Documentation Map
 
 ### 🎓 1. [The Aether Masterclass Course](course/README.md)
-A comprehensive, hands-on 12-chapter curriculum that takes you from complete beginner to master:
+A comprehensive, hands-on 13-chapter curriculum that takes you from complete beginner to master:
 - **[Curriculum Index](course/README.md):** From basic syntax, module anatomy, and algebraic types to compile-time contracts, the Borrow Checker, traits, async/await, and the final capstone service.
 
 ---

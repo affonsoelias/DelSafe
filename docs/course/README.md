@@ -28,7 +28,8 @@ Aether combines the structural elegance and readability of Pascal with modern sy
 | **[09. Async/Await & Concurrency](09_ASYNC_AWAIT_AND_CONCURRENCY.md)** | Non-blocking Systems | `async function`, `AetherTask`, cooperative event loops, worker threads, and structured concurrency. |
 | **[10. Conditional Compilation & Optimizations](10_CONDITIONAL_COMPILATION_AND_OPTIMIZATIONS.md)** | Target Tuning | `@cfg(target_os)`, `@inline(always)`, `@cold` branch prediction, and `comptime` constant folding. |
 | **[11. FFI & Zero-Boilerplate Interop](11_FFI_AND_INTEROPERABILITY.md)** | Universal Bridges | Direct consumption of C headers (`<math.h>`) and Pascal units (`SysUtils`), explicit `extern c`, C header generation. |
-| **[12. Capstone Project](12_CAPSTONE_PROJECT.md)** | End-to-End System | Building an in-memory secure cache service with JSON serialization, contracts, and zero memory leaks. |
+| **[12. Modules, Projects & Packages](12_MODULES_PACKAGES_AND_DEPENDENCIES.md)** | Code Organization | Multi-file projects, 1:1 module mapping, `aether.json` manifest, `aetherc pkg` manager, and lockfile security. |
+| **[13. Capstone Project](13_CAPSTONE_PROJECT.md)** | End-to-End System | Building an in-memory secure cache service with JSON serialization, contracts, and zero memory leaks. |
 
 ---
 

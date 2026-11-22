@@ -1,4 +1,4 @@
-# Chapter 12: Capstone Project: High-Performance In-Memory Cache
+# Chapter 13: Capstone Project: High-Performance In-Memory Cache
 
 Congratulations on reaching the final chapter of the Aether Masterclass! In this hands-on project, you will build an **In-Memory Secure Cache Service** that integrates every pillar of the language:
 
