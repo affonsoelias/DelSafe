@@ -774,7 +774,8 @@ If (ParamCount >= 1) And (LowerCase(ParamStr(1)) = 'pkg') Then
         Else If Pos('--version=', Arg) = 1 Then OptVer := Copy(Arg, 11, Length(Arg))
         Else If Pos('--branch=', Arg) = 1 Then OptVer := Copy(Arg, 10, Length(Arg))
         Else If Pos('--tag=', Arg) = 1 Then OptVer := Copy(Arg, 7, Length(Arg))
-        Else If PkgName = '' Then PkgName := Arg;
+        Else If PkgName = '' Then PkgName := Arg
+        Else If (OptVer = '') And (Length(Arg) > 0) And (Arg[1] <> '-') Then OptVer := Arg;
         Inc(I);
       End;
       Try
@@ -895,7 +896,9 @@ If (ParamCount >= 1) And (LowerCase(ParamStr(1)) = 'add') Then
         Else If Pos('--tag=', Arg) = 1 Then
                OptVer := Copy(Arg, 7, Length(Arg))
         Else If PkgName = '' Then
-               PkgName := Arg;
+               PkgName := Arg
+        Else If (OptVer = '') And (Length(Arg) > 0) And (Arg[1] <> '-') Then
+               OptVer := Arg;
         Inc(I);
       End;
     Try

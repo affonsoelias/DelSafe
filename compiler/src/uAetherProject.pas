@@ -739,14 +739,41 @@ var
   Obj, DepsObj, SubObj: TJSONObject;
   CachePkgDir, LocalDepDir: string;
   EffectivePkg, EffectiveGit, EffectiveVer: string;
-  Idx: Integer;
+  Idx, AtPos, HashPos, StartIdx, P: Integer;
 begin
   if PkgName = '' then
-    raise Exception.Create('Nome do pacote nao informado. Uso: aetherc add <nome_pacote | git_url> [--path=caminho] [--git=url] [--version=versao]');
+    raise Exception.Create('Nome do pacote nao informado. Uso: aetherc pkg add <nome_pacote[@versao] | git_url[@tag]> [--version=versao]');
 
   EffectivePkg := PkgName;
   EffectiveGit := OptGit;
   EffectiveVer := OptVer;
+
+  // 1. Suporte a especificacao inline de versao via "@versao" ou "#tag"
+  // Ex: "aether-horse@1.0.0", "https://github.com/org/repo@v2.0.0", "repo#v1.0"
+  AtPos := 0;
+  StartIdx := 1;
+  if Pos('git@', EffectivePkg) = 1 then StartIdx := 5;
+  for P := StartIdx to Length(EffectivePkg) do
+  begin
+    if EffectivePkg[P] = '@' then
+    begin
+      AtPos := P;
+      Break;
+    end;
+  end;
+
+  if (EffectiveVer = '') and (AtPos > 0) then
+  begin
+    EffectiveVer := Copy(EffectivePkg, AtPos + 1, Length(EffectivePkg));
+    EffectivePkg := Copy(EffectivePkg, 1, AtPos - 1);
+  end;
+
+  HashPos := Pos('#', EffectivePkg);
+  if (EffectiveVer = '') and (HashPos > 0) then
+  begin
+    EffectiveVer := Copy(EffectivePkg, HashPos + 1, Length(EffectivePkg));
+    EffectivePkg := Copy(EffectivePkg, 1, HashPos - 1);
+  end;
 
   // Detecta se o primeiro argumento e uma URL Git
   if (EffectiveGit = '') and
