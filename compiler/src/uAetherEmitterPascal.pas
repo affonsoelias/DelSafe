@@ -33,6 +33,9 @@ type
     procedure EmitRecordType(Rec: TASTRecordDecl);
     procedure EmitRecordConstructor(Rec: TASTRecordDecl);
     procedure EmitEnumDecl(Enm: TASTEnumDecl);
+    procedure EmitArrayDecl(Arr: TASTArrayDecl);
+    procedure EmitSetDecl(SetD: TASTSetDecl);
+    procedure EmitSubrangeDecl(SubR: TASTSubrangeDecl);
     procedure EmitFunction(Func: TASTFunction);
     procedure EmitProgramBlock(Prog: TASTProgramBlock);
 
@@ -248,6 +251,37 @@ begin
   Result := (Pos('Box<', T) > 0) or (Pos('Pointer', T) > 0) or (T = 'Box');
 end;
 
+function FormatPascalArrayType(const S: string): string;
+var
+  P1, P2, I, DimVal: Integer;
+  DimsPart, ElemPart, ResultDims: string;
+  DimsList: TStringList;
+begin
+  P1 := Pos('[', S);
+  P2 := Pos('] of ', S);
+  if (P1 > 0) and (P2 > P1) then
+  begin
+    DimsPart := Copy(S, P1 + 1, P2 - P1 - 1);
+    ElemPart := Copy(S, P2 + 5, Length(S));
+    DimsList := TStringList.Create;
+    try
+      DimsList.CommaText := DimsPart;
+      ResultDims := '';
+      for I := 0 to DimsList.Count - 1 do
+      begin
+        DimVal := StrToIntDef(Trim(DimsList[I]), 1);
+        if I > 0 then ResultDims := ResultDims + ', ';
+        ResultDims := ResultDims + Format('0..%d', [DimVal - 1]);
+      end;
+      Result := Format('array[%s] of %s', [ResultDims, Trim(ElemPart)]);
+    finally
+      DimsList.Free;
+    end;
+  end
+  else
+    Result := S;
+end;
+
 function TAetherEmitterPascal.EmitTypeRef(const AType: string): string;
 var
   Inner: string;
@@ -263,6 +297,10 @@ begin
     Result := AType
   else if Pos('Result', AType) = 1 then
     Result := 'TResultDoubleError'
+  else if Pos('array[', AType) = 1 then
+    Result := FormatPascalArrayType(AType)
+  else if Pos('set of ', AType) = 1 then
+    Result := 'set of ' + EmitTypeRef(Trim(Copy(AType, 8, Length(AType))))
   else if Pos('Box<', AType) > 0 then
   begin
     P1 := Pos('Box<', AType);
@@ -300,6 +338,8 @@ var
   Bin: TASTBinaryExpr;
   Un: TASTUnaryExpr;
   Call: TASTCallExpr;
+  Idx: TASTIndexExpr;
+  SetLit: TASTSetLiteralExpr;
   ArgsStr: string;
   I: Integer;
   TargetStr: string;
@@ -394,6 +434,33 @@ begin
   if Expr is TASTSpawnExpr then
   begin
     Result := EmitExpr(TASTSpawnExpr(Expr).CallExpr);
+    Exit;
+  end;
+
+  if Expr is TASTIndexExpr then
+  begin
+    Idx := TASTIndexExpr(Expr);
+    TargetStr := EmitExpr(Idx.Target);
+    ArgsStr := '';
+    for I := 0 to Idx.Indices.Count - 1 do
+    begin
+      if I > 0 then ArgsStr := ArgsStr + ', ';
+      ArgsStr := ArgsStr + EmitExpr(TASTExpr(Idx.Indices[I]));
+    end;
+    Result := Format('%s[%s]', [TargetStr, ArgsStr]);
+    Exit;
+  end;
+
+  if Expr is TASTSetLiteralExpr then
+  begin
+    SetLit := TASTSetLiteralExpr(Expr);
+    ArgsStr := '';
+    for I := 0 to SetLit.Elements.Count - 1 do
+    begin
+      if I > 0 then ArgsStr := ArgsStr + ', ';
+      ArgsStr := ArgsStr + EmitExpr(TASTExpr(SetLit.Elements[I]));
+    end;
+    Result := Format('[%s]', [ArgsStr]);
     Exit;
   end;
 
@@ -645,6 +712,7 @@ var
   IfStmt: TASTIfStmt;
   WhileStmt: TASTWhileStmt;
   ForStmt: TASTForStmt;
+  RepeatStmt: TASTRepeatStmt;
   MatchStmt: TASTMatchStmt;
   CaseNode: TASTMatchCase;
   Ret: TASTReturnStmt;
@@ -708,6 +776,16 @@ begin
       EmitStmt(TASTStmt(ForStmt.Body[I]));
     DecIndent;
     Emit('end;');
+  end
+  else if Stmt is TASTRepeatStmt then
+  begin
+    RepeatStmt := TASTRepeatStmt(Stmt);
+    Emit('repeat');
+    IncIndent;
+    for I := 0 to RepeatStmt.Body.Count - 1 do
+      EmitStmt(TASTStmt(RepeatStmt.Body[I]));
+    DecIndent;
+    Emit(Format('until %s;', [EmitExpr(RepeatStmt.Condition)]));
   end
   else if Stmt is TASTReturnStmt then
   begin
@@ -859,6 +937,56 @@ begin
   end;
   DecIndent;
   Emit(');');
+  Emit(Format('%s = T%s;', [Enm.Name, Enm.Name]));
+  Emit('');
+end;
+
+procedure TAetherEmitterPascal.EmitArrayDecl(Arr: TASTArrayDecl);
+var
+  I, DimVal: Integer;
+  DimsStr: string;
+begin
+  DimsStr := '';
+  for I := 0 to Arr.Dims.Count - 1 do
+  begin
+    DimVal := StrToIntDef(Arr.Dims[I], 1);
+    if I > 0 then DimsStr := DimsStr + ', ';
+    DimsStr := DimsStr + Format('0..%d', [DimVal - 1]);
+  end;
+  Emit(Format('T%s = array[%s] of %s;', [Arr.Name, DimsStr, EmitTypeRef(Arr.ElemType)]));
+  Emit(Format('%s = T%s;', [Arr.Name, Arr.Name]));
+  Emit('');
+end;
+
+procedure TAetherEmitterPascal.EmitSetDecl(SetD: TASTSetDecl);
+var
+  I: Integer;
+  VarsStr: string;
+begin
+  if SetD.Variants.Count > 0 then
+  begin
+    VarsStr := '';
+    for I := 0 to SetD.Variants.Count - 1 do
+    begin
+      if I > 0 then VarsStr := VarsStr + ', ';
+      VarsStr := VarsStr + TASTEnumVariant(SetD.Variants[I]).Name;
+    end;
+    Emit(Format('T%s_Enum = (%s);', [SetD.Name, VarsStr]));
+    Emit(Format('T%s = set of T%s_Enum;', [SetD.Name, SetD.Name]));
+    Emit(Format('%s = T%s;', [SetD.Name, SetD.Name]));
+  end
+  else
+  begin
+    Emit(Format('T%s = set of %s;', [SetD.Name, EmitTypeRef(SetD.ElemType)]));
+    Emit(Format('%s = T%s;', [SetD.Name, SetD.Name]));
+  end;
+  Emit('');
+end;
+
+procedure TAetherEmitterPascal.EmitSubrangeDecl(SubR: TASTSubrangeDecl);
+begin
+  Emit(Format('T%s = %s..%s;', [SubR.Name, SubR.LowBound, SubR.HighBound]));
+  Emit(Format('%s = T%s;', [SubR.Name, SubR.Name]));
   Emit('');
 end;
 
@@ -992,6 +1120,13 @@ begin
   Emit('begin');
   IncIndent;
 
+  for I := 0 to Func.LocalVars.Count - 1 do
+  begin
+    VarDecl := TASTVarDecl(Func.LocalVars[I]);
+    if Assigned(VarDecl.InitialExpr) then
+      Emit(Format('%s := %s;', [VarDecl.Name, EmitExpr(VarDecl.InitialExpr)]));
+  end;
+
   // Verificacao de Contratos require em tempo de execucao (Asserts)
   for I := 0 to Func.Requires.Count - 1 do
   begin
@@ -1093,6 +1228,12 @@ begin
 
   Emit('begin');
   IncIndent;
+  for I := 0 to Prog.LocalVars.Count - 1 do
+  begin
+    VarDecl := TASTVarDecl(Prog.LocalVars[I]);
+    if Assigned(VarDecl.InitialExpr) then
+      Emit(Format('%s := %s;', [VarDecl.Name, EmitExpr(VarDecl.InitialExpr)]));
+  end;
   for I := 0 to Prog.Body.Count - 1 do
     EmitStmt(TASTStmt(Prog.Body[I]));
   DecIndent;
@@ -1511,7 +1652,13 @@ begin
         if AModule.Types[I] is TASTRecordDecl then
           EmitRecordType(TASTRecordDecl(AModule.Types[I]))
         else if AModule.Types[I] is TASTEnumDecl then
-          EmitEnumDecl(TASTEnumDecl(AModule.Types[I]));
+          EmitEnumDecl(TASTEnumDecl(AModule.Types[I]))
+        else if AModule.Types[I] is TASTArrayDecl then
+          EmitArrayDecl(TASTArrayDecl(AModule.Types[I]))
+        else if AModule.Types[I] is TASTSetDecl then
+          EmitSetDecl(TASTSetDecl(AModule.Types[I]))
+        else if AModule.Types[I] is TASTSubrangeDecl then
+          EmitSubrangeDecl(TASTSubrangeDecl(AModule.Types[I]));
       end;
       DecIndent;
       Emit('');
@@ -1633,7 +1780,13 @@ begin
         if AModule.Types[I] is TASTRecordDecl then
           EmitRecordType(TASTRecordDecl(AModule.Types[I]))
         else if AModule.Types[I] is TASTEnumDecl then
-          EmitEnumDecl(TASTEnumDecl(AModule.Types[I]));
+          EmitEnumDecl(TASTEnumDecl(AModule.Types[I]))
+        else if AModule.Types[I] is TASTArrayDecl then
+          EmitArrayDecl(TASTArrayDecl(AModule.Types[I]))
+        else if AModule.Types[I] is TASTSetDecl then
+          EmitSetDecl(TASTSetDecl(AModule.Types[I]))
+        else if AModule.Types[I] is TASTSubrangeDecl then
+          EmitSubrangeDecl(TASTSubrangeDecl(AModule.Types[I]));
       end;
       DecIndent;
       Emit('');

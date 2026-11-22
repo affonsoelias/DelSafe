@@ -36,6 +36,7 @@ type
     procedure Error(const ACode, AMsg: string; ALine, ACol: Integer);
     function IsNumericType(const AType: string): Boolean;
     function IsIntegerType(const AType: string): Boolean;
+    function IsSetType(const AType: string): Boolean;
     function TypesAreCompatible(const TargetType, SourceType: string): Boolean;
 
     function CheckExpr(Expr: TASTExpr): string;
@@ -47,12 +48,15 @@ type
     function CheckAwait(AwaitExpr: TASTAwaitExpr): string;
     function CheckSpawn(SpawnExpr: TASTSpawnExpr): string;
     function CheckCall(Call: TASTCallExpr): string;
+    function CheckIndexExpr(Idx: TASTIndexExpr): string;
+    function CheckSetLiteral(SetLit: TASTSetLiteralExpr): string;
 
     procedure CheckStmt(Stmt: TASTStmt);
     procedure CheckAssign(Assign: TASTAssignStmt);
     procedure CheckIf(IfStmt: TASTIfStmt);
     procedure CheckWhile(WhileStmt: TASTWhileStmt);
     procedure CheckFor(ForStmt: TASTForStmt);
+    procedure CheckRepeat(RepeatStmt: TASTRepeatStmt);
     procedure CheckReturn(Ret: TASTReturnStmt);
     procedure CheckMatch(MatchStmt: TASTMatchStmt);
 
@@ -123,6 +127,21 @@ begin
             (AType = 'IntLiteral');
 end;
 
+function TAetherTypeChecker.IsSetType(const AType: string): Boolean;
+var
+  Sym: TSymbol;
+begin
+  if (Pos('set of', AType) > 0) or (AType = 'SetLiteral') then
+    Exit(True);
+  if Assigned(FSymbols) then
+  begin
+    Sym := FSymbols.Resolve(AType);
+    if (Sym <> nil) and (Sym.Kind = skType) and (Sym.Node is TASTSetDecl) then
+      Exit(True);
+  end;
+  Result := False;
+end;
+
 function TAetherTypeChecker.TypesAreCompatible(const TargetType, SourceType: string): Boolean;
 begin
   if TargetType = SourceType then Exit(True);
@@ -138,6 +157,22 @@ begin
   if (Pos('Box', TargetType) = 1) and (Pos('Box', SourceType) = 1) then Exit(True);
   if (Pos('Task', TargetType) = 1) and (Pos('Task', SourceType) = 1) then Exit(True);
   if (Pos('Option<Box<', TargetType) = 1) and ((Pos('Box<', SourceType) = 1) or (SourceType = 'Option<GenericNone>')) then Exit(True);
+  // Literais de conjunto e tipos set
+  if (SourceType = 'SetLiteral') and IsSetType(TargetType) then Exit(True);
+  if (TargetType = 'SetLiteral') and IsSetType(SourceType) then Exit(True);
+  if IsSetType(TargetType) and IsSetType(SourceType) then Exit(True);
+  // Compatibilidade com subfaixas e tipos definidos pelo usuario
+  if Assigned(FSymbols) then
+  begin
+    if Assigned(FSymbols.Resolve(TargetType)) and (FSymbols.Resolve(TargetType).Node is TASTSubrangeDecl) then
+    begin
+      if TypesAreCompatible(TASTSubrangeDecl(FSymbols.Resolve(TargetType).Node).BaseType, SourceType) then Exit(True);
+    end;
+    if Assigned(FSymbols.Resolve(SourceType)) and (FSymbols.Resolve(SourceType).Node is TASTSubrangeDecl) then
+    begin
+      if TypesAreCompatible(TargetType, TASTSubrangeDecl(FSymbols.Resolve(SourceType).Node).BaseType) then Exit(True);
+    end;
+  end;
   Result := False;
 end;
 
@@ -284,6 +319,16 @@ begin
   // Operacoes Aritmeticas: +, -, *, /, mod, div, %
   if (Bin.Op = '+') or (Bin.Op = '-') or (Bin.Op = '*') or (Bin.Op = '/') or (Bin.Op = 'mod') or (Bin.Op = 'div') or (Bin.Op = '%') then
   begin
+    // Operacoes de conjunto: uniao (+), intersecao (*), diferenca (-)
+    if (Bin.Op = '+') or (Bin.Op = '-') or (Bin.Op = '*') then
+    begin
+      if IsSetType(LeftType) or IsSetType(RightType) then
+      begin
+        if LeftType <> 'SetLiteral' then Exit(LeftType)
+        else Exit(RightType);
+      end;
+    end;
+
     // Concatenacao de strings com +
     if (Bin.Op = '+') and ((LeftType = 'String') or (RightType = 'String')) then
       Exit('String');
@@ -326,6 +371,12 @@ begin
       Error('E0308', Format('Operando de "%s" deve ser Bool, encontrado: "%s"', [Bin.Op, LeftType]), Bin.Line, Bin.Col);
     if (RightType <> 'Bool') then
       Error('E0308', Format('Operando de "%s" deve ser Bool, encontrado: "%s"', [Bin.Op, RightType]), Bin.Line, Bin.Col);
+    Exit('Bool');
+  end;
+
+  // Operador de Pertinência de Conjunto: in
+  if Bin.Op = 'in' then
+  begin
     Exit('Bool');
   end;
 
@@ -846,8 +897,69 @@ begin
     Result := CheckSpawn(TASTSpawnExpr(Expr))
   else if Expr is TASTCallExpr then
     Result := CheckCall(TASTCallExpr(Expr))
+  else if Expr is TASTIndexExpr then
+    Result := CheckIndexExpr(TASTIndexExpr(Expr))
+  else if Expr is TASTSetLiteralExpr then
+    Result := CheckSetLiteral(TASTSetLiteralExpr(Expr))
   else
     Result := 'Unknown';
+end;
+
+function TAetherTypeChecker.CheckIndexExpr(Idx: TASTIndexExpr): string;
+var
+  TargetType, IdxType, ElemType: string;
+  I, DimSize, ValInt: Integer;
+  Sym: TSymbol;
+  ArrDecl: TASTArrayDecl;
+  P1: Integer;
+begin
+  TargetType := CheckExpr(Idx.Target);
+  ElemType := 'Int32';
+
+  ArrDecl := nil;
+  Sym := FSymbols.Resolve(TargetType);
+  if Assigned(Sym) and (Sym.Kind = skType) and (Sym.Node is TASTArrayDecl) then
+    ArrDecl := TASTArrayDecl(Sym.Node);
+
+  if Assigned(ArrDecl) then
+    ElemType := ArrDecl.ElemType
+  else if Pos('array[', TargetType) = 1 then
+  begin
+    P1 := Pos('] of ', TargetType);
+    if P1 > 0 then
+      ElemType := Copy(TargetType, P1 + 5, Length(TargetType))
+    else
+      ElemType := 'Int32';
+  end;
+
+  for I := 0 to Idx.Indices.Count - 1 do
+  begin
+    IdxType := CheckExpr(TASTExpr(Idx.Indices[I]));
+    if not IsIntegerType(IdxType) and (IdxType <> 'IntLiteral') then
+      Error('E0308', Format('Indice do array deve ser inteiro, encontrado: "%s"', [IdxType]), Idx.Line, Idx.Col);
+
+    if Assigned(ArrDecl) and (I < ArrDecl.Dims.Count) then
+    begin
+      DimSize := StrToIntDef(ArrDecl.Dims[I], 0);
+      if (Idx.Indices[I] is TASTLiteralExpr) and (TASTLiteralExpr(Idx.Indices[I]).Kind = lkInt) then
+      begin
+        ValInt := StrToIntDef(TASTLiteralExpr(Idx.Indices[I]).Value, 0);
+        if (ValInt < 0) or ((DimSize > 0) and (ValInt >= DimSize)) then
+          Error('E0309', Format('Indice de array fora dos limites: %d (dimensao declarada: %d)', [ValInt, DimSize]), Idx.Line, Idx.Col);
+      end;
+    end;
+  end;
+
+  Result := ElemType;
+end;
+
+function TAetherTypeChecker.CheckSetLiteral(SetLit: TASTSetLiteralExpr): string;
+var
+  I: Integer;
+begin
+  for I := 0 to SetLit.Elements.Count - 1 do
+    CheckExpr(TASTExpr(SetLit.Elements[I]));
+  Result := 'SetLiteral';
 end;
 
 procedure TAetherTypeChecker.CheckAssign(Assign: TASTAssignStmt);
@@ -1072,6 +1184,8 @@ begin
     CheckWhile(TASTWhileStmt(Stmt))
   else if Stmt is TASTForStmt then
     CheckFor(TASTForStmt(Stmt))
+  else if Stmt is TASTRepeatStmt then
+    CheckRepeat(TASTRepeatStmt(Stmt))
   else if Stmt is TASTReturnStmt then
     CheckReturn(TASTReturnStmt(Stmt))
   else if Stmt is TASTMatchStmt then
@@ -1081,12 +1195,31 @@ begin
     ;
 end;
 
-procedure TAetherTypeChecker.RegisterTypes(AModule: TASTModule);
+procedure TAetherTypeChecker.CheckRepeat(RepeatStmt: TASTRepeatStmt);
 var
   I: Integer;
+  CondType: string;
+begin
+  for I := 0 to RepeatStmt.Body.Count - 1 do
+    CheckStmt(TASTStmt(RepeatStmt.Body[I]));
+  if Assigned(RepeatStmt.Condition) then
+  begin
+    CondType := CheckExpr(RepeatStmt.Condition);
+    if CondType <> 'Bool' then
+      Error('E0308', Format('Condicao do "repeat...until" deve ser do tipo Bool, encontrado: "%s"', [CondType]), RepeatStmt.Line, RepeatStmt.Col);
+  end;
+end;
+
+procedure TAetherTypeChecker.RegisterTypes(AModule: TASTModule);
+var
+  I, J: Integer;
   Node: TASTNode;
   Rec: TASTRecordDecl;
   Enm: TASTEnumDecl;
+  Arr: TASTArrayDecl;
+  SetD: TASTSetDecl;
+  SubR: TASTSubrangeDecl;
+  VariantNode: TASTEnumVariant;
 begin
   for I := 0 to AModule.Types.Count - 1 do
   begin
@@ -1100,6 +1233,31 @@ begin
     begin
       Enm := TASTEnumDecl(Node);
       FSymbols.Define(TSymbol.Create(Enm.Name, skType, Enm.Name, Enm.Line, Enm.Col, True, owNone, Enm));
+      for J := 0 to Enm.Variants.Count - 1 do
+      begin
+        VariantNode := TASTEnumVariant(Enm.Variants[J]);
+        FSymbols.Define(TSymbol.Create(VariantNode.Name, skEnumVariant, Enm.Name, VariantNode.Line, VariantNode.Col, False, owNone, VariantNode));
+      end;
+    end
+    else if Node is TASTArrayDecl then
+    begin
+      Arr := TASTArrayDecl(Node);
+      FSymbols.Define(TSymbol.Create(Arr.Name, skType, Arr.Name, Arr.Line, Arr.Col, True, owNone, Arr));
+    end
+    else if Node is TASTSetDecl then
+    begin
+      SetD := TASTSetDecl(Node);
+      FSymbols.Define(TSymbol.Create(SetD.Name, skType, SetD.Name, SetD.Line, SetD.Col, True, owNone, SetD));
+      for J := 0 to SetD.Variants.Count - 1 do
+      begin
+        VariantNode := TASTEnumVariant(SetD.Variants[J]);
+        FSymbols.Define(TSymbol.Create(VariantNode.Name, skEnumVariant, SetD.Name, VariantNode.Line, VariantNode.Col, False, owNone, VariantNode));
+      end;
+    end
+    else if Node is TASTSubrangeDecl then
+    begin
+      SubR := TASTSubrangeDecl(Node);
+      FSymbols.Define(TSymbol.Create(SubR.Name, skType, SubR.Name, SubR.Line, SubR.Col, True, owNone, SubR));
     end;
   end;
 end;

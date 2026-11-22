@@ -100,6 +100,39 @@ end.
 
 ---
 
+## 2.2 Post-Test Loops: `repeat ... until <condition>;`
+
+The `repeat ... until` construct guarantees that the loop body executes **at least once**. It continues iterating until the trailing boolean condition evaluates to `true`:
+
+```aether
+module repeat_demo;
+
+program Main;
+var
+    attempts: Int32;
+    success: Bool;
+begin
+    attempts := 0;
+    success := false;
+
+    repeat
+        attempts := attempts + 1;
+        PrintLn("Attempt #" + IntToStr(attempts));
+        if attempts >= 3 then
+            success := true;
+        end;
+    until success;
+
+    PrintLn("Finished with " + IntToStr(attempts) + " attempts.");
+end.
+```
+
+Notice:
+- No `begin ... end` wrapper is needed around the body because `repeat` and `until` naturally delimit the block.
+- Terminates when the condition evaluates to `true` (unlike C's `do...while` which continues while true).
+
+---
+
 ## 3. Algebraic Enums
 
 Enums in Aether are not just lists of numbers; they are **Algebraic Data Types (ADTs)** that can carry payload data with variants:

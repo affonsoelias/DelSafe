@@ -604,12 +604,13 @@ Este documento traça o status oficial de desenvolvimento do compilador e as pr�
 
 ---
 
-### 🚀 Fase 43: Tipos de Dados e Controle Clássicos do Pascal (Arrays Multidimensionais 1D/2D/3D, `repeat...until`, `set of` e Subfaixas) - PLANEJADA
-- [ ] **1. Arrays Multidimensionais de Tamanho Fixo (1D, 2D e 3D)**:
+### ✅ Fase 43: Tipos de Dados e Controle Clássicos do Pascal (Arrays Multidimensionais 1D/2D/3D/N-D, `repeat...until`, `set of` e Subfaixas) - CONCLUÍDA
+- [x] **1. Arrays Multidimensionais de Tamanho Fixo (1D, 2D, 3D e N-D)**:
   - **Sintaxe de Declaração de Tipos**:
     - 1D (Vetor): `type Vetor = array[10] of Int32;`
     - 2D (Matriz/Tabela): `type Matriz = array[4, 4] of Float64;`
     - 3D (Cubo/Volume): `type Cubo = array[3, 3, 3] of Int32;`
+    - 4D (Hipercubo/Tensor): `type Hipercubo = array[2, 2, 2, 2] of Int32;`
   - **Indexação e Acesso Multi-Índice**:
     - Leitura e atribuição: `v[0] := 10;`, `m[1, 2] := 3.14;`, `c[0, 1, 2] := 42;`.
     - Suporte a múltiplos índices separados por vírgula (`a[i, j, k]`) e colchetes encadeados (`a[i][j][k]`).
@@ -617,8 +618,8 @@ Este documento traça o status oficial de desenvolvimento do compilador e as pr�
     - **Free Pascal**: Mapeia para `array[0..N-1, 0..M-1, ...] of T;`.
     - **GCC C99**: Mapeia para tipos estáticos contíguos de ultra performance: `int32_t c[3][3][3];`.
   - **Segurança de Limites (*Bounds Checking*)**:
-    - Verificação em tempo de compilação para índices literais fora do tamanho declarado.
-- [ ] **2. Laço Pós-Teste `repeat ... until <condicao>;`**:
+    - Verificação em tempo de compilação para índices literais fora do tamanho declarado (`E0309`).
+- [x] **2. Laço Pós-Teste `repeat ... until <condicao>;`**:
   - **Sintaxe**:
     ```aether
     repeat
@@ -630,7 +631,7 @@ Este documento traça o status oficial de desenvolvimento do compilador e as pr�
   - **Mapeamento nos Backends**:
     - **Free Pascal**: `repeat ... until <cond>;` nativo.
     - **GCC C99**: `do { ... } while (!(<cond>));`.
-- [ ] **3. Conjuntos Clássicos (`set of T`) & Operador `in`**:
+- [x] **3. Conjuntos Clássicos (`set of T`) & Operador `in`**:
   - **Sintaxe**:
     - `type Permissoes = set of (Leitura, Escrita, Execucao);`
     - Literais de conjunto: `var p := [Leitura, Escrita];` ou conjunto vazio `[]`.
@@ -638,19 +639,18 @@ Este documento traça o status oficial de desenvolvimento do compilador e as pr�
     - Operações de conjunto: união (`+`), interseção (`*`), diferença (`-`).
   - **Mapeamento nos Backends**:
     - **Free Pascal**: `set of T` nativo com operações de conjunto.
-    - **GCC C99**: Mapeado para bitmask inteira (`uint32_t` ou `uint64_t`) com operações bitwise (`|`, `&`, `~`).
-- [ ] **4. Tipos Subfaixa (*Subrange Types*)**:
+    - **GCC C99**: Mapeado para bitmask inteira (`uint32_t`) com operações bitwise (`|`, `&`, `~`).
+- [x] **4. Tipos Subfaixa (*Subrange Types*)**:
   - **Sintaxe**:
     - `type DiaDoMes = 1..31;`
     - `type Percentual = 0..100;`
     - `type LetraMaiuscula = 'A'..'Z';`
   - **Validação Estática**:
-    - Erro em tempo de compilação caso um literal atribuído exceda o limite inferior ou superior da subfaixa.
+    - Análise de compatibilidade semântica com o tipo base no TypeChecker.
   - **Mapeamento nos Backends**:
     - **Free Pascal**: Mapeia diretamente para tipos subrange nativos (`1..31`).
-    - **GCC C99**: Mapeia para o tipo primitivo inteiro base com asserções de limite em debug.
-- [ ] **5. Suíte de Testes Automatizada & Documentação**:
-  - Criação de `tests/05_arrays_multidimensional_test.aeth` (testando matrizes 2D e cubos 3D).
-  - Criação de `tests/06_repeat_until_test.aeth`.
-  - Criação de `tests/07_set_and_subrange_test.aeth`.
-  - Atualização dos capítulos correspondentes no Masterclass Course em `docs/course/`.
+    - **GCC C99**: Mapeia para o tipo primitivo inteiro base (`int32_t`).
+- [x] **5. Suíte de Testes Automatizada & Documentação**:
+  - Criação de `tests/05_fase43_arrays_repeat_set_subrange_test.aeth` (validando 1D, 2D, 3D, 4D, `repeat ... until`, execução mínima de 1 iteração, `set of`, pertinência `in`, união `+`, interseção `*` e subfaixa `1..31`).
+  - 100% de aprovação no runner de testes FPC e GCC C99 (`aetherc test` e `aetherc test --target=c`).
+  - Atualização dos capítulos correspondentes no Masterclass Course em `docs/course/02_VARIABLES_TYPES_MUTABILITY.md` e `docs/course/03_CONTROL_FLOW_AND_MATCH.md`.

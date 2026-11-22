@@ -61,6 +61,7 @@ type
     function ParseIfStmt: TASTIfStmt;
     function ParseWhileStmt: TASTWhileStmt;
     function ParseForStmt: TASTForStmt;
+    function ParseRepeatStmt: TASTRepeatStmt;
     function ParseMatchStmt: TASTMatchStmt;
     function ParseReturnStmt: TASTReturnStmt;
     function ParseAsmStmt: TASTStmt;
@@ -140,6 +141,26 @@ function TAetherParser.ParseTypeRef: string;
 var
   BaseType: string;
 begin
+  if Match(tokArray) then
+  begin
+    Expect(tokLBracket, 'Esperado "[" na especificacao de dimensoes do array');
+    BaseType := 'array[';
+    BaseType := BaseType + Expect(tokIntLiteral, 'Esperada dimensao inteira do array').Value;
+    while Match(tokComma) do
+      BaseType := BaseType + ', ' + Expect(tokIntLiteral, 'Esperada dimensao inteira do array').Value;
+    Expect(tokRBracket, 'Esperado "]" ao fechar dimensoes do array');
+    Expect(tokOf, 'Esperado "of" apos dimensoes do array');
+    BaseType := BaseType + '] of ' + ParseTypeRef;
+    Result := BaseType;
+    Exit;
+  end;
+  if Match(tokSet) then
+  begin
+    Expect(tokOf, 'Esperado "of" apos "set"');
+    Result := 'set of ' + ParseTypeRef;
+    Exit;
+  end;
+
   BaseType := Expect(tokIdentifier, 'Esperado identificador de tipo').Value;
   if Match(tokLess) then
   begin
@@ -416,11 +437,14 @@ end;
 
 procedure TAetherParser.ParseTypeSection(AModule: TASTModule; var SectionAttrs: TParsedAttributes);
 var
-  TypeName, TypeDoc, EffectiveCfg: string;
+  TypeName, TypeDoc, EffectiveCfg, LowBound, HighBound, BaseType: string;
   TLine, TCol: Integer;
   RecDecl: TASTRecordDecl;
   EnumDecl: TASTEnumDecl;
   TraitDecl: TASTTraitDecl;
+  ArrDecl: TASTArrayDecl;
+  SetDecl: TASTSetDecl;
+  SubDecl: TASTSubrangeDecl;
   CurrentAttrs: TParsedAttributes;
 begin
   Expect(tokType);
@@ -468,8 +492,75 @@ begin
           TraitDecl.DocComment := TypeDoc;
           AModule.Traits.Add(TraitDecl);
         end
+        else if Check(tokArray) then
+        begin
+          Advance; // consome 'array'
+          Expect(tokLBracket, 'Esperado "[" na declaracao de dimensoes do array');
+          ArrDecl := TASTArrayDecl.Create(TLine, TCol, TypeName, '');
+          ArrDecl.Dims.Add(Expect(tokIntLiteral, 'Esperada dimensao inteira do array').Value);
+          while Match(tokComma) do
+            ArrDecl.Dims.Add(Expect(tokIntLiteral, 'Esperada dimensao inteira do array').Value);
+          Expect(tokRBracket, 'Esperado "]" apos dimensoes do array');
+          Expect(tokOf, 'Esperado "of" apos dimensoes do array');
+          ArrDecl.ElemType := ParseTypeRef;
+          ArrDecl.DocComment := TypeDoc;
+          ArrDecl.CfgCondition := EffectiveCfg;
+          AModule.Types.Add(ArrDecl);
+        end
+        else if Check(tokSet) then
+        begin
+          Advance; // consome 'set'
+          Expect(tokOf, 'Esperado "of" apos "set"');
+          SetDecl := TASTSetDecl.Create(TLine, TCol, TypeName);
+          if Match(tokLParen) then
+          begin
+            while not Check(tokRParen) and not Check(tokEOF) do
+            begin
+              SetDecl.Variants.Add(TASTEnumVariant.Create(FCurTok.Line, FCurTok.Col, Expect(tokIdentifier, 'Esperado identificador de variante de conjunto').Value));
+              if not Match(tokComma) then Break;
+            end;
+            Expect(tokRParen, 'Esperado ")" ao fechar variantes de conjunto');
+          end
+          else
+            SetDecl.ElemType := ParseTypeRef;
+          SetDecl.DocComment := TypeDoc;
+          SetDecl.CfgCondition := EffectiveCfg;
+          AModule.Types.Add(SetDecl);
+        end
+        else if (Check(tokIntLiteral) or Check(tokCharLiteral)) and (FPeekTok.Kind = tokDotDot) then
+        begin
+          LowBound := FCurTok.Value;
+          Advance;
+          Expect(tokDotDot, 'Esperado ".." no intervalo da subfaixa');
+          HighBound := FCurTok.Value;
+          Advance;
+          if (Length(LowBound) > 0) and (LowBound[1] = '''') then
+            BaseType := 'Char'
+          else
+            BaseType := 'Int32';
+          SubDecl := TASTSubrangeDecl.Create(TLine, TCol, TypeName, LowBound, HighBound, BaseType);
+          SubDecl.DocComment := TypeDoc;
+          SubDecl.CfgCondition := EffectiveCfg;
+          AModule.Types.Add(SubDecl);
+        end
+        else if Check(tokLParen) then
+        begin
+          Advance; // consome '('
+          EnumDecl := TASTEnumDecl.Create(TLine, TCol, TypeName);
+          while not Check(tokRParen) and not Check(tokEOF) do
+          begin
+            EnumDecl.Variants.Add(TASTEnumVariant.Create(FCurTok.Line, FCurTok.Col, Expect(tokIdentifier, 'Esperado nome da variante do enum').Value));
+            if not Match(tokComma) then Break;
+          end;
+          Expect(tokRParen, 'Esperado ")" ao fechar variantes do enum');
+          EnumDecl.DocComment := TypeDoc;
+          EnumDecl.Derives.AddStrings(CurrentAttrs.Derives);
+          EnumDecl.Derives.AddStrings(SectionAttrs.Derives);
+          EnumDecl.CfgCondition := EffectiveCfg;
+          AModule.Types.Add(EnumDecl);
+        end
         else
-          raise EAetherParserError.Create('Esperado "record", "enum" ou "trait" na declaracao de tipo', TLine, TCol);
+          raise EAetherParserError.Create('Esperado "record", "enum", "trait", "array", "set" ou subfaixa na declaracao de tipo', TLine, TCol);
 
         ClearAttributes(SectionAttrs);
         Expect(tokSemicolon, 'Esperado ";" apos declaracao de tipo');
@@ -934,6 +1025,30 @@ begin
   end;
 end;
 
+function TAetherParser.ParseRepeatStmt: TASTRepeatStmt;
+var
+  RLine, RCol: Integer;
+  Cond: TASTExpr;
+begin
+  RLine := FCurTok.Line;
+  RCol := FCurTok.Col;
+  Expect(tokRepeat);
+  Result := TASTRepeatStmt.Create(RLine, RCol, nil);
+  try
+    while not Check(tokUntil) and not Check(tokEOF) do
+    begin
+      Result.Body.Add(ParseStatement);
+      Expect(tokSemicolon, 'Esperado ";" apos instrucao no bloco repeat');
+    end;
+    Expect(tokUntil, 'Esperado "until" para fechar o bloco repeat');
+    Cond := ParseExpr;
+    Result.Condition := Cond;
+  except
+    Result.Free;
+    raise;
+  end;
+end;
+
 function TAetherParser.ParseMatchStmt: TASTMatchStmt;
 var
   MatchExpr: TASTExpr;
@@ -1048,6 +1163,8 @@ begin
     Result := ParseWhileStmt
   else if Check(tokFor) then
     Result := ParseForStmt
+  else if Check(tokRepeat) then
+    Result := ParseRepeatStmt
   else if Check(tokMatch) then
     Result := ParseMatchStmt
   else if Check(tokReturn) then
@@ -1065,6 +1182,7 @@ var
   CallExpr: TASTCallExpr;
   ArgExpr: TASTExpr;
   ArgOwn: TOwnershipKind;
+  IdxExpr: TASTIndexExpr;
 begin
   Line := FCurTok.Line;
   Col := FCurTok.Col;
@@ -1104,6 +1222,20 @@ begin
   if Match(tokFalse) then
     Exit(TASTLiteralExpr.Create(Line, Col, lkBool, 'false'));
 
+  // Literal de Conjunto [elem1, elem2, ...] ou []
+  if Match(tokLBracket) then
+  begin
+    Result := TASTSetLiteralExpr.Create(Line, Col);
+    if not Check(tokRBracket) then
+    begin
+      repeat
+        TASTSetLiteralExpr(Result).Elements.Add(ParseExpr);
+      until not Match(tokComma);
+    end;
+    Expect(tokRBracket, 'Esperado "]" ao fechar literal de conjunto');
+    Exit;
+  end;
+
   // Parenteses (Expr)
   if Match(tokLParen) then
   begin
@@ -1112,7 +1244,7 @@ begin
     Exit;
   end;
 
-  // Identificador ou Chamada de Funcao ou Acesso a Membro
+  // Identificador ou Chamada de Funcao ou Acesso a Membro / Indexacao
   if Check(tokIdentifier) then
   begin
     Id := Expect(tokIdentifier).Value;
@@ -1154,38 +1286,53 @@ begin
       Result := TASTIdentifierExpr.Create(Line, Col, Id);
     end;
 
-    // Acesso a membro sequencial: obj.campo ou chamada encadeada estilo metodo: obj.Metodo(args) [UFCS]
-    while Match(tokDot) do
+    // Acesso sequencial: membro (obj.campo / UFCS) ou indexacao (arr[i, j] / arr[i][j])
+    while Check(tokDot) or Check(tokLBracket) do
     begin
-      Id := Expect(tokIdentifier, 'Esperado identificador apos "."').Value;
-      if Match(tokLParen) then
+      if Match(tokDot) then
       begin
-        // UFCS: obj.Metodo(args...) e transformado transparentemente em Metodo(borrow obj, args...)
-        CallExpr := TASTCallExpr.Create(Line, Col, Id);
-        CallExpr.Args.Add(TASTCallArg.Create(Line, Col, owBorrow, Result));
+        Id := Expect(tokIdentifier, 'Esperado identificador apos "."').Value;
+        if Match(tokLParen) then
+        begin
+          // UFCS: obj.Metodo(args...) e transformado transparentemente em Metodo(borrow obj, args...)
+          CallExpr := TASTCallExpr.Create(Line, Col, Id);
+          CallExpr.Args.Add(TASTCallArg.Create(Line, Col, owBorrow, Result));
 
-        if not Check(tokRParen) then
+          if not Check(tokRParen) then
+          begin
+            repeat
+              ArgOwn := owNone;
+              if Match(tokTake) then ArgOwn := owTake
+              else if Match(tokBorrow) then ArgOwn := owBorrow
+              else if Match(tokMut) then
+              begin
+                Expect(tokBorrow);
+                ArgOwn := owMutBorrow;
+              end;
+
+              ArgExpr := ParseExpr;
+              CallExpr.Args.Add(TASTCallArg.Create(Line, Col, ArgOwn, ArgExpr));
+            until not Match(tokComma);
+          end;
+          Expect(tokRParen, 'Esperado ")" no fechamento dos argumentos');
+          Result := CallExpr;
+        end
+        else
+        begin
+          Result := TASTMemberAccessExpr.Create(Line, Col, Result, Id);
+        end;
+      end
+      else if Match(tokLBracket) then
+      begin
+        IdxExpr := TASTIndexExpr.Create(Line, Col, Result);
+        if not Check(tokRBracket) then
         begin
           repeat
-            ArgOwn := owNone;
-            if Match(tokTake) then ArgOwn := owTake
-            else if Match(tokBorrow) then ArgOwn := owBorrow
-            else if Match(tokMut) then
-            begin
-              Expect(tokBorrow);
-              ArgOwn := owMutBorrow;
-            end;
-
-            ArgExpr := ParseExpr;
-            CallExpr.Args.Add(TASTCallArg.Create(Line, Col, ArgOwn, ArgExpr));
+            IdxExpr.Indices.Add(ParseExpr);
           until not Match(tokComma);
         end;
-        Expect(tokRParen, 'Esperado ")" no fechamento dos argumentos');
-        Result := CallExpr;
-      end
-      else
-      begin
-        Result := TASTMemberAccessExpr.Create(Line, Col, Result, Id);
+        Expect(tokRBracket, 'Esperado "]" ao fechar indexador de array');
+        Result := IdxExpr;
       end;
     end;
 
@@ -1257,7 +1404,7 @@ var
 begin
   Left := ParseAdditiveExpr;
   while Check(tokEqual) or Check(tokNotEqual) or Check(tokLess) or
-        Check(tokLessEqual) or Check(tokGreater) or Check(tokGreaterEqual) do
+        Check(tokLessEqual) or Check(tokGreater) or Check(tokGreaterEqual) or Check(tokIn) do
   begin
     Line := FCurTok.Line;
     Col := FCurTok.Col;

@@ -123,6 +123,21 @@ begin
       EnumDecl := TASTEnumDecl(TypeNode);
       if (EnumDecl.CfgCondition <> '') and not EvaluateCfgCondition(EnumDecl.CfgCondition, TargetOS, TargetBackend, IsRelease) then
         AModule.Types.Delete(I);
+    end
+    else if TypeNode is TASTArrayDecl then
+    begin
+      if (TASTArrayDecl(TypeNode).CfgCondition <> '') and not EvaluateCfgCondition(TASTArrayDecl(TypeNode).CfgCondition, TargetOS, TargetBackend, IsRelease) then
+        AModule.Types.Delete(I);
+    end
+    else if TypeNode is TASTSetDecl then
+    begin
+      if (TASTSetDecl(TypeNode).CfgCondition <> '') and not EvaluateCfgCondition(TASTSetDecl(TypeNode).CfgCondition, TargetOS, TargetBackend, IsRelease) then
+        AModule.Types.Delete(I);
+    end
+    else if TypeNode is TASTSubrangeDecl then
+    begin
+      if (TASTSubrangeDecl(TypeNode).CfgCondition <> '') and not EvaluateCfgCondition(TASTSubrangeDecl(TypeNode).CfgCondition, TargetOS, TargetBackend, IsRelease) then
+        AModule.Types.Delete(I);
     end;
     Dec(I);
   end;

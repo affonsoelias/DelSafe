@@ -494,6 +494,31 @@ begin
           OptimizeExpr(CallArg.Expr);
       end;
     end;
+  end
+  else if Expr is TASTIndexExpr then
+  begin
+    OptimizeExpr(TASTIndexExpr(Expr).Target);
+    if Assigned(TASTIndexExpr(Expr).Indices) then
+    begin
+      for I := 0 to TASTIndexExpr(Expr).Indices.Count - 1 do
+      begin
+        NewExpr := TASTExpr(TASTIndexExpr(Expr).Indices[I]);
+        OptimizeExpr(NewExpr);
+        TASTIndexExpr(Expr).Indices[I] := NewExpr;
+      end;
+    end;
+  end
+  else if Expr is TASTSetLiteralExpr then
+  begin
+    if Assigned(TASTSetLiteralExpr(Expr).Elements) then
+    begin
+      for I := 0 to TASTSetLiteralExpr(Expr).Elements.Count - 1 do
+      begin
+        NewExpr := TASTExpr(TASTSetLiteralExpr(Expr).Elements[I]);
+        OptimizeExpr(NewExpr);
+        TASTSetLiteralExpr(Expr).Elements[I] := NewExpr;
+      end;
+    end;
   end;
 end;
 
@@ -502,6 +527,7 @@ var
   IfStmt: TASTIfStmt;
   WhileStmt: TASTWhileStmt;
   ForStmt: TASTForStmt;
+  RepeatStmt: TASTRepeatStmt;
   AssignStmt: TASTAssignStmt;
   ReturnStmt: TASTReturnStmt;
   CallStmt: TASTCallStmt;
@@ -553,6 +579,14 @@ begin
     OptimizeExpr(ForStmt.EndExpr);
     if Assigned(ForStmt.Body) then
       OptimizeBlock(ForStmt.Body);
+  end
+  else if Stmt is TASTRepeatStmt then
+  begin
+    RepeatStmt := TASTRepeatStmt(Stmt);
+    if Assigned(RepeatStmt.Body) then
+      OptimizeBlock(RepeatStmt.Body);
+    if Assigned(RepeatStmt.Condition) then
+      OptimizeExpr(RepeatStmt.Condition);
   end;
 end;
 

@@ -23,17 +23,22 @@ type
     function IndentStr: string;
 
     function IsEnumName(const AName: string): Boolean;
+    function IsSetType(const AName: string): Boolean;
     function IsMutBorrowParam(const AName: string): Boolean;
     function FindFunction(const AName: string): TASTFunction;
     function EscapeCString(const S: string): string;
     function GetExprTypeName(Expr: TASTExpr): string;
     function IsPointerTarget(Expr: TASTExpr): Boolean;
+    function FormatCArrayVar(const AType, AName: string): string;
 
     function EmitTypeRef(const AType: string): string;
     function EmitExpr(Expr: TASTExpr): string;
     procedure EmitStmt(Stmt: TASTStmt);
     procedure EmitRecordDecl(Rec: TASTRecordDecl);
     procedure EmitEnumDecl(Enm: TASTEnumDecl);
+    procedure EmitArrayDecl(Arr: TASTArrayDecl);
+    procedure EmitSetDecl(SetD: TASTSetDecl);
+    procedure EmitSubrangeDecl(SubR: TASTSubrangeDecl);
     procedure EmitFunction(Func: TASTFunction);
     procedure EmitProgramBlock(Prog: TASTProgramBlock);
   public
@@ -90,6 +95,20 @@ begin
     for I := 0 to FModule.Types.Count - 1 do
       if (TASTNode(FModule.Types[I]) is TASTEnumDecl) and
          SameText(TASTEnumDecl(FModule.Types[I]).Name, AName) then
+        Exit(True);
+end;
+
+function TAetherEmitterC.IsSetType(const AName: string): Boolean;
+var
+  I: Integer;
+begin
+  if (Pos('set of', AName) > 0) or (AName = 'SetLiteral') then
+    Exit(True);
+  Result := False;
+  if Assigned(FModule) then
+    for I := 0 to FModule.Types.Count - 1 do
+      if (TASTNode(FModule.Types[I]) is TASTSetDecl) and
+         SameText(TASTSetDecl(FModule.Types[I]).Name, AName) then
         Exit(True);
 end;
 
@@ -229,6 +248,8 @@ begin
     Bin := TASTBinaryExpr(Expr);
     if (Bin.Op = '+') and ((GetExprTypeName(Bin.Left) = 'String') or (GetExprTypeName(Bin.Right) = 'String')) then
       Exit('String');
+    if IsSetType(GetExprTypeName(Bin.Left)) then Exit(GetExprTypeName(Bin.Left));
+    if IsSetType(GetExprTypeName(Bin.Right)) then Exit(GetExprTypeName(Bin.Right));
   end
   else if Expr is TASTCallExpr then
   begin
@@ -272,6 +293,33 @@ begin
   Result := (Pos('Box<', T) > 0) or (Pos('Pointer', T) > 0) or (T = 'Box');
 end;
 
+function TAetherEmitterC.FormatCArrayVar(const AType, AName: string): string;
+var
+  P1, P2, I: Integer;
+  DimsPart, ElemPart, DimsStr: string;
+  DimsList: TStringList;
+begin
+  P1 := Pos('[', AType);
+  P2 := Pos('] of ', AType);
+  if (P1 > 0) and (P2 > P1) then
+  begin
+    DimsPart := Copy(AType, P1 + 1, P2 - P1 - 1);
+    ElemPart := Copy(AType, P2 + 5, Length(AType));
+    DimsList := TStringList.Create;
+    try
+      DimsList.CommaText := DimsPart;
+      DimsStr := '';
+      for I := 0 to DimsList.Count - 1 do
+        DimsStr := DimsStr + Format('[%s]', [Trim(DimsList[I])]);
+      Result := Format('%s %s%s;', [EmitTypeRef(Trim(ElemPart)), AName, DimsStr]);
+    finally
+      DimsList.Free;
+    end;
+  end
+  else
+    Result := Format('%s %s;', [EmitTypeRef(AType), AName]);
+end;
+
 function TAetherEmitterC.EmitTypeRef(const AType: string): string;
 var
   Inner: string;
@@ -291,6 +339,7 @@ begin
   else if AType = 'String' then Result := 'const char*'
   else if AType = 'Void' then Result := 'void'
   else if Pos('Result', AType) = 1 then Result := 'AetherResult'
+  else if Pos('set of', AType) = 1 then Result := 'uint32_t'
   else if Pos('Box<', AType) > 0 then
   begin
     P1 := Pos('Box<', AType);
@@ -316,6 +365,8 @@ var
   Bin: TASTBinaryExpr;
   Un: TASTUnaryExpr;
   Call: TASTCallExpr;
+  Idx: TASTIndexExpr;
+  SetLit: TASTSetLiteralExpr;
   FuncDecl: TASTFunction;
   CalleeName: string;
   ArgsStr: string;
@@ -435,7 +486,16 @@ begin
     else if OpStr = 'mod' then OpStr := '%'
     else if OpStr = 'div' then OpStr := '/'
     else if OpStr = 'implies' then
-      Exit(Format('(!(%s) || (%s))', [EmitExpr(Bin.Left), EmitExpr(Bin.Right)]));
+      Exit(Format('(!(%s) || (%s))', [EmitExpr(Bin.Left), EmitExpr(Bin.Right)]))
+    else if OpStr = 'in' then
+      Exit(Format('(((%s) & (1U << (%s))) != 0)', [EmitExpr(Bin.Right), EmitExpr(Bin.Left)]));
+
+    if IsSetType(GetExprTypeName(Bin.Left)) or IsSetType(GetExprTypeName(Bin.Right)) then
+    begin
+      if OpStr = '+' then Exit(Format('((%s) | (%s))', [EmitExpr(Bin.Left), EmitExpr(Bin.Right)]))
+      else if OpStr = '*' then Exit(Format('((%s) & (%s))', [EmitExpr(Bin.Left), EmitExpr(Bin.Right)]))
+      else if OpStr = '-' then Exit(Format('((%s) & ~(%s))', [EmitExpr(Bin.Left), EmitExpr(Bin.Right)]));
+    end;
 
     Result := Format('(%s %s %s)', [EmitExpr(Bin.Left), OpStr, EmitExpr(Bin.Right)]);
     Exit;
@@ -466,6 +526,35 @@ begin
   if Expr is TASTSpawnExpr then
   begin
     Result := EmitExpr(TASTSpawnExpr(Expr).CallExpr);
+    Exit;
+  end;
+
+  if Expr is TASTIndexExpr then
+  begin
+    Idx := TASTIndexExpr(Expr);
+    TargetStr := EmitExpr(Idx.Target);
+    ArgsStr := '';
+    for I := 0 to Idx.Indices.Count - 1 do
+      ArgsStr := ArgsStr + Format('[%s]', [EmitExpr(TASTExpr(Idx.Indices[I]))]);
+    Result := Format('%s%s', [TargetStr, ArgsStr]);
+    Exit;
+  end;
+
+  if Expr is TASTSetLiteralExpr then
+  begin
+    SetLit := TASTSetLiteralExpr(Expr);
+    if SetLit.Elements.Count = 0 then
+      Result := '0U'
+    else
+    begin
+      Result := '';
+      for I := 0 to SetLit.Elements.Count - 1 do
+      begin
+        if I > 0 then Result := Result + ' | ';
+        Result := Result + Format('(1U << (%s))', [EmitExpr(TASTExpr(SetLit.Elements[I]))]);
+      end;
+      Result := '(' + Result + ')';
+    end;
     Exit;
   end;
 
@@ -747,6 +836,7 @@ var
   IfStmt: TASTIfStmt;
   WhileStmt: TASTWhileStmt;
   ForStmt: TASTForStmt;
+  RepeatStmt: TASTRepeatStmt;
   MatchStmt: TASTMatchStmt;
   CaseNode: TASTMatchCase;
   Ret: TASTReturnStmt;
@@ -809,6 +899,16 @@ begin
       EmitStmt(TASTStmt(ForStmt.Body[I]));
     DecIndent;
     Emit('}');
+  end
+  else if Stmt is TASTRepeatStmt then
+  begin
+    RepeatStmt := TASTRepeatStmt(Stmt);
+    Emit('do {');
+    IncIndent;
+    for I := 0 to RepeatStmt.Body.Count - 1 do
+      EmitStmt(TASTStmt(RepeatStmt.Body[I]));
+    DecIndent;
+    Emit(Format('} while (!(%s));', [EmitExpr(RepeatStmt.Condition)]));
   end
   else if Stmt is TASTReturnStmt then
   begin
@@ -942,6 +1042,67 @@ begin
   end;
   DecIndent;
   Emit(Format('} T%s;', [Enm.Name]));
+  Emit(Format('typedef T%s %s;', [Enm.Name, Enm.Name]));
+  for I := 0 to Enm.Variants.Count - 1 do
+    Emit(Format('#define %s %s_%s', [TASTEnumVariant(Enm.Variants[I]).Name, Enm.Name, TASTEnumVariant(Enm.Variants[I]).Name]));
+  Emit('');
+end;
+
+procedure TAetherEmitterC.EmitArrayDecl(Arr: TASTArrayDecl);
+var
+  I: Integer;
+  DimsStr: string;
+begin
+  DimsStr := '';
+  for I := 0 to Arr.Dims.Count - 1 do
+    DimsStr := DimsStr + Format('[%s]', [Arr.Dims[I]]);
+  Emit(Format('typedef %s T%s%s;', [EmitTypeRef(Arr.ElemType), Arr.Name, DimsStr]));
+  Emit(Format('typedef T%s %s;', [Arr.Name, Arr.Name]));
+  Emit('');
+end;
+
+procedure TAetherEmitterC.EmitSetDecl(SetD: TASTSetDecl);
+var
+  I: Integer;
+  VName: string;
+begin
+  if SetD.Variants.Count > 0 then
+  begin
+    Emit('typedef enum {');
+    IncIndent;
+    for I := 0 to SetD.Variants.Count - 1 do
+    begin
+      VName := TASTEnumVariant(SetD.Variants[I]).Name;
+      if I < SetD.Variants.Count - 1 then
+        Emit(Format('AETHER_SET_%s_%s = %d,', [SetD.Name, VName, I]))
+      else
+        Emit(Format('AETHER_SET_%s_%s = %d', [SetD.Name, VName, I]));
+    end;
+    DecIndent;
+    Emit(Format('} T%s_Enum;', [SetD.Name]));
+    for I := 0 to SetD.Variants.Count - 1 do
+    begin
+      VName := TASTEnumVariant(SetD.Variants[I]).Name;
+      Emit(Format('#define %s %d', [VName, I]));
+    end;
+  end;
+  Emit(Format('typedef uint32_t T%s;', [SetD.Name]));
+  Emit(Format('typedef T%s %s;', [SetD.Name, SetD.Name]));
+  Emit('');
+end;
+
+procedure TAetherEmitterC.EmitSubrangeDecl(SubR: TASTSubrangeDecl);
+begin
+  if SubR.BaseType = 'Char' then
+  begin
+    Emit(Format('typedef char T%s;', [SubR.Name]));
+    Emit(Format('typedef T%s %s;', [SubR.Name, SubR.Name]));
+  end
+  else
+  begin
+    Emit(Format('typedef int32_t T%s;', [SubR.Name]));
+    Emit(Format('typedef T%s %s;', [SubR.Name, SubR.Name]));
+  end;
   Emit('');
 end;
 
@@ -1055,7 +1216,17 @@ begin
   for I := 0 to Func.LocalVars.Count - 1 do
   begin
     VarDecl := TASTVarDecl(Func.LocalVars[I]);
-    Emit(Format('%s %s;', [EmitTypeRef(VarDecl.TypeName), VarDecl.Name]));
+    if Pos('array[', VarDecl.TypeName) = 1 then
+    begin
+      Emit(FormatCArrayVar(VarDecl.TypeName, VarDecl.Name));
+      Emit(Format('memset(&%s, 0, sizeof(%s));', [VarDecl.Name, VarDecl.Name]));
+    end
+    else
+    begin
+      Emit(Format('%s %s;', [EmitTypeRef(VarDecl.TypeName), VarDecl.Name]));
+      if Assigned(VarDecl.InitialExpr) then
+        Emit(Format('%s = %s;', [VarDecl.Name, EmitExpr(VarDecl.InitialExpr)]));
+    end;
   end;
 
   for I := 0 to Func.Body.Count - 1 do
@@ -1102,7 +1273,17 @@ begin
   for I := 0 to Prog.LocalVars.Count - 1 do
   begin
     VarDecl := TASTVarDecl(Prog.LocalVars[I]);
-    Emit(Format('%s %s;', [EmitTypeRef(VarDecl.TypeName), VarDecl.Name]));
+    if Pos('array[', VarDecl.TypeName) = 1 then
+    begin
+      Emit(FormatCArrayVar(VarDecl.TypeName, VarDecl.Name));
+      Emit(Format('memset(&%s, 0, sizeof(%s));', [VarDecl.Name, VarDecl.Name]));
+    end
+    else
+    begin
+      Emit(Format('%s %s;', [EmitTypeRef(VarDecl.TypeName), VarDecl.Name]));
+      if Assigned(VarDecl.InitialExpr) then
+        Emit(Format('%s = %s;', [VarDecl.Name, EmitExpr(VarDecl.InitialExpr)]));
+    end;
   end;
 
   for I := 0 to Prog.Body.Count - 1 do
@@ -1613,7 +1794,13 @@ begin
     if AModule.Types[I] is TASTRecordDecl then
       EmitRecordDecl(TASTRecordDecl(AModule.Types[I]))
     else if AModule.Types[I] is TASTEnumDecl then
-      EmitEnumDecl(TASTEnumDecl(AModule.Types[I]));
+      EmitEnumDecl(TASTEnumDecl(AModule.Types[I]))
+    else if AModule.Types[I] is TASTArrayDecl then
+      EmitArrayDecl(TASTArrayDecl(AModule.Types[I]))
+    else if AModule.Types[I] is TASTSetDecl then
+      EmitSetDecl(TASTSetDecl(AModule.Types[I]))
+    else if AModule.Types[I] is TASTSubrangeDecl then
+      EmitSubrangeDecl(TASTSubrangeDecl(AModule.Types[I]));
   end;
   Emit('');
 

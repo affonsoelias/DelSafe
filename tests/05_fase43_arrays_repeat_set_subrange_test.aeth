@@ -1,0 +1,107 @@
+module Fase43ArraysRepeatSetSubrangeTest;
+
+import IO;
+
+type
+    Vetor = array[5] of Int32;
+    Matriz = array[3, 3] of Int32;
+    Cubo = array[2, 2, 2] of Int32;
+    Hipercubo = array[2, 2, 2, 2] of Int32;
+
+    Permissoes = set of (Leitura, Escrita, Execucao);
+    DiaDoMes = 1..31;
+
+program Main;
+var
+    v: Vetor;
+    m: Matriz;
+    c: Cubo;
+    h: Hipercubo;
+    i: Int32;
+    soma: Int32;
+    repCount: Int32;
+    p: Permissoes;
+    p2: Permissoes;
+    pUnion: Permissoes;
+    pInter: Permissoes;
+    dia: DiaDoMes;
+begin
+    PrintLn("=== TESTE DA FASE 43: ARRAYS, REPEAT-UNTIL, SETS E SUBFAIXAS ===");
+
+    // 1. Teste de Vetor 1D
+    v[0] := 10;
+    v[1] := 20;
+    v[2] := 30;
+    v[3] := 40;
+    v[4] := 50;
+    assert(v[0] = 10);
+    assert(v[2] = 30);
+    assert(v[4] = 50);
+
+    // 2. Teste de Matriz 2D
+    m[0, 0] := 1;
+    m[0, 1] := 2;
+    m[1, 1] := 5;
+    m[2, 2] := 9;
+    assert(m[0, 0] = 1);
+    assert(m[0, 1] = 2);
+    assert(m[1, 1] = 5);
+    assert(m[2, 2] = 9);
+
+    // 3. Teste de Cubo 3D
+    c[0, 0, 0] := 11;
+    c[1, 0, 1] := 77;
+    c[1, 1, 1] := 99;
+    assert(c[0, 0, 0] = 11);
+    assert(c[1, 0, 1] = 77);
+    assert(c[1, 1, 1] = 99);
+
+    // 4. Teste de Hipercubo 4D
+    h[0, 1, 0, 1] := 1234;
+    h[1, 1, 1, 1] := 5678;
+    assert(h[0, 1, 0, 1] = 1234);
+    assert(h[1, 1, 1, 1] = 5678);
+
+    // 5. Teste de repeat ... until
+    repCount := 0;
+    soma := 0;
+    repeat
+        repCount := repCount + 1;
+        soma := soma + repCount;
+    until repCount >= 5;
+    assert(repCount = 5);
+    assert(soma = 15);
+
+    // Teste de execucao garantida de pelo menos 1 vez
+    repCount := 100;
+    repeat
+        repCount := repCount + 1;
+    until repCount > 50;
+    assert(repCount = 101);
+
+    // 6. Teste de Conjuntos (set of) e operador 'in'
+    p := [Leitura, Execucao];
+    assert(Leitura in p);
+    assert(Execucao in p);
+    assert(not (Escrita in p));
+
+    p2 := [Escrita, Execucao];
+    assert(Escrita in p2);
+
+    // Operacoes de conjunto: uniao (+) e intersecao (*)
+    pUnion := p + p2;
+    assert(Leitura in pUnion);
+    assert(Escrita in pUnion);
+    assert(Execucao in pUnion);
+
+    pInter := p * p2;
+    assert(Execucao in pInter);
+    assert(not (Leitura in pInter));
+    assert(not (Escrita in pInter));
+
+    // 7. Teste de Subfaixa
+    dia := 22;
+    assert(dia = 22);
+
+    PrintLn("Fase 43: Todos os testes de Arrays N-D, repeat-until, sets e subfaixas passaram com sucesso!");
+end.

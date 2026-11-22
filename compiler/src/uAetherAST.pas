@@ -120,6 +120,23 @@ type
     function Dump(Indent: Integer = 0): string; override;
   end;
 
+  TASTIndexExpr = class(TASTExpr)
+  public
+    Target: TASTExpr;
+    Indices: TASTNodeList; // lista de TASTExpr
+    constructor Create(ALine, ACol: Integer; ATarget: TASTExpr);
+    destructor Destroy; override;
+    function Dump(Indent: Integer = 0): string; override;
+  end;
+
+  TASTSetLiteralExpr = class(TASTExpr)
+  public
+    Elements: TASTNodeList; // lista de TASTExpr
+    constructor Create(ALine, ACol: Integer);
+    destructor Destroy; override;
+    function Dump(Indent: Integer = 0): string; override;
+  end;
+
   // --- Instruções (Statements) ---
   TASTStmt = class(TASTNode);
 
@@ -167,6 +184,15 @@ type
     IsDownTo: Boolean;
     Body: TASTNodeList;
     constructor Create(ALine, ACol: Integer; const AVarName: string; AStart, AEnd: TASTExpr; AIsDownTo: Boolean = False);
+    destructor Destroy; override;
+    function Dump(Indent: Integer = 0): string; override;
+  end;
+
+  TASTRepeatStmt = class(TASTStmt)
+  public
+    Condition: TASTExpr;
+    Body: TASTNodeList;
+    constructor Create(ALine, ACol: Integer; ACond: TASTExpr = nil);
     destructor Destroy; override;
     function Dump(Indent: Integer = 0): string; override;
   end;
@@ -267,6 +293,42 @@ type
     constructor Create(ALine, ACol: Integer; const AName: string);
     destructor Destroy; override;
     function HasDerive(const ADerive: string): Boolean;
+    function Dump(Indent: Integer = 0): string; override;
+  end;
+
+  TASTArrayDecl = class(TASTNode)
+  public
+    Name: string;
+    ElemType: string;
+    Dims: TStringList;
+    DocComment: string;
+    CfgCondition: string;
+    constructor Create(ALine, ACol: Integer; const AName, AElemType: string);
+    destructor Destroy; override;
+    function Dump(Indent: Integer = 0): string; override;
+  end;
+
+  TASTSetDecl = class(TASTNode)
+  public
+    Name: string;
+    ElemType: string;
+    Variants: TASTNodeList; // TASTEnumVariant
+    DocComment: string;
+    CfgCondition: string;
+    constructor Create(ALine, ACol: Integer; const AName: string; const AElemType: string = '');
+    destructor Destroy; override;
+    function Dump(Indent: Integer = 0): string; override;
+  end;
+
+  TASTSubrangeDecl = class(TASTNode)
+  public
+    Name: string;
+    LowBound: string;
+    HighBound: string;
+    BaseType: string;
+    DocComment: string;
+    CfgCondition: string;
+    constructor Create(ALine, ACol: Integer; const AName, ALow, AHigh, ABase: string);
     function Dump(Indent: Integer = 0): string; override;
   end;
 
@@ -650,6 +712,60 @@ begin
   end;
 end;
 
+{ TASTIndexExpr }
+
+constructor TASTIndexExpr.Create(ALine, ACol: Integer; ATarget: TASTExpr);
+begin
+  inherited Create(ALine, ACol);
+  Target := ATarget;
+  Indices := TASTNodeList.Create;
+end;
+
+destructor TASTIndexExpr.Destroy;
+begin
+  Target.Free;
+  Indices.Free;
+  inherited Destroy;
+end;
+
+function TASTIndexExpr.Dump(Indent: Integer): string;
+var
+  I: Integer;
+begin
+  Result := MakeIndent(Indent) + 'Indexacao de Array: Target =' + LineEnding +
+            Target.Dump(Indent + 1) + LineEnding +
+            MakeIndent(Indent) + 'Indices:';
+  for I := 0 to Indices.Count - 1 do
+    Result := Result + LineEnding + Indices[I].Dump(Indent + 1);
+end;
+
+{ TASTSetLiteralExpr }
+
+constructor TASTSetLiteralExpr.Create(ALine, ACol: Integer);
+begin
+  inherited Create(ALine, ACol);
+  Elements := TASTNodeList.Create;
+end;
+
+destructor TASTSetLiteralExpr.Destroy;
+begin
+  Elements.Free;
+  inherited Destroy;
+end;
+
+function TASTSetLiteralExpr.Dump(Indent: Integer): string;
+var
+  I: Integer;
+begin
+  Result := MakeIndent(Indent) + 'Literal de Conjunto: [';
+  for I := 0 to Elements.Count - 1 do
+  begin
+    if I > 0 then Result := Result + ', ';
+    Result := Result + Elements[I].Dump(0);
+  end;
+  Result := Result + ']';
+end;
+
 { TASTAssignStmt }
 
 constructor TASTAssignStmt.Create(ALine, ACol: Integer; ATarget, AExpr: TASTExpr);
@@ -788,6 +904,34 @@ begin
             MakeIndent(Indent) + 'Faca (Do):';
   for I := 0 to Body.Count - 1 do
     Result := Result + LineEnding + Body[I].Dump(Indent + 1);
+end;
+
+{ TASTRepeatStmt }
+
+constructor TASTRepeatStmt.Create(ALine, ACol: Integer; ACond: TASTExpr);
+begin
+  inherited Create(ALine, ACol);
+  Condition := ACond;
+  Body := TASTNodeList.Create;
+end;
+
+destructor TASTRepeatStmt.Destroy;
+begin
+  Condition.Free;
+  Body.Free;
+  inherited Destroy;
+end;
+
+function TASTRepeatStmt.Dump(Indent: Integer): string;
+var
+  I: Integer;
+begin
+  Result := MakeIndent(Indent) + 'Repita (Repeat):' + LineEnding;
+  for I := 0 to Body.Count - 1 do
+    Result := Result + Body[I].Dump(Indent + 1) + LineEnding;
+  Result := Result + MakeIndent(Indent) + 'Ate (Until):' + LineEnding;
+  if Assigned(Condition) then
+    Result := Result + Condition.Dump(Indent + 1);
 end;
 
 { TASTPattern }
@@ -1043,6 +1187,73 @@ begin
     Result := MakeIndent(Indent) + Format('Tipo Enum: %s', [Name]);
   for I := 0 to Variants.Count - 1 do
     Result := Result + LineEnding + Variants[I].Dump(Indent + 1);
+end;
+
+{ TASTArrayDecl }
+
+constructor TASTArrayDecl.Create(ALine, ACol: Integer; const AName, AElemType: string);
+begin
+  inherited Create(ALine, ACol);
+  Name := AName;
+  ElemType := AElemType;
+  Dims := TStringList.Create;
+  DocComment := '';
+  CfgCondition := '';
+end;
+
+destructor TASTArrayDecl.Destroy;
+begin
+  Dims.Free;
+  inherited Destroy;
+end;
+
+function TASTArrayDecl.Dump(Indent: Integer): string;
+begin
+  Result := MakeIndent(Indent) + Format('Tipo Array: %s = array[%s] of %s', [Name, Dims.CommaText, ElemType]);
+end;
+
+{ TASTSetDecl }
+
+constructor TASTSetDecl.Create(ALine, ACol: Integer; const AName: string; const AElemType: string);
+begin
+  inherited Create(ALine, ACol);
+  Name := AName;
+  ElemType := AElemType;
+  Variants := TASTNodeList.Create;
+  DocComment := '';
+  CfgCondition := '';
+end;
+
+destructor TASTSetDecl.Destroy;
+begin
+  Variants.Free;
+  inherited Destroy;
+end;
+
+function TASTSetDecl.Dump(Indent: Integer): string;
+begin
+  if Variants.Count > 0 then
+    Result := MakeIndent(Indent) + Format('Tipo Set: %s = set of (variantes)', [Name])
+  else
+    Result := MakeIndent(Indent) + Format('Tipo Set: %s = set of %s', [Name, ElemType]);
+end;
+
+{ TASTSubrangeDecl }
+
+constructor TASTSubrangeDecl.Create(ALine, ACol: Integer; const AName, ALow, AHigh, ABase: string);
+begin
+  inherited Create(ALine, ACol);
+  Name := AName;
+  LowBound := ALow;
+  HighBound := AHigh;
+  BaseType := ABase;
+  DocComment := '';
+  CfgCondition := '';
+end;
+
+function TASTSubrangeDecl.Dump(Indent: Integer): string;
+begin
+  Result := MakeIndent(Indent) + Format('Tipo Subfaixa: %s = %s..%s (base: %s)', [Name, LowBound, HighBound, BaseType]);
 end;
 
 { TASTParam }
@@ -1337,6 +1548,20 @@ begin
       TASTCallExpr(Result).Args.Add(CloneASTNode(TASTCallExpr(Node).Args[I]));
     Exit;
   end
+  else if Node is TASTIndexExpr then
+  begin
+    Result := TASTIndexExpr.Create(Node.Line, Node.Col, TASTExpr(CloneASTNode(TASTIndexExpr(Node).Target)));
+    for I := 0 to TASTIndexExpr(Node).Indices.Count - 1 do
+      TASTIndexExpr(Result).Indices.Add(CloneASTNode(TASTIndexExpr(Node).Indices[I]));
+    Exit;
+  end
+  else if Node is TASTSetLiteralExpr then
+  begin
+    Result := TASTSetLiteralExpr.Create(Node.Line, Node.Col);
+    for I := 0 to TASTSetLiteralExpr(Node).Elements.Count - 1 do
+      TASTSetLiteralExpr(Result).Elements.Add(CloneASTNode(TASTSetLiteralExpr(Node).Elements[I]));
+    Exit;
+  end
 
   // Instruções
   else if Node is TASTAssignStmt then
@@ -1367,6 +1592,13 @@ begin
                                  TASTForStmt(Node).IsDownTo);
     for I := 0 to TASTForStmt(Node).Body.Count - 1 do
       TASTForStmt(Result).Body.Add(CloneASTNode(TASTForStmt(Node).Body[I]));
+    Exit;
+  end
+  else if Node is TASTRepeatStmt then
+  begin
+    Result := TASTRepeatStmt.Create(Node.Line, Node.Col, TASTExpr(CloneASTNode(TASTRepeatStmt(Node).Condition)));
+    for I := 0 to TASTRepeatStmt(Node).Body.Count - 1 do
+      TASTRepeatStmt(Result).Body.Add(CloneASTNode(TASTRepeatStmt(Node).Body[I]));
     Exit;
   end
   else if Node is TASTPattern then

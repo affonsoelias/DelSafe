@@ -330,6 +330,23 @@ begin
     CheckExpr(TASTSpawnExpr(Expr).CallExpr, accRead);
     Exit;
   end;
+
+  // Indexacao de Array
+  if Expr is TASTIndexExpr then
+  begin
+    CheckExpr(TASTIndexExpr(Expr).Target, Access);
+    for I := 0 to TASTIndexExpr(Expr).Indices.Count - 1 do
+      CheckExpr(TASTExpr(TASTIndexExpr(Expr).Indices[I]), accRead);
+    Exit;
+  end;
+
+  // Literal de Conjunto
+  if Expr is TASTSetLiteralExpr then
+  begin
+    for I := 0 to TASTSetLiteralExpr(Expr).Elements.Count - 1 do
+      CheckExpr(TASTExpr(TASTSetLiteralExpr(Expr).Elements[I]), accRead);
+    Exit;
+  end;
 end;
 
 procedure TAetherBorrowChecker.CheckCallArg(Arg: TASTCallArg);
@@ -353,6 +370,7 @@ var
   IfStmt: TASTIfStmt;
   WhileStmt: TASTWhileStmt;
   ForStmt: TASTForStmt;
+  RepeatStmt: TASTRepeatStmt;
   MatchStmt: TASTMatchStmt;
   CaseNode: TASTMatchCase;
   Ret: TASTReturnStmt;
@@ -457,6 +475,16 @@ begin
       FCurrentScope.ReleaseTemporaryBorrows;
     for I := 0 to ForStmt.Body.Count - 1 do
       CheckStmt(TASTStmt(ForStmt.Body[I]));
+  end
+  else if Stmt is TASTRepeatStmt then
+  begin
+    RepeatStmt := TASTRepeatStmt(Stmt);
+    for I := 0 to RepeatStmt.Body.Count - 1 do
+      CheckStmt(TASTStmt(RepeatStmt.Body[I]));
+    if Assigned(RepeatStmt.Condition) then
+      CheckExpr(RepeatStmt.Condition, accRead);
+    if Assigned(FCurrentScope) then
+      FCurrentScope.ReleaseTemporaryBorrows;
   end
   else if Stmt is TASTReturnStmt then
   begin

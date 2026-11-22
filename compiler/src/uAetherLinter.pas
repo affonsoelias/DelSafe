@@ -135,6 +135,17 @@ begin
   else if Expr is TASTSpawnExpr then
   begin
     CollectIdentifiersInExpr(TASTSpawnExpr(Expr).CallExpr, IdentList);
+  end
+  else if Expr is TASTIndexExpr then
+  begin
+    CollectIdentifiersInExpr(TASTIndexExpr(Expr).Target, IdentList);
+    for I := 0 to TASTIndexExpr(Expr).Indices.Count - 1 do
+      CollectIdentifiersInExpr(TASTExpr(TASTIndexExpr(Expr).Indices[I]), IdentList);
+  end
+  else if Expr is TASTSetLiteralExpr then
+  begin
+    for I := 0 to TASTSetLiteralExpr(Expr).Elements.Count - 1 do
+      CollectIdentifiersInExpr(TASTExpr(TASTSetLiteralExpr(Expr).Elements[I]), IdentList);
   end;
 end;
 
@@ -145,6 +156,7 @@ var
   IfStmt: TASTIfStmt;
   WhileStmt: TASTWhileStmt;
   ForStmt: TASTForStmt;
+  RepeatStmt: TASTRepeatStmt;
   MatchStmt: TASTMatchStmt;
   ReturnStmt: TASTReturnStmt;
   CaseNode: TASTMatchCase;
@@ -183,6 +195,13 @@ begin
     CollectIdentifiersInExpr(ForStmt.StartExpr, IdentList);
     CollectIdentifiersInExpr(ForStmt.EndExpr, IdentList);
     CollectIdentifiersInNodeList(ForStmt.Body, IdentList);
+  end
+  else if Stmt is TASTRepeatStmt then
+  begin
+    RepeatStmt := TASTRepeatStmt(Stmt);
+    CollectIdentifiersInNodeList(RepeatStmt.Body, IdentList);
+    if Assigned(RepeatStmt.Condition) then
+      CollectIdentifiersInExpr(RepeatStmt.Condition, IdentList);
   end
   else if Stmt is TASTMatchStmt then
   begin
@@ -359,6 +378,12 @@ var
         CheckExprForRedundancies(TASTForStmt(CurStmt).StartExpr);
         CheckExprForRedundancies(TASTForStmt(CurStmt).EndExpr);
         CheckStmtListForDeadCode(TASTForStmt(CurStmt).Body);
+      end
+      else if CurStmt is TASTRepeatStmt then
+      begin
+        CheckStmtListForDeadCode(TASTRepeatStmt(CurStmt).Body);
+        if Assigned(TASTRepeatStmt(CurStmt).Condition) then
+          CheckExprForRedundancies(TASTRepeatStmt(CurStmt).Condition);
       end
       else if CurStmt is TASTAssignStmt then
         CheckExprForRedundancies(TASTAssignStmt(CurStmt).Expr)

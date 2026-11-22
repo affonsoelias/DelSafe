@@ -36,6 +36,9 @@ type
     tokEnum,
     tokTrait,
     tokImpl,
+    tokArray,
+    tokOf,
+    tokSet,
 
     // Palavras-chave: Concorrencia e Async
     tokAsync,
@@ -65,6 +68,8 @@ type
     tokIn,
     tokTo,
     tokDownto,
+    tokRepeat,
+    tokUntil,
     tokMatch,
     tokCase,
     tokReturn,
@@ -89,6 +94,7 @@ type
     tokSemicolon,      // ;
     tokComma,          // ,
     tokDot,            // .
+    tokDotDot,         // ..
     tokAssign,         // :=
     tokEqual,          // =
     tokNotEqual,       // <>
@@ -146,6 +152,9 @@ begin
     tokEnum:          Result := 'enum';
     tokTrait:         Result := 'trait';
     tokImpl:          Result := 'impl';
+    tokArray:         Result := 'array';
+    tokOf:            Result := 'of';
+    tokSet:           Result := 'set';
     tokFunction:      Result := 'function';
     tokContract:      Result := 'contract';
     tokRequire:       Result := 'require';
@@ -163,6 +172,8 @@ begin
     tokIn:            Result := 'in';
     tokTo:            Result := 'to';
     tokDownto:        Result := 'downto';
+    tokRepeat:        Result := 'repeat';
+    tokUntil:         Result := 'until';
     tokMatch:         Result := 'match';
     tokCase:          Result := 'case';
     tokReturn:        Result := 'return';
@@ -186,6 +197,7 @@ begin
     tokSemicolon:     Result := ';';
     tokComma:         Result := ',';
     tokDot:           Result := '.';
+    tokDotDot:        Result := '..';
     tokAssign:        Result := ':=';
     tokEqual:         Result := '=';
     tokNotEqual:      Result := '<>';
@@ -226,6 +238,9 @@ begin
   else if Lower = 'enum' then Result := tokEnum
   else if Lower = 'trait' then Result := tokTrait
   else if Lower = 'impl' then Result := tokImpl
+  else if Lower = 'array' then Result := tokArray
+  else if Lower = 'of' then Result := tokOf
+  else if Lower = 'set' then Result := tokSet
   else if Lower = 'function' then Result := tokFunction
   else if Lower = 'contract' then Result := tokContract
   else if Lower = 'require' then Result := tokRequire
@@ -243,6 +258,8 @@ begin
   else if Lower = 'in' then Result := tokIn
   else if Lower = 'to' then Result := tokTo
   else if Lower = 'downto' then Result := tokDownto
+  else if Lower = 'repeat' then Result := tokRepeat
+  else if Lower = 'until' then Result := tokUntil
   else if Lower = 'match' then Result := tokMatch
   else if Lower = 'case' then Result := tokCase
   else if Lower = 'return' then Result := tokReturn

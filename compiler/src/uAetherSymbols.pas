@@ -302,7 +302,8 @@ begin
   if P > 0 then
     CleanName := Copy(CleanName, 1, P - 1);
 
-  if (CleanName = 'Result') or (CleanName = 'Option') or (CleanName = 'Box') or (CleanName = 'Task') then
+  if (CleanName = 'Result') or (CleanName = 'Option') or (CleanName = 'Box') or (CleanName = 'Task') or
+     (Pos('array[', CleanName) = 1) or (Pos('set of', CleanName) = 1) then
     Exit(True);
 
   Sym := ResolveTypeSymbol(CleanName);

@@ -491,7 +491,24 @@ begin
     '.':
       begin
         ReadChar;
-        Result := CreateToken(tokDot, '.', StartLine, StartCol);
+        if PeekChar = '.' then
+        begin
+          ReadChar;
+          Result := CreateToken(tokDotDot, '..', StartLine, StartCol);
+        end
+        else
+          Result := CreateToken(tokDot, '.', StartLine, StartCol);
+      end;
+    '!':
+      begin
+        ReadChar;
+        if PeekChar = '=' then
+        begin
+          ReadChar;
+          Result := CreateToken(tokNotEqual, '!=', StartLine, StartCol);
+        end
+        else
+          Result := CreateToken(tokUnknown, '!', StartLine, StartCol);
       end;
     '=':
       begin
