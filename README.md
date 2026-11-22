@@ -27,8 +27,22 @@ A sintaxe do Aether se lê como pseudocódigo executável de alto nível. Qualqu
 
 ### 5. Interoperabilidade Bilateral Total com C e Pascal
 O Aether não cria um ecossistema isolado:
-* **Consome C e Pascal nativamente:** Você pode importar e usar qualquer biblioteca em C (`extern function`) e qualquer unit do Free Pascal (`import pascal`) diretamente no código.
+* **Consome C e Pascal nativamente:** Você pode importar e usar qualquer biblioteca em C (`extern function`, `import c`) e qualquer unit do Free Pascal (`import pascal`) diretamente no código.
 * **Consumido por C e Pascal:** O compilador do Aether possui emissores nativos de alta performance para **C99** e **Object Pascal**. As bibliotecas que você escreve em Aether podem ser compiladas e consumidas de maneira transparente por bases de código existentes em C ou Delphi/FPC.
+
+### 6. Alta Concorrência Moderna sem o Custo do Garbage Collector (Superando os Limites de Horse e mORMot)
+No desenvolvimento de servidores e microsserviços modernos, os frameworks tradicionais em Pascal muitas vezes esbarram no modelo clássico "1 thread por conexão" (que esgota a memória sob milhares de conexões simultâneas) ou na complexidade de gerenciar locks manuais com risco de *Access Violations* silenciosas. 
+O Aether traz a revolução da **Concorrência Segura (*Fearless Concurrency*)**:
+* **I/O Multiplexado e Micro-tarefas:** Arquitetura orientada a eventos (IOCP no Windows / epoll no Linux) capaz de segurar dezenas de milhares de conexões simultâneas consumindo poucos megabytes de RAM.
+* **Segurança contra Data Races no Compilador:** O Borrow Checker (`take`, `borrow`, `mut borrow`) impede acessos concorrentes desprotegidos em tempo de compilação. Se o código compilar, ele não corrompe a memória entre threads.
+
+### 7. Fullstack Nativo: O Mesmo Código no Backend e Frontend (BlaiseVue)
+Ao invés de programar o backend em uma linguagem e o frontend em outra (com validações duplicadas e APIs frágeis), o Aether unifica o desenvolvimento:
+* **Tipos Compartilhados:** Registros, Enums e DTOs definidos uma única vez em Aether são compartilhados nativamente entre as APIs de backend e o frontend reativo (BlaiseVue).
+* **Zero Duplicação:** Se um campo for alterado ou renomeado no backend, o compilador alerta imediatamente os erros no frontend antes de rodar o sistema.
+
+### 8. Autonomia e Compilador Auto-Hospedado (Self-Hosting)
+O Aether não depende eternamente de harnesses externos: seu núcleo (`compiler/aeth/`) é escrito na própria linguagem Aether, fechando o ciclo de bootstrapping e garantindo a maturidade e independência a longo prazo da plataforma.
 
 ---
 
@@ -39,8 +53,9 @@ O Aether não cria um ecossistema isolado:
 - 🧩 **Traits e Polimorfismo Estático (*Zero-Cost Abstractions*):** Defina contratos comportamentais com `trait` e implemente para seus tipos com `impl`. Despacho monomorfizado estático em tempo de compilação, sem tabelas virtuais (vtable) nem overhead em runtime.
 - 🎯 **Pattern Matching Algébrico:** `match` exaustivo e tipos algébricos com dados associados (`enum Payload`), eliminando a necessidade de `nil`/`null` com as mónadas nativas `Result<T, E>` e `Option<T>`.
 - ⚡ **Sintaxe de Métodos via UFCS:** Invocação intuitiva estilo objeto (`registro.Metodo()`) combinada com funções puras e modulares.
-- 📦 **Gerenciador de Pacotes e Test Runner Integrados:** Ferramental nativo (`aether add` e `aether test`) sem dependência de ferramentas externas.
-- 🔌 **LSP Nativo (Language Server Protocol):** Autocompletar, verificação em tempo real e integração completa com VS Code e editores modernos.
+- 🌐 **Biblioteca Padrão Moderna (`std/`):** Módulos nativos para `JSON` (parser zero-alocação), `Sync` (atômicos, mutex e canais CSP), `Net` (sockets e HTTP), `Strings`, `Math` e `IO`.
+- 📦 **Gerenciador de Pacotes e Test Runner Integrados:** Ferramental nativo completo (`aether add` com suporte a Git e dependências transitivas, `aether test`, `aether init`, `aether build`, `aether run`).
+- 🔌 **LSP e Extensão VS Code Oficiais:** Language Server integrado (`aetherc lsp`) com autocompletion, hover tipado, go-to-definition, diagnósticos em tempo real e extensão VS Code (`ide/vscode/`).
 
 ---
 
@@ -138,14 +153,17 @@ aetherc run --target=c
 # Adiciona uma dependência local ao aether.json
 aetherc add math_extra --path=libs/math_extra
 
-# Adiciona uma dependência remota via Git
-aetherc add logger --git=https://github.com/exemplo/logger.git
+# Adiciona uma dependência remota diretamente via URL Git
+aetherc add https://github.com/exemplo/logger.git --branch=v1.0.0
 ```
 
 ### 4. Execução de Testes Automatizados
 ```bash
 # Roda todos os testes unitários da pasta tests/
 aetherc test
+
+# Roda testes utilizando o backend C99 nativo
+aetherc test --target=c
 
 # Roda apenas testes que correspondam a um filtro
 aetherc test banco --target=c
@@ -164,15 +182,15 @@ aetherc examples/01_hello_world.aeth --target=c
 
 ## 📂 Estrutura do Repositório
 
-- **[`compiler/`](file:///c:/Users/Pichau/Documents/aether/compiler/):** Código-fonte do compilador oficial (bootstrap em Free Pascal e versão auto-hospedada em `compiler/aeth/`).
-- **[`std/`](file:///c:/Users/Pichau/Documents/aether/std/):** Biblioteca Padrão oficial (`math`, `strings`, `io`, `collections`).
-- **[`examples/`](file:///c:/Users/Pichau/Documents/aether/examples/):** Exemplos práticos cobrindo do Hello World a Traits, Pattern Matching, Ownership e Interoperabilidade.
+- **[`compiler/`](file:///c:/Users/Pichau/Documents/aether/compiler/):** Código-fonte do compilador oficial (bootstrap em Free Pascal e versão auto-hospedada completa em `compiler/aeth/`).
+- **[`std/`](file:///c:/Users/Pichau/Documents/aether/std/):** Biblioteca Padrão oficial (`json`, `sync`, `net`, `math`, `strings`, `io`).
+- **[`examples/`](file:///c:/Users/Pichau/Documents/aether/examples/):** Exemplos práticos cobrindo do Hello World a Traits, Concorrência, Sockets, JSON, Pattern Matching, Ownership e Compilador Auto-Hospedado.
 - **[`docs/`](file:///c:/Users/Pichau/Documents/aether/docs/):**
   - **[Curso Oficial Aether](file:///c:/Users/Pichau/Documents/aether/docs/curso/README.md):** 9 lições práticas passo a passo.
   - **[Guia do Iniciante](file:///c:/Users/Pichau/Documents/aether/docs/usuario/GUIA_DO_INICIANTE.md):** Manual completo de conceitos.
   - **[Especificação Técnica](file:///c:/Users/Pichau/Documents/aether/docs/tecnica/ESPECIFICACAO_LINGUAGEM.md):** Gramática formal EBNF e arquitetura do compilador.
-  - **[Roadmap de Desenvolvimento](file:///c:/Users/Pichau/Documents/aether/docs/planejamento/ROADMAP_DE_DESENVOLVIMENTO.md):** Fases do projeto e metas futuras.
-- **[`ide/vscode/`](file:///c:/Users/Pichau/Documents/aether/ide/vscode/):** Extensão oficial para Visual Studio Code com syntax highlighting, snippets e LSP.
+  - **[Roadmap de Desenvolvimento](file:///c:/Users/Pichau/Documents/aether/docs/planejamento/ROADMAP_DE_DESENVOLVIMENTO.md):** Todas as 19 fases concluídas e metas futuras (Fases 20-22).
+- **[`ide/vscode/`](file:///c:/Users/Pichau/Documents/aether/ide/vscode/):** Extensão oficial para Visual Studio Code com syntax highlighting TextMate, snippets e cliente LSP.
 
 ---
 
