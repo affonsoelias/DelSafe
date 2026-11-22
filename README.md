@@ -1,6 +1,6 @@
 # Aether Programming Language
 
-> **Uma linguagem de sistemas moderna com a clareza estruturada de Object Pascal e Ada, a segurança estática de memória do Rust, interoperabilidade bilateral nativa com C e Pascal, e arquitetada do zero para colaboração perfeita com Inteligências Artificiais.**
+> **Uma linguagem de sistemas moderna com a clareza estruturada de Object Pascal e Ada, a segurança estática de memória do Rust, interoperabilidade bilateral nativa com C e Pascal, e concebida especialmente como a linguagem de alta performance para o framework BlaiseVue e para colaboração perfeita com Inteligências Artificiais.**
 
 ---
 
@@ -36,10 +36,11 @@ O Aether traz a revolução da **Concorrência Segura (*Fearless Concurrency*)**
 * **I/O Multiplexado e Micro-tarefas:** Arquitetura orientada a eventos (IOCP no Windows / epoll no Linux) capaz de segurar dezenas de milhares de conexões simultâneas consumindo poucos megabytes de RAM.
 * **Segurança contra Data Races no Compilador:** O Borrow Checker (`take`, `borrow`, `mut borrow`) impede acessos concorrentes desprotegidos em tempo de compilação. Se o código compilar, ele não corrompe a memória entre threads.
 
-### 7. Fullstack Nativo: O Mesmo Código no Backend e Frontend (BlaiseVue)
-Ao invés de programar o backend em uma linguagem e o frontend em outra (com validações duplicadas e APIs frágeis), o Aether unifica o desenvolvimento:
-* **Tipos Compartilhados:** Registros, Enums e DTOs definidos uma única vez em Aether são compartilhados nativamente entre as APIs de backend e o frontend reativo (BlaiseVue).
-* **Zero Duplicação:** Se um campo for alterado ou renomeado no backend, o compilador alerta imediatamente os erros no frontend antes de rodar o sistema.
+### 7. Criada para o Framework BlaiseVue: Fullstack Nativo de Ponta a Ponta
+O **Aether** foi concebido e arquitetado sob medida para ser a linguagem oficial de alta performance do ecossistema **BlaiseVue**. Ao invés de forçar o desenvolvedor a fragmentar seu ecossistema utilizando uma linguagem no backend e outra no frontend (o que gera validações duplicadas, APIs frágeis e atritos de tipagem), o Aether entrega uma experiência Fullstack verdadeiramente integrada:
+* **A Linguagem Oficial do BlaiseVue:** Criada para que tanto a camada de microsserviços e APIs do backend quanto os componentes e regras de negócio do frontend compartilhem a mesma elegância, segurança estática de memória e velocidade nativa bare-metal.
+* **Tipos Compartilhados de Ponta a Ponta:** Registros, Enums e DTOs definidos uma única vez em Aether são consumidos diretamente pelo BlaiseVue, eliminando discrepâncias de dados entre cliente e servidor.
+* **Zero Duplicação e Refatoração Confiável:** Se um modelo ou regra de negócio for alterado no backend, o compilador alerta instantaneamente as incompatibilidades no frontend antes mesmo do código ser implantado.
 
 ### 8. Autonomia e Compilador Auto-Hospedado (Self-Hosting)
 O Aether não depende eternamente de harnesses externos: seu núcleo (`compiler/aeth/`) é escrito na própria linguagem Aether, fechando o ciclo de bootstrapping e garantindo a maturidade e independência a longo prazo da plataforma.
