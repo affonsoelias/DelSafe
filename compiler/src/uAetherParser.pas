@@ -45,6 +45,7 @@ type
     function ParseWhileStmt: TASTWhileStmt;
     function ParseMatchStmt: TASTMatchStmt;
     function ParseReturnStmt: TASTReturnStmt;
+    function ParseAsmStmt: TASTStmt;
     function ParseAssignOrCallStmt: TASTStmt;
 
     function ParseExpr: TASTExpr;
@@ -671,6 +672,15 @@ begin
   Result := TASTReturnStmt.Create(RLine, RCol, RetExpr);
 end;
 
+function TAetherParser.ParseAsmStmt: TASTStmt;
+var
+  AsmTok: TToken;
+begin
+  AsmTok := Expect(tokAsm);
+  Result := TASTAsmStmt.Create(AsmTok.Line, AsmTok.Col, AsmTok.Value);
+  Expect(tokEnd, 'Esperado "end" no fechamento do bloco asm');
+end;
+
 function TAetherParser.ParseAssignOrCallStmt: TASTStmt;
 var
   Expr: TASTExpr;
@@ -700,6 +710,8 @@ begin
     Result := ParseMatchStmt
   else if Check(tokReturn) then
     Result := ParseReturnStmt
+  else if Check(tokAsm) then
+    Result := ParseAsmStmt
   else
     Result := ParseAssignOrCallStmt;
 end;

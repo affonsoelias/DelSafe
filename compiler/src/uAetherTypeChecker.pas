@@ -925,7 +925,10 @@ begin
   else if Stmt is TASTReturnStmt then
     CheckReturn(TASTReturnStmt(Stmt))
   else if Stmt is TASTMatchStmt then
-    CheckMatch(TASTMatchStmt(Stmt));
+    CheckMatch(TASTMatchStmt(Stmt))
+  else if Stmt is TASTAsmStmt then
+    // Bloco assembly de baixo nivel: aceito sem verificacao semantica de tipos
+    ;
 end;
 
 procedure TAetherTypeChecker.RegisterTypes(AModule: TASTModule);

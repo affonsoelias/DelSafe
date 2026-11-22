@@ -29,6 +29,7 @@ type
     procedure SkipWhitespaceAndComments;
 
     function ScanIdentifierOrKeyword: TToken;
+    function ScanAsmBlock: string;
     function ScanNumber: TToken;
     function ScanString: TToken;
     function ScanCharLiteral: TToken;
@@ -168,7 +169,47 @@ begin
   end;
 
   Kind := LookupKeyword(Val);
+  if Kind = tokAsm then
+  begin
+    Val := ScanAsmBlock;
+    Result := CreateToken(tokAsm, Val, StartLine, StartCol);
+    Exit;
+  end;
   Result := CreateToken(Kind, Val, StartLine, StartCol);
+end;
+
+function TAetherLexer.ScanAsmBlock: string;
+var
+  Buffer: string;
+  SavedPos, SavedLine, SavedCol: Integer;
+  WordBuf: string;
+begin
+  Buffer := '';
+  while not IsEOF do
+  begin
+    if PeekChar in ['e', 'E'] then
+    begin
+      SavedPos := FPos;
+      SavedLine := FLine;
+      SavedCol := FCol;
+      WordBuf := '';
+      while (not IsEOF) and (PeekChar in ['a'..'z', 'A'..'Z', '0'..'9', '_']) do
+        WordBuf := WordBuf + ReadChar;
+
+      if LowerCase(WordBuf) = 'end' then
+      begin
+        FPos := SavedPos;
+        FLine := SavedLine;
+        FCol := SavedCol;
+        Break;
+      end
+      else
+        Buffer := Buffer + WordBuf;
+    end
+    else
+      Buffer := Buffer + ReadChar;
+  end;
+  Result := Trim(Buffer);
 end;
 
 function TAetherLexer.ScanNumber: TToken;

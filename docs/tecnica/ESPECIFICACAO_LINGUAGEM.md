@@ -26,7 +26,7 @@
 - **Identificadores:** Iniciam com letra (`a-z`, `A-Z`) ou sublinhado (`_`), seguidos por letras, dígitos (`0-9`) ou sublinhados. Sensível a maiúsculas/minúsculas (*case-sensitive*), adotando `PascalCase` para tipos e módulos, `camelCase` ou `snake_case` para variáveis/funções.
 - **Palavras-chave Reservadas:**
   ```text
-  and, as, begin, borrow, case, contract, do, else, end, ensure,
+  and, as, asm, begin, borrow, case, contract, do, else, end, ensure,
   enum, false, for, function, if, implies, import, in, let, match,
   module, mut, not, or, program, record, require, return,
   take, then, true, type, var, while
@@ -290,3 +290,36 @@ Quando transpilado no modo unit:
 2. Exporta publicamente na seção `interface` todos os tipos de records, enums, assinaturas de funções e helpers monádicos.
 3. Isola corpos e despachos na seção `implementation`.
 4. Permite consumo imediato no Free Pascal e no ecossistema BlaiseVue via cláusula `uses <NomeDoModulo>;`.
+
+---
+
+## 9. Acesso a Baixo Nível e Inline Assembly Intel (`asm ... end;`)
+
+O Aether oferece controle total de hardware através de blocos nativos de **Inline Assembly em Sintaxe Intel (`Intel Syntax`)**:
+
+```aether
+asm
+    mov eax, 42
+    add eax, 8
+    rdtsc
+    nop
+end;
+```
+
+### 9.1 Paridade Total Dual-Backend
+- **Backend Free Pascal:**
+  Emite diretamente a diretiva nativa `{$ASMMODE INTEL}` com o bloco `asm ... end;` do FPC.
+- **Backend C99 / GCC:**
+  Emite instruções envelopadas na diretiva GNU `.intel_syntax noprefix` / `.att_syntax prefix`:
+  ```c
+  __asm__ volatile (
+      ".intel_syntax noprefix\n\t"
+      "mov eax, 42\n\t"
+      "add eax, 8\n\t"
+      "rdtsc\n\t"
+      "nop\n\t"
+      ".att_syntax prefix"
+  );
+  ```
+- **Zero Incompatibilidade:** O mesmo código assembly é compilado sem modificações tanto pelo FPC quanto pelo GCC.
+- **Segurança e Isolamento:** Instruções assembly são aceitas dentro de blocos de funções ou programas, permitindo otimizações SIMD/AVX, leitura de contadores de ciclo de CPU (`rdtsc`) e chamadas de interrupções de baixo nível.

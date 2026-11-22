@@ -530,6 +530,8 @@ var
   MatchStmt: TASTMatchStmt;
   CaseNode: TASTMatchCase;
   Ret: TASTReturnStmt;
+  Lines: TStringList;
+  LineStr: string;
   I, J: Integer;
   PatStr: string;
 begin
@@ -582,6 +584,26 @@ begin
       Emit(Format('Exit(%s);', [EmitExpr(Ret.Expr)]))
     else
       Emit('Exit;');
+  end
+  else if Stmt is TASTAsmStmt then
+  begin
+    Emit('{$ASMMODE INTEL}');
+    Emit('asm');
+    IncIndent;
+    Lines := TStringList.Create;
+    try
+      Lines.Text := TASTAsmStmt(Stmt).AsmCode;
+      for J := 0 to Lines.Count - 1 do
+      begin
+        LineStr := Trim(Lines[J]);
+        if LineStr <> '' then
+          Emit(LineStr);
+      end;
+    finally
+      Lines.Free;
+    end;
+    DecIndent;
+    Emit('end;');
   end
   else if Stmt is TASTMatchStmt then
   begin

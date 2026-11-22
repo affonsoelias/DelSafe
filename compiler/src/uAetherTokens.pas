@@ -58,6 +58,7 @@ type
     tokMatch,
     tokCase,
     tokReturn,
+    tokAsm,
 
     // Palavras-chave: Posse e Empréstimo (Ownership)
     tokTake,
@@ -149,6 +150,7 @@ begin
     tokMatch:         Result := 'match';
     tokCase:          Result := 'case';
     tokReturn:        Result := 'return';
+    tokAsm:           Result := 'asm';
     tokTake:          Result := 'take';
     tokBorrow:        Result := 'borrow';
     tokMut:           Result := 'mut';
@@ -219,6 +221,7 @@ begin
   else if Lower = 'match' then Result := tokMatch
   else if Lower = 'case' then Result := tokCase
   else if Lower = 'return' then Result := tokReturn
+  else if Lower = 'asm' then Result := tokAsm
   else if Lower = 'take' then Result := tokTake
   else if Lower = 'borrow' then Result := tokBorrow
   else if Lower = 'mut' then Result := tokMut

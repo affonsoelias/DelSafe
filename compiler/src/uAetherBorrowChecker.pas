@@ -441,6 +441,10 @@ begin
     if Assigned(Ret.Expr) then
       CheckExpr(Ret.Expr, accMove);
   end
+  else if Stmt is TASTAsmStmt then
+  begin
+    // Bloco assembly: instrucoes de baixo nivel aceitas sem violacao de borrow
+  end
   else if Stmt is TASTMatchStmt then
   begin
     MatchStmt := TASTMatchStmt(Stmt);

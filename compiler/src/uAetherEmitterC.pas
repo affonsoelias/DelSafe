@@ -630,6 +630,8 @@ var
   MatchStmt: TASTMatchStmt;
   CaseNode: TASTMatchCase;
   Ret: TASTReturnStmt;
+  Lines: TStringList;
+  LineStr: string;
   I, J: Integer;
   PatStr: string;
 begin
@@ -681,6 +683,27 @@ begin
       Emit(Format('return %s;', [EmitExpr(Ret.Expr)]))
     else
       Emit('return;');
+  end
+  else if Stmt is TASTAsmStmt then
+  begin
+    Emit('__asm__ volatile (');
+    IncIndent;
+    Emit('".intel_syntax noprefix\n\t"');
+    Lines := TStringList.Create;
+    try
+      Lines.Text := TASTAsmStmt(Stmt).AsmCode;
+      for J := 0 to Lines.Count - 1 do
+      begin
+        LineStr := Trim(Lines[J]);
+        if LineStr <> '' then
+          Emit('"' + LineStr + '\n\t"');
+      end;
+    finally
+      Lines.Free;
+    end;
+    Emit('".att_syntax prefix"');
+    DecIndent;
+    Emit(');');
   end
   else if Stmt is TASTMatchStmt then
   begin

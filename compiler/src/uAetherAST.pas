@@ -175,6 +175,13 @@ type
     function Dump(Indent: Integer = 0): string; override;
   end;
 
+  TASTAsmStmt = class(TASTStmt)
+  public
+    AsmCode: string;
+    constructor Create(ALine, ACol: Integer; const ACode: string);
+    function Dump(Indent: Integer = 0): string; override;
+  end;
+
   // --- Declarações de Variáveis e Tipos ---
   TASTVarDecl = class(TASTNode)
   public
@@ -725,6 +732,19 @@ begin
     Result := MakeIndent(Indent) + 'Return (Void)';
 end;
 
+{ TASTAsmStmt }
+
+constructor TASTAsmStmt.Create(ALine, ACol: Integer; const ACode: string);
+begin
+  inherited Create(ALine, ACol);
+  AsmCode := ACode;
+end;
+
+function TASTAsmStmt.Dump(Indent: Integer): string;
+begin
+  Result := MakeIndent(Indent) + 'Asm:' + LineEnding + MakeIndent(Indent + 1) + AsmCode;
+end;
+
 { TASTVarDecl }
 
 constructor TASTVarDecl.Create(ALine, ACol: Integer; const AName, ATypeName: string; AInit: TASTExpr; AMut: Boolean);
@@ -1165,6 +1185,8 @@ begin
     else
       Exit(TASTReturnStmt.Create(Node.Line, Node.Col, nil));
   end
+  else if Node is TASTAsmStmt then
+    Exit(TASTAsmStmt.Create(Node.Line, Node.Col, TASTAsmStmt(Node).AsmCode))
   else if Node is TASTParam then
     Exit(TASTParam.Create(Node.Line, Node.Col, TASTParam(Node).Name, TASTParam(Node).TypeName, TASTParam(Node).Ownership))
   else if Node is TASTVarDecl then

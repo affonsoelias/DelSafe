@@ -1,0 +1,34 @@
+module InlineAssemblyIntel;
+
+program InlineAssemblyIntel;
+var
+    mensagem: String;
+begin
+    PrintLn("========================================================");
+    PrintLn("  Aether - Demonstracao de Inline Assembly (Sintaxe Intel)");
+    PrintLn("========================================================");
+
+    PrintLn("[1/3] Executando instrucoes de controle de CPU (NOP)...");
+    asm
+        nop
+        nop
+        nop
+    end;
+    PrintLn("      3 NOPs executados diretamente pelo processador!");
+
+    PrintLn("[2/3] Executando RDTSC (Leitura de Ciclos de Clock da CPU)...");
+    asm
+        rdtsc
+    end;
+    PrintLn("      Instrucao RDTSC executada com sucesso!");
+
+    PrintLn("[3/3] Operacoes com registradores em Sintaxe Intel...");
+    asm
+        mov eax, 42
+        add eax, 8
+    end;
+    PrintLn("      Registradores manipulados diretamente com sintaxe Intel!");
+
+    PrintLn("");
+    PrintLn("SUCESSO: Codigo Assembly Intel executado nativamente!");
+end.
