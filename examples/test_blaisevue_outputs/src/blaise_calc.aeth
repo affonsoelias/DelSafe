@@ -1,0 +1,11 @@
+module blaise_calc;
+
+function SomarValores(a: Int32, b: Int32): Int32
+begin
+    return a + b;
+end;
+
+function MultiplicarValores(a: Int32, b: Int32): Int32
+begin
+    return a * b;
+end;

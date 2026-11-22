@@ -18,6 +18,14 @@ type
 
   TStringArray = array of string;
 
+  TAetherProjectOutputs = record
+    BinDir: string;
+    PascalSrcDir: string;
+    PascalUnitDir: string;
+    CSrcDir: string;
+    AsUnit: Boolean;
+  end;
+
   TAetherProjectConfig = record
     Name: string;
     Version: string;
@@ -35,6 +43,7 @@ type
     PathsLibDirs: TStringArray;
     PathsLibs: TStringArray;
     PathsSharedLibs: TStringArray;
+    Outputs: TAetherProjectOutputs;
   end;
 
 function FindProjectRoot(out RootDir, ConfigFile: string): Boolean;
@@ -603,8 +612,8 @@ var
   RootDir, ConfigFile, JsonStr: string;
   FileStream: TFileStream;
   StringStream: TStringStream;
-  JSON, DepsData, ItemData, PathsData: TJSONData;
-  Obj, DepsObj, ItemObj, PathsObj: TJSONObject;
+  JSON, DepsData, ItemData, PathsData, OutputsData: TJSONData;
+  Obj, DepsObj, ItemObj, PathsObj, OutputsObj: TJSONObject;
   I: Integer;
 begin
   Result := False;
@@ -616,6 +625,11 @@ begin
   SetLength(Config.PathsLibDirs, 0);
   SetLength(Config.PathsLibs, 0);
   SetLength(Config.PathsSharedLibs, 0);
+  Config.Outputs.BinDir := '';
+  Config.Outputs.PascalSrcDir := '';
+  Config.Outputs.PascalUnitDir := '';
+  Config.Outputs.CSrcDir := '';
+  Config.Outputs.AsUnit := False;
   if not FindProjectRoot(RootDir, ConfigFile) then
     Exit(False);
 
@@ -685,6 +699,17 @@ begin
           ReadJsonStringArray(PathsObj, 'shared_libs', Config.PathsSharedLibs);
         end;
 
+        OutputsData := Obj.Find('outputs');
+        if Assigned(OutputsData) and (OutputsData is TJSONObject) then
+        begin
+          OutputsObj := TJSONObject(OutputsData);
+          Config.Outputs.BinDir := OutputsObj.Get('bin_dir', '');
+          Config.Outputs.PascalSrcDir := OutputsObj.Get('pascal_src_dir', '');
+          Config.Outputs.PascalUnitDir := OutputsObj.Get('pascal_unit_dir', '');
+          Config.Outputs.CSrcDir := OutputsObj.Get('c_src_dir', '');
+          Config.Outputs.AsUnit := OutputsObj.Get('as_unit', False);
+        end;
+
         Result := True;
       end;
     finally
@@ -701,7 +726,7 @@ var
   TargetDir, EffectiveName: string;
   SrcDir, TestsDir, BinDir: string;
   ConfigFile, MainFile, TestFile, GitignoreFile, ReadmeFile: string;
-  ConfigObj, PathsObj: TJSONObject;
+  ConfigObj, PathsObj, OutputsObj: TJSONObject;
   ArrAether: TJSONArray;
 begin
   if (ProjectName <> '') and (ProjectName <> '.') then
@@ -756,6 +781,15 @@ begin
     PathsObj.Add('libs', TJSONArray.Create);
     PathsObj.Add('shared_libs', TJSONArray.Create);
     ConfigObj.Add('paths', PathsObj);
+
+    // Seção 'outputs' para configuração de diretórios de saída e BlaiseVue
+    OutputsObj := TJSONObject.Create;
+    OutputsObj.Add('bin_dir', 'bin');
+    OutputsObj.Add('pascal_src_dir', '.blaisevue/generated');
+    OutputsObj.Add('pascal_unit_dir', 'build/units');
+    OutputsObj.Add('c_src_dir', 'build/c');
+    OutputsObj.Add('as_unit', false);
+    ConfigObj.Add('outputs', OutputsObj);
 
     WriteStringToFile(ConfigFile, ConfigObj.FormatJSON);
   finally
@@ -1330,10 +1364,14 @@ end;
 procedure HandleProjectClean();
 var
   RootDir, Dummy: string;
-  GenDir, BinDir, BuildCacheDir: string;
+  GenDir, BinDir, BuildCacheDir, CustomDir: string;
+  Config: TAetherProjectConfig;
+  HasConfig: Boolean;
 begin
   if not FindProjectRoot(RootDir, Dummy) then
     RootDir := GetCurrentDir;
+
+  HasConfig := LoadProjectConfig(Config);
 
   WriteLn('========================================================');
   WriteLn('  Aether Project Cleaner (aetherc clean)                ');
@@ -1357,6 +1395,49 @@ begin
   end
   else
     WriteLn('  • bin/       ... [JA LIMPO]');
+
+  if HasConfig then
+  begin
+    if (Config.Outputs.PascalSrcDir <> '') and (Pos('src', LowerCase(Config.Outputs.PascalSrcDir)) = 0) then
+    begin
+      CustomDir := RootDir + PathDelim + Config.Outputs.PascalSrcDir;
+      if DirectoryExists(CustomDir) then
+      begin
+        DeleteDirectoryTree(CustomDir);
+        WriteLn('  • ' + Config.Outputs.PascalSrcDir + ' ... [REMOVIDO]');
+      end;
+    end;
+
+    if (Config.Outputs.PascalUnitDir <> '') and (Pos('src', LowerCase(Config.Outputs.PascalUnitDir)) = 0) then
+    begin
+      CustomDir := RootDir + PathDelim + Config.Outputs.PascalUnitDir;
+      if DirectoryExists(CustomDir) then
+      begin
+        DeleteDirectoryTree(CustomDir);
+        WriteLn('  • ' + Config.Outputs.PascalUnitDir + ' ... [REMOVIDO]');
+      end;
+    end;
+
+    if (Config.Outputs.CSrcDir <> '') and (Pos('src', LowerCase(Config.Outputs.CSrcDir)) = 0) then
+    begin
+      CustomDir := RootDir + PathDelim + Config.Outputs.CSrcDir;
+      if DirectoryExists(CustomDir) then
+      begin
+        DeleteDirectoryTree(CustomDir);
+        WriteLn('  • ' + Config.Outputs.CSrcDir + ' ... [REMOVIDO]');
+      end;
+    end;
+
+    if (Config.Outputs.BinDir <> '') and (Config.Outputs.BinDir <> 'bin') and (Pos('src', LowerCase(Config.Outputs.BinDir)) = 0) then
+    begin
+      CustomDir := RootDir + PathDelim + Config.Outputs.BinDir;
+      if DirectoryExists(CustomDir) then
+      begin
+        DeleteDirectoryTree(CustomDir);
+        WriteLn('  • ' + Config.Outputs.BinDir + ' ... [REMOVIDO]');
+      end;
+    end;
+  end;
 
   BuildCacheDir := RootDir + PathDelim + '.aether' + PathDelim + 'cache' + PathDelim + 'build';
   if DirectoryExists(BuildCacheDir) then

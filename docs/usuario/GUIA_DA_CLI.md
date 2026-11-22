@@ -210,8 +210,41 @@ No manifesto `aether.json`, a seção `"paths"` permite organizar módulos, subp
 - **`libs`**: Nomes de bibliotecas para linkagem final (ex: `-lraylib`, `-lsqlite3`).
 - **`shared_libs`**: Bibliotecas dinâmicas (`.dll` no Windows ou `.so` no Linux) que são **automaticamente copiadas para a pasta do binário** (`bin/`) durante o build ou run.
 
-### Flags de Caminhos e Interop na Linha de Comando (CLI)
+---
+
+### Configuração de Diretórios de Saída e Integração BlaiseVue (`outputs`)
+
+Para integrar perfeitamente o Aether ao ecossistema **BlaiseVue** e controlar com precisão onde ficam os arquivos fontes e compilados, o manifesto `aether.json` suporta a seção `"outputs"`:
+
+```json
+{
+  "name": "meu_modulo_blaise",
+  "version": "0.1.0",
+  "entry": "src/meu_modulo.aeth",
+  "backend": "pascal",
+  "outputs": {
+    "bin_dir": "bin",
+    "pascal_src_dir": ".blaisevue/generated",
+    "pascal_unit_dir": "build/units",
+    "c_src_dir": "build/c",
+    "as_unit": true
+  }
+}
+```
+
+- **`bin_dir`**: Diretório onde o executável final será gerado (padrão: `bin`).
+- **`pascal_src_dir`**: Diretório onde o código Object Pascal gerado (`.pas`) será salvo (ex: `.blaisevue/generated` ou `generated/pascal`).
+- **`pascal_unit_dir`**: Diretório onde o Free Pascal Compiler grava as units compiladas (`.ppu` e `.o`), repassado automaticamente como `-FU"<dir>"`. Isso impede que arquivos objeto se misturem com seus fontes.
+- **`c_src_dir`**: Diretório onde os fontes C (`.c`) transpilados são gravados.
+- **`as_unit`**: Quando `true`, emite e compila o código Aether como uma **Unit Object Pascal** (`unit ... interface ... implementation ... end.`) pronta para ser importada via `uses` em projetos BlaiseVue e Lazarus.
+
+### Flags de Caminhos, Saídas e Interop na Linha de Comando (CLI)
 Você também pode passar essas configurações diretamente na linha de comando:
+- `-FE <dir>`: Define o diretório de saída dos executáveis finais.
+- `-FU <dir>`: Define o diretório de saída das units compiladas FPC (`.ppu` e `.o`).
+- `--out-pascal <dir>`: Define o diretório onde os fontes `.pas` gerados são gravados.
+- `--out-c <dir>`: Define o diretório onde os fontes `.c` gerados são gravados.
+- `--unit`: Emite/compila código no formato Unit Pascal (unit/interface/implementation).
 - `-I <dir>`: Adiciona diretório de busca para módulos Aether e headers C.
 - `-Fu <dir>`: Adiciona diretório de busca para units do Free Pascal (`.pas`/`.ppu`).
 - `-L <dir>`: Adiciona diretório de bibliotecas nativas (`-L` GCC e `-Fl` FPC).

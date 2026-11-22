@@ -112,6 +112,11 @@ Begin
  '  --lsp             Inicia o servidor de linguagem (Language Server Protocol)'
   );
   WriteLn('  -o <arquivo.exe>  Especifica o nome do executavel de saida');
+  WriteLn('  -FE <dir>         Define o diretorio de saida dos executaveis finais');
+  WriteLn('  -FU <dir>         Define o diretorio de saida das units compiladas FPC (.ppu/.o)');
+  WriteLn('  --out-pascal <dir> Define o diretorio onde os fontes .pas gerados sao gravados');
+  WriteLn('  --out-c <dir>     Define o diretorio onde os fontes .c gerados sao gravados');
+  WriteLn('  --unit            Emite/compila codigo como Unit Pascal (unit... interface... implementation... end.)');
   WriteLn('  -I <dir>          Adiciona diretorio de busca para modulos Aether e headers C');
   WriteLn('  -Fu <dir>         Adiciona diretorio de busca para units do Free Pascal (.pas/.ppu)');
   WriteLn('  -L <dir>          Adiciona diretorio de busca de bibliotecas nativas (.a/.lib)');
@@ -200,6 +205,11 @@ Var
   GlobalLibDirs: TStringList = nil;
   GlobalLibs: TStringList = nil;
   GlobalSharedLibs: TStringList = nil;
+  GlobalOutBinDir: string = '';
+  GlobalOutPascalSrcDir: string = '';
+  GlobalOutPascalUnitDir: string = '';
+  GlobalOutCSrcDir: string = '';
+  GlobalAsUnit: Boolean = False;
 
 Procedure InitGlobalPaths;
 Begin
@@ -249,6 +259,28 @@ Begin
     If (Length(Val) > 0) And (Val[1] = '=') Then Val := Copy(Val, 2, Length(Val));
     GlobalPascalUnitPaths.Add(Val);
   End
+  Else If (Arg = '-FU') Then
+  Begin
+    Inc(I);
+    If I <= ParamCount Then GlobalOutPascalUnitDir := ParamStr(I);
+  End
+  Else If (Copy(Arg, 1, 3) = '-FU') And (Length(Arg) > 3) Then
+  Begin
+    Val := Copy(Arg, 4, Length(Arg));
+    If (Length(Val) > 0) And (Val[1] = '=') Then Val := Copy(Val, 2, Length(Val));
+    GlobalOutPascalUnitDir := Val;
+  End
+  Else If (Arg = '-FE') Then
+  Begin
+    Inc(I);
+    If I <= ParamCount Then GlobalOutBinDir := ParamStr(I);
+  End
+  Else If (Copy(Arg, 1, 3) = '-FE') And (Length(Arg) > 3) Then
+  Begin
+    Val := Copy(Arg, 4, Length(Arg));
+    If (Length(Val) > 0) And (Val[1] = '=') Then Val := Copy(Val, 2, Length(Val));
+    GlobalOutBinDir := Val;
+  End
   Else If (Arg = '-L') Then
   Begin
     Inc(I);
@@ -288,6 +320,28 @@ Begin
   Else If Pos('--shared-lib=', Arg) = 1 Then
   Begin
     GlobalSharedLibs.Add(Copy(Arg, 14, Length(Arg)));
+  End
+  Else If (Arg = '--out-pascal') Then
+  Begin
+    Inc(I);
+    If I <= ParamCount Then GlobalOutPascalSrcDir := ParamStr(I);
+  End
+  Else If Pos('--out-pascal=', Arg) = 1 Then
+  Begin
+    GlobalOutPascalSrcDir := Copy(Arg, 14, Length(Arg));
+  End
+  Else If (Arg = '--out-c') Then
+  Begin
+    Inc(I);
+    If I <= ParamCount Then GlobalOutCSrcDir := ParamStr(I);
+  End
+  Else If Pos('--out-c=', Arg) = 1 Then
+  Begin
+    GlobalOutCSrcDir := Copy(Arg, 9, Length(Arg));
+  End
+  Else If (Arg = '--unit') Then
+  Begin
+    GlobalAsUnit := True;
   End
   Else
     Result := False;
@@ -583,6 +637,8 @@ Begin
 
   If OutputExeName <> '' Then
     FinalExe := OutputExeName
+  Else If GlobalOutBinDir <> '' Then
+    FinalExe := IncludeTrailingPathDelimiter(GlobalOutBinDir) + ChangeFileExt(ExtractFileName(SourceFile), '.exe')
   Else
     FinalExe := BaseProjDir + PathDelim + 'bin' + PathDelim + ChangeFileExt(ExtractFileName(
                 SourceFile), '.exe');
@@ -720,14 +776,26 @@ If Not FindProjectRoot(BaseProjDir, Dummy) Then
 BaseProjDir := ExcludeTrailingPathDelimiter(BaseProjDir);
 
 If TargetPascal Then
-  GenDir := BaseProjDir + PathDelim + 'generated' + PathDelim + 'pascal'
+Begin
+  If GlobalOutPascalSrcDir <> '' Then
+    GenDir := GlobalOutPascalSrcDir
+  Else
+    GenDir := BaseProjDir + PathDelim + 'generated' + PathDelim + 'pascal';
+End
 Else
-  GenDir := BaseProjDir + PathDelim + 'generated' + PathDelim + 'c';
+Begin
+  If GlobalOutCSrcDir <> '' Then
+    GenDir := GlobalOutCSrcDir
+  Else
+    GenDir := BaseProjDir + PathDelim + 'generated' + PathDelim + 'c';
+End;
 
 ForceDirectories(GenDir);
 
 If OutputExeName <> '' Then
   FinalExe := OutputExeName
+Else If GlobalOutBinDir <> '' Then
+  FinalExe := IncludeTrailingPathDelimiter(GlobalOutBinDir) + ChangeFileExt(ExtractFileName(SourceFile), '.exe')
 Else
   FinalExe := BaseProjDir + PathDelim + 'bin' + PathDelim + ChangeFileExt(ExtractFileName(
               SourceFile), '.exe');
@@ -740,10 +808,10 @@ If TargetPascal Then
                         SourceFile), '.pas');
     EmitterPas := TAetherEmitterPascal.Create;
     Try
-      GeneratedCode := EmitterPas.Generate(ModuleNode);
+      GeneratedCode := EmitterPas.Generate(ModuleNode, GlobalAsUnit);
     Finally
       EmitterPas.Free;
-  End;
+    End;
 
 CodeFile := TStringList.Create;
 Try
@@ -764,17 +832,32 @@ If Not SilentBanner Then
   End;
 
 CompileLog := '';
-Success := CompileWithFPC(IntermediateFile, FinalExe, CompileLog, ReleaseMode, GlobalPascalUnitPaths, GlobalLibDirs);
+Success := CompileWithFPC(IntermediateFile, FinalExe, CompileLog, ReleaseMode, GlobalPascalUnitPaths, GlobalLibDirs, GlobalOutPascalUnitDir, GlobalAsUnit);
 If Success Then
   Begin
-    CopySharedLibraries(BaseProjDir, FinalExe, GlobalSharedLibs);
-    If Incremental Then
-      SaveBuildCache(BaseProjDir, SourceFile, TargetBackendStr, FinalExe, DependencyFiles);
-    If Not SilentBanner Then
+    If GlobalAsUnit Then
       Begin
-        WriteLn('');
-        WriteLn('SUCESSO! Executavel nativo gerado:');
-        WriteLn('  --> ' + FinalExe);
+        If Not SilentBanner Then
+          Begin
+            WriteLn('');
+            WriteLn('SUCESSO! Unit Object Pascal compilada com sucesso:');
+            If GlobalOutPascalUnitDir <> '' Then
+              WriteLn('  --> Diretorio de units (.ppu/.o): ' + GlobalOutPascalUnitDir)
+            Else
+              WriteLn('  --> ' + IntermediateFile);
+          End;
+      End
+    Else
+      Begin
+        CopySharedLibraries(BaseProjDir, FinalExe, GlobalSharedLibs);
+        If Incremental Then
+          SaveBuildCache(BaseProjDir, SourceFile, TargetBackendStr, FinalExe, DependencyFiles);
+        If Not SilentBanner Then
+          Begin
+            WriteLn('');
+            WriteLn('SUCESSO! Executavel nativo gerado:');
+            WriteLn('  --> ' + FinalExe);
+          End;
       End;
   End
 Else
@@ -1407,21 +1490,28 @@ Begin
           Inc(I);
         End;
 
-      If EmitSource = '' Then
+      If LoadProjectConfig(ProjConfig) Then
         Begin
-          If LoadProjectConfig(ProjConfig) Then
+          If EmitSource = '' Then
+            EmitSource := ProjConfig.RootDir + PathDelim + StringReplace(ProjConfig.Entry, '/', PathDelim, [rfReplaceAll]);
+          If Not HasTargetSpecified Then
+            EmitTargetPascal := ProjConfig.Backend <> 'c';
+          If EmitOutDir = '' Then
             Begin
-              EmitSource := ProjConfig.RootDir + PathDelim + StringReplace(ProjConfig.Entry, '/', PathDelim, [rfReplaceAll]);
-              If Not HasTargetSpecified Then
-                EmitTargetPascal := ProjConfig.Backend <> 'c';
-              RestoreProjectDependencies(ProjConfig);
-            End
-          Else
-            Begin
-              WriteLn(ErrOutput, 'Erro: Nenhum arquivo fonte especificado e nenhum "aether.json" encontrado.');
-              WriteLn(ErrOutput, 'Uso: aetherc emit <pascal|c> [arquivo.aeth] [--unit] [--out-dir=dir] [--stdout]');
-              Halt(1);
+              If EmitTargetPascal And (ProjConfig.Outputs.PascalSrcDir <> '') Then
+                EmitOutDir := ProjConfig.RootDir + PathDelim + ProjConfig.Outputs.PascalSrcDir
+              Else If (Not EmitTargetPascal) And (ProjConfig.Outputs.CSrcDir <> '') Then
+                EmitOutDir := ProjConfig.RootDir + PathDelim + ProjConfig.Outputs.CSrcDir;
             End;
+          If ProjConfig.Outputs.AsUnit Then
+            EmitAsUnit := True;
+          RestoreProjectDependencies(ProjConfig);
+        End
+      Else If EmitSource = '' Then
+        Begin
+          WriteLn(ErrOutput, 'Erro: Nenhum arquivo fonte especificado e nenhum "aether.json" encontrado.');
+          WriteLn(ErrOutput, 'Uso: aetherc emit <pascal|c> [arquivo.aeth] [--unit] [--out-dir=dir] [--stdout]');
+          Halt(1);
         End;
 
       If (Not EmitToStdout) And (Not EmitSilent) And (Not EmitWatch) Then
@@ -1754,6 +1844,18 @@ If (ParamCount >= 1) And ((LowerCase(ParamStr(1)) = 'build') Or (LowerCase(
       If ProjConfig.PathsSharedLibs[J] <> '' Then
         GlobalSharedLibs.Add(ExpandFileName(ProjConfig.RootDir + PathDelim + ProjConfig.PathsSharedLibs[J]));
 
+    // Carrega configuracoes de saida declaradas na secao 'outputs' do aether.json
+    If (GlobalOutBinDir = '') And (ProjConfig.Outputs.BinDir <> '') Then
+      GlobalOutBinDir := ExpandFileName(ProjConfig.RootDir + PathDelim + ProjConfig.Outputs.BinDir);
+    If (GlobalOutPascalSrcDir = '') And (ProjConfig.Outputs.PascalSrcDir <> '') Then
+      GlobalOutPascalSrcDir := ExpandFileName(ProjConfig.RootDir + PathDelim + ProjConfig.Outputs.PascalSrcDir);
+    If (GlobalOutPascalUnitDir = '') And (ProjConfig.Outputs.PascalUnitDir <> '') Then
+      GlobalOutPascalUnitDir := ExpandFileName(ProjConfig.RootDir + PathDelim + ProjConfig.Outputs.PascalUnitDir);
+    If (GlobalOutCSrcDir = '') And (ProjConfig.Outputs.CSrcDir <> '') Then
+      GlobalOutCSrcDir := ExpandFileName(ProjConfig.RootDir + PathDelim + ProjConfig.Outputs.CSrcDir);
+    If ProjConfig.Outputs.AsUnit Then
+      GlobalAsUnit := True;
+
     // Permite sobrescrever flags como --target=c, -o, -I, -Fu, etc. na linha de comando
     I := 2;
     While I <= ParamCount Do
@@ -1783,6 +1885,9 @@ If (ParamCount >= 1) And ((LowerCase(ParamStr(1)) = 'build') Or (LowerCase(
         Inc(I);
       End;
 
+    If (GlobalOutBinDir <> '') And (OutputExe = ProjConfig.RootDir + PathDelim + StringReplace(ProjConfig.Output, '/', PathDelim, [rfReplaceAll])) Then
+      OutputExe := IncludeTrailingPathDelimiter(GlobalOutBinDir) + ExtractFileName(OutputExe);
+
     If Not OptionJSONDiag Then
       PrintBanner;
 
@@ -1792,11 +1897,20 @@ If (ParamCount >= 1) And ((LowerCase(ParamStr(1)) = 'build') Or (LowerCase(
                   OptionRelease, OptionOptimize);
       If IsRunCommand And Not OptionCheckOnly Then
         Begin
-          WriteLn('');
-          WriteLn('--------------------------------------------------------');
-          WriteLn(' Executando: ' + ExtractFileName(OutputExe));
-          WriteLn('--------------------------------------------------------');
-          ExecuteProcess(OutputExe, '');
+          If GlobalAsUnit Then
+            Begin
+              WriteLn('');
+              WriteLn('Aviso: Projeto configurado em modo Unit Pascal (--unit / outputs.as_unit: true).');
+              WriteLn('Units Object Pascal nao possuem ponto de entrada executavel direto para "run".');
+            End
+          Else
+            Begin
+              WriteLn('');
+              WriteLn('--------------------------------------------------------');
+              WriteLn(' Executando: ' + ExtractFileName(OutputExe));
+              WriteLn('--------------------------------------------------------');
+              ExecuteProcess(OutputExe, '');
+            End;
         End;
       Halt(0);
     Except

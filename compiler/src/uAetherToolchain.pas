@@ -27,7 +27,8 @@ function DetectToolchain: TToolchainInfo;
 procedure PrintDoctorReport;
 function RunCommandCapture(const ExePath, Params: string; const ExtraPathDir: string; var OutText: string): Integer;
 function CompileWithFPC(const PascalSource, OutExe: string; var OutputLog: string; ReleaseMode: Boolean = False;
-                        UnitPaths: TStrings = nil; LibDirs: TStrings = nil): Boolean;
+                        UnitPaths: TStrings = nil; LibDirs: TStrings = nil; const UnitOutputDir: string = '';
+                        CompileUnitOnly: Boolean = False): Boolean;
 function CompileWithGCC(const CSource, OutExe: string; var OutputLog: string; ReleaseMode: Boolean = False;
                         IncludePaths: TStrings = nil; ExtraCSources: TStrings = nil;
                         LibDirs: TStrings = nil; Libs: TStrings = nil): Boolean;
@@ -239,7 +240,8 @@ begin
 end;
 
 function CompileWithFPC(const PascalSource, OutExe: string; var OutputLog: string; ReleaseMode: Boolean = False;
-                        UnitPaths: TStrings = nil; LibDirs: TStrings = nil): Boolean;
+                        UnitPaths: TStrings = nil; LibDirs: TStrings = nil; const UnitOutputDir: string = '';
+                        CompileUnitOnly: Boolean = False): Boolean;
 var
   Info: TToolchainInfo;
   Params, ExtraFlags: string;
@@ -267,13 +269,34 @@ begin
         ExtraFlags := ExtraFlags + Format(' -Fl"%s"', [Trim(LibDirs[I])]);
   end;
 
-  if ReleaseMode then
-    Params := Format('-O3 -XX -Xs -FE"%s" -o"%s"%s "%s"', [ExtractFileDir(OutExe), ExtractFileName(OutExe), ExtraFlags, PascalSource])
-  else
-    Params := Format('-O2 -FE"%s" -o"%s"%s "%s"', [ExtractFileDir(OutExe), ExtractFileName(OutExe), ExtraFlags, PascalSource]);
+  if Trim(UnitOutputDir) <> '' then
+  begin
+    ForceDirectories(Trim(UnitOutputDir));
+    ExtraFlags := ExtraFlags + Format(' -FU"%s"', [Trim(UnitOutputDir)]);
+  end;
 
-  Code := RunCommandCapture(Info.FPCPath, Params, '', OutputLog);
-  Result := (Code = 0) and FileExists(OutExe);
+  if ExtractFileDir(OutExe) <> '' then
+    ForceDirectories(ExtractFileDir(OutExe));
+
+  if CompileUnitOnly then
+  begin
+    if ReleaseMode then
+      Params := Format('-O3 -XX -Xs -Cn%s "%s"', [ExtraFlags, PascalSource])
+    else
+      Params := Format('-O2 -Cn%s "%s"', [ExtraFlags, PascalSource]);
+    Code := RunCommandCapture(Info.FPCPath, Params, '', OutputLog);
+    Result := (Code = 0);
+  end
+  else
+  begin
+    if ReleaseMode then
+      Params := Format('-O3 -XX -Xs -FE"%s" -o"%s"%s "%s"', [ExtractFileDir(OutExe), ExtractFileName(OutExe), ExtraFlags, PascalSource])
+    else
+      Params := Format('-O2 -FE"%s" -o"%s"%s "%s"', [ExtractFileDir(OutExe), ExtractFileName(OutExe), ExtraFlags, PascalSource]);
+
+    Code := RunCommandCapture(Info.FPCPath, Params, '', OutputLog);
+    Result := (Code = 0) and FileExists(OutExe);
+  end;
 end;
 
 function CompileWithGCC(const CSource, OutExe: string; var OutputLog: string; ReleaseMode: Boolean = False;
