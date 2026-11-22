@@ -52,6 +52,7 @@ type
     procedure CheckAssign(Assign: TASTAssignStmt);
     procedure CheckIf(IfStmt: TASTIfStmt);
     procedure CheckWhile(WhileStmt: TASTWhileStmt);
+    procedure CheckFor(ForStmt: TASTForStmt);
     procedure CheckReturn(Ret: TASTReturnStmt);
     procedure CheckMatch(MatchStmt: TASTMatchStmt);
 
@@ -897,6 +898,31 @@ begin
     CheckStmt(TASTStmt(WhileStmt.Body[I]));
 end;
 
+procedure TAetherTypeChecker.CheckFor(ForStmt: TASTForStmt);
+var
+  VarSym: TSymbol;
+  StartType, EndType: string;
+  I: Integer;
+begin
+  VarSym := FSymbols.Resolve(ForStmt.VarName);
+  if not Assigned(VarSym) then
+  begin
+    FSymbols.Define(TSymbol.Create(ForStmt.VarName, skVariable, 'Int32', ForStmt.Line, ForStmt.Col, True));
+  end;
+
+  StartType := CheckExpr(ForStmt.StartExpr);
+  EndType := CheckExpr(ForStmt.EndExpr);
+
+  if not IsIntegerType(StartType) and (StartType <> 'IntLiteral') then
+    Error('E0308', Format('Limite inicial do laco "for" deve ser inteiro, encontrado: "%s"', [StartType]), ForStmt.Line, ForStmt.Col);
+
+  if not IsIntegerType(EndType) and (EndType <> 'IntLiteral') then
+    Error('E0308', Format('Limite final do laco "for" deve ser inteiro, encontrado: "%s"', [EndType]), ForStmt.Line, ForStmt.Col);
+
+  for I := 0 to ForStmt.Body.Count - 1 do
+    CheckStmt(TASTStmt(ForStmt.Body[I]));
+end;
+
 procedure TAetherTypeChecker.CheckReturn(Ret: TASTReturnStmt);
 var
   RetType: string;
@@ -1044,6 +1070,8 @@ begin
     CheckIf(TASTIfStmt(Stmt))
   else if Stmt is TASTWhileStmt then
     CheckWhile(TASTWhileStmt(Stmt))
+  else if Stmt is TASTForStmt then
+    CheckFor(TASTForStmt(Stmt))
   else if Stmt is TASTReturnStmt then
     CheckReturn(TASTReturnStmt(Stmt))
   else if Stmt is TASTMatchStmt then

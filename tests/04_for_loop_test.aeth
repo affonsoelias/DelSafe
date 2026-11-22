@@ -1,0 +1,53 @@
+module for_loop_test;
+
+function SomarIntervalo(inicio: Int32, fim: Int32): Int32
+var
+    total: Int32;
+    i: Int32;
+begin
+    total := 0;
+    for i := inicio to fim do
+        total := total + i;
+    end;
+    return total;
+end;
+
+function ContagemRegressiva(inicio: Int32, fim: Int32): Int32
+var
+    soma: Int32;
+    k: Int32;
+begin
+    soma := 0;
+    for k := inicio downto fim do
+        soma := soma + k;
+    end;
+    return soma;
+end;
+
+program Test;
+var
+    soma_asc: Int32;
+    soma_desc: Int32;
+    matriz_soma: Int32;
+    x: Int32;
+    y: Int32;
+begin
+    // 1. Teste de For crescente (1 to 10): 1+2+3+4+5+6+7+8+9+10 = 55
+    soma_asc := SomarIntervalo(1, 10);
+    Assert(soma_asc = 55, "Soma de 1 a 10 deve ser 55");
+
+    // 2. Teste de For decrescente (10 downto 1): 10+9+...+1 = 55
+    soma_desc := ContagemRegressiva(10, 1);
+    Assert(soma_desc = 55, "Contagem regressiva de 10 a 1 deve ser 55");
+
+    // 3. Teste de For aninhado (matriz 3x3)
+    matriz_soma := 0;
+    for x := 1 to 3 do
+        for y := 1 to 3 do
+            matriz_soma := matriz_soma + 1;
+        end;
+    end;
+    Assert(matriz_soma = 9, "Laco aninhado 3x3 deve iterar 9 vezes");
+
+    PrintLn("For Loop Test: Todos os testes do laco FOR passaram com sucesso!");
+end.

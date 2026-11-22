@@ -63,6 +63,8 @@ type
     tokDo,
     tokFor,
     tokIn,
+    tokTo,
+    tokDownto,
     tokMatch,
     tokCase,
     tokReturn,
@@ -159,6 +161,8 @@ begin
     tokDo:            Result := 'do';
     tokFor:           Result := 'for';
     tokIn:            Result := 'in';
+    tokTo:            Result := 'to';
+    tokDownto:        Result := 'downto';
     tokMatch:         Result := 'match';
     tokCase:          Result := 'case';
     tokReturn:        Result := 'return';
@@ -237,6 +241,8 @@ begin
   else if Lower = 'do' then Result := tokDo
   else if Lower = 'for' then Result := tokFor
   else if Lower = 'in' then Result := tokIn
+  else if Lower = 'to' then Result := tokTo
+  else if Lower = 'downto' then Result := tokDownto
   else if Lower = 'match' then Result := tokMatch
   else if Lower = 'case' then Result := tokCase
   else if Lower = 'return' then Result := tokReturn

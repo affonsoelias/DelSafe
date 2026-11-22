@@ -584,3 +584,20 @@ Este documento traça o status oficial de desenvolvimento do compilador e as pr�
   - Rollback automático caso o novo binário falhe no teste de inicialização.
   - Comando `aetherc upgrade --rollback` para restauração imediata da versão anterior a qualquer momento.
   - Modo `--dry-run` para auditoria prévia completa do plano de execução sem modificações em disco.
+
+---
+
+### ✅ Fase 42: Laços Contadores Canônicos (`for ... to` e `for ... downto`) - CONCLUÍDA
+- [x] **Gramática e AST Canônica do Laço `for`**:
+  - Tokens oficiais `to` e `downto` (`uAetherTokens.pas` e `uAetherLexer.pas`).
+  - Nó da AST `TASTForStmt` com identificador, limites de início/fim e flag de direção decrescente (`uAetherAST.pas`).
+  - Análise sintática em `TAetherParser.ParseForStmt` com fechamento canônico `end;`.
+- [x] **Verificação de Tipos e Análise de Posse**:
+  - Tipagem estrita: validação de que os limites inicial e final são expressões inteiras (`Int8`..`Int64`).
+  - Auto-declaração no escopo da variável contadora caso não tenha sido declarada previamente no bloco `var`.
+  - Auditoria no Borrow Checker (`uAetherBorrowChecker.pas`) e Linter (`uAetherLinter.pas`).
+- [x] **Emissão Multi-Backend (Pascal & C99)**:
+  - **Backend Free Pascal**: Emite `for VarName := Start to End do begin ... end;` e `downto`, com garantia de alocação de variável no bloco `var`.
+  - **Backend C99**: Emite `for (VarName = Start; VarName <= End; VarName++) { ... }` e `VarName >= End; VarName--`.
+- [x] **Suíte de Testes Automatizada**:
+  - Testes unitários cobrindo iteração ascendente, contagem regressiva (`downto`) e laços aninhados em `tests/04_for_loop_test.aeth` (100% pass em ambos os backends).

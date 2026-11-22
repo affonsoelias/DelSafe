@@ -159,6 +159,18 @@ type
     function Dump(Indent: Integer = 0): string; override;
   end;
 
+  TASTForStmt = class(TASTStmt)
+  public
+    VarName: string;
+    StartExpr: TASTExpr;
+    EndExpr: TASTExpr;
+    IsDownTo: Boolean;
+    Body: TASTNodeList;
+    constructor Create(ALine, ACol: Integer; const AVarName: string; AStart, AEnd: TASTExpr; AIsDownTo: Boolean = False);
+    destructor Destroy; override;
+    function Dump(Indent: Integer = 0): string; override;
+  end;
+
   TASTPattern = class(TASTNode)
   public
     Value: string;
@@ -743,6 +755,41 @@ begin
     Result := Result + LineEnding + Body[I].Dump(Indent + 1);
 end;
 
+{ TASTForStmt }
+
+constructor TASTForStmt.Create(ALine, ACol: Integer; const AVarName: string; AStart, AEnd: TASTExpr; AIsDownTo: Boolean);
+begin
+  inherited Create(ALine, ACol);
+  VarName := AVarName;
+  StartExpr := AStart;
+  EndExpr := AEnd;
+  IsDownTo := AIsDownTo;
+  Body := TASTNodeList.Create;
+end;
+
+destructor TASTForStmt.Destroy;
+begin
+  StartExpr.Free;
+  EndExpr.Free;
+  Body.Free;
+  inherited Destroy;
+end;
+
+function TASTForStmt.Dump(Indent: Integer): string;
+var
+  I: Integer;
+  DirStr: string;
+begin
+  if IsDownTo then DirStr := 'downto' else DirStr := 'to';
+  Result := MakeIndent(Indent) + Format('Para (For) %s := ', [VarName]) + LineEnding +
+            StartExpr.Dump(Indent + 1) + LineEnding +
+            MakeIndent(Indent) + DirStr + LineEnding +
+            EndExpr.Dump(Indent + 1) + LineEnding +
+            MakeIndent(Indent) + 'Faca (Do):';
+  for I := 0 to Body.Count - 1 do
+    Result := Result + LineEnding + Body[I].Dump(Indent + 1);
+end;
+
 { TASTPattern }
 
 constructor TASTPattern.Create(ALine, ACol: Integer; const AValue: string; const ASub: string; AIsLet: Boolean);
@@ -1310,6 +1357,16 @@ begin
     Result := TASTWhileStmt.Create(Node.Line, Node.Col, TASTExpr(CloneASTNode(TASTWhileStmt(Node).Condition)));
     for I := 0 to TASTWhileStmt(Node).Body.Count - 1 do
       TASTWhileStmt(Result).Body.Add(CloneASTNode(TASTWhileStmt(Node).Body[I]));
+    Exit;
+  end
+  else if Node is TASTForStmt then
+  begin
+    Result := TASTForStmt.Create(Node.Line, Node.Col, TASTForStmt(Node).VarName,
+                                 TASTExpr(CloneASTNode(TASTForStmt(Node).StartExpr)),
+                                 TASTExpr(CloneASTNode(TASTForStmt(Node).EndExpr)),
+                                 TASTForStmt(Node).IsDownTo);
+    for I := 0 to TASTForStmt(Node).Body.Count - 1 do
+      TASTForStmt(Result).Body.Add(CloneASTNode(TASTForStmt(Node).Body[I]));
     Exit;
   end
   else if Node is TASTPattern then

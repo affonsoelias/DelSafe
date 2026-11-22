@@ -746,6 +746,7 @@ var
   CallStmt: TASTCallStmt;
   IfStmt: TASTIfStmt;
   WhileStmt: TASTWhileStmt;
+  ForStmt: TASTForStmt;
   MatchStmt: TASTMatchStmt;
   CaseNode: TASTMatchCase;
   Ret: TASTReturnStmt;
@@ -793,6 +794,19 @@ begin
     IncIndent;
     for I := 0 to WhileStmt.Body.Count - 1 do
       EmitStmt(TASTStmt(WhileStmt.Body[I]));
+    DecIndent;
+    Emit('}');
+  end
+  else if Stmt is TASTForStmt then
+  begin
+    ForStmt := TASTForStmt(Stmt);
+    if ForStmt.IsDownTo then
+      Emit(Format('for (%s = %s; %s >= %s; %s--) {', [ForStmt.VarName, EmitExpr(ForStmt.StartExpr), ForStmt.VarName, EmitExpr(ForStmt.EndExpr), ForStmt.VarName]))
+    else
+      Emit(Format('for (%s = %s; %s <= %s; %s++) {', [ForStmt.VarName, EmitExpr(ForStmt.StartExpr), ForStmt.VarName, EmitExpr(ForStmt.EndExpr), ForStmt.VarName]));
+    IncIndent;
+    for I := 0 to ForStmt.Body.Count - 1 do
+      EmitStmt(TASTStmt(ForStmt.Body[I]));
     DecIndent;
     Emit('}');
   end
@@ -934,10 +948,11 @@ end;
 procedure TAetherEmitterC.EmitFunction(Func: TASTFunction);
 var
   ParamListStr, ExportPrefix: string;
-  I: Integer;
+  I, K: Integer;
   Param: TASTParam;
   ModStr: string;
   VarDecl: TASTVarDecl;
+  VarExists: Boolean;
 begin
   if Func.GenericParam <> '' then Exit; // Molde generico nao emite codigo diretamente
   if Func.IsExtern then
@@ -1043,6 +1058,20 @@ begin
     Emit(Format('%s %s;', [EmitTypeRef(VarDecl.TypeName), VarDecl.Name]));
   end;
 
+  for I := 0 to Func.Body.Count - 1 do
+    if Func.Body[I] is TASTForStmt then
+    begin
+      VarExists := False;
+      for K := 0 to Func.LocalVars.Count - 1 do
+        if SameText(TASTVarDecl(Func.LocalVars[K]).Name, TASTForStmt(Func.Body[I]).VarName) then
+        begin
+          VarExists := True;
+          Break;
+        end;
+      if not VarExists then
+        Emit(Format('int32_t %s;', [TASTForStmt(Func.Body[I]).VarName]));
+    end;
+
   // Corpo
   for I := 0 to Func.Body.Count - 1 do
     EmitStmt(TASTStmt(Func.Body[I]));
@@ -1060,8 +1089,9 @@ end;
 
 procedure TAetherEmitterC.EmitProgramBlock(Prog: TASTProgramBlock);
 var
-  I: Integer;
+  I, K: Integer;
   VarDecl: TASTVarDecl;
+  VarExists: Boolean;
 begin
   FCurrentFunc := nil;
   FProgramBlock := Prog;
@@ -1074,6 +1104,20 @@ begin
     VarDecl := TASTVarDecl(Prog.LocalVars[I]);
     Emit(Format('%s %s;', [EmitTypeRef(VarDecl.TypeName), VarDecl.Name]));
   end;
+
+  for I := 0 to Prog.Body.Count - 1 do
+    if Prog.Body[I] is TASTForStmt then
+    begin
+      VarExists := False;
+      for K := 0 to Prog.LocalVars.Count - 1 do
+        if SameText(TASTVarDecl(Prog.LocalVars[K]).Name, TASTForStmt(Prog.Body[I]).VarName) then
+        begin
+          VarExists := True;
+          Break;
+        end;
+      if not VarExists then
+        Emit(Format('int32_t %s;', [TASTForStmt(Prog.Body[I]).VarName]));
+    end;
 
   for I := 0 to Prog.Body.Count - 1 do
     EmitStmt(TASTStmt(Prog.Body[I]));

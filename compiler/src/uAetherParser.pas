@@ -60,6 +60,7 @@ type
     function ParseStatement: TASTStmt;
     function ParseIfStmt: TASTIfStmt;
     function ParseWhileStmt: TASTWhileStmt;
+    function ParseForStmt: TASTForStmt;
     function ParseMatchStmt: TASTMatchStmt;
     function ParseReturnStmt: TASTReturnStmt;
     function ParseAsmStmt: TASTStmt;
@@ -893,6 +894,44 @@ begin
   end;
 end;
 
+function TAetherParser.ParseForStmt: TASTForStmt;
+var
+  VarName: string;
+  StartExpr, EndExpr: TASTExpr;
+  FLine, FCol: Integer;
+  IsDownTo: Boolean;
+begin
+  FLine := FCurTok.Line;
+  FCol := FCurTok.Col;
+  Expect(tokFor);
+  VarName := Expect(tokIdentifier, 'Esperado nome da variavel contadora do for').Value;
+  Expect(tokAssign, 'Esperado ":=" apos nome da variavel no for');
+  StartExpr := ParseExpr;
+  IsDownTo := False;
+  if Match(tokTo) then
+    IsDownTo := False
+  else if Match(tokDownto) then
+    IsDownTo := True
+  else
+    raise EAetherParserError.CreateFmt('Esperado "to" ou "downto" no laco for na linha %d, coluna %d', [FCurTok.Line, FCurTok.Col]);
+
+  EndExpr := ParseExpr;
+  Expect(tokDo, 'Esperado "do" apos limites do laco for');
+
+  Result := TASTForStmt.Create(FLine, FCol, VarName, StartExpr, EndExpr, IsDownTo);
+  try
+    while not Check(tokEnd) and not Check(tokEOF) do
+    begin
+      Result.Body.Add(ParseStatement);
+      Expect(tokSemicolon, 'Esperado ";" apos instrucao do for');
+    end;
+    Expect(tokEnd, 'Esperado "end" no fechamento do for');
+  except
+    Result.Free;
+    raise;
+  end;
+end;
+
 function TAetherParser.ParseMatchStmt: TASTMatchStmt;
 var
   MatchExpr: TASTExpr;
@@ -1005,6 +1044,8 @@ begin
     Result := ParseIfStmt
   else if Check(tokWhile) then
     Result := ParseWhileStmt
+  else if Check(tokFor) then
+    Result := ParseForStmt
   else if Check(tokMatch) then
     Result := ParseMatchStmt
   else if Check(tokReturn) then

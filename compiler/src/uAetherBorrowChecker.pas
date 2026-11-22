@@ -352,6 +352,7 @@ var
   Assign: TASTAssignStmt;
   IfStmt: TASTIfStmt;
   WhileStmt: TASTWhileStmt;
+  ForStmt: TASTForStmt;
   MatchStmt: TASTMatchStmt;
   CaseNode: TASTMatchCase;
   Ret: TASTReturnStmt;
@@ -446,6 +447,16 @@ begin
       FCurrentScope.ReleaseTemporaryBorrows;
     for I := 0 to WhileStmt.Body.Count - 1 do
       CheckStmt(TASTStmt(WhileStmt.Body[I]));
+  end
+  else if Stmt is TASTForStmt then
+  begin
+    ForStmt := TASTForStmt(Stmt);
+    CheckExpr(ForStmt.StartExpr, accRead);
+    CheckExpr(ForStmt.EndExpr, accRead);
+    if Assigned(FCurrentScope) then
+      FCurrentScope.ReleaseTemporaryBorrows;
+    for I := 0 to ForStmt.Body.Count - 1 do
+      CheckStmt(TASTStmt(ForStmt.Body[I]));
   end
   else if Stmt is TASTReturnStmt then
   begin

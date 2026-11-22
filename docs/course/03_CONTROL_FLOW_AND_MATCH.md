@@ -65,6 +65,41 @@ end.
 
 ---
 
+## 2.1 Counting Loops: `for...to` and `for...downto`
+
+For deterministic iteration across numeric ranges, Aether provides canonical `for` loops in the Pascal tradition:
+
+- **Ascending (`to`):** `for i := start to end do ... end;`
+- **Descending (`downto`):** `for i := start downto end do ... end;`
+
+```aether
+module for_demo;
+
+program Main;
+var
+    i: Int32;
+    k: Int32;
+    sum: Int32;
+begin
+    sum := 0;
+
+    // Ascending loop: 1 through 10
+    for i := 1 to 10 do
+        sum := sum + i;
+    end;
+    PrintLn("Ascending sum (1..10): " + IntToStr(sum)); // 55
+
+    // Descending countdown loop: 5 down to 1
+    PrintLn("Countdown:");
+    for k := 5 downto 1 do
+        PrintLn("  T-minus: " + IntToStr(k));
+    end;
+    PrintLn("Blast off!");
+end.
+```
+
+---
+
 ## 3. Algebraic Enums
 
 Enums in Aether are not just lists of numbers; they are **Algebraic Data Types (ADTs)** that can carry payload data with variants:

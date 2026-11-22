@@ -644,6 +644,7 @@ var
   CallStmt: TASTCallStmt;
   IfStmt: TASTIfStmt;
   WhileStmt: TASTWhileStmt;
+  ForStmt: TASTForStmt;
   MatchStmt: TASTMatchStmt;
   CaseNode: TASTMatchCase;
   Ret: TASTReturnStmt;
@@ -694,6 +695,20 @@ begin
     DecIndent;
     Emit('end;');
   end
+  else if Stmt is TASTForStmt then
+  begin
+    ForStmt := TASTForStmt(Stmt);
+    if ForStmt.IsDownTo then
+      Emit(Format('for %s := %s downto %s do', [ForStmt.VarName, EmitExpr(ForStmt.StartExpr), EmitExpr(ForStmt.EndExpr)]))
+    else
+      Emit(Format('for %s := %s to %s do', [ForStmt.VarName, EmitExpr(ForStmt.StartExpr), EmitExpr(ForStmt.EndExpr)]));
+    Emit('begin');
+    IncIndent;
+    for I := 0 to ForStmt.Body.Count - 1 do
+      EmitStmt(TASTStmt(ForStmt.Body[I]));
+    DecIndent;
+    Emit('end;');
+  end
   else if Stmt is TASTReturnStmt then
   begin
     Ret := TASTReturnStmt(Stmt);
@@ -724,6 +739,20 @@ begin
     finally
       Lines.Free;
     end;
+    DecIndent;
+    Emit('end;');
+  end
+  else if Stmt is TASTForStmt then
+  begin
+    ForStmt := TASTForStmt(Stmt);
+    if ForStmt.IsDownTo then
+      Emit(Format('for %s := %s downto %s do', [ForStmt.VarName, EmitExpr(ForStmt.StartExpr), EmitExpr(ForStmt.EndExpr)]))
+    else
+      Emit(Format('for %s := %s to %s do', [ForStmt.VarName, EmitExpr(ForStmt.StartExpr), EmitExpr(ForStmt.EndExpr)]));
+    Emit('begin');
+    IncIndent;
+    for I := 0 to ForStmt.Body.Count - 1 do
+      EmitStmt(TASTStmt(ForStmt.Body[I]));
     DecIndent;
     Emit('end;');
   end
@@ -836,12 +865,13 @@ end;
 procedure TAetherEmitterPascal.EmitFunction(Func: TASTFunction);
 var
   ParamListStr: string;
-  I: Integer;
+  I, K: Integer;
   Param: TASTParam;
   ModStr, ExportClause: string;
   VarDecl: TASTVarDecl;
   LibClause: string;
   ParamType: string;
+  HasVars, VarExists: Boolean;
 begin
   if Func.GenericParam <> '' then Exit; // Molde generico nao emite codigo diretamente
   FCurrentFunc := Func;
@@ -923,7 +953,18 @@ begin
     Emit(Format('function %s(%s): %s;%s', [Func.Name, ParamListStr, EmitTypeRef(Func.ReturnType), ExportClause]));
 
   // Variaveis Locais
-  if Func.LocalVars.Count > 0 then
+  HasVars := Func.LocalVars.Count > 0;
+  if not HasVars then
+  begin
+    for I := 0 to Func.Body.Count - 1 do
+      if Func.Body[I] is TASTForStmt then
+      begin
+        HasVars := True;
+        Break;
+      end;
+  end;
+
+  if HasVars then
   begin
     Emit('var');
     IncIndent;
@@ -932,6 +973,19 @@ begin
       VarDecl := TASTVarDecl(Func.LocalVars[I]);
       Emit(Format('%s: %s;', [VarDecl.Name, EmitTypeRef(VarDecl.TypeName)]));
     end;
+    for I := 0 to Func.Body.Count - 1 do
+      if Func.Body[I] is TASTForStmt then
+      begin
+        VarExists := False;
+        for K := 0 to Func.LocalVars.Count - 1 do
+          if SameText(TASTVarDecl(Func.LocalVars[K]).Name, TASTForStmt(Func.Body[I]).VarName) then
+          begin
+            VarExists := True;
+            Break;
+          end;
+        if not VarExists then
+          Emit(Format('%s: LongInt;', [TASTForStmt(Func.Body[I]).VarName]));
+      end;
     DecIndent;
   end;
 
@@ -959,7 +1013,7 @@ var
   VarDecl: TASTVarDecl;
   MatchNode: TASTMatchStmt;
   CaseNode: TASTMatchCase;
-  HasVars: Boolean;
+  HasVars, VarExists: Boolean;
 begin
   FCurrentFunc := nil;
   FProgramBlock := Prog;
@@ -983,6 +1037,16 @@ begin
       end;
       if HasVars then Break;
     end;
+
+    if not HasVars then
+    begin
+      for I := 0 to Prog.Body.Count - 1 do
+        if Prog.Body[I] is TASTForStmt then
+        begin
+          HasVars := True;
+          Break;
+        end;
+    end;
   end;
 
   if HasVars then
@@ -994,6 +1058,20 @@ begin
       VarDecl := TASTVarDecl(Prog.LocalVars[I]);
       Emit(Format('%s: %s;', [VarDecl.Name, EmitTypeRef(VarDecl.TypeName)]));
     end;
+
+    for I := 0 to Prog.Body.Count - 1 do
+      if Prog.Body[I] is TASTForStmt then
+      begin
+        VarExists := False;
+        for K := 0 to Prog.LocalVars.Count - 1 do
+          if SameText(TASTVarDecl(Prog.LocalVars[K]).Name, TASTForStmt(Prog.Body[I]).VarName) then
+          begin
+            VarExists := True;
+            Break;
+          end;
+        if not VarExists then
+          Emit(Format('%s: LongInt;', [TASTForStmt(Prog.Body[I]).VarName]));
+      end;
 
     // Variaveis de padrao do match (ex: let valor)
     for I := 0 to Prog.Body.Count - 1 do

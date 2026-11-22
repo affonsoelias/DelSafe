@@ -144,6 +144,7 @@ var
   CallStmt: TASTCallStmt;
   IfStmt: TASTIfStmt;
   WhileStmt: TASTWhileStmt;
+  ForStmt: TASTForStmt;
   MatchStmt: TASTMatchStmt;
   ReturnStmt: TASTReturnStmt;
   CaseNode: TASTMatchCase;
@@ -174,6 +175,14 @@ begin
     WhileStmt := TASTWhileStmt(Stmt);
     CollectIdentifiersInExpr(WhileStmt.Condition, IdentList);
     CollectIdentifiersInNodeList(WhileStmt.Body, IdentList);
+  end
+  else if Stmt is TASTForStmt then
+  begin
+    ForStmt := TASTForStmt(Stmt);
+    IdentList.Add(ForStmt.VarName);
+    CollectIdentifiersInExpr(ForStmt.StartExpr, IdentList);
+    CollectIdentifiersInExpr(ForStmt.EndExpr, IdentList);
+    CollectIdentifiersInNodeList(ForStmt.Body, IdentList);
   end
   else if Stmt is TASTMatchStmt then
   begin
@@ -344,6 +353,12 @@ var
       begin
         CheckExprForRedundancies(TASTWhileStmt(CurStmt).Condition);
         CheckStmtListForDeadCode(TASTWhileStmt(CurStmt).Body);
+      end
+      else if CurStmt is TASTForStmt then
+      begin
+        CheckExprForRedundancies(TASTForStmt(CurStmt).StartExpr);
+        CheckExprForRedundancies(TASTForStmt(CurStmt).EndExpr);
+        CheckStmtListForDeadCode(TASTForStmt(CurStmt).Body);
       end
       else if CurStmt is TASTAssignStmt then
         CheckExprForRedundancies(TASTAssignStmt(CurStmt).Expr)

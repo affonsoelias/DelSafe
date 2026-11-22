@@ -501,6 +501,7 @@ function TAetherOptimizer.OptimizeStmt(var Stmt: TASTStmt): Boolean;
 var
   IfStmt: TASTIfStmt;
   WhileStmt: TASTWhileStmt;
+  ForStmt: TASTForStmt;
   AssignStmt: TASTAssignStmt;
   ReturnStmt: TASTReturnStmt;
   CallStmt: TASTCallStmt;
@@ -544,6 +545,14 @@ begin
     OptimizeExpr(WhileStmt.Condition);
     if Assigned(WhileStmt.Body) then
       OptimizeBlock(WhileStmt.Body);
+  end
+  else if Stmt is TASTForStmt then
+  begin
+    ForStmt := TASTForStmt(Stmt);
+    OptimizeExpr(ForStmt.StartExpr);
+    OptimizeExpr(ForStmt.EndExpr);
+    if Assigned(ForStmt.Body) then
+      OptimizeBlock(ForStmt.Body);
   end;
 end;
 
@@ -553,6 +562,7 @@ var
   Stmt: TASTStmt;
   IfStmt: TASTIfStmt;
   WhileStmt: TASTWhileStmt;
+  ForStmt: TASTForStmt;
   CondLit: TASTLiteralExpr;
   HasReturn: Boolean;
 begin
