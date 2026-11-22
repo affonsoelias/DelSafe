@@ -362,12 +362,17 @@ Este documento traça o status oficial de desenvolvimento do compilador e as pr�
     - `stage2_suite.c` e `stage3_suite.c`: 828 bytes, SHA-256 idêntico (`d6c7f2f6135cb09275953e546b59212c94baafe42b91a8f4b7dae5e3808ab767`), 0 bytes de diferença.
   - Status certificado: **CONVERGÊNCIA TOTAL (Ponto Fixo / Fixed Point!)** com **100% BIT-A-BIT IDENTICO**.
 
-### ⏳ Fase 30: Backend WebAssembly (Wasm) & Interop Web com BlaiseVue
-- [ ] **Alvo de Compilação WebAssembly (`--target=wasm`)**:
-  - Emissão de código adaptado para compilação WebAssembly (`.wasm`) via toolchain C/Emscripten e Free Pascal Wasm backend (sem dependência de backend LLVM IR nativo).
-  - Geração de wrapper JavaScript/TypeScript e manifesto de carregamento para browsers e runtimes edge (Cloudflare Workers, Deno, Wasmtime).
-- [ ] **Integração de Primeira Classe com BlaiseVue**:
-  - Execução de lógica de negócios e stores reativos escritos em Aether diretamente no frontend do navegador via Wasm com transferências de memória zero-copy.
+### ⏳ Fase 30: Backend WebAssembly (`.wasm`) & JavaScript via `pas2js` (`--target=js` / `--target=wasm`)
+- [ ] **Alvo JavaScript via Free Pascal (`--target=js` / `pas2js`)**:
+  - Integração nativa com o compilador oficial `pas2js` da suíte Free Pascal / Lazarus.
+  - O Aether transpila para Object Pascal e invoca `pas2js` para gerar um arquivo `.js` (ECMAScript) puro, leve e direto.
+  - Zero dependência de TypeScript, sem necessidade de Node.js/npm e sem bundlers complexos.
+  - Execução imediata em qualquer navegador via tag `<script src="saida.js"></script>`.
+- [ ] **Alvo WebAssembly Puro (`--target=wasm`) via Clang**:
+  - Compilação direta do código C gerado pelo Aether para binário WebAssembly (`.wasm`) de baixo nível utilizando Clang/LLVM (`clang --target=wasm32 -nostdlib -Wl,--no-entry -Wl,--export-all`).
+  - Geração opcional de um arquivo `.html` mínimo de teste apenas com `<script>` JavaScript vanilla nativo (`WebAssembly.instantiateStreaming`) para carga e testes imediatos no browser.
+- [ ] **Diagnóstico de Toolchain Web**:
+  - Detecção no `aetherc --doctor` de `pas2js.exe` e `clang.exe`.
 
 ### ⏳ Fase 31: Concorrência Estruturada & Async/Await com Corrotinas
 - [ ] **Corrotinas Zero-Cost e Tarefas Cooperativas**:
