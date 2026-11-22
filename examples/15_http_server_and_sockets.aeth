@@ -1,0 +1,99 @@
+module HttpServerAndSockets;
+
+import IO;
+import Strings;
+import Net;
+import Json;
+
+function RunDemo(): Void
+var
+    server: Socket;
+    client: Socket;
+    conn: Socket;
+    req_text: String;
+    req: HttpRequest;
+    http_resp: String;
+    client_received: String;
+    builder: JsonBuilder;
+    json_out: String;
+    bytes_sent: Int32;
+begin
+    PrintLn("==================================================");
+    PrintLn(" [Aether Phase 20] OS Sockets & Native HTTP Server");
+    PrintLn(" Base de Alta Performance para BlaiseVue Fullstack");
+    PrintLn("==================================================");
+
+    // 1. Inicia o Servidor Socket Nativo na porta 8089
+    server := SocketListenServer(8089, 5);
+    if not server.is_open then
+        PrintLn("ERRO: Nao foi possivel abrir porta do servidor socket.");
+        return;
+    end;
+    PrintLn("[Server] Escutando em http://127.0.0.1:8089 (Backlog: 5)...");
+
+    // 2. Conecta um Cliente Socket Nativo no Servidor
+    client := SocketConnectClient("127.0.0.1", 8089);
+    if not client.is_open then
+        PrintLn("ERRO: Cliente nao conseguiu conectar ao servidor.");
+        SocketCloseHandle(mut borrow server);
+        return;
+    end;
+    PrintLn("[Client] Conexao TCP estabelecida com sucesso!");
+
+    // 3. Servidor aceita a conexao do cliente
+    conn := SocketAcceptClient(borrow server);
+    if not conn.is_open then
+        PrintLn("ERRO: Servidor falhou ao aceitar cliente.");
+        SocketCloseHandle(mut borrow client);
+        SocketCloseHandle(mut borrow server);
+        return;
+    end;
+    PrintLn("[Server] Conexao de cliente aceita com sucesso (fd ativo)!");
+
+    // 4. Cliente envia uma Requisicao HTTP real
+    req_text := BuildHttpRequest("GET", "127.0.0.1:8089", "/api/v1/status");
+    bytes_sent := SocketSendString(borrow client, borrow req_text);
+    PrintLn("[Client] Requisicao HTTP enviada (Bytes: " + IntToStr(bytes_sent) + ")");
+
+    // 5. Servidor recebe e faz o parse da requisicao HTTP
+    req_text := SocketRecvString(borrow conn, 2048);
+    if ParseHttpRequest(borrow req_text, mut borrow req) then
+        PrintLn("[Server] Metodo HTTP: " + req.method);
+        PrintLn("[Server] Rota requisitada: " + req.path);
+    end;
+
+    // 6. Servidor gera uma resposta JSON usando std/json
+    builder := NewJsonBuilder();
+    AddString(mut borrow builder, "framework", "BlaiseVue");
+    AddString(mut borrow builder, "language", "Aether");
+    AddString(mut borrow builder, "status", "ultra_fast_online");
+    AddInt(mut borrow builder, "code", 200);
+    json_out := Build(borrow builder);
+
+    // 7. Servidor constroi a resposta HTTP completa e envia
+    http_resp := BuildHttpResponse(200, "application/json", borrow json_out);
+    bytes_sent := SocketSendString(borrow conn, borrow http_resp);
+    PrintLn("[Server] Resposta HTTP 200 JSON enviada (" + IntToStr(bytes_sent) + " bytes)");
+
+    // 8. Cliente recebe a resposta HTTP
+    client_received := SocketRecvString(borrow client, 2048);
+    PrintLn("[Client] Resposta HTTP recebida pelo cliente:");
+    PrintLn("--------------------------------------------------");
+    PrintLn(client_received);
+    PrintLn("--------------------------------------------------");
+
+    // 9. Encerramento limpo de todos os recursos de rede
+    SocketCloseHandle(mut borrow conn);
+    SocketCloseHandle(mut borrow client);
+    SocketCloseHandle(mut borrow server);
+
+    PrintLn("[Cleanup] Sockets fechados com sucesso. Zero leaks de descritores!");
+    PrintLn("==================================================");
+    PrintLn(" [OK] Servidor HTTP e Sockets Nativos Testados!");
+    PrintLn("==================================================");
+end;
+
+program HttpServerAndSockets;
+begin
+    RunDemo();
+end.

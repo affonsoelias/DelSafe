@@ -4,19 +4,27 @@ import Strings;
 
 type
     Socket = record
+        fd: Int32;
         port: UInt32;
         host: String;
         is_open: Bool;
     end;
 
+    HttpRequest = record
+        method: String;
+        path: String;
+        body: String;
+    end;
+
     HttpResponse = record
         status_code: UInt32;
+        content_type: String;
         body: String;
     end;
 
 function NewSocket(borrow h: String; borrow p: UInt32): Socket
 begin
-    return Socket(port: p, host: h, is_open: false);
+    return Socket(fd: -1, port: p, host: h, is_open: false);
 end;
 
 function Connect(mut borrow s: Socket): Bool
@@ -24,6 +32,7 @@ begin
     if s.is_open then
         return false;
     end;
+    s.fd := SocketConnect(s.host, s.port);
     s.is_open := true;
     return true;
 end;
@@ -33,12 +42,82 @@ begin
     if not s.is_open then
         return 0;
     end;
+    if s.fd >= 0 then
+        SocketSend(s.fd, payload);
+    end;
     return Length(borrow payload);
 end;
 
 function CloseSocket(mut borrow s: Socket): Void
 begin
-    s.is_open := false;
+    if s.is_open then
+        if s.fd >= 0 then
+            SocketClose(s.fd);
+            s.fd := -1;
+        end;
+        s.is_open := false;
+    end;
+end;
+
+function SocketListenServer(borrow p: UInt32; borrow backlog: Int32): Socket
+var
+    listen_fd: Int32;
+begin
+    listen_fd := SocketListen(p, backlog);
+    if listen_fd < 0 then
+        return Socket(fd: -1, port: p, host: "0.0.0.0", is_open: false);
+    end;
+    return Socket(fd: listen_fd, port: p, host: "0.0.0.0", is_open: true);
+end;
+
+function SocketAcceptClient(borrow server: Socket): Socket
+var
+    client_fd: Int32;
+begin
+    if not server.is_open then
+        return Socket(fd: -1, port: 0, host: "", is_open: false);
+    end;
+    client_fd := SocketAccept(server.fd);
+    if client_fd < 0 then
+        return Socket(fd: -1, port: 0, host: "", is_open: false);
+    end;
+    return Socket(fd: client_fd, port: server.port, host: "client", is_open: true);
+end;
+
+function SocketConnectClient(borrow h: String; borrow p: UInt32): Socket
+var
+    conn_fd: Int32;
+begin
+    conn_fd := SocketConnect(h, p);
+    if conn_fd < 0 then
+        return Socket(fd: -1, port: p, host: h, is_open: false);
+    end;
+    return Socket(fd: conn_fd, port: p, host: h, is_open: true);
+end;
+
+function SocketSendString(borrow s: Socket; borrow payload: String): Int32
+begin
+    if not s.is_open then
+        return -1;
+    end;
+    return SocketSend(s.fd, payload);
+end;
+
+function SocketRecvString(borrow s: Socket; borrow max_len: Int32): String
+begin
+    if not s.is_open then
+        return "";
+    end;
+    return SocketRecv(s.fd, max_len);
+end;
+
+function SocketCloseHandle(mut borrow s: Socket): Void
+begin
+    if s.is_open then
+        SocketClose(s.fd);
+        s.is_open := false;
+        s.fd := -1;
+    end;
 end;
 
 function BuildHttpRequest(borrow method: String; borrow host: String; borrow path: String): String
@@ -47,9 +126,77 @@ var
 begin
     req := method + " " + path + " HTTP/1.1\r\n";
     req := req + "Host: " + host + "\r\n";
-    req := req + "User-Agent: AetherLang/0.5\r\n";
+    req := req + "User-Agent: AetherLang/0.5 (BlaiseVue-Engine)\r\n";
     req := req + "Connection: close\r\n\r\n";
     return req;
+end;
+
+function BuildHttpResponse(borrow status_code: UInt32; borrow content_type: String; borrow body: String): String
+var
+    res: String;
+    status_text: String;
+begin
+    status_text := "OK";
+    if status_code = 404 then
+        status_text := "Not Found";
+    end;
+    if status_code = 500 then
+        status_text := "Internal Server Error";
+    end;
+
+    res := "HTTP/1.1 " + IntToStr(Int32(status_code)) + " " + status_text + "\r\n";
+    res := res + "Content-Type: " + content_type + "\r\n";
+    res := res + "Content-Length: " + IntToStr(Int32(Length(borrow body))) + "\r\n";
+    res := res + "Server: Aether-BlaiseVue/1.0\r\n";
+    res := res + "Connection: close\r\n\r\n";
+    res := res + body;
+    return res;
+end;
+
+function ParseHttpRequest(borrow raw_request: String; mut borrow out_req: HttpRequest): Bool
+var
+    first_space: Int32;
+    second_space: Int32;
+    len: UInt32;
+    i: UInt32;
+    ch: String;
+begin
+    len := Length(borrow raw_request);
+    if len = 0 then
+        return false;
+    end;
+
+    first_space := -1;
+    second_space := -1;
+    i := 0;
+    while i < len do
+        ch := CharAt(borrow raw_request, i);
+        if ch = " " then
+            if first_space = -1 then
+                first_space := Int32(i);
+            else
+                if second_space = -1 then
+                    second_space := Int32(i);
+                end;
+            end;
+        end;
+        i := i + 1;
+    end;
+
+    if first_space > 0 then
+        out_req.method := Substring(borrow raw_request, 0, UInt32(first_space));
+    else
+        out_req.method := "GET";
+    end;
+
+    if (first_space > 0) and (second_space > first_space) then
+        out_req.path := Substring(borrow raw_request, UInt32(first_space + 1), UInt32(second_space - first_space - 1));
+    else
+        out_req.path := "/";
+    end;
+
+    out_req.body := "";
+    return true;
 end;
 
 function ParseHttpResponse(borrow raw_response: String; mut borrow out_resp: HttpResponse): Bool
@@ -58,6 +205,7 @@ begin
         return false;
     end;
     out_resp.status_code := 200;
+    out_resp.content_type := "text/plain";
     out_resp.body := raw_response;
     return true;
 end;

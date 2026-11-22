@@ -265,7 +265,11 @@ begin
     Exit(False);
   end;
 
+  {$IFDEF MSWINDOWS}
+  Params := Format('-O2 "%s" -o "%s" -lws2_32', [CSource, OutExe]);
+  {$ELSE}
   Params := Format('-O2 "%s" -o "%s"', [CSource, OutExe]);
+  {$ENDIF}
   Code := RunCommandCapture(Info.GCCPath, Params, Info.MSYS2BinDir, OutputLog);
   Result := (Code = 0) and FileExists(OutExe);
 end;

@@ -207,6 +207,15 @@ begin
   FGlobalScope.Define(TSymbol.Create('WriteFile', skFunction, 'Bool', 0, 0));
   FGlobalScope.Define(TSymbol.Create('IntToStr', skFunction, 'String', 0, 0));
   FGlobalScope.Define(TSymbol.Create('StrToInt', skFunction, 'Int32', 0, 0));
+
+  // Funcoes nativas de Sockets (SO / Rede)
+  FGlobalScope.Define(TSymbol.Create('SocketCreate', skFunction, 'Int32', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('SocketListen', skFunction, 'Int32', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('SocketAccept', skFunction, 'Int32', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('SocketConnect', skFunction, 'Int32', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('SocketSend', skFunction, 'Int32', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('SocketRecv', skFunction, 'String', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('SocketClose', skFunction, 'Void', 0, 0));
 end;
 
 procedure TSymbolTable.EnterScope;

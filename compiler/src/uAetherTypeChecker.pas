@@ -568,6 +568,55 @@ begin
       Exit('Int32');
     end;
 
+    if Call.Callee = 'SocketCreate' then
+    begin
+      if Call.Args.Count <> 0 then
+        Error('E0061', 'Funcao "SocketCreate" nao espera argumentos', Call.Line, Call.Col);
+      Exit('Int32');
+    end;
+
+    if Call.Callee = 'SocketListen' then
+    begin
+      if Call.Args.Count <> 2 then
+        Error('E0061', 'Funcao "SocketListen" espera 2 argumentos (Port: UInt32, Backlog: Int32)', Call.Line, Call.Col);
+      Exit('Int32');
+    end;
+
+    if Call.Callee = 'SocketAccept' then
+    begin
+      if Call.Args.Count <> 1 then
+        Error('E0061', 'Funcao "SocketAccept" espera 1 argumento (ListenFd: Int32)', Call.Line, Call.Col);
+      Exit('Int32');
+    end;
+
+    if Call.Callee = 'SocketConnect' then
+    begin
+      if Call.Args.Count <> 2 then
+        Error('E0061', 'Funcao "SocketConnect" espera 2 argumentos (Host: String, Port: UInt32)', Call.Line, Call.Col);
+      Exit('Int32');
+    end;
+
+    if Call.Callee = 'SocketSend' then
+    begin
+      if Call.Args.Count <> 2 then
+        Error('E0061', 'Funcao "SocketSend" espera 2 argumentos (Fd: Int32, Data: String)', Call.Line, Call.Col);
+      Exit('Int32');
+    end;
+
+    if Call.Callee = 'SocketRecv' then
+    begin
+      if Call.Args.Count <> 2 then
+        Error('E0061', 'Funcao "SocketRecv" espera 2 argumentos (Fd: Int32, MaxLen: Int32)', Call.Line, Call.Col);
+      Exit('String');
+    end;
+
+    if Call.Callee = 'SocketClose' then
+    begin
+      if Call.Args.Count <> 1 then
+        Error('E0061', 'Funcao "SocketClose" espera 1 argumento (Fd: Int32)', Call.Line, Call.Col);
+      Exit('Void');
+    end;
+
     if Assigned(Sym.Node) and (Sym.Node is TASTFunction) then
     begin
       FuncNode := TASTFunction(Sym.Node);

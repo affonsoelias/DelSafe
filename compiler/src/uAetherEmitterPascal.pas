@@ -219,9 +219,10 @@ begin
     Call := TASTCallExpr(Expr);
     if Call.Callee = 'Box' then Exit('Box');
     if Call.Callee = 'Some' then Exit('Option');
-    if (Call.Callee = 'ReadFile') or (Call.Callee = 'CharAt') or (Call.Callee = 'Substring') or (Call.Callee = 'ToString') or (Call.Callee = 'IntToStr') then Exit('String');
-    if (Call.Callee = 'Length') or (Call.Callee = 'StrToInt') then Exit('UInt32');
+    if (Call.Callee = 'ReadFile') or (Call.Callee = 'CharAt') or (Call.Callee = 'Substring') or (Call.Callee = 'ToString') or (Call.Callee = 'IntToStr') or (Call.Callee = 'SocketRecv') then Exit('String');
+    if (Call.Callee = 'Length') or (Call.Callee = 'StrToInt') or (Call.Callee = 'SocketCreate') or (Call.Callee = 'SocketListen') or (Call.Callee = 'SocketAccept') or (Call.Callee = 'SocketConnect') or (Call.Callee = 'SocketSend') then Exit('Int32');
     if (Call.Callee = 'FileExists') or (Call.Callee = 'WriteFile') then Exit('Bool');
+    if Call.Callee = 'SocketClose' then Exit('Void');
   end;
 end;
 
@@ -441,6 +442,48 @@ begin
     if Call.Callee = 'StrToInt' then
     begin
       Result := 'StrToIntDef(' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + ', 0)';
+      Exit;
+    end;
+
+    if Call.Callee = 'SocketCreate' then
+    begin
+      Result := 'AetherSocketCreate()';
+      Exit;
+    end;
+
+    if Call.Callee = 'SocketListen' then
+    begin
+      Result := 'AetherSocketListen(' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + ', ' + EmitExpr(TASTCallArg(Call.Args[1]).Expr) + ')';
+      Exit;
+    end;
+
+    if Call.Callee = 'SocketAccept' then
+    begin
+      Result := 'AetherSocketAccept(' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + ')';
+      Exit;
+    end;
+
+    if Call.Callee = 'SocketConnect' then
+    begin
+      Result := 'AetherSocketConnect(' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + ', ' + EmitExpr(TASTCallArg(Call.Args[1]).Expr) + ')';
+      Exit;
+    end;
+
+    if Call.Callee = 'SocketSend' then
+    begin
+      Result := 'AetherSocketSend(' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + ', ' + EmitExpr(TASTCallArg(Call.Args[1]).Expr) + ')';
+      Exit;
+    end;
+
+    if Call.Callee = 'SocketRecv' then
+    begin
+      Result := 'AetherSocketRecv(' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + ', ' + EmitExpr(TASTCallArg(Call.Args[1]).Expr) + ')';
+      Exit;
+    end;
+
+    if Call.Callee = 'SocketClose' then
+    begin
+      Result := 'AetherSocketClose(' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + ')';
       Exit;
     end;
 
@@ -810,7 +853,7 @@ begin
   Emit('{$mode objfpc}{$H+}{$assertions on}');
   Emit('');
 
-  UsesClause := '  SysUtils';
+  UsesClause := '  SysUtils, Sockets';
   for I := 0 to AModule.PascalImports.Count - 1 do
     UsesClause := UsesClause + ', ' + AModule.PascalImports[I];
   UsesClause := UsesClause + ';';
@@ -920,6 +963,87 @@ begin
   Emit('  Write(F, AContent);');
   Emit('  CloseFile(F);');
   Emit('  Result := True;');
+  Emit('end;');
+  Emit('');
+  Emit('// Sockets Nativos via Sockets FPC');
+  Emit('function AetherSocketCreate(): LongInt;');
+  Emit('begin');
+  Emit('  Result := Sockets.fpsocket(AF_INET, SOCK_STREAM, 0);');
+  Emit('end;');
+  Emit('');
+  Emit('function AetherSocketListen(Port: Word; Backlog: LongInt): LongInt;');
+  Emit('var');
+  Emit('  Addr: TInetSockAddr;');
+  Emit('  Opt: LongInt;');
+  Emit('begin');
+  Emit('  Result := Sockets.fpsocket(AF_INET, SOCK_STREAM, 0);');
+  Emit('  if Result < 0 then Exit(-1);');
+  Emit('  Opt := 1;');
+  Emit('  Sockets.fpsetsockopt(Result, SOL_SOCKET, SO_REUSEADDR, @Opt, SizeOf(Opt));');
+  Emit('  FillChar(Addr, SizeOf(Addr), 0);');
+  Emit('  Addr.sin_family := AF_INET;');
+  Emit('  Addr.sin_port := Sockets.htons(Port);');
+  Emit('  Addr.sin_addr.s_addr := 0; // INADDR_ANY');
+  Emit('  if Sockets.fpbind(Result, @Addr, SizeOf(Addr)) <> 0 then');
+  Emit('  begin');
+  Emit('    Sockets.CloseSocket(Result);');
+  Emit('    Exit(-1);');
+  Emit('  end;');
+  Emit('  if Sockets.fplisten(Result, Backlog) <> 0 then');
+  Emit('  begin');
+  Emit('    Sockets.CloseSocket(Result);');
+  Emit('    Exit(-1);');
+  Emit('  end;');
+  Emit('end;');
+  Emit('');
+  Emit('function AetherSocketAccept(ListenFd: LongInt): LongInt;');
+  Emit('var');
+  Emit('  Addr: TInetSockAddr;');
+  Emit('  AddrLen: LongInt;');
+  Emit('begin');
+  Emit('  AddrLen := SizeOf(Addr);');
+  Emit('  Result := Sockets.fpaccept(ListenFd, @Addr, @AddrLen);');
+  Emit('end;');
+  Emit('');
+  Emit('function AetherSocketConnect(const Host: String; Port: Word): LongInt;');
+  Emit('var');
+  Emit('  Addr: TInetSockAddr;');
+  Emit('begin');
+  Emit('  Result := Sockets.fpsocket(AF_INET, SOCK_STREAM, 0);');
+  Emit('  if Result < 0 then Exit(-1);');
+  Emit('  FillChar(Addr, SizeOf(Addr), 0);');
+  Emit('  Addr.sin_family := AF_INET;');
+  Emit('  Addr.sin_port := Sockets.htons(Port);');
+  Emit('  Addr.sin_addr := Sockets.StrToNetAddr(Host);');
+  Emit('  if Sockets.fpconnect(Result, @Addr, SizeOf(Addr)) <> 0 then');
+  Emit('  begin');
+  Emit('    Sockets.CloseSocket(Result);');
+  Emit('    Exit(-1);');
+  Emit('  end;');
+  Emit('end;');
+  Emit('');
+  Emit('function AetherSocketSend(Fd: LongInt; const Data: String): LongInt;');
+  Emit('begin');
+  Emit('  if Length(Data) = 0 then Exit(0);');
+  Emit('  Result := Sockets.fpsend(Fd, @Data[1], Length(Data), 0);');
+  Emit('end;');
+  Emit('');
+  Emit('function AetherSocketRecv(Fd: LongInt; MaxLen: LongInt): String;');
+  Emit('var');
+  Emit('  Buf: array of Char;');
+  Emit('  Bytes: LongInt;');
+  Emit('begin');
+  Emit('  SetLength(Buf, MaxLen);');
+  Emit('  Bytes := Sockets.fprecv(Fd, @Buf[0], MaxLen, 0);');
+  Emit('  if Bytes > 0 then');
+  Emit('    SetString(Result, PChar(@Buf[0]), Bytes)');
+  Emit('  else');
+  Emit('    Result := '''';');
+  Emit('end;');
+  Emit('');
+  Emit('procedure AetherSocketClose(Fd: LongInt);');
+  Emit('begin');
+  Emit('  if Fd >= 0 then Sockets.CloseSocket(Fd);');
   Emit('end;');
   Emit('');
 

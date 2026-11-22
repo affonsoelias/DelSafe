@@ -224,9 +224,10 @@ begin
     Call := TASTCallExpr(Expr);
     if Call.Callee = 'Box' then Exit('Box');
     if Call.Callee = 'Some' then Exit('Option');
-    if (Call.Callee = 'ReadFile') or (Call.Callee = 'CharAt') or (Call.Callee = 'Substring') or (Call.Callee = 'ToString') or (Call.Callee = 'IntToStr') then Exit('String');
-    if (Call.Callee = 'Length') or (Call.Callee = 'StrToInt') then Exit('UInt32');
+    if (Call.Callee = 'ReadFile') or (Call.Callee = 'CharAt') or (Call.Callee = 'Substring') or (Call.Callee = 'ToString') or (Call.Callee = 'IntToStr') or (Call.Callee = 'SocketRecv') then Exit('String');
+    if (Call.Callee = 'Length') or (Call.Callee = 'StrToInt') or (Call.Callee = 'SocketCreate') or (Call.Callee = 'SocketListen') or (Call.Callee = 'SocketAccept') or (Call.Callee = 'SocketConnect') or (Call.Callee = 'SocketSend') then Exit('Int32');
     if (Call.Callee = 'FileExists') or (Call.Callee = 'WriteFile') then Exit('Bool');
+    if Call.Callee = 'SocketClose' then Exit('Void');
     if Assigned(FModule) then
     begin
       for I := 0 to FModule.Functions.Count - 1 do
@@ -513,6 +514,48 @@ begin
     if Call.Callee = 'StrToInt' then
     begin
       Result := 'AetherStrToInt(' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + ')';
+      Exit;
+    end;
+
+    if Call.Callee = 'SocketCreate' then
+    begin
+      Result := 'AetherSocketCreate()';
+      Exit;
+    end;
+
+    if Call.Callee = 'SocketListen' then
+    begin
+      Result := 'AetherSocketListen(' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + ', ' + EmitExpr(TASTCallArg(Call.Args[1]).Expr) + ')';
+      Exit;
+    end;
+
+    if Call.Callee = 'SocketAccept' then
+    begin
+      Result := 'AetherSocketAccept(' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + ')';
+      Exit;
+    end;
+
+    if Call.Callee = 'SocketConnect' then
+    begin
+      Result := 'AetherSocketConnect(' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + ', ' + EmitExpr(TASTCallArg(Call.Args[1]).Expr) + ')';
+      Exit;
+    end;
+
+    if Call.Callee = 'SocketSend' then
+    begin
+      Result := 'AetherSocketSend(' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + ', ' + EmitExpr(TASTCallArg(Call.Args[1]).Expr) + ')';
+      Exit;
+    end;
+
+    if Call.Callee = 'SocketRecv' then
+    begin
+      Result := 'AetherSocketRecv(' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + ', ' + EmitExpr(TASTCallArg(Call.Args[1]).Expr) + ')';
+      Exit;
+    end;
+
+    if Call.Callee = 'SocketClose' then
+    begin
+      Result := 'AetherSocketClose(' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + ')';
       Exit;
     end;
 
@@ -833,6 +876,16 @@ begin
   Emit('#include <string.h>');
   Emit('#include <assert.h>');
   Emit('#include <math.h>');
+  Emit('#ifdef _WIN32');
+  Emit('#include <winsock2.h>');
+  Emit('#include <ws2tcpip.h>');
+  Emit('typedef int socklen_t;');
+  Emit('#else');
+  Emit('#include <sys/socket.h>');
+  Emit('#include <netinet/in.h>');
+  Emit('#include <arpa/inet.h>');
+  Emit('#include <unistd.h>');
+  Emit('#endif');
   Emit('');
 
   // Helpers de Runtime do Aether
@@ -904,6 +957,116 @@ begin
   Emit('static inline int32_t AetherStrToInt(const char* s) {');
   Emit('    if (!s) return 0;');
   Emit('    return (int32_t)atoi(s);');
+  Emit('}');
+  Emit('');
+  Emit('// Helpers de Sockets Aether');
+  Emit('#ifdef _WIN32');
+  Emit('static inline void AetherSocketInit(void) {');
+  Emit('    static int wsa_init = 0;');
+  Emit('    if (!wsa_init) {');
+  Emit('        WSADATA wsa;');
+  Emit('        WSAStartup(MAKEWORD(2, 2), &wsa);');
+  Emit('        wsa_init = 1;');
+  Emit('    }');
+  Emit('}');
+  Emit('#endif');
+  Emit('');
+  Emit('static inline int32_t AetherSocketCreate(void) {');
+  Emit('#ifdef _WIN32');
+  Emit('    AetherSocketInit();');
+  Emit('#endif');
+  Emit('    return (int32_t)socket(AF_INET, SOCK_STREAM, 0);');
+  Emit('}');
+  Emit('');
+  Emit('static inline int32_t AetherSocketListen(uint16_t port, int32_t backlog) {');
+  Emit('#ifdef _WIN32');
+  Emit('    AetherSocketInit();');
+  Emit('#endif');
+  Emit('    int fd = socket(AF_INET, SOCK_STREAM, 0);');
+  Emit('    if (fd < 0) return -1;');
+  Emit('    int opt = 1;');
+  Emit('    setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, (const char*)&opt, sizeof(opt));');
+  Emit('    struct sockaddr_in addr;');
+  Emit('    memset(&addr, 0, sizeof(addr));');
+  Emit('    addr.sin_family = AF_INET;');
+  Emit('    addr.sin_port = htons(port);');
+  Emit('    addr.sin_addr.s_addr = INADDR_ANY;');
+  Emit('    if (bind(fd, (struct sockaddr*)&addr, sizeof(addr)) != 0) {');
+  Emit('#ifdef _WIN32');
+  Emit('        closesocket(fd);');
+  Emit('#else');
+  Emit('        close(fd);');
+  Emit('#endif');
+  Emit('        return -1;');
+  Emit('    }');
+  Emit('    if (listen(fd, backlog) != 0) {');
+  Emit('#ifdef _WIN32');
+  Emit('        closesocket(fd);');
+  Emit('#else');
+  Emit('        close(fd);');
+  Emit('#endif');
+  Emit('        return -1;');
+  Emit('    }');
+  Emit('    return (int32_t)fd;');
+  Emit('}');
+  Emit('');
+  Emit('static inline int32_t AetherSocketAccept(int32_t listen_fd) {');
+  Emit('    struct sockaddr_in addr;');
+  Emit('    socklen_t len = sizeof(addr);');
+  Emit('    int client_fd = accept(listen_fd, (struct sockaddr*)&addr, &len);');
+  Emit('    return (int32_t)client_fd;');
+  Emit('}');
+  Emit('');
+  Emit('static inline int32_t AetherSocketConnect(const char* host, uint16_t port) {');
+  Emit('#ifdef _WIN32');
+  Emit('    AetherSocketInit();');
+  Emit('#endif');
+  Emit('    int fd = socket(AF_INET, SOCK_STREAM, 0);');
+  Emit('    if (fd < 0) return -1;');
+  Emit('    struct sockaddr_in addr;');
+  Emit('    memset(&addr, 0, sizeof(addr));');
+  Emit('    addr.sin_family = AF_INET;');
+  Emit('    addr.sin_port = htons(port);');
+  Emit('    addr.sin_addr.s_addr = inet_addr(host ? host : "127.0.0.1");');
+  Emit('    if (connect(fd, (struct sockaddr*)&addr, sizeof(addr)) != 0) {');
+  Emit('#ifdef _WIN32');
+  Emit('        closesocket(fd);');
+  Emit('#else');
+  Emit('        close(fd);');
+  Emit('#endif');
+  Emit('        return -1;');
+  Emit('    }');
+  Emit('    return (int32_t)fd;');
+  Emit('}');
+  Emit('');
+  Emit('static inline int32_t AetherSocketSend(int32_t fd, const char* data) {');
+  Emit('    if (!data) return 0;');
+  Emit('    size_t len = strlen(data);');
+  Emit('    if (len == 0) return 0;');
+  Emit('    return (int32_t)send(fd, data, (int)len, 0);');
+  Emit('}');
+  Emit('');
+  Emit('static inline char* AetherSocketRecv(int32_t fd, int32_t max_len) {');
+  Emit('    if (max_len <= 0) max_len = 4096;');
+  Emit('    char* buf = (char*)malloc(max_len + 1);');
+  Emit('    int bytes = recv(fd, buf, max_len, 0);');
+  Emit('    if (bytes > 0) {');
+  Emit('        buf[bytes] = ''\0'';');
+  Emit('        return buf;');
+  Emit('    } else {');
+  Emit('        buf[0] = ''\0'';');
+  Emit('        return buf;');
+  Emit('    }');
+  Emit('}');
+  Emit('');
+  Emit('static inline void AetherSocketClose(int32_t fd) {');
+  Emit('    if (fd >= 0) {');
+  Emit('#ifdef _WIN32');
+  Emit('        closesocket(fd);');
+  Emit('#else');
+  Emit('        close(fd);');
+  Emit('#endif');
+  Emit('    }');
   Emit('}');
   Emit('');
 

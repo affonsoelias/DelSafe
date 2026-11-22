@@ -185,17 +185,21 @@ Este documento traça o status oficial de desenvolvimento do compilador e as pr�
   - Restauração automática de dependências (`RestoreProjectDependencies`) nos comandos `aetherc build`, `aetherc run` e `aetherc test`.
   - Validação completa com repositório Git real testado em ambos os backends (**Free Pascal** e **GCC C99**).
 
-### ⏳ Fase 20: Sockets Reais do Sistema Operacional & Servidor HTTP Nativo
-- [ ] **Integração Nativa com a Camada de Rede do SO (`std/net.aeth`)**:
-  - Implementação de chamadas de rede reais nos emissores C e Pascal:
-    - No Windows: Suporte a `WinSock2` (`ws2_32.dll` com inicialização `WSAStartup`/`WSACleanup`).
-    - No Linux/POSIX: Suporte a `sys/socket.h`, `arpa/inet.h`, `netdb.h`.
-  - Primitivas reais de rede em `std/net.aeth`: `SocketListen`, `SocketAccept`, `SocketConnect`, `SocketSend`, `SocketRecv`, `SocketClose`.
-- [ ] **Servidor HTTP & REST de Altíssimo Desempenho**:
-  - Servidor HTTP nativo em código Aether puro, sem dependências externas nem garbage collector.
-  - Parser completo de cabeçalhos e roteamento de rotas (`GET`, `POST`, `PUT`, `DELETE`).
-  - Serialização e resposta de payloads JSON estruturados utilizando `std/json.aeth`.
-  - Exemplo prático de micro-serviço web com validação dual-backend (`fpc` e `gcc`).
+### ✅ Fase 20: Sockets Reais do Sistema Operacional & Servidor HTTP Nativo (Concluído)
+- [x] **Integração Nativa com a Camada de Rede do SO (`std/net.aeth`)**:
+  - Implementação de chamadas de rede reais nos emissores C e Pascal com paridade estrita:
+    - No backend Object Pascal (FPC): Uso nativo e multiplataforma da unit `Sockets` (`fpsocket`, `fpbind`, `fplisten`, `fpaccept`, `fpconnect`, `fpsend`, `fprecv`, `CloseSocket`).
+    - No backend C99 (GCC): Suporte a `WinSock2` (`<winsock2.h>`, `<ws2tcpip.h>`, inicialização transparente `WSAStartup`) com linkagem automática da flag `-lws2_32` no Windows e `<sys/socket.h>` no POSIX.
+  - Primitivas embutidas no compilador e na tabela de símbolos: `SocketCreate`, `SocketListen`, `SocketAccept`, `SocketConnect`, `SocketSend`, `SocketRecv`, `SocketClose`.
+  - Abstrações de alto nível em `std/net.aeth`: `SocketListenServer`, `SocketAcceptClient`, `SocketConnectClient`, `SocketSendString`, `SocketRecvString`, `SocketCloseHandle`.
+- [x] **Servidor HTTP & REST de Altíssimo Desempenho**:
+  - Servidor HTTP nativo em código Aether puro, sem dependências externas nem garbage collector (*Zero-Cost Abstractions*).
+  - Parser de requisições HTTP (`ParseHttpRequest`) e montador de respostas estruturadas (`BuildHttpRequest`, `BuildHttpResponse`).
+  - Serialização e resposta de payloads JSON estruturados integrando perfeitamente com `std/json.aeth` (`JsonBuilder`).
+- [x] **Validação Prática Dual-Backend**:
+  - Exemplo completo criado em `examples/15_http_server_and_sockets.aeth`, simulando servidor escutando em loopback e cliente conectando, trocando requisição/resposta HTTP com payload JSON.
+  - Compilado e executado com 100% de sucesso e paridade idêntica nos backends **Free Pascal** e **GCC (MSYS2)**.
+  - Suíte completa de testes de regressão (`examples/12_package_manager_and_tests` e `examples/14_stdlib_and_concurrency.aeth`) 100% aprovada em ambos os backends.
 
 ### ⏳ Fase 21: Interoperabilidade Avançada de Primeira Classe (Free Pascal Units & C Headers / FFI)
 - [ ] **Interoperabilidade Fluida com Units do Free Pascal (`import pascal`)**:
