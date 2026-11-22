@@ -1,15 +1,38 @@
-# Chapter 06: Records & Uniform Function Call Syntax (UFCS)
+# Chapter 06: Object-Oriented Programming (OOP): Records, UFCS & Composition
 
-Aether avoids complex, deep inheritance hierarchies. Instead, it provides **Data Records** coupled with **Uniform Function Call Syntax (UFCS)** for elegant, object-oriented method syntax with value-type performance.
+Aether provides a modern, high-performance approach to **Object-Oriented Programming (OOP)**. Instead of relying on heavyweight classes and fragile inheritance trees, Aether follows the proven architectural paradigm of modern systems languages (such as Rust, Go, and Ada 2012): **Composition over Inheritance**, **Value-Type Records**, and **Uniform Function Call Syntax (UFCS)**.
 
 ---
 
-## 1. Declaring Records
+## 1. The Object-Oriented Philosophy of Aether
 
-A record is a composite data structure laid out contiguously in memory:
+In classic object-oriented languages (like Java, C++, or pre-2000 Delphi), OOP is built around classes with inheritance (`class Car extends Vehicle`):
+
+### Why Aether Rejects Classic Class Inheritance:
+1. **The Fragile Base Class Problem:** Modifying a base class silently breaks assumptions in derived subclasses throughout the codebase.
+2. **Virtual Method Indirection (vtable penalties):** Every virtual call requires pointer chasing, destroying CPU instruction caches and branch prediction.
+3. **Forced Heap Allocation & Garbage Collection:** Classic objects live in the heap, causing memory fragmentation and GC pauses.
+4. **State Bloat:** Subclasses inherit every internal field of their ancestors, creating tightly coupled, bloated data structures.
+
+### The Aether Solution:
+Aether satisfies all fundamental pillars of OOP with **Zero-Cost Abstractions**:
+
+| OOP Pillar | Classic OOP (Java / Delphi) | Modern Aether OOP |
+| :--- | :--- | :--- |
+| **Encapsulation & State** | Heap-allocated `class` | Stack-allocated **`record`** (contiguous, predictable, 0 GC) |
+| **Methods & Behavior** | Methods inside class body | **UFCS** (`instance.Method()`) with explicit ownership |
+| **Polymorphism** | `virtual` / `override` vtables | **`trait`** contracts & Generics with Trait Bounds |
+| **Code Reuse** | Subclassing (`class B : A`) | **Composition** (nesting records) & `[derive(...)]` |
+| **Visibility** | `private` / `protected` / `public` | Module boundaries and `export` declarations |
+
+---
+
+## 2. Encapsulation: Declaring Records & Constructors
+
+A `record` represents the object's encapsulated state. Fields are laid out contiguously in memory:
 
 ```aether
-module records_demo;
+module geometry;
 
 type
     Point = record
@@ -17,6 +40,7 @@ type
         y: Float64;
     end;
 
+    // Composition: Rectangle encapsulates a Point for its origin
     Rectangle = record
         origin: Point;
         width: Float64;
@@ -24,50 +48,59 @@ type
     end;
 ```
 
----
-
-## 2. Fast Construction
-
-Every record in Aether automatically receives a positional constructor:
+### Positional Constructors
+Every record automatically provides a canonical, type-safe constructor:
 
 ```aether
 program Main;
 var
-    p1: Point;
+    pt: Point;
     rect: Rectangle;
 begin
-    p1 := Point(10.0, 20.0);
-    rect := Rectangle(p1, 100.0, 50.0);
+    pt := Point(10.0, 20.0);
+    rect := Rectangle(pt, 100.0, 50.0);
 
-    PrintLn("Point coordinates: (" + FloatToStr(p1.x) + ", " + FloatToStr(p1.y) + ")");
-    PrintLn("Rectangle width: " + FloatToStr(rect.width));
+    PrintLn("Origin: (" + FloatToStr(rect.origin.x) + ", " + FloatToStr(rect.origin.y) + ")");
+    PrintLn("Width: " + FloatToStr(rect.width));
 end.
 ```
 
 ---
 
-## 3. Uniform Function Call Syntax (UFCS)
+## 3. Methods & Uniform Function Call Syntax (UFCS)
 
-In traditional languages, there is a strict divide between free functions (`ComputeArea(rect)`) and methods (`rect.ComputeArea()`).
+In traditional languages, there is a rigid divide between procedural functions (`CalculateArea(rect)`) and methods (`rect.CalculateArea()`).
 
-In Aether, **UFCS unifies both**: any function whose first parameter is a record can be invoked using method syntax `instance.Function(...)`!
+In Aether, **UFCS unifies both worlds**: any function whose first parameter receives the record (either by `borrow`, `mut borrow`, or `take`) can be called using standard object-oriented dot-syntax:
+
+$$\text{Function}(x, y) \iff x.\text{Function}(y)$$
+
+### Defining Read-Only and Mutating Methods:
 
 ```aether
-module ufcs_demo;
+module shapes;
 
 type
     Circle = record
         radius: Float64;
     end;
 
-function Area(borrow c: Circle): Float64
+// Read-Only Method: Takes an immutable borrow of self
+function Area(borrow self: Circle): Float64
 begin
-    return 3.1415926535 * c.radius * c.radius;
+    return 3.1415926535 * self.radius * self.radius;
 end;
 
-function Scale(mut borrow c: Circle, factor: Float64): Void
+// Read-Only Method: Computes perimeter
+function Perimeter(borrow self: Circle): Float64
 begin
-    c.radius := c.radius * factor;
+    return 2.0 * 3.1415926535 * self.radius;
+end;
+
+// Mutating Method: Takes an exclusive mutable borrow of self
+function Scale(mut borrow self: Circle, factor: Float64): Void
+begin
+    self.radius := self.radius * factor;
 end;
 
 program Main;
@@ -77,40 +110,102 @@ var
 begin
     c := Circle(10.0);
 
-    // Call as an object method:
+    // Calling methods with natural OO dot-notation:
     a := c.Area();
     PrintLn("Initial area: " + FloatToStr(a));
+    PrintLn("Perimeter: " + FloatToStr(c.Perimeter()));
 
-    // Mutating method:
+    // Mutating method call (guaranteed safe by the Borrow Checker):
     c.Scale(2.0);
     PrintLn("Scaled area: " + FloatToStr(c.Area()));
 
-    // Both calling syntaxes are 100% equivalent:
-    // Area(c) == c.Area()
+    // Both syntax forms are identical under the hood:
+    // c.Area() <===> Area(c)
 end.
 ```
 
-### Advantages of UFCS:
-1. **Zero Runtime Overhead:** No vtables, no virtual dispatch pointers, and no dynamic heap allocation.
-2. **Extensibility:** You can add new "methods" to any record in any module without modifying the original record definition!
-3. **IDE Autocomplete:** IDEs and the Aether LSP can discover all available functions for any record type when you type `.`.
+### The Architectural Benefits of UFCS:
+1. **Zero Runtime Overhead:** Direct function calls without vtables or pointer overhead.
+2. **Open Extensibility:** You can add new methods to *any* record type (even types from third-party libraries) without altering the original record definition!
+3. **First-Class Tooling & IDE Autocomplete:** The Aether LSP and IDEs discover all available functions for any record type when you type `.`.
 
 ---
 
-## 4. Automatic Derivations on Records
+## 4. Composition Over Inheritance
 
-Records can automatically derive core behaviors with compile-time attributes:
+Rather than creating fragile inheritance hierarchies like `Vehicle -> MotorVehicle -> Car`, Aether models domains by composing independent, reusable components:
+
+```aether
+module vehicle_system;
+
+type
+    Engine = record
+        horsepower: Int32;
+        is_running: Bool;
+    end;
+
+    GPS = record
+        latitude: Float64;
+        longitude: Float64;
+    end;
+
+    // Car is composed of an Engine and a GPS unit
+    Car = record
+        model: String;
+        engine: Engine;
+        navigation: GPS;
+    end;
+
+function Start(mut borrow self: Engine): Void
+begin
+    self.is_running := true;
+end;
+
+function Drive(mut borrow self: Car): Void
+begin
+    self.engine.Start();
+    PrintLn(self.model + " is driving smoothly!");
+end;
+
+program Main;
+var
+    my_car: Car;
+begin
+    my_car := Car("Aether GT", Engine(450, false), GPS(-23.5505, -46.6333));
+    my_car.Drive();
+end.
+```
+
+---
+
+## 5. Automatic Derivations on Objects (`[derive(...)]`)
+
+To eliminate tedious boilerplate, records can automatically derive fundamental object behaviors at compile time:
 
 ```aether
 [derive(Debug, JSON, Clone, Equals)]
 type
-    User = record
-        id: Int32;
-        username: String;
-        is_active: Bool;
+    Account = record
+        id: Int64;
+        owner: String;
+        balance: Float64;
     end;
 ```
 
-In the next chapter, we will explore traits, generics, and how derived traits work under the hood.
+The compiler synthesizes:
+- **`Debug` (`acc.ToString()`):** Formats the object into a readable debug representation.
+- **`JSON` (`acc.ToJSON()`):** Serializes the object into a valid JSON string.
+- **`Clone` (`acc.Clone()`):** Deep-copies the object with independent memory ownership.
+- **`Equals` (`acc.Equals(borrow other)`):** Compares all fields for equality.
 
-➡️ **Next:** **[Chapter 07: Traits, Generics & Derives](07_TRAITS_GENERICS_AND_DERIVES.md)**
+---
+
+## 6. Summary
+
+1. **Aether is fully object-oriented**, but ditches legacy class inheritance in favor of **Composition, Records, and UFCS**.
+2. **Records** provide contiguous, cache-friendly value semantics with zero garbage collection overhead.
+3. **UFCS** enables clean `instance.Method()` dot-syntax while retaining the simplicity and speed of pure functions.
+4. **Borrow Checker integration** ensures that methods taking `mut borrow self` can never suffer from data races or concurrent aliasing bugs.
+5. In the next chapter, we will see how **Traits** provide the final pillar of OOP: **Polymorphism and Interface Contracts**.
+
+➡️ **Next:** **[Chapter 07: Traits, Generics & Compiler Derivations](07_TRAITS_GENERICS_AND_DERIVES.md)**

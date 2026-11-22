@@ -22,7 +22,7 @@ Aether combines the structural elegance and readability of Pascal with modern sy
 | **[03. Control Flow & Pattern Matching](03_CONTROL_FLOW_AND_MATCH.md)** | Deterministic Execution | Unambiguous `if...then...else...end;`, loops, algebraic enums, and compile-time exhaustive `match`. |
 | **[04. Functions & Contracts](04_FUNCTIONS_AND_CONTRACTS.md)** | Design by Contract (DbC) | Signatures, pre-conditions (`require`), post-conditions (`ensure`), debug vs release assertion modes. |
 | **[05. The Borrow Checker](05_THE_BORROW_CHECKER.md)** | Memory Safety | Ownership semantics, move semantics (`take`), immutable borrows (`borrow`), mutable borrows (`mut borrow`), aliasing XOR mutability. |
-| **[06. Records & UFCS](06_RECORDS_AND_UFCS.md)** | Data Modeling | Value-type records, fast constructors, memory layout, Uniform Function Call Syntax (`val.method()`). |
+| **[06. Object-Oriented Programming (Records & UFCS)](06_RECORDS_AND_UFCS.md)** | Modern OOP Architecture | Object-Oriented design in Aether, encapsulation with records, UFCS method syntax (`val.method()`), composition over inheritance, and derivations. |
 | **[07. Traits, Generics & Derives](07_TRAITS_GENERICS_AND_DERIVES.md)** | Modern Abstractions | Interfaces without inheritance, trait bounds (`<T: Bound>`), compiler derivations (`Debug`, `JSON`, `Clone`, `Equals`). |
 | **[08. Error Handling (Result & Option)](08_ERROR_HANDLING_RESULT_OPTION.md)** | Safe Error Handling | Monadic handling, eliminating null-pointer crashes, `Option<T>` and `Result<T, E>`. |
 | **[09. Async/Await & Concurrency](09_ASYNC_AWAIT_AND_CONCURRENCY.md)** | Non-blocking Systems | `async function`, `AetherTask`, cooperative event loops, worker threads, and structured concurrency. |
