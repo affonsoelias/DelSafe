@@ -716,6 +716,8 @@ begin
   if Expr is TASTIdentifierExpr then
   begin
     Id := TASTIdentifierExpr(Expr);
+    if Assigned(FCurrentFunc) and SameText(Id.Name, 'result') then
+      Exit(FCurrentFunc.ReturnType);
     if Assigned(FCurrentFunc) then
     begin
       for I := 0 to FCurrentFunc.LocalVars.Count - 1 do
@@ -826,6 +828,11 @@ begin
   end
   else if Expr is TASTIndexExpr then
   begin
+    if TASTIndexExpr(Expr).Target is TASTSetLiteralExpr then
+    begin
+      if TASTSetLiteralExpr(TASTIndexExpr(Expr).Target).Elements.Count > 0 then
+        Exit(GetExprTypeName(TASTExpr(TASTSetLiteralExpr(TASTIndexExpr(Expr).Target).Elements[0])));
+    end;
     TargetType := ResolveAliasType(GetExprTypeName(TASTIndexExpr(Expr).Target));
     if TargetType = 'String' then
       Exit('Char')
@@ -1191,6 +1198,20 @@ begin
   if Expr is TASTIndexExpr then
   begin
     Idx := TASTIndexExpr(Expr);
+    if Idx.Target is TASTSetLiteralExpr then
+    begin
+      ValF := ResolveAliasType(GetExprTypeName(Idx));
+      if ValF = '' then ValF := 'Int32';
+      ArgsStr := '';
+      for I := 0 to TASTSetLiteralExpr(Idx.Target).Elements.Count - 1 do
+      begin
+        if I > 0 then ArgsStr := ArgsStr + ', ';
+        ArgsStr := ArgsStr + EmitExpr(TASTExpr(TASTSetLiteralExpr(Idx.Target).Elements[I]));
+      end;
+      TargetStr := EmitTypeRef('array of ' + ValF);
+      Result := Format('%s.Create(%s)[%s]', [TargetStr, ArgsStr, EmitExpr(TASTExpr(Idx.Indices[0]))]);
+      Exit;
+    end;
     TargetT := ResolveAliasType(GetExprTypeName(Idx.Target));
     if TargetT = 'String' then
     begin
@@ -1903,7 +1924,7 @@ begin
   else if Stmt is TASTReturnStmt then
   begin
     Ret := TASTReturnStmt(Stmt);
-    if FActiveDefers.Count > 0 then
+    if (FActiveDefers.Count > 0) or (Assigned(FCurrentFunc) and (FCurrentFunc.Ensures.Count > 0)) then
     begin
       if Assigned(Ret.Expr) then
       begin
@@ -1911,12 +1932,22 @@ begin
           Emit(Format('Result.is_completed := True; Result.value := %s;', [EmitExpr(Ret.Expr)]))
         else
           Emit(Format('Result := %s;', [EmitExpr(Ret.Expr)]));
-        EmitActiveDefers(0);
+        if FActiveDefers.Count > 0 then
+          EmitActiveDefers(0);
+        if Assigned(FCurrentFunc) then
+          for J := 0 to FCurrentFunc.Ensures.Count - 1 do
+            Emit(Format('Assert(%s, ''Violacao de pos-condicao (ensure) na funcao %s'');',
+              [EmitExpr(TASTExpr(FCurrentFunc.Ensures[J])), FCurrentFunc.Name]));
         Emit('Exit(Result);');
       end
       else
       begin
-        EmitActiveDefers(0);
+        if FActiveDefers.Count > 0 then
+          EmitActiveDefers(0);
+        if Assigned(FCurrentFunc) then
+          for J := 0 to FCurrentFunc.Ensures.Count - 1 do
+            Emit(Format('Assert(%s, ''Violacao de pos-condicao (ensure) na funcao %s'');',
+              [EmitExpr(TASTExpr(FCurrentFunc.Ensures[J])), FCurrentFunc.Name]));
         Emit('Exit;');
       end;
     end
@@ -2361,6 +2392,13 @@ begin
   FLoopDeferBase := 0;
   EmitStmtList(Func.Body);
   FActiveDefers.Clear;
+
+  if (Func.Ensures.Count > 0) and ((Func.Body.Count = 0) or not (Func.Body[Func.Body.Count - 1] is TASTReturnStmt)) then
+  begin
+    for I := 0 to Func.Ensures.Count - 1 do
+      Emit(Format('Assert(%s, ''Violacao de pos-condicao (ensure) na funcao %s'');',
+        [EmitExpr(TASTExpr(Func.Ensures[I])), Func.Name]));
+  end;
 
   DecIndent;
   Emit('end;');
@@ -2901,7 +2939,7 @@ begin
   CollectMapsFromModule(AModule, MapTags, MapKeys, MapVals);
 
   EffectiveLibrary := AsLibrary;
-  if not EffectiveLibrary then
+  if (not EffectiveLibrary) and (not Assigned(AModule.ProgramBlock)) then
   begin
     for I := 0 to AModule.Functions.Count - 1 do
     begin

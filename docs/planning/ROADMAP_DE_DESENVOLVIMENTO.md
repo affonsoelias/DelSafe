@@ -796,11 +796,11 @@ Mapeamento técnico completo dos recursos pendentes identificados no compilador 
 - [ ] **1.5 Tipos de Função (Callbacks) & Closures/Lambdas**:
   - Declaração de tipos de função (`type Predicate = function(Int32): Bool;`) e expressões lambda (`fn(x: Int32): Int32 => x * 2`) nos backends Pascal e C99.
 
-### 📋 Fase 50: 2. Contratos (`contract` / `require` / `ensure`) - PLANEJADA
-- [ ] **2.1 Emissão Real de Pós-Condições (`ensure`) nos Dois Backends**:
+### ✅ Fase 50: 2. Contratos (`contract` / `require` / `ensure`) - CONCLUÍDA
+- [x] **2.1 Emissão Real de Pós-Condições (`ensure`) nos Dois Backends**:
   - Emitir `Assert(...)` (Pascal) e `assert(...)` (C99) para todas as expressões de `Func.Ensures` antes de cada ponto de retorno (`TASTReturnStmt`) e na saída implícita da função.
-- [ ] **2.2 Suporte à Variável Especial `result` em `ensure`**:
-  - Registrar `result` no escopo de verificação de pós-condições em `TAetherTypeChecker.CheckFunction` com o `ReturnType` da função e unificar captura de retorno antes dos asserts `ensure` em ambos os backends.
+- [x] **2.2 Suporte à Variável Especial `result` em `ensure` & Genéricos com Contrato**:
+  - Registrar `result` no escopo de verificação de pós-condições em `TAetherTypeChecker.CheckFunction` com o `ReturnType` da função, preservar `Requires`/`Ensures` em `MonomorphizeFunction` e unificar captura de retorno antes dos asserts `ensure` em ambos os backends. Validado em `tests/11_fase50_56_contracts_ensure_ufcs_lit_fmt_header_test.aeth`.
 
 ### 📋 Fase 51: 3. Expressões, Operadores e Controle de Fluxo - PLANEJADA
 - [ ] **3.1 Operador de Propagação Rápida de Erro (`?` / `try expr`)**:
@@ -847,10 +847,10 @@ Mapeamento técnico completo dos recursos pendentes identificados no compilador 
 - [ ] **7.4 Parser JSON Estruturado em `std/json.aeth`**:
   - Substituir a busca por substring por um parser recursivo compatível com objetos aninhados, arrays `[...]`, `Float64` e escapes `\"`/`\\`/`\n`.
 
-### 📋 Fase 56: 8. Ferramental do Compilador (`fmt`, `emit-header`, `lexer`) - PLANEJADA
-- [ ] **8.1 Correção do Formatador Canônico (`aetherc fmt` — `uAetherFormatter.pas`)**:
-  - Reescrever `NormalizeOperators` para respeitar tokens compostos multi-caractere (`=>`, `+=`, `-=`, `*=`, `<>`, `:=`, `..`) sem inserção indevida de espaços e corrigir o rastreamento de indentação em `if ... then ... else ... end;`.
-- [ ] **8.2 Exportação Completa no Gerador de Headers C (`aetherc emit-header` — `uAetherHeaderGen.pas`)**:
+### ✅ Fase 56: 8. Ferramental do Compilador (`fmt`, `emit-header`, `lexer`) - CONCLUÍDA
+- [x] **8.1 Correção do Formatador Canônico (`aetherc fmt` — `uAetherFormatter.pas`)**:
+  - Reescrever `NormalizeOperators` para respeitar tokens compostos multi-caractere (`=>`, `+=`, `-=`, `*=`, `/=`, `<>`, `<=`, `>=`, `:=`, `..`), parâmetros genéricos (`<T>`) e `-` unário sem inserção indevida de espaços, além de reescrever `FormatSource` com pilha estruturada para `if ... then ... else ... end;`, `match`, `contract`/`require`/`ensure` e seções `type`/`var`/`let`.
+- [x] **8.2 Exportação Completa no Gerador de Headers C (`aetherc emit-header` — `uAetherHeaderGen.pas`)**:
   - Emitir declarações de `enum`, `type alias`, `subrange` e `array` fixo nos arquivos `.h` gerados além de `record`s e funções exportadas.
-- [ ] **8.3 Desambiguação Léxica UFCS em Literais Numéricos (`uAetherLexer.pas`)**:
-  - Evitar que `ScanNumber` consuma `.` como separador decimal quando o caractere seguinte não for dígito (`0..9`), habilitando chamadas UFCS diretamente em literais (`55.Clamp(0, 100)`).
+- [x] **8.3 Desambiguação UFCS & Indexação Direta em Literais (`uAetherParser.pas` / `uAetherTypeChecker.pas`)**:
+  - Permitir postfixos (`.Method()`, `.Field`, `[i]`, `^`) diretamente sobre literais numéricos/string/array e expressões parentizadas (`55.Clamp(0, 40)`, `(-42).Abs()`, `"  aether  ".Trim()`, `"Aether"[0]`, `[10, 20, 30][1]`). Validado em `tests/11_fase50_56_contracts_ensure_ufcs_lit_fmt_header_test.aeth` (`11/11 PASS` nos dois backends).

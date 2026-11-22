@@ -1,0 +1,146 @@
+module Fase5056ContractsEnsureUfcsLitFmtHeaderTest;
+
+type
+    JobPhase = (Queued, Running, Finished);
+    TextAlias = String;
+    SmallScore = 0..10;
+    Vec3 = array[3] of Int32;
+    Ponto = record
+        x: Int32;
+        y: Int32;
+    end;
+
+function SafeDoublePositive(x: Int32): Int32
+contract
+    require
+        x > 0;
+    ensure
+        result > x;
+begin
+    if x > 100 then
+        return x + 10;
+    end;
+    return x * 2;
+end;
+
+function MakePositivePoint(ax: Int32, ay: Int32): Ponto
+contract
+    require
+        ax > 0;
+        ay > 0;
+    ensure
+        (result.x > 0) and (result.y > 0);
+begin
+    return Ponto(x: ax, y: ay);
+end;
+
+function NonEmptyTag(prefix: TextAlias): String
+contract
+    require
+        prefix.Length() > 0;
+    ensure
+        result.Length() > 0;
+begin
+    return "[" + prefix + "]";
+end;
+
+function ReturnWithDeferAndEnsure(mut borrow acc: Int32, val: Int32): Int32
+contract
+    require
+        val > 0;
+    ensure
+        result >= 10;
+begin
+    defer acc := acc + 100;
+    if val < 10 then
+        return 10;
+    end;
+    return val;
+end;
+
+function BumpPointInPlace(mut borrow p: Ponto): Void
+contract
+    require
+        (p.x >= 0) and (p.y >= 0);
+    ensure
+        (p.x > 0) and (p.y > 0);
+begin
+    p.x := p.x + 1;
+    p.y := p.y + 1;
+end;
+
+function IdentityPositive<T>(val: T): T
+contract
+    require
+        val > 0;
+    ensure
+        result > 0;
+begin
+    return val;
+end;
+
+export cdecl function ExportedStep(p: Ponto, phase: JobPhase, score: SmallScore, vec: Vec3): JobPhase
+begin
+    if (p.x > 0) and (score >= 0) and (vec[0] >= 0) then
+        return phase;
+    end;
+    return JobPhase.Queued;
+end;
+
+program Main;
+var
+    a, b, acc, absNeg, clampedLit, arrLitElem, genRes: Int32;
+    pt: Ponto;
+    tag, cleanStr: String;
+    ch0: Char;
+    arr3: Vec3;
+    phaseOut: JobPhase;
+begin
+    // 1. Contratos ensure + result (retorno simples, record, String, defer+early return, Void, generico)
+    a := SafeDoublePositive(7);
+    Assert(a = 14);
+    b := SafeDoublePositive(120);
+    Assert(b = 130);
+
+    pt := MakePositivePoint(3, 5);
+    Assert((pt.x = 3) and (pt.y = 5));
+
+    tag := NonEmptyTag("CORE");
+    Assert(tag = "[CORE]");
+
+    acc := 0;
+    Assert(ReturnWithDeferAndEnsure(mut borrow acc, 4) = 10);
+    Assert(acc = 100);
+    Assert(ReturnWithDeferAndEnsure(mut borrow acc, 25) = 25);
+    Assert(acc = 200);
+
+    pt := Ponto(x: 0, y: 2);
+    BumpPointInPlace(mut borrow pt);
+    Assert((pt.x = 1) and (pt.y = 3));
+
+    genRes := IdentityPositive(42);
+    Assert(genRes = 42);
+
+    // 2. Pos-fixos diretos em literais e expressoes (Fase 56.3)
+    clampedLit := 55.Clamp(0, 40);
+    Assert(clampedLit = 40);
+
+    absNeg := (-42).Abs();
+    Assert(absNeg = 42);
+
+    cleanStr := "  aether  ".Trim().UpperCase();
+    Assert(cleanStr = "AETHER");
+
+    ch0 := "Aether"[0];
+    Assert(ch0 = 'A');
+
+    arrLitElem := [10, 20, 30][1];
+    Assert(arrLitElem = 20);
+
+    // 3. Exercicio dos tipos exportados em C header (enum, alias, subfaixa, array fixo)
+    arr3 := [1, 2, 3];
+    phaseOut := ExportedStep(pt, JobPhase.Finished, 9, arr3);
+    Assert(phaseOut = JobPhase.Finished);
+
+    PrintLn("=== FASE 50 + 56 TEST PASSOU (ENSURE+RESULT, UFCS LITERAIS, FMT, EMIT-HEADER) ===");
+end.

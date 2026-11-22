@@ -1629,54 +1629,41 @@ begin
     Exit(TASTIfExpr.Create(Line, Col, CondExpr, ThenExpr, ElseExpr));
   end;
 
-  // Literais
+  // Literais, arrays/conjuntos, agrupamento por parenteses ou identificadores/chamadas
   if Check(tokIntLiteral) then
   begin
     Result := TASTLiteralExpr.Create(Line, Col, lkInt, FCurTok.Value);
     Advance;
-    Exit;
-  end;
-
-  if Check(tokFloatLiteral) then
+  end
+  else if Check(tokFloatLiteral) then
   begin
     Result := TASTLiteralExpr.Create(Line, Col, lkFloat, FCurTok.Value);
     Advance;
-    Exit;
-  end;
-
-  if Check(tokStringLiteral) then
+  end
+  else if Check(tokStringLiteral) then
   begin
     Result := TASTLiteralExpr.Create(Line, Col, lkString, FCurTok.Value);
     Advance;
-    Exit;
-  end;
-
-  if Check(tokInterpStringLiteral) then
+  end
+  else if Check(tokInterpStringLiteral) then
   begin
     Result := ParseInterpolatedString(FCurTok.Value, Line, Col);
     Advance;
-    Exit;
-  end;
-
-  if Check(tokCharLiteral) then
+  end
+  else if Check(tokCharLiteral) then
   begin
     Result := TASTLiteralExpr.Create(Line, Col, lkChar, FCurTok.Value);
     Advance;
-    Exit;
-  end;
-
-  if Match(tokTrue) then
-    Exit(TASTLiteralExpr.Create(Line, Col, lkBool, 'true'));
-
-  if Match(tokFalse) then
-    Exit(TASTLiteralExpr.Create(Line, Col, lkBool, 'false'));
-
-  if Match(tokNil) then
-    Exit(TASTLiteralExpr.Create(Line, Col, lkNil, 'nil'));
-
-  // Literal de Conjunto [elem1, elem2, ...] ou []
-  if Match(tokLBracket) then
+  end
+  else if Match(tokTrue) then
+    Result := TASTLiteralExpr.Create(Line, Col, lkBool, 'true')
+  else if Match(tokFalse) then
+    Result := TASTLiteralExpr.Create(Line, Col, lkBool, 'false')
+  else if Match(tokNil) then
+    Result := TASTLiteralExpr.Create(Line, Col, lkNil, 'nil')
+  else if Match(tokLBracket) then
   begin
+    // Literal de Conjunto [elem1, elem2, ...] ou []
     Result := TASTSetLiteralExpr.Create(Line, Col);
     if not Check(tokRBracket) then
     begin
@@ -1685,19 +1672,14 @@ begin
       until not Match(tokComma);
     end;
     Expect(tokRBracket, 'Esperado "]" ao fechar literal de conjunto');
-    Exit;
-  end;
-
-  // Parenteses (Expr)
-  if Match(tokLParen) then
+  end
+  else if Match(tokLParen) then
   begin
+    // Parenteses (Expr)
     Result := ParseExpr;
     Expect(tokRParen, 'Esperado ")" para fechar expressao');
-    Exit;
-  end;
-
-  // Identificador ou Chamada de Funcao ou Acesso a Membro / Indexacao / Desreferencia
-  if Check(tokIdentifier) then
+  end
+  else if Check(tokIdentifier) then
   begin
     Id := Expect(tokIdentifier).Value;
 
@@ -1741,65 +1723,63 @@ begin
     begin
       Result := TASTIdentifierExpr.Create(Line, Col, Id);
     end;
+  end
+  else
+    raise EAetherParserError.Create(Format('Expressao inesperada: "%s"', [FCurTok.Value]), Line, Col);
 
-    // Acesso sequencial: membro (obj.campo / UFCS), indexacao (arr[i]) ou desreferencia (ptr^)
-    while Check(tokDot) or Check(tokLBracket) or Check(tokCaret) do
+  // Acesso sequencial para qualquer expressao primaria: membro (obj.campo / UFCS), indexacao (arr[i]) ou desreferencia (ptr^)
+  while Check(tokDot) or Check(tokLBracket) or Check(tokCaret) do
+  begin
+    if Match(tokCaret) then
     begin
-      if Match(tokCaret) then
+      Result := TASTUnaryExpr.Create(Line, Col, '^', Result);
+    end
+    else if Match(tokDot) then
+    begin
+      Id := Expect(tokIdentifier, 'Esperado identificador apos "."').Value;
+      if Match(tokLParen) then
       begin
-        Result := TASTUnaryExpr.Create(Line, Col, '^', Result);
-      end
-      else if Match(tokDot) then
-      begin
-        Id := Expect(tokIdentifier, 'Esperado identificador apos "."').Value;
-        if Match(tokLParen) then
-        begin
-          // UFCS: obj.Metodo(args...) e transformado transparentemente em Metodo(borrow obj, args...)
-          CallExpr := TASTCallExpr.Create(Line, Col, Id);
-          CallExpr.Args.Add(TASTCallArg.Create(Line, Col, owBorrow, Result));
+        // UFCS: expr.Metodo(args...) e transformado transparentemente em Metodo(borrow expr, args...)
+        CallExpr := TASTCallExpr.Create(Line, Col, Id);
+        CallExpr.Args.Add(TASTCallArg.Create(Line, Col, owBorrow, Result));
 
-          if not Check(tokRParen) then
-          begin
-            repeat
-              ArgOwn := owNone;
-              if Match(tokTake) then ArgOwn := owTake
-              else if Match(tokBorrow) then ArgOwn := owBorrow
-              else if Match(tokMut) then
-              begin
-                Expect(tokBorrow);
-                ArgOwn := owMutBorrow;
-              end;
-
-              ArgExpr := ParseExpr;
-              CallExpr.Args.Add(TASTCallArg.Create(Line, Col, ArgOwn, ArgExpr));
-            until not Match(tokComma);
-          end;
-          Expect(tokRParen, 'Esperado ")" no fechamento dos argumentos');
-          Result := CallExpr;
-        end
-        else
-        begin
-          Result := TASTMemberAccessExpr.Create(Line, Col, Result, Id);
-        end;
-      end
-      else if Match(tokLBracket) then
-      begin
-        IdxExpr := TASTIndexExpr.Create(Line, Col, Result);
-        if not Check(tokRBracket) then
+        if not Check(tokRParen) then
         begin
           repeat
-            IdxExpr.Indices.Add(ParseExpr);
+            ArgOwn := owNone;
+            if Match(tokTake) then ArgOwn := owTake
+            else if Match(tokBorrow) then ArgOwn := owBorrow
+            else if Match(tokMut) then
+            begin
+              Expect(tokBorrow);
+              ArgOwn := owMutBorrow;
+            end;
+
+            ArgExpr := ParseExpr;
+            CallExpr.Args.Add(TASTCallArg.Create(Line, Col, ArgOwn, ArgExpr));
           until not Match(tokComma);
         end;
-        Expect(tokRBracket, 'Esperado "]" ao fechar indexador de array');
-        Result := IdxExpr;
+        Expect(tokRParen, 'Esperado ")" no fechamento dos argumentos');
+        Result := CallExpr;
+      end
+      else
+      begin
+        Result := TASTMemberAccessExpr.Create(Line, Col, Result, Id);
       end;
+    end
+    else if Match(tokLBracket) then
+    begin
+      IdxExpr := TASTIndexExpr.Create(Line, Col, Result);
+      if not Check(tokRBracket) then
+      begin
+        repeat
+          IdxExpr.Indices.Add(ParseExpr);
+        until not Match(tokComma);
+      end;
+      Expect(tokRBracket, 'Esperado "]" ao fechar indexador de array');
+      Result := IdxExpr;
     end;
-
-    Exit;
   end;
-
-  raise EAetherParserError.Create(Format('Expressao inesperada: "%s"', [FCurTok.Value]), Line, Col);
 end;
 
 function TAetherParser.ParseUnaryExpr: TASTExpr;

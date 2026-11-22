@@ -735,6 +735,8 @@ begin
   if Expr is TASTIdentifierExpr then
   begin
     Id := TASTIdentifierExpr(Expr);
+    if Assigned(FCurrentFunc) and SameText(Id.Name, 'result') then
+      Exit(FCurrentFunc.ReturnType);
     if Assigned(FCurrentFunc) then
     begin
       for I := 0 to FCurrentFunc.LocalVars.Count - 1 do
@@ -845,6 +847,11 @@ begin
   end
   else if Expr is TASTIndexExpr then
   begin
+    if TASTIndexExpr(Expr).Target is TASTSetLiteralExpr then
+    begin
+      if TASTSetLiteralExpr(TASTIndexExpr(Expr).Target).Elements.Count > 0 then
+        Exit(GetExprTypeName(TASTExpr(TASTSetLiteralExpr(TASTIndexExpr(Expr).Target).Elements[0])));
+    end;
     TargetType := ResolveAliasType(GetExprTypeName(TASTIndexExpr(Expr).Target));
     if TargetType = 'String' then
       Exit('Char')
@@ -1086,7 +1093,9 @@ begin
   if Expr is TASTIdentifierExpr then
   begin
     Id := TASTIdentifierExpr(Expr);
-    if Id.Name = '__ValueNone' then
+    if Assigned(FCurrentFunc) and SameText(Id.Name, 'result') then
+      Result := 'result'
+    else if Id.Name = '__ValueNone' then
       Result := '((AetherOption){ .is_some = false, .is_none = true, .num_val = 0, .str_val = "" })'
     else if Id.Name = 'None' then
       Result := 'NULL'
@@ -1301,6 +1310,19 @@ begin
   if Expr is TASTIndexExpr then
   begin
     Idx := TASTIndexExpr(Expr);
+    if Idx.Target is TASTSetLiteralExpr then
+    begin
+      ValF := ResolveAliasType(GetExprTypeName(Idx));
+      if ValF = '' then ValF := 'Int32';
+      ArgsStr := '';
+      for I := 0 to TASTSetLiteralExpr(Idx.Target).Elements.Count - 1 do
+      begin
+        if I > 0 then ArgsStr := ArgsStr + ', ';
+        ArgsStr := ArgsStr + EmitExpr(TASTExpr(TASTSetLiteralExpr(Idx.Target).Elements[I]));
+      end;
+      Result := Format('(((%s[]){ %s })[%s])', [EmitTypeRef(ValF), ArgsStr, EmitExpr(TASTExpr(Idx.Indices[0]))]);
+      Exit;
+    end;
     TargetT := ResolveAliasType(GetExprTypeName(Idx.Target));
     if TargetT = 'String' then
     begin
@@ -2155,7 +2177,7 @@ begin
   else if Stmt is TASTReturnStmt then
   begin
     Ret := TASTReturnStmt(Stmt);
-    if FActiveDefers.Count > 0 then
+    if (FActiveDefers.Count > 0) or (Assigned(FCurrentFunc) and (FCurrentFunc.Ensures.Count > 0)) then
     begin
       if Assigned(Ret.Expr) then
       begin
@@ -2168,7 +2190,11 @@ begin
             Emit(Format('AetherTask __ret_task = (AetherTask){ .is_completed = true, .str_val = %s };', [EmitExpr(Ret.Expr)]))
           else
             Emit(Format('AetherTask __ret_task = (AetherTask){ .is_completed = true, .int_val = (int64_t)(%s) };', [EmitExpr(Ret.Expr)]));
-          EmitActiveDefers(0);
+          if FActiveDefers.Count > 0 then
+            EmitActiveDefers(0);
+          if Assigned(FCurrentFunc) then
+            for J := 0 to FCurrentFunc.Ensures.Count - 1 do
+              Emit(Format('assert(%s);', [EmitExpr(TASTExpr(FCurrentFunc.Ensures[J]))]));
           if FTryDepth > 0 then
             Emit(Format('g_aether_jmp_top -= %d;', [FTryDepth]));
           Emit('return __ret_task;');
@@ -2176,7 +2202,11 @@ begin
         else
         begin
           Emit(Format('result = %s;', [EmitExpr(Ret.Expr)]));
-          EmitActiveDefers(0);
+          if FActiveDefers.Count > 0 then
+            EmitActiveDefers(0);
+          if Assigned(FCurrentFunc) then
+            for J := 0 to FCurrentFunc.Ensures.Count - 1 do
+              Emit(Format('assert(%s);', [EmitExpr(TASTExpr(FCurrentFunc.Ensures[J]))]));
           if FTryDepth > 0 then
             Emit(Format('g_aether_jmp_top -= %d;', [FTryDepth]));
           Emit('return result;');
@@ -2184,7 +2214,11 @@ begin
       end
       else
       begin
-        EmitActiveDefers(0);
+        if FActiveDefers.Count > 0 then
+          EmitActiveDefers(0);
+        if Assigned(FCurrentFunc) then
+          for J := 0 to FCurrentFunc.Ensures.Count - 1 do
+            Emit(Format('assert(%s);', [EmitExpr(TASTExpr(FCurrentFunc.Ensures[J]))]));
         if FTryDepth > 0 then
           Emit(Format('g_aether_jmp_top -= %d;', [FTryDepth]));
         Emit('return;');
@@ -2664,6 +2698,12 @@ begin
   FTryDepth := 0;
   EmitStmtList(Func.Body);
   FActiveDefers.Clear;
+
+  if (Func.Ensures.Count > 0) and ((Func.Body.Count = 0) or not (Func.Body[Func.Body.Count - 1] is TASTReturnStmt)) then
+  begin
+    for I := 0 to Func.Ensures.Count - 1 do
+      Emit(Format('assert(%s);', [EmitExpr(TASTExpr(Func.Ensures[I]))]));
+  end;
 
   if (Func.ReturnType <> 'Void') and (Func.ReturnType <> '') and (not Func.IsAsync) then
   begin

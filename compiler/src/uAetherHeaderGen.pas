@@ -71,6 +71,10 @@ begin
   if (Length(T) > 1) and (T[1] = '^') then
     Exit(MapTypeToC(Copy(T, 2, Length(T))) + '*');
 
+  // Arrays dinamicos: array of T -> Elem*
+  if Pos('array of ', LowerCase(T)) = 1 then
+    Exit(MapTypeToC(Trim(Copy(T, 10, Length(T)))) + '*');
+
   // Tipos de usuario (Records / Structs)
   Result := T;
 end;
@@ -134,8 +138,8 @@ end;
 
 function TAetherHeaderGenerator.Generate(AModule: TASTModule): string;
 var
-  GuardName: string;
-  I: Integer;
+  GuardName, VarItem, DimsStr: string;
+  I, VIdx, DIdx: Integer;
   Func: TASTFunction;
   HasExports: Boolean;
 begin
@@ -176,14 +180,62 @@ begin
   Emit('#endif');
   Emit('');
 
-  // Declara tipos/records
+  // Declara tipos/records/enums/aliases/subfaixas/arrays
   if AModule.Types.Count > 0 then
   begin
     Emit('/* --- Tipos e Registros Exportados --- */');
     for I := 0 to AModule.Types.Count - 1 do
     begin
       if AModule.Types[I] is TASTRecordDecl then
-        EmitRecordTypeDef(TASTRecordDecl(AModule.Types[I]));
+        EmitRecordTypeDef(TASTRecordDecl(AModule.Types[I]))
+      else if AModule.Types[I] is TASTEnumDecl then
+      begin
+        Emit('typedef enum {');
+        for VIdx := 0 to TASTEnumDecl(AModule.Types[I]).Variants.Count - 1 do
+        begin
+          VarItem := TASTEnumDecl(AModule.Types[I]).Name + '_' +
+            TASTEnumVariant(TASTEnumDecl(AModule.Types[I]).Variants[VIdx]).Name;
+          if VIdx < TASTEnumDecl(AModule.Types[I]).Variants.Count - 1 then
+            Emit('    ' + VarItem + ',')
+          else
+            Emit('    ' + VarItem);
+        end;
+        Emit(Format('} %s;', [TASTEnumDecl(AModule.Types[I]).Name]));
+        Emit('');
+      end
+      else if AModule.Types[I] is TASTTypeAliasDecl then
+      begin
+        Emit(Format('typedef %s %s;', [
+          MapTypeToC(TASTTypeAliasDecl(AModule.Types[I]).TargetType),
+          TASTTypeAliasDecl(AModule.Types[I]).Name]));
+        Emit('');
+      end
+      else if AModule.Types[I] is TASTSubrangeDecl then
+      begin
+        if SameText(TASTSubrangeDecl(AModule.Types[I]).BaseType, 'Char') then
+          Emit(Format('typedef char %s;', [TASTSubrangeDecl(AModule.Types[I]).Name]))
+        else
+          Emit(Format('typedef int32_t %s;', [TASTSubrangeDecl(AModule.Types[I]).Name]));
+        Emit('');
+      end
+      else if AModule.Types[I] is TASTArrayDecl then
+      begin
+        if TASTArrayDecl(AModule.Types[I]).Dims.Count = 0 then
+          Emit(Format('typedef %s* %s;', [
+            MapTypeToC(TASTArrayDecl(AModule.Types[I]).ElemType),
+            TASTArrayDecl(AModule.Types[I]).Name]))
+        else
+        begin
+          DimsStr := '';
+          for DIdx := 0 to TASTArrayDecl(AModule.Types[I]).Dims.Count - 1 do
+            DimsStr := DimsStr + '[' + TASTArrayDecl(AModule.Types[I]).Dims[DIdx] + ']';
+          Emit(Format('typedef %s %s%s;', [
+            MapTypeToC(TASTArrayDecl(AModule.Types[I]).ElemType),
+            TASTArrayDecl(AModule.Types[I]).Name,
+            DimsStr]));
+        end;
+        Emit('');
+      end;
     end;
   end;
 

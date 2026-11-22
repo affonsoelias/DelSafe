@@ -832,6 +832,8 @@ begin
     if Call.Args.Count > 0 then
     begin
       ArgType := CheckExpr(TASTCallArg(Call.Args[0]).Expr);
+      if ArgType = 'IntLiteral' then ArgType := 'Int32'
+      else if ArgType = 'FloatLiteral' then ArgType := 'Float64';
       if Pos('Box<', ArgType) = 1 then
       begin
         ArgType := Copy(ArgType, 5, Length(ArgType) - 5);
@@ -958,6 +960,8 @@ begin
         Error('E0061', Format('Funcao generica "%s" requer pelo menos 1 argumento para deducao de tipo', [FuncNode.Name]), Call.Line, Call.Col);
 
       ArgType := CheckExpr(TASTCallArg(Call.Args[0]).Expr);
+      if ArgType = 'IntLiteral' then ArgType := 'Int32'
+      else if ArgType = 'FloatLiteral' then ArgType := 'Float64';
       if Pos('Box<', ArgType) = 1 then
       begin
         ArgType := Copy(ArgType, 5, Length(ArgType) - 5);
@@ -1687,21 +1691,26 @@ begin
   end;
 
   ArrDecl := nil;
-  Sym := FSymbols.Resolve(TargetType);
-  if Assigned(Sym) and (Sym.Kind = skType) and (Sym.Node is TASTArrayDecl) then
-    ArrDecl := TASTArrayDecl(Sym.Node);
-
-  if Assigned(ArrDecl) then
-    ElemType := ArrDecl.ElemType
-  else if Pos('array of ', TargetType) = 1 then
-    ElemType := Trim(Copy(TargetType, 10, Length(TargetType)))
-  else if Pos('array[', TargetType) = 1 then
+  if (TargetType = 'SetLiteral') and (Idx.Target is TASTSetLiteralExpr) then
+    ElemType := InferArrayLiteralElemType(TASTSetLiteralExpr(Idx.Target))
+  else
   begin
-    P1 := Pos('] of ', TargetType);
-    if P1 > 0 then
-      ElemType := Copy(TargetType, P1 + 5, Length(TargetType))
-    else
-      ElemType := 'Int32';
+    Sym := FSymbols.Resolve(TargetType);
+    if Assigned(Sym) and (Sym.Kind = skType) and (Sym.Node is TASTArrayDecl) then
+      ArrDecl := TASTArrayDecl(Sym.Node);
+
+    if Assigned(ArrDecl) then
+      ElemType := ArrDecl.ElemType
+    else if Pos('array of ', TargetType) = 1 then
+      ElemType := Trim(Copy(TargetType, 10, Length(TargetType)))
+    else if Pos('array[', TargetType) = 1 then
+    begin
+      P1 := Pos('] of ', TargetType);
+      if P1 > 0 then
+        ElemType := Copy(TargetType, P1 + 5, Length(TargetType))
+      else
+        ElemType := 'Int32';
+    end;
   end;
 
   for I := 0 to Idx.Indices.Count - 1 do
@@ -2410,11 +2419,21 @@ begin
         Error('E0308', 'Expressao em "require" deve ser do tipo Bool', Func.Line, Func.Col);
     end;
 
-    // Contratos ensure
-    for I := 0 to Func.Ensures.Count - 1 do
+    // Contratos ensure (com acesso a variavel especial "result" quando nao for Void)
+    if Func.Ensures.Count > 0 then
     begin
-      if CheckExpr(TASTExpr(Func.Ensures[I])) <> 'Bool' then
-        Error('E0308', 'Expressao em "ensure" deve ser do tipo Bool', Func.Line, Func.Col);
+      FSymbols.EnterScope;
+      try
+        if (Func.ReturnType <> '') and (not SameText(Func.ReturnType, 'Void')) then
+          FSymbols.Define(TSymbol.Create('result', skVariable, Func.ReturnType, Func.Line, Func.Col, False));
+        for I := 0 to Func.Ensures.Count - 1 do
+        begin
+          if CheckExpr(TASTExpr(Func.Ensures[I])) <> 'Bool' then
+            Error('E0308', 'Expressao em "ensure" deve ser do tipo Bool', Func.Line, Func.Col);
+        end;
+      finally
+        FSymbols.LeaveScope;
+      end;
     end;
 
     // Se for extern, nao possui corpo nem variaveis locais
@@ -2628,6 +2647,12 @@ begin
       VType := ConcreteType;
     Result.LocalVars.Add(TASTVarDecl.Create(VarDecl.Line, VarDecl.Col, VarDecl.Name, VType, TASTExpr(CloneASTNode(VarDecl.InitialExpr)), VarDecl.IsMutable));
   end;
+
+  for I := 0 to OriginalFunc.Requires.Count - 1 do
+    Result.Requires.Add(CloneASTNode(TASTExpr(OriginalFunc.Requires[I])));
+
+  for I := 0 to OriginalFunc.Ensures.Count - 1 do
+    Result.Ensures.Add(CloneASTNode(TASTExpr(OriginalFunc.Ensures[I])));
 
   for I := 0 to OriginalFunc.Body.Count - 1 do
     Result.Body.Add(CloneASTNode(TASTStmt(OriginalFunc.Body[I])));
