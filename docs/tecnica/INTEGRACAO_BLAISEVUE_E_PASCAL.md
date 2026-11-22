@@ -165,3 +165,9 @@ O **Zephyr** é o motor de backend de alto desempenho do BlaiseVue construído e
 ### 5.2 Compilação Nativa Dupla (C ou Pascal)
 - **Produção (Binário C via GCC)**: O código Aether do Zephyr é compilado com `--target=c -O3 -flto -s`, gerando um executável nativo em C com o mais alto throughput de requisições por segundo e footprint de memória minúsculo (~20 KB a 50 KB).
 - **Desenvolvimento (Binário Pascal via FPC)**: Compilado com `--target=pascal`, oferecendo depuração rápida com FPC e perfeita integração com units Object Pascal legadas.
+
+### 5.3 Arquitetura de Segurança de Alta Confiabilidade
+- **Zero Memory Leaks & Zero Buffer Overflows**: O Borrow Checker do Aether garante em tempo de compilação que nenhum buffer ou string possa ser acessado após liberação (*use-after-free*) ou corrompido em concorrência.
+- **Proteção Ativa contra DoS e Slowloris**: Controles rigorosos de limites de tamanho (`MaxBodyBytes`, `MaxHeaderBytes`) e timeouts de conexões ociosas.
+- **Sanitização Automática via Tipagem Estática**: A desserialização JSON tipada do Aether rejeita entradas maliciosas antes mesmo de alcançar a camada de controle.
+- **Headers de Segurança e Rate Limiting**: Defesas nativas out-of-the-box contra ataques comuns (HSTS, CSP, X-Frame-Options, CORS estrito).

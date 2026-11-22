@@ -430,6 +430,12 @@ Este documento traça o status oficial de desenvolvimento do compilador e as pr�
   - **Alvo de Compilação Duplo (Binário C ou Pascal)**:
     - **Binário C via GCC (Modo Padrão de Produção & Máxima Performance)**: O Aether compila o Zephyr para C99 e o GCC gera um binário executável nativo ultra-compacto com otimizações LTO (`-O3 -flto -s`), alcançando o mais alto throughput de requisições por segundo e baixíssimo footprint de RAM.
     - **Binário Pascal via FPC (Modo Desenvolvimento & Debug)**: O Aether compila para Object Pascal puro e o Free Pascal gera o binário nativo com integração e stack traces familiares do ecossistema FPC.
+  - **Segurança Nativa e Blindagem de Produção (Security-First Engine)**:
+    - **Memory Safety Absoluta**: Imunidade matemática contra *buffer overflows*, vazamentos (*memory leaks*), *use-after-free* e corrupção de memória garantida em tempo de compilação pelo Borrow Checker do Aether, sem garbage collector.
+    - **Proteção contra Ataques DoS & Slowloris**: Timeouts estritos de conexões inativas (`ReadTimeout`, `WriteTimeout`, `IdleTimeout`) e limites rígidos de tamanho de requisição (`MaxHeaderBytes`, `MaxBodyBytes`).
+    - **Sanitização e Validação Tipada**: Desserialização estrita através de `[derive(JSON)]`, blindando os endpoints contra injeções (SQLi, NoSQLi, Command Injection) e payloads malformados.
+    - **Proteções HTTP e Rate Limiting**: Middlewares nativos para CORS configurável, Security Headers (HSTS, CSP, X-Frame-Options, X-Content-Type-Options) e controle de taxa de requisições (*Rate Limiting*) por IP/Token.
+    - **Transporte Seguro (TLS/HTTPS)**: Suporte nativo a conexões seguras criptografadas de ponta a ponta.
 - [ ] **Arquitetura Modular Não-Invasiva**:
   - Preservação do core do BlaiseVue (`core/*.pas` e `bin/bv.pas`) em Object Pascal puro, garantindo estabilidade operacional, sem dependências circulares e sem necessidade de dois compiladores para desenvolver o framework.
   - O Aether atua como linguagem de desenvolvimento de primeira classe para o desenvolvedor de aplicações.
