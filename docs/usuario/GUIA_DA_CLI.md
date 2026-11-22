@@ -54,10 +54,34 @@ Assert(condicao, "Mensagem descritiva de falha");
 ```
 
 ### `aetherc clean`
-Remove com segurança todos os artefatos de compilação do projeto atual (`bin/` e `generated/`), preservando o código-fonte e o compilador:
+Remove com segurança todos os artefatos de compilação do projeto atual (`bin/`, `generated/` e `.aether/cache/build/`), preservando o código-fonte e o compilador:
 ```bash
 aetherc clean
 ```
+
+---
+
+## 2.1 Compilação Incremental e Sistema de Cache (`--incremental`)
+
+O Aether possui um sistema de compilação incremental de alta performance baseado em **SHA-256**, que rastreia criptograficamente cada arquivo fonte e todas as suas dependências transitivas (`import std.fs;`, `import std.http;`, etc.).
+
+### Flags de Compilação Incremental:
+- `--incremental`: Ativa o rastreamento de cache. Se o executável de saída já existir e nenhum arquivo fonte ou dependência transitiva tiver sido modificado, a compilação retorna **imediatamente** (0 ms) reutilizando o binário existente.
+- `--force`: Ignora qualquer cache existente e força a recompilação completa de ponta a ponta.
+- `--no-incremental`: Desativa a verificação de cache incremental para a compilação atual.
+
+```bash
+# Compilação incremental rápida (detecta e reutiliza cache se inalterado)
+aetherc build src/main.aeth --incremental
+
+# Execução incremental
+aetherc run src/main.aeth --incremental
+
+# Força recompilação completa ignorando cache
+aetherc build src/main.aeth --incremental --force
+```
+
+Os manifestos de compilação incremental são salvos automaticamente no diretório `.aether/cache/build/` em formato JSON legível e determinístico.
 
 ---
 

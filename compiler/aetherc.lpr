@@ -19,7 +19,8 @@ uAetherToolchain,
 uAetherJSONDiag,
 uAetherLSP,
 uAetherProject,
-uAetherFormatter;
+uAetherFormatter,
+uAetherIncremental;
 
 Procedure PrintBanner;
 Begin
@@ -93,6 +94,8 @@ Begin
 
   '  --check-only      Executa apenas analise sintatica, tipos e borrow checker'
   );
+  WriteLn('  --incremental     Habilita compilacao incremental baseada em hashes SHA-256');
+  WriteLn('  --force           Forca recompilacao total ignorando cache de objetos');
   WriteLn('  --dump-tokens     Exibe a lista de tokens do Lexer');
   WriteLn('  --dump-ast        Exibe a Arvore Sintatica Abstrata (AST)');
   WriteLn(
@@ -301,7 +304,7 @@ End;
 Procedure CollectModuleImports(TargetMod: TASTModule; Const BaseDir: String;
                                Visited: TStringList; AllTypes, AllTraits,
                                AllImpls, AllFuncs: TFPList; PascalImports:
-                               TStringList);
+                               TStringList; DependencyFiles: TStrings = nil);
 
 Var 
   I, J: Integer;
@@ -323,6 +326,9 @@ Begin
 'Modulo Aether "%s" nao encontrado. Verifique se o arquivo existe ou se esta em "std/".'
                                   , [ModName]);
 
+      If Assigned(DependencyFiles) And (DependencyFiles.IndexOf(ExpandFileName(ModPath)) < 0) Then
+        DependencyFiles.Add(ExpandFileName(ModPath));
+
       If Visited.IndexOf(LowerCase(ModPath)) >= 0 Then Continue;
       Visited.Add(LowerCase(ModName));
       Visited.Add(LowerCase(ModPath));
@@ -335,7 +341,7 @@ Begin
         SubMod := SubParser.ParseModule;
         Try
           CollectModuleImports(SubMod, ExtractFilePath(ModPath), Visited,
-          AllTypes, AllTraits, AllImpls, AllFuncs, PascalImports);
+          AllTypes, AllTraits, AllImpls, AllFuncs, PascalImports, DependencyFiles);
 
           // Validação Estrita 1:1 de Módulos Importados (Fase 13)
           ExpectedName := ModName;
@@ -374,7 +380,7 @@ End;
 End;
 
 Procedure ResolveModuleImports(TargetMod: TASTModule; Const BaseDir: String;
-                               Visited: TStringList);
+                               Visited: TStringList; DependencyFiles: TStrings = nil);
 
 Var 
   AllTypes, AllTraits, AllImpls, AllFuncs: TFPList;
@@ -386,7 +392,7 @@ Begin
   AllFuncs := TFPList.Create;
   Try
     CollectModuleImports(TargetMod, BaseDir, Visited, AllTypes, AllTraits,
-                         AllImpls, AllFuncs, TargetMod.PascalImports);
+                         AllImpls, AllFuncs, TargetMod.PascalImports, DependencyFiles);
     For I := AllTypes.Count - 1 Downto 0 Do
       TargetMod.Types.Insert(0, TASTNode(AllTypes[I]));
     For I := AllTraits.Count - 1 Downto 0 Do
@@ -405,7 +411,8 @@ End;
 
 Procedure CompileFile(Const SourceFile: String; TargetPascal: Boolean; CheckOnly
                       , DumpASTOnly: Boolean; Const OutputExeName: String;
-                      SilentBanner: Boolean);
+                      SilentBanner: Boolean; Incremental: Boolean = False;
+                      ForceRebuild: Boolean = False);
 
 Var 
   Source: string;
@@ -415,7 +422,7 @@ Var
   BorrowChecker: TAetherBorrowChecker;
   ModuleNode: TASTModule;
   GenDir, IntermediateFile, FinalExe: string;
-  BaseProjDir, Dummy: string;
+  BaseProjDir, Dummy, TargetBackendStr, CachePath: string;
   GeneratedCode: string;
   EmitterPas: TAetherEmitterPascal;
   EmitterC: TAetherEmitterC;
@@ -423,10 +430,67 @@ Var
   CompileLog: string;
   CodeFile: TStringList;
   Visited: TStringList;
+  DependencyFiles: TStringList;
   FileBase, CleanBase, CleanMod: string;
-  P: Integer;
+  P, I: Integer;
+  BuildCache: TAetherBuildCache;
+  CacheUpToDate: Boolean;
+  CacheItem: PFileCacheItem;
 Begin
   ModuleNode := nil;
+  DependencyFiles := nil;
+
+  // Determina BaseProjDir e FinalExe antecipadamente para checagem incremental
+  If Not FindProjectRoot(BaseProjDir, Dummy) Then
+    BaseProjDir := GetCurrentDir;
+  BaseProjDir := ExcludeTrailingPathDelimiter(BaseProjDir);
+
+  TargetBackendStr := 'pascal';
+  If Not TargetPascal Then TargetBackendStr := 'c';
+
+  If OutputExeName <> '' Then
+    FinalExe := OutputExeName
+  Else
+    FinalExe := BaseProjDir + PathDelim + 'bin' + PathDelim + ChangeFileExt(ExtractFileName(
+                SourceFile), '.exe');
+
+  // Checagem antecipada de cache incremental (0 ms rebuild)
+  If Incremental And (Not ForceRebuild) And (Not CheckOnly) And (Not DumpASTOnly) And FileExists(FinalExe) Then
+  Begin
+    CachePath := GetBuildCachePath(BaseProjDir, SourceFile, TargetBackendStr);
+    If FileExists(CachePath) Then
+    Begin
+      BuildCache := TAetherBuildCache.Create;
+      Try
+        If BuildCache.LoadFromFile(CachePath) Then
+        Begin
+          CacheUpToDate := True;
+          For I := 0 To BuildCache.Files.Count - 1 Do
+          Begin
+            CacheItem := PFileCacheItem(BuildCache.Files[I]);
+            If (Not FileExists(CacheItem^.Path)) Or (SHA256File(CacheItem^.Path) <> CacheItem^.Hash) Then
+            Begin
+              CacheUpToDate := False;
+              Break;
+            End;
+          End;
+
+          If CacheUpToDate And FileExists(FinalExe) And (SHA256File(FinalExe) = BuildCache.OutputExeHash) Then
+          Begin
+            If Not SilentBanner Then
+            Begin
+              WriteLn(Format('[INCREMENTAL] Nenhuma alteracao detectada em "%s" ou em suas %d dependencias.', [ExtractFileName(SourceFile), BuildCache.Files.Count - 1]));
+              WriteLn(Format('[INCREMENTAL] Reutilizando executavel em cache: "%s"', [FinalExe]));
+            End;
+            Exit;
+          End;
+        End;
+      Finally
+        BuildCache.Free;
+      End;
+    End;
+  End;
+
   Source := LoadFileContent(SourceFile);
   Lexer := TAetherLexer.Create(Source);
   Parser := TAetherParser.Create(Lexer);
@@ -452,14 +516,15 @@ Begin
                                 , [ExtractFileName(SourceFile), ModuleNode.Name,
       FileBase]);
 
+    DependencyFiles := TStringList.Create;
+    DependencyFiles.Add(ExpandFileName(SourceFile));
+    Visited := TStringList.Create;
     Try
-      Visited := TStringList.Create;
-      Try
-        ResolveModuleImports(ModuleNode, ExtractFilePath(ExpandFileName(
-                             SourceFile)), Visited);
-      Finally
-        Visited.Free;
-End;
+      ResolveModuleImports(ModuleNode, ExtractFilePath(ExpandFileName(
+                           SourceFile)), Visited, DependencyFiles);
+    Finally
+      Visited.Free;
+    End;
 If DumpASTOnly Then
   Begin
     WriteLn(Format('--- Arvore Sintatica Abstrata (AST) de: %s ---', [SourceFile
@@ -549,6 +614,8 @@ CompileLog := '';
 Success := CompileWithFPC(IntermediateFile, FinalExe, CompileLog);
 If Success Then
   Begin
+    If Incremental Then
+      SaveBuildCache(BaseProjDir, SourceFile, TargetBackendStr, FinalExe, DependencyFiles);
     If Not SilentBanner Then
       Begin
         WriteLn('');
@@ -594,6 +661,8 @@ CompileLog := '';
 Success := CompileWithGCC(IntermediateFile, FinalExe, CompileLog);
 If Success Then
   Begin
+    If Incremental Then
+      SaveBuildCache(BaseProjDir, SourceFile, TargetBackendStr, FinalExe, DependencyFiles);
     If Not SilentBanner Then
       Begin
         WriteLn('');
@@ -610,9 +679,8 @@ Else
 End;
 
 Finally
-  ModuleNode.Free;
-End;
-Finally
+  If Assigned(DependencyFiles) Then DependencyFiles.Free;
+  If Assigned(ModuleNode) Then ModuleNode.Free;
   Parser.Free;
   Lexer.Free;
 End;
@@ -1039,6 +1107,8 @@ Var
   OptionCheckOnly: Boolean;
   OptionTargetPascal: Boolean;
   OptionJSONDiag: Boolean;
+  OptionIncremental: Boolean;
+  OptionForce: Boolean;
   IsRunCommand: Boolean;
   ProjConfig: TAetherProjectConfig;
   I: Integer;
@@ -1054,6 +1124,8 @@ Begin
   OptionCheckOnly := False;
   OptionTargetPascal := True;
   OptionJSONDiag := False;
+  OptionIncremental := False;
+  OptionForce := False;
   IsRunCommand := False;
 
   // Checa comando de formatacao: fmt [caminho] [--check]
@@ -1477,6 +1549,7 @@ If (ParamCount >= 1) And ((LowerCase(ParamStr(1)) = 'build') Or (LowerCase(
     OutputExe := ProjConfig.RootDir + PathDelim + StringReplace(ProjConfig.
                  Output, '/', PathDelim, [rfReplaceAll]);
     OptionTargetPascal := ProjConfig.Backend <> 'c';
+    OptionIncremental := True; // Habilitado por padrão para projetos aether.json
     RestoreProjectDependencies(ProjConfig);
 
     // Permite sobrescrever flags como --target=c, -o, etc. na linha de comando
@@ -1487,6 +1560,9 @@ If (ParamCount >= 1) And ((LowerCase(ParamStr(1)) = 'build') Or (LowerCase(
         If Arg = '--target=pascal' Then OptionTargetPascal := True
         Else If Arg = '--target=c' Then OptionTargetPascal := False
         Else If Arg = '--check-only' Then OptionCheckOnly := True
+        Else If Arg = '--incremental' Then OptionIncremental := True
+        Else If Arg = '--no-incremental' Then OptionIncremental := False
+        Else If Arg = '--force' Then OptionForce := True
         Else If (Arg = '--emit-json-diag') Or (Arg = '--emit-json-diagnostics')
                Then OptionJSONDiag := True
         Else If Arg = '-o' Then
@@ -1502,7 +1578,7 @@ If (ParamCount >= 1) And ((LowerCase(ParamStr(1)) = 'build') Or (LowerCase(
 
     Try
       CompileFile(InputFile, OptionTargetPascal, OptionCheckOnly, False,
-                  OutputExe, OptionJSONDiag);
+                  OutputExe, OptionJSONDiag, OptionIncremental, OptionForce);
       If IsRunCommand And Not OptionCheckOnly Then
         Begin
           WriteLn('');
@@ -1592,6 +1668,12 @@ While I <= ParamCount Do
            OptionDumpAST := True
     Else If Arg = '--check-only' Then
            OptionCheckOnly := True
+    Else If Arg = '--incremental' Then
+           OptionIncremental := True
+    Else If Arg = '--no-incremental' Then
+           OptionIncremental := False
+    Else If Arg = '--force' Then
+           OptionForce := True
     Else If Arg = '--target=pascal' Then
            OptionTargetPascal := True
     Else If Arg = '--target=c' Then
@@ -1632,7 +1714,7 @@ Try
     DumpTokens(InputFile);
 
   CompileFile(InputFile, OptionTargetPascal, OptionCheckOnly, OptionDumpAST,
-              OutputExe, OptionJSONDiag);
+              OutputExe, OptionJSONDiag, OptionIncremental, OptionForce);
 Except
   on E: EAetherBorrowError Do
         Begin

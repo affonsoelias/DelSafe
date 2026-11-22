@@ -305,16 +305,18 @@ Este documento traça o status oficial de desenvolvimento do compilador e as pr�
 - [x] **Validação Prática Dual-Backend**:
   - Exemplo integrado criado em `examples/20_stdlib_expanded.aeth`, testado e validado com 100% de sucesso e paridade idêntica nos backends Free Pascal e GCC C99.
 
-### ⏳ Fase 26: Compilação Incremental e Sistema de Cache de Objetos (`aetherc build --incremental`)
-- [ ] **Hash e Detecção de Mudanças (SHA-256)**:
-  - Rastreamento criptográfico do conteúdo dos arquivos fonte `.aeth` e das suas dependências transitivas em `.aether/cache/build/`.
-  - Mapeamento de grafo de dependências entre módulos para invalidar apenas os nós que foram alterados ou dependem de nós alterados.
-- [ ] **Reutilização de Artefatos Compilados**:
-  - Reutilização direta de arquivos objeto (`.o`, `.ppu`) já gerados, pulando a transpilação e compilação de unidades inalteradas.
-  - Linkagem inteligente preservando o binário de saída final.
-- [ ] **Integração na CLI**:
-  - Flag `--incremental` (ativada por padrão em `aetherc build` e `aetherc run` quando configurado no `aether.json`).
-  - Flag `--force` para limpar o cache local e forçar recompilação total de todos os módulos.
+### ✅ Fase 26: Compilação Incremental e Sistema de Cache de Objetos (`aetherc build --incremental`) (Concluído)
+- [x] **Hash e Detecção de Mudanças (SHA-256 Autônomo)**:
+  - Implementado algoritmo criptográfico SHA-256 autônomo e de alta performance na unit `compiler/src/uAetherIncremental.pas` (`SHA256File`, `SHA256String`), sem dependência de bibliotecas externas.
+  - Rastreamento criptográfico completo do arquivo fonte `.aeth`, do hash do executável final e de todas as dependências transitivas resolvidas (`import`).
+  - Armazenamento em manifesto estruturado e determinístico em `.aether/cache/build/<modulo>_<target>.cache.json`.
+- [x] **Reutilização Inteligente de Artefatos & Fast-Path Instantâneo**:
+  - Checagem antecipada de cache: quando ativado `--incremental` e nenhuma alteração de hash for detectada em nenhum nó do grafo de dependências, o compilador pula todas as etapas de parsing, semântica, transpilação e invocação do backend externo, retornando instantaneamente (0 ms).
+  - Paridade total garantida nos backends **Free Pascal** (`fpc`) e **GCC C99** (`gcc`).
+- [x] **Integração na CLI & Limpeza de Cache**:
+  - Flags de linha de comando `--incremental`, `--no-incremental` e `--force` adicionadas a `aetherc`, com suporte em comandos diretos, `build` e `run`.
+  - Atualizado `aetherc clean` para limpar também o diretório de cache `.aether/cache/build/`.
+  - Validação completa com suíte padrão (`examples/20_stdlib_expanded.aeth`), test runner (`aetherc test`) e cenários com e sem modificação.
 
 ### ⏳ Fase 27: Otimizações de AST & Modo Release (`aetherc build --release`)
 - [ ] **Constant Folding & Otimizações na AST**:

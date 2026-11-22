@@ -1200,7 +1200,7 @@ end;
 procedure HandleProjectClean();
 var
   RootDir, Dummy: string;
-  GenDir, BinDir: string;
+  GenDir, BinDir, BuildCacheDir: string;
 begin
   if not FindProjectRoot(RootDir, Dummy) then
     RootDir := GetCurrentDir;
@@ -1227,6 +1227,13 @@ begin
   end
   else
     WriteLn('  • bin/       ... [JA LIMPO]');
+
+  BuildCacheDir := RootDir + PathDelim + '.aether' + PathDelim + 'cache' + PathDelim + 'build';
+  if DirectoryExists(BuildCacheDir) then
+  begin
+    DeleteDirectoryTree(BuildCacheDir);
+    WriteLn('  • .aether/cache/build/ ... [REMOVIDO]');
+  end;
 
   WriteLn('');
   WriteLn('SUCESSO! O projeto foi limpo.');
