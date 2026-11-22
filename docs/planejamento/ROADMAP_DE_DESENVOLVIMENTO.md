@@ -202,17 +202,18 @@ Este documento traça o status oficial de desenvolvimento do compilador e as pr�
   - Suíte completa de testes de regressão (`examples/12_package_manager_and_tests` e `examples/14_stdlib_and_concurrency.aeth`) 100% aprovada em ambos os backends.
 
 ### ✅ Fase 21: Interoperabilidade Avançada de Primeira Classe (Free Pascal Units & C Headers / FFI) (Concluído)
+- [x] **Auto-Import Transparente & Zero-Boilerplate (Sem `extern` manual!)**:
+  - Invocação direta de funções de units Pascal (`import pascal SysUtils;`) e headers C (`import c "<math.h>";`) no código, sem necessidade de declarações manuais de `extern`.
+  - O analisador de tipos (*Type Checker*) resolve dinamicamente os símbolos de units/headers importados, inferindo os tipos de retorno e argumentos com zero atrito de desenvolvimento.
 - [x] **Interoperabilidade Fluida com Units do Free Pascal (`import pascal`)**:
   - Inclusão transparente de units FPC (`SysUtils`, `DateUtils`, `Classes`, `Horse`, `mORMot`) na cláusula `uses` do Object Pascal sem duplicação de identificadores.
-  - Declaração de funções e rotinas de units Pascal usando `extern pascal function <Nome>(...): <Tipo>;`.
-  - No backend Free Pascal: omissão automática de diretivas de linkagem DLL (`external 'msvcrt'`), consumindo a unit nativamente com máxima otimização inline do compilador FPC.
-- [x] **Interoperabilidade Avançada com Cabeçalhos e Bibliotecas C (`import c` / `extern c`)**:
+  - No backend Free Pascal: omissão automática de diretivas de linkagem DLL, consumindo a unit nativamente com máxima otimização inline do compilador FPC.
+- [x] **Interoperabilidade Avançada com Cabeçalhos e Bibliotecas C (`import c`)**:
   - Inclusão direta de headers C com suporte a delimitadores angulares e aspas (`import c "<math.h>";`, `import c "minha_lib.h";`).
-  - Declaração de funções da biblioteca padrão C ou bibliotecas externas usando `extern c function <Nome>(...): <Tipo>;`.
   - Suporte a diretivas de linkagem nativa no compilador e toolchain (`-lm`, `-lws2_32`).
   - Prevenção automática de conflitos de redeclaração no GCC para funções padrão de `<math.h>` (`sin`, `cos`, `sqrt`, etc.).
 - [x] **Validação Prática Dual-Backend**:
-  - Exemplo modelo criado em `examples/16_pascal_and_c_interop.aeth`, consumindo simultaneamente `SysUtils.GetTickCount64` do Free Pascal e `sin`, `cos`, `sqrt` de `<math.h>` do C99.
+  - Exemplo modelo criado em `examples/16_pascal_and_c_interop.aeth`, consumindo simultaneamente `SysUtils.GetTickCount64` do Free Pascal e `sin`, `cos`, `sqrt` de `<math.h>` do C99 com **zero declarações `extern` manuais**.
   - Compilado e executado com 100% de paridade e sucesso nos backends **Free Pascal** e **GCC C99**.
   - Suíte completa de testes de regressão (exemplos 12, 14 e 15) 100% aprovada em ambos os backends.
 

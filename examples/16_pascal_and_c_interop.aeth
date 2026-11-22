@@ -5,13 +5,9 @@ import Strings;
 import pascal SysUtils;
 import c "<math.h>";
 
-// 1. Declaracao de Funcoes Externas do Free Pascal (Unit SysUtils)
-extern pascal function GetTickCount64(): UInt64;
-
-// 2. Declaracao de Funcoes Externas de C (<math.h> / C Standard Library)
-extern c function sin(x: Float64): Float64;
-extern c function cos(x: Float64): Float64;
-extern c function sqrt(x: Float64): Float64;
+// ZERO DECLARACOES "EXTERN" MANUAIS!
+// O compilador Aether resolve automaticamente os simbolos
+// a partir dos modulos "import pascal" e "import c" declarados!
 
 function DemonstrarInteroperabilidade(): Void
 var
@@ -26,17 +22,17 @@ var
 begin
     PrintLn("==========================================================");
     PrintLn(" [Aether Phase 21] Interoperabilidade Nativa Pascal e C   ");
-    PrintLn(" Conexao Bidirecional com Ecossistemas Free Pascal & C99  ");
+    PrintLn(" Auto-Import & Zero-Boilerplate (Sem 'extern' manual!)    ");
     PrintLn("==========================================================");
 
     // --- Teste 1: Consumindo Funcao da Unit SysUtils do Free Pascal ---
-    PrintLn("[1/2] Testando Interoperabilidade com Unit SysUtils (Free Pascal)...");
+    PrintLn("[1/2] Invocando GetTickCount64() de 'import pascal SysUtils'...");
     inicio_ticks := GetTickCount64();
     PrintLn("      Tick inicial do SO: " + IntToStr(Int32(inicio_ticks)));
 
-    // --- Teste 2: Consumindo Funcoes C de <math.h> ---
+    // --- Teste 2: Consumindo Funcoes C de 'import c <math.h>' ---
     PrintLn("");
-    PrintLn("[2/2] Testando Interoperabilidade com Headers C99 (<math.h>)...");
+    PrintLn("[2/2] Invocando sin(), cos() e sqrt() de 'import c <math.h>'...");
     ang := 0.785398; // aprox PI / 4 (45 graus)
     val_sin := sin(ang);
     val_cos := cos(ang);
@@ -55,8 +51,8 @@ begin
     PrintLn("");
     PrintLn("----------------------------------------------------------");
     PrintLn(" [OK] Interoperabilidade executada em " + IntToStr(Int32(delta_ticks)) + " ms!");
-    PrintLn(" [OK] Free Pascal Units (SysUtils) e C Headers (<math.h>)");
-    PrintLn("      operando em plena harmonia com zero overhead!");
+    PrintLn(" [OK] Funcoes externas consumidas de forma 100% transparente");
+    PrintLn("      sem nenhuma linha de 'extern' manual!");
     PrintLn("==========================================================");
 end;
 

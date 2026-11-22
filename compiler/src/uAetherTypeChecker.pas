@@ -60,6 +60,8 @@ type
     function TypeImplementsTrait(const ATypeName, ATraitName: string): Boolean;
     function FindTraitMethod(const ATypeName, AMethodName: string): string;
     function MonomorphizeFunction(OriginalFunc: TASTFunction; const ConcreteType: string): TASTFunction;
+    function HasForeignImports: Boolean;
+    function InferForeignFunctionReturnType(const FuncName: string): string;
     procedure CheckFunction(Func: TASTFunction);
     procedure CheckProgramBlock(Prog: TASTProgramBlock);
   public
@@ -335,6 +337,40 @@ begin
   Result := OperandType;
 end;
 
+function TAetherTypeChecker.HasForeignImports: Boolean;
+begin
+  Result := Assigned(FModule) and
+            (((FModule.PascalImports <> nil) and (FModule.PascalImports.Count > 0)) or
+             ((FModule.CImports <> nil) and (FModule.CImports.Count > 0)));
+end;
+
+function TAetherTypeChecker.InferForeignFunctionReturnType(const FuncName: string): string;
+var
+  LowName: string;
+begin
+  LowName := LowerCase(FuncName);
+  if (LowName = 'sin') or (LowName = 'cos') or (LowName = 'tan') or
+     (LowName = 'sqrt') or (LowName = 'asin') or (LowName = 'acos') or
+     (LowName = 'atan') or (LowName = 'exp') or (LowName = 'ln') or
+     (LowName = 'log10') or (LowName = 'pow') or (LowName = 'floor') or
+     (LowName = 'ceil') or (LowName = 'now') then
+    Exit('Float64');
+
+  if (LowName = 'gettickcount64') or (LowName = 'gettickcount') then
+    Exit('UInt64');
+
+  if (LowName = 'inttostr') or (LowName = 'floattostr') or
+     (LowName = 'timetostr') or (LowName = 'datetostr') or
+     (LowName = 'formatdatetime') then
+    Exit('String');
+
+  if (LowName = 'strtoint') or (LowName = 'strtointdef') or
+     (LowName = 'length') then
+    Exit('Int32');
+
+  Result := 'Float64';
+end;
+
 function TAetherTypeChecker.CheckCall(Call: TASTCallExpr): string;
 var
   Sym, SymMono: TSymbol;
@@ -400,7 +436,19 @@ begin
     end;
 
     if not Assigned(Sym) then
+    begin
+      // Interoperabilidade Transparente:
+      // Se houver imports de units Pascal (import pascal) ou headers C (import c),
+      // e a funcao nao for local, permitimos a invocacao direta sem necessidade de extern!
+      if HasForeignImports then
+      begin
+        for I := 0 to Call.Args.Count - 1 do
+          CheckExpr(TASTCallArg(Call.Args[I]).Expr);
+        Exit(InferForeignFunctionReturnType(Call.Callee));
+      end;
+
       Error('E0425', Format('Funcao ou tipo nao encontrado: "%s"', [Call.Callee]), Call.Line, Call.Col);
+    end;
   end;
 
   // Construtor de Record: DataBuffer(id: 101, size: 2048)
