@@ -217,6 +217,22 @@ Este documento traça o status oficial de desenvolvimento do compilador e as pr�
   - Compilado e executado com 100% de paridade e sucesso nos backends **Free Pascal** e **GCC C99**.
   - Suíte completa de testes de regressão (exemplos 12, 14 e 15) 100% aprovada em ambos os backends.
 
+### 📋 Fase 21.1: Integração de Primeira Classe com BlaiseVue & Pipeline de Tooling Pascal (Planejada)
+- [ ] **1. Emissão de Units Free Pascal Reutilizáveis (`unit` em vez de apenas `program`)**:
+  - Suporte à flag `--unit` em `aetherc emit pascal` e `aetherc build` (e detecção inteligente de módulos de biblioteca).
+  - Geração estruturada com separação idiomática de seções Pascal:
+    - **`interface`**: Exportação pública de todas as `structs`, mônades (`Result`, `Option`), tipos e protótipos de funções/métodos.
+    - **`implementation`**: Implementação dos corpos das funções, despachos estáticos de traits e runtime helpers zero-cost do Aether.
+  - Compatibilidade nativa para consumo direto no ecossistema BlaiseVue via cláusula `uses MeuComponente;`.
+- [ ] **2. Customização Completa de Diretório de Saída (`--out-dir`)**:
+  - Suporte à flag `--out-dir=<caminho>` para direcionar a saída transpilada diretamente para as pastas gerenciadas pelo BlaiseVue (ex: `.blaisevue/generated/`, `src/generated/` ou `server/generated/`).
+- [ ] **3. Execução Silenciosa & Headless para Ferramentas (`--silent` & JSON Diag)**:
+  - Suporte à flag `--silent` para toolings e orquestradores externos (CLI do BlaiseVue, scripts de build).
+  - Códigos de saída estritos (exit codes 0 e 1) e integração com `--emit-json-diag` para permitir que o BlaiseVue capture e renderize erros de compilação e borrow checker diretamente na sua UI/terminal.
+- [ ] **4. Modo Observador / Hot-Reload Reativo (`--watch`)**:
+  - Comando `aetherc emit pascal <arquivo> --watch` com monitoramento contínuo de alterações no arquivo `.aeth`.
+  - Regeneração instantânea e atômica da unit `.pas` correspondente para suporte a recarga rápida no servidor/UI do BlaiseVue.
+
 ### ⏳ Fase 22: Bootstrapping 100% Autônomo do Compilador Auto-Hospedado (`compiler/aeth/`)
 - [ ] **Resolução Multi-Módulo no Compilador Auto-Hospedado**:
   - Capacidade de analisar e resolver múltiplos arquivos com `import` diretamente no código Aether de `compiler/aeth/`.

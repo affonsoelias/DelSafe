@@ -190,7 +190,7 @@ aetherc examples/01_hello_world.aeth --target=c
   - **[Curso Oficial Aether](file:///c:/Users/Pichau/Documents/aether/docs/curso/README.md):** 9 lições práticas passo a passo.
   - **[Guia do Iniciante](file:///c:/Users/Pichau/Documents/aether/docs/usuario/GUIA_DO_INICIANTE.md):** Manual completo de conceitos.
   - **[Especificação Técnica](file:///c:/Users/Pichau/Documents/aether/docs/tecnica/ESPECIFICACAO_LINGUAGEM.md):** Gramática formal EBNF e arquitetura do compilador.
-  - **[Roadmap de Desenvolvimento](file:///c:/Users/Pichau/Documents/aether/docs/planejamento/ROADMAP_DE_DESENVOLVIMENTO.md):** Todas as 19 fases concluídas e metas futuras (Fases 20-22).
+  - **[Roadmap de Desenvolvimento](file:///c:/Users/Pichau/Documents/aether/docs/planejamento/ROADMAP_DE_DESENVOLVIMENTO.md):** Fases 1 a 21 concluídas, Fase 21.1 (Integração BlaiseVue & Tooling Pascal) e Fase 22 (Self-Hosting Bootstrapping).
 - **[`ide/vscode/`](file:///c:/Users/Pichau/Documents/aether/ide/vscode/):** Extensão oficial para Visual Studio Code com syntax highlighting TextMate, snippets e cliente LSP.
 
 ---
