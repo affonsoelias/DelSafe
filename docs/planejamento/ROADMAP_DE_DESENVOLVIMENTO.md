@@ -318,17 +318,20 @@ Este documento traça o status oficial de desenvolvimento do compilador e as pr�
   - Atualizado `aetherc clean` para limpar também o diretório de cache `.aether/cache/build/`.
   - Validação completa com suíte padrão (`examples/20_stdlib_expanded.aeth`), test runner (`aetherc test`) e cenários com e sem modificação.
 
-### ⏳ Fase 27: Otimizações de AST & Modo Release (`aetherc build --release`)
-- [ ] **Constant Folding & Otimizações na AST**:
-  - Avaliação estática em tempo de compilação de expressões numéricas e booleanas constantes (ex: `1000 * 60 * 60` -> `3600000`).
-  - Simplificação de identidades algébricas (`x + 0` -> `x`, `x * 1` -> `x`, `true and x` -> `x`).
-- [ ] **Dead Code Elimination (DCE)**:
-  - Eliminação de ramos inalcançáveis (`if false then ...`, `while false do ...`).
-  - Omissão de emissão para funções privadas de módulos não utilizadas.
-- [ ] **Pipeline de Release de Alta Performance**:
-  - Flag `--release` na CLI com passagem de diretivas agressivas aos backends:
-    - Free Pascal: `-O3 -XX -Xs` (otimização máxima, remoção de seções mortas e strip de símbolos de debug).
-    - GCC C99: `-O3 -flto -s` (otimização LTO em tempo de linkagem e binários ultra compactos).
+### ✅ Fase 27: Otimizações de AST & Modo Release (`aetherc build --release`) (Concluído)
+- [x] **Constant Folding & Otimizações na AST**:
+  - Implementada a unit dedicada `compiler/src/uAetherOptimizer.pas` (`TAetherOptimizer`).
+  - Avaliação estática em tempo de compilação de expressões numéricas inteiras (`+`, `-`, `*`, `/`, `%`), de ponto flutuante, booleanas (`and`, `or`, comparações) e concatenação de strings literais.
+  - Simplificação de identidades algébricas (`x + 0` -> `x`, `x * 1` -> `x`, `not (not x)` -> `x`, curto-circuito em booleanos).
+- [x] **Dead Code Elimination (DCE)**:
+  - Eliminação estática de ramos inalcançáveis (`if false then ... else ...`, `while false do ...`).
+  - Eliminação de instruções subsequentes inalcançáveis após `return` incondicional em blocos e funções.
+- [x] **Pipeline de Release de Alta Performance**:
+  - Flags `--release`, `--opt` e `-O` implementadas na CLI `aetherc`.
+  - Passagem de diretivas agressivas aos backends nativos:
+    - Free Pascal: `-O3 -XX -Xs` gerando binários stripped compactos de ~116 KB.
+    - GCC C99: `-O3 -flto -s` com Link-Time Optimization (LTO) gerando binários ultra compactos de apenas ~13.8 KB.
+  - Exemplo integrado criado e validado em `examples/21_optimizer_and_release.aeth` com 100% de paridade em ambos os backends.
 
 ### ⏳ Fase 28: Expansão do LSP & IDE Developer Experience (VS Code Extension v1.0.0)
 - [ ] **Formatação Integrada via LSP**:

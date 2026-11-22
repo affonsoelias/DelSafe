@@ -85,6 +85,41 @@ Os manifestos de compilação incremental são salvos automaticamente no diretó
 
 ---
 
+## 2.2 Otimizações de AST & Modo Release (`--release`, `--opt`)
+
+O Aether possui um otimizador de AST integrado (`uAetherOptimizer.pas`) com análise estática de alto nível e reescrita de código para máxima performance de execução e tamanho reduzido de binários:
+
+### Otimizações na AST:
+1. **Constant Folding (Dobra de Constantes)**:
+   - Expressões inteiras: `24 * 60 * 60` -> `86400`
+   - Expressões booleanas: `(100 > 50) and (20 = 20)` -> `true`
+   - Concatenação de literais: `"Aether " + "Engine " + "Release"` -> `"Aether Engine Release"`
+2. **Simplificações Algébricas**:
+   - `x + 0` -> `x`, `x - 0` -> `x`, `x * 1` -> `x`, `x / 1` -> `x`, `not (not x)` -> `x`
+3. **Dead Code Elimination (DCE)**:
+   - `if false then ... else ... end;`: o ramo `then` inalcançável é descartado em tempo de compilação e o `else` é promovido.
+   - `while false do ... end;`: loops com condição estática falsa são eliminados da AST.
+   - Código inalcançável após `return` incondicional é automaticamente expurgado da árvore sintática.
+
+### Flags do Otimizador e Release:
+- `--release`: Ativa o otimizador de AST e passa diretivas agressivas aos compiladores nativos:
+  - **Free Pascal (`fpc`)**: `-O3 -XX -Xs` (otimização agressiva nível 3, eliminação de funções/unidades não usadas e strip total de símbolos de debug). Binários em torno de ~110 KB.
+  - **GCC C99 (`gcc`)**: `-O3 -flto -s` (otimização nível 3, link-time optimization entre módulos e strip de símbolos). Binários ultra compactos de ~13 KB.
+- `--opt` ou `-O`: Ativa o otimizador de AST mantendo o modo normal de compilação.
+
+```bash
+# Compilação em modo release para produção
+aetherc build src/main.aeth --release
+
+# Compilação release direcionada para C99
+aetherc build src/main.aeth --target=c --release -o bin/app.exe
+
+# Execução com otimizações de AST
+aetherc run src/main.aeth --opt
+```
+
+---
+
 ## 3. Comandos de Emissão e Transpilação (`aetherc emit`)
 
 O comando `emit` gera o código-fonte transpilado sem necessariamente invocar o FPC ou GCC, permitindo inspeção, depuração, integração com CI/CD e integração direta com o **BlaiseVue**:

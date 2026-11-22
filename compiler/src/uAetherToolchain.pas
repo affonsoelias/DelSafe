@@ -25,8 +25,8 @@ type
 
 function DetectToolchain: TToolchainInfo;
 procedure PrintDoctorReport;
-function CompileWithFPC(const PascalSource, OutExe: string; var OutputLog: string): Boolean;
-function CompileWithGCC(const CSource, OutExe: string; var OutputLog: string): Boolean;
+function CompileWithFPC(const PascalSource, OutExe: string; var OutputLog: string; ReleaseMode: Boolean = False): Boolean;
+function CompileWithGCC(const CSource, OutExe: string; var OutputLog: string; ReleaseMode: Boolean = False): Boolean;
 
 implementation
 
@@ -234,7 +234,7 @@ begin
   WriteLn('--------------------------------------------------------');
 end;
 
-function CompileWithFPC(const PascalSource, OutExe: string; var OutputLog: string): Boolean;
+function CompileWithFPC(const PascalSource, OutExe: string; var OutputLog: string; ReleaseMode: Boolean = False): Boolean;
 var
   Info: TToolchainInfo;
   Params: string;
@@ -247,12 +247,16 @@ begin
     Exit(False);
   end;
 
-  Params := Format('-O2 -FE"%s" -o"%s" "%s"', [ExtractFileDir(OutExe), ExtractFileName(OutExe), PascalSource]);
+  if ReleaseMode then
+    Params := Format('-O3 -XX -Xs -FE"%s" -o"%s" "%s"', [ExtractFileDir(OutExe), ExtractFileName(OutExe), PascalSource])
+  else
+    Params := Format('-O2 -FE"%s" -o"%s" "%s"', [ExtractFileDir(OutExe), ExtractFileName(OutExe), PascalSource]);
+
   Code := RunCommandCapture(Info.FPCPath, Params, '', OutputLog);
   Result := (Code = 0) and FileExists(OutExe);
 end;
 
-function CompileWithGCC(const CSource, OutExe: string; var OutputLog: string): Boolean;
+function CompileWithGCC(const CSource, OutExe: string; var OutputLog: string; ReleaseMode: Boolean = False): Boolean;
 var
   Info: TToolchainInfo;
   Params: string;
@@ -265,11 +269,22 @@ begin
     Exit(False);
   end;
 
-  {$IFDEF MSWINDOWS}
-  Params := Format('-O2 "%s" -o "%s" -lws2_32 -lm', [CSource, OutExe]);
-  {$ELSE}
-  Params := Format('-O2 "%s" -o "%s" -lm', [CSource, OutExe]);
-  {$ENDIF}
+  if ReleaseMode then
+  begin
+    {$IFDEF MSWINDOWS}
+    Params := Format('-O3 -flto -s "%s" -o "%s" -lws2_32 -lm', [CSource, OutExe]);
+    {$ELSE}
+    Params := Format('-O3 -flto -s "%s" -o "%s" -lm', [CSource, OutExe]);
+    {$ENDIF}
+  end
+  else
+  begin
+    {$IFDEF MSWINDOWS}
+    Params := Format('-O2 "%s" -o "%s" -lws2_32 -lm', [CSource, OutExe]);
+    {$ELSE}
+    Params := Format('-O2 "%s" -o "%s" -lm', [CSource, OutExe]);
+    {$ENDIF}
+  end;
   Code := RunCommandCapture(Info.GCCPath, Params, Info.MSYS2BinDir, OutputLog);
   Result := (Code = 0) and FileExists(OutExe);
 end;

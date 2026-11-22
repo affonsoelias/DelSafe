@@ -151,6 +151,17 @@ begin
   Result := '';
   if not Assigned(Expr) then Exit;
 
+  if Expr is TASTLiteralExpr then
+  begin
+    case TASTLiteralExpr(Expr).Kind of
+      lkInt: Exit('Int32');
+      lkFloat: Exit('Float64');
+      lkBool: Exit('Bool');
+      lkString: Exit('String');
+      lkChar: Exit('Char');
+    end;
+  end;
+
   if Expr is TASTIdentifierExpr then
   begin
     Id := TASTIdentifierExpr(Expr);
@@ -298,6 +309,7 @@ var
   I: Integer;
   OpStr: string;
   TargetStr: string;
+  ArgType: string;
 begin
   if not Assigned(Expr) then Exit('');
 
@@ -427,10 +439,22 @@ begin
   begin
     Call := TASTCallExpr(Expr);
 
-    if Call.Callee = 'PrintLn' then
+    if (Call.Callee = 'PrintLn') or (Call.Callee = 'WriteLn') then
     begin
       if Call.Args.Count = 1 then
-        Result := 'printf("%s\n", ' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + ')'
+      begin
+        ArgType := GetExprTypeName(TASTCallArg(Call.Args[0]).Expr);
+        if (ArgType = 'Int32') or (ArgType = 'Int16') or (ArgType = 'Int8') or (ArgType = 'UInt16') or (ArgType = 'UInt8') then
+          Result := 'printf("%d\n", ' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + ')'
+        else if (ArgType = 'Int64') or (ArgType = 'UInt64') or (ArgType = 'UInt32') then
+          Result := 'printf("%lld\n", (long long)(' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + '))'
+        else if (ArgType = 'Float64') or (ArgType = 'Float32') then
+          Result := 'printf("%f\n", ' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + ')'
+        else if (ArgType = 'Bool') then
+          Result := 'printf("%s\n", (' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + ') ? "true" : "false")'
+        else
+          Result := 'printf("%s\n", ' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + ')';
+      end
       else
       begin
         ArgsStr := EmitExpr(TASTCallArg(Call.Args[0]).Expr);

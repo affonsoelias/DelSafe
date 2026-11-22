@@ -25,14 +25,17 @@ type
     FItems: TFPList;
     function GetCount: Integer;
     function GetItem(Index: Integer): TASTNode;
+    procedure SetItem(Index: Integer; Node: TASTNode);
   public
     constructor Create;
     destructor Destroy; override;
     procedure Add(Node: TASTNode);
     procedure Insert(Index: Integer; Node: TASTNode);
+    procedure Delete(Index: Integer);
     function Extract(Node: TASTNode): TASTNode;
+    function ExtractIndex(Index: Integer): TASTNode;
     property Count: Integer read GetCount;
-    property Items[Index: Integer]: TASTNode read GetItem; default;
+    property Items[Index: Integer]: TASTNode read GetItem write SetItem; default;
   end;
 
   // --- Expressões ---
@@ -376,6 +379,38 @@ end;
 function TASTNodeList.GetItem(Index: Integer): TASTNode;
 begin
   Result := TASTNode(FItems[Index]);
+end;
+
+procedure TASTNodeList.SetItem(Index: Integer; Node: TASTNode);
+begin
+  if (Index >= 0) and (Index < FItems.Count) then
+  begin
+    if TASTNode(FItems[Index]) <> Node then
+    begin
+      TASTNode(FItems[Index]).Free;
+      FItems[Index] := Node;
+    end;
+  end;
+end;
+
+procedure TASTNodeList.Delete(Index: Integer);
+begin
+  if (Index >= 0) and (Index < FItems.Count) then
+  begin
+    TASTNode(FItems[Index]).Free;
+    FItems.Delete(Index);
+  end;
+end;
+
+function TASTNodeList.ExtractIndex(Index: Integer): TASTNode;
+begin
+  if (Index >= 0) and (Index < FItems.Count) then
+  begin
+    Result := TASTNode(FItems[Index]);
+    FItems.Delete(Index);
+  end
+  else
+    Result := nil;
 end;
 
 { TASTLiteralExpr }

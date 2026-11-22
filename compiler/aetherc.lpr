@@ -20,7 +20,8 @@ uAetherJSONDiag,
 uAetherLSP,
 uAetherProject,
 uAetherFormatter,
-uAetherIncremental;
+uAetherIncremental,
+uAetherOptimizer;
 
 Procedure PrintBanner;
 Begin
@@ -96,6 +97,8 @@ Begin
   );
   WriteLn('  --incremental     Habilita compilacao incremental baseada em hashes SHA-256');
   WriteLn('  --force           Forca recompilacao total ignorando cache de objetos');
+  WriteLn('  --release         Modo release: otimiza AST e ativa -O3, DCE e strip de simbolos');
+  WriteLn('  --opt, -O         Ativa otimizador de AST (Constant Folding e Dead Code Elimination)');
   WriteLn('  --dump-tokens     Exibe a lista de tokens do Lexer');
   WriteLn('  --dump-ast        Exibe a Arvore Sintatica Abstrata (AST)');
   WriteLn(
@@ -412,7 +415,8 @@ End;
 Procedure CompileFile(Const SourceFile: String; TargetPascal: Boolean; CheckOnly
                       , DumpASTOnly: Boolean; Const OutputExeName: String;
                       SilentBanner: Boolean; Incremental: Boolean = False;
-                      ForceRebuild: Boolean = False);
+                      ForceRebuild: Boolean = False; ReleaseMode: Boolean = False;
+                      RunOptimizer: Boolean = False);
 
 Var 
   Source: string;
@@ -420,6 +424,7 @@ Var
   Parser: TAetherParser;
   TypeChecker: TAetherTypeChecker;
   BorrowChecker: TAetherBorrowChecker;
+  Optimizer: TAetherOptimizer;
   ModuleNode: TASTModule;
   GenDir, IntermediateFile, FinalExe: string;
   BaseProjDir, Dummy, TargetBackendStr, CachePath: string;
@@ -445,8 +450,14 @@ Begin
     BaseProjDir := GetCurrentDir;
   BaseProjDir := ExcludeTrailingPathDelimiter(BaseProjDir);
 
-  TargetBackendStr := 'pascal';
-  If Not TargetPascal Then TargetBackendStr := 'c';
+  If TargetPascal Then
+  Begin
+    If ReleaseMode Then TargetBackendStr := 'pascal-release' Else TargetBackendStr := 'pascal';
+  End
+  Else
+  Begin
+    If ReleaseMode Then TargetBackendStr := 'c-release' Else TargetBackendStr := 'c';
+  End;
 
   If OutputExeName <> '' Then
     FinalExe := OutputExeName
@@ -564,6 +575,22 @@ If CheckOnly Then
     Exit;
   End;
 
+// 3.5 Otimizacoes de AST (Constant Folding & Dead Code Elimination)
+If RunOptimizer Or ReleaseMode Then
+Begin
+  Optimizer := TAetherOptimizer.Create;
+  Try
+    If Optimizer.OptimizeModule(ModuleNode) And (Not SilentBanner) Then
+    Begin
+      WriteLn(Format('      [OPTIMIZER] AST otimizada: %d constantes dobradas, %d identidades simplificadas, %d ramos mortos e %d instrucoes inalcancaveis eliminadas.',
+        [Optimizer.Stats.FoldedConstants, Optimizer.Stats.SimplifiedIdentities,
+         Optimizer.Stats.EliminatedDeadBranches, Optimizer.Stats.EliminatedUnreachableStmts]));
+    End;
+  Finally
+    Optimizer.Free;
+  End;
+End;
+
 // 4. Emissao de Codigo e Geracao do Executavel
 If Not FindProjectRoot(BaseProjDir, Dummy) Then
   BaseProjDir := GetCurrentDir;
@@ -607,11 +634,14 @@ If Not SilentBanner Then
   Begin
     WriteLn(Format('[4/4] Transpilando para Object Pascal -> "%s"', [
             ExtractFileName(IntermediateFile)]));
-    WriteLn('      Invocando Free Pascal (fpc)...');
+    If ReleaseMode Then
+      WriteLn('      Invocando Free Pascal (fpc) [Modo RELEASE: -O3 -XX -Xs]...')
+    Else
+      WriteLn('      Invocando Free Pascal (fpc)...');
   End;
 
 CompileLog := '';
-Success := CompileWithFPC(IntermediateFile, FinalExe, CompileLog);
+Success := CompileWithFPC(IntermediateFile, FinalExe, CompileLog, ReleaseMode);
 If Success Then
   Begin
     If Incremental Then
@@ -654,11 +684,14 @@ If Not SilentBanner Then
   Begin
     WriteLn(Format('[4/4] Transpilando para C99 -> "%s"', [ExtractFileName(
             IntermediateFile)]));
-    WriteLn('      Invocando GCC...');
+    If ReleaseMode Then
+      WriteLn('      Invocando GCC [Modo RELEASE: -O3 -flto -s]...')
+    Else
+      WriteLn('      Invocando GCC...');
   End;
 
 CompileLog := '';
-Success := CompileWithGCC(IntermediateFile, FinalExe, CompileLog);
+Success := CompileWithGCC(IntermediateFile, FinalExe, CompileLog, ReleaseMode);
 If Success Then
   Begin
     If Incremental Then
@@ -1109,6 +1142,8 @@ Var
   OptionJSONDiag: Boolean;
   OptionIncremental: Boolean;
   OptionForce: Boolean;
+  OptionRelease: Boolean;
+  OptionOptimize: Boolean;
   IsRunCommand: Boolean;
   ProjConfig: TAetherProjectConfig;
   I: Integer;
@@ -1126,6 +1161,8 @@ Begin
   OptionJSONDiag := False;
   OptionIncremental := False;
   OptionForce := False;
+  OptionRelease := False;
+  OptionOptimize := False;
   IsRunCommand := False;
 
   // Checa comando de formatacao: fmt [caminho] [--check]
@@ -1563,6 +1600,12 @@ If (ParamCount >= 1) And ((LowerCase(ParamStr(1)) = 'build') Or (LowerCase(
         Else If Arg = '--incremental' Then OptionIncremental := True
         Else If Arg = '--no-incremental' Then OptionIncremental := False
         Else If Arg = '--force' Then OptionForce := True
+        Else If Arg = '--release' Then
+        Begin
+          OptionRelease := True;
+          OptionOptimize := True;
+        End
+        Else If (Arg = '--opt') Or (Arg = '-O') Then OptionOptimize := True
         Else If (Arg = '--emit-json-diag') Or (Arg = '--emit-json-diagnostics')
                Then OptionJSONDiag := True
         Else If Arg = '-o' Then
@@ -1578,7 +1621,8 @@ If (ParamCount >= 1) And ((LowerCase(ParamStr(1)) = 'build') Or (LowerCase(
 
     Try
       CompileFile(InputFile, OptionTargetPascal, OptionCheckOnly, False,
-                  OutputExe, OptionJSONDiag, OptionIncremental, OptionForce);
+                  OutputExe, OptionJSONDiag, OptionIncremental, OptionForce,
+                  OptionRelease, OptionOptimize);
       If IsRunCommand And Not OptionCheckOnly Then
         Begin
           WriteLn('');
@@ -1674,6 +1718,13 @@ While I <= ParamCount Do
            OptionIncremental := False
     Else If Arg = '--force' Then
            OptionForce := True
+    Else If Arg = '--release' Then
+           Begin
+             OptionRelease := True;
+             OptionOptimize := True;
+           End
+    Else If (Arg = '--opt') Or (Arg = '-O') Then
+           OptionOptimize := True
     Else If Arg = '--target=pascal' Then
            OptionTargetPascal := True
     Else If Arg = '--target=c' Then
@@ -1714,7 +1765,8 @@ Try
     DumpTokens(InputFile);
 
   CompileFile(InputFile, OptionTargetPascal, OptionCheckOnly, OptionDumpAST,
-              OutputExe, OptionJSONDiag, OptionIncremental, OptionForce);
+              OutputExe, OptionJSONDiag, OptionIncremental, OptionForce,
+              OptionRelease, OptionOptimize);
 Except
   on E: EAetherBorrowError Do
         Begin
