@@ -248,3 +248,37 @@ Este documento traça o status oficial de desenvolvimento do compilador e as pr�
   - Execução de `bin\aetherc-core.exe examples/13_self_hosted_compiler_demo.aeth -o bin/self_hosted_output.c`.
   - Análise léxica, sintática, verificação de tipos nativa e borrow checking nativo executados com 0 erros.
   - Compilação do código C99 gerado via GCC e execução bem-sucedida, fechando com êxito o ciclo de bootstrapping e auto-hospedagem!
+
+### ⏳ Fase 23: Auto-Hospedagem Recursiva Suprema (O `aetherc-core` Compilar a Si Mesmo)
+- [ ] **Expansão do Parser e AST Nativa em Aether (`compiler/aeth/`)**:
+  - Suporte a declaração de tipos compostos: `struct Nome ... end` e `type Nome = ...`.
+  - Suporte a declaração e chamadas de funções livres: `function Nome(params): Tipo begin ... end;`.
+  - Suporte a resolução de múltiplos módulos e `import` nativo dentro do motor Aether.
+- [ ] **Emissor C99 Nativo Avançado**:
+  - Emissão de definições de `typedef struct` em C para structs Aether.
+  - Emissão de protótipos e implementações de funções C separadas com assinaturas de tipo.
+- [ ] **Ciclo Supremo de Auto-Hospedagem (Stage 2 & Stage 3)**:
+  - `aetherc-core` (gerado pelo FPC no Stage 1) compila o código-fonte de `compiler/aeth/` gerando `compiler-stage2.c`.
+  - Compilação de `compiler-stage2.c` via GCC gerando `aetherc-core-stage2.exe`.
+  - Verificação de identidade de binários / AST (*Reproducible Build Verification*).
+
+### ⏳ Fase 24: Tooling Nativo & Developer Experience (`aetherc fmt` e `aetherc test`)
+- [ ] **Formatador Canônico Oficial (`aetherc fmt`)**:
+  - Implementação do comando `aetherc fmt [arquivo | pasta] [--check]`.
+  - Padronização automática de indentação (4 espaços), quebras de linha em blocos `begin ... end`, alinhamento de seções `var`, `type` e pontuação Pascal.
+  - Modo `--check` para uso em pipelines de CI/CD (retorna exit code 1 se houver desvios de formatação).
+- [ ] **Test Runner Embutido (`aetherc test`)**:
+  - Implementação do comando `aetherc test [arquivo | pasta]`.
+  - Reconhecimento de blocos ou arquivos de teste (`tests/*.aeth` ou `*_test.aeth`).
+  - Primitivas de asserção nativas (`Assert(cond, "msg")`, `AssertEq(a, b)`).
+  - Execução sequencial e relatório no terminal com cores, tempos de execução e rastreio de falhas.
+
+### ⏳ Fase 25: Biblioteca Padrão Canônica Expandida (`std/`)
+- [ ] **`std.fs` (Sistema de Arquivos & Diretórios)**:
+  - Criação de diretórios (`CreateDir`, `ForceDirectories`), remoção (`DeleteFile`, `RemoveDir`), listagem de arquivos e verificação de metadados (tamanho, datas de modificação).
+- [ ] **`std.time` (Tempo de Alta Resolução & Benchmarking)**:
+  - Medição de tempo monótono de alta precisão (`GetNanoseconds`, `Timer`), formatação de data/hora e utilitários de medição de desempenho para blocos de código.
+- [ ] **`std.json` (Manipulação Rápida de JSON)**:
+  - Parser e gerador JSON nativo em Aether, convertendo estruturas de dados e records em representações JSON estruturadas.
+- [ ] **`std.http` (Cliente e Servidor HTTP Básico)**:
+  - Construído sobre a camada nativa de Sockets (`SocketCreate`, `SocketListen`, `SocketAccept`), permitindo criar endpoints HTTP simples e microserviços em Aether.
