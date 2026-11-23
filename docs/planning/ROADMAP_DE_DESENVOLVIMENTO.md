@@ -889,6 +889,21 @@ Mapeamento técnico completo dos recursos pendentes identificados no compilador 
   - Refatorado `uAetherEmitterPascal.pas` e `uAetherEmitterC.pas` com análise de alcançabilidade (eliminando símbolos importados não utilizados de `std/*.aeth`) e emissão sob demanda dos helpers do runtime (`AetherSocket*`, `AetherFile*`, `AetherJson*`, `AetherDynPop_*`, `AetherResult`, `AetherOption`, `AetherTask`, etc.). Projetos simples como o template de `aetherc new` caíram para ~32 linhas em Pascal e ~64 linhas em C99.
 - [x] **7.6 Padronização Agnóstica de Diretórios de Build em `aetherc new` / `init` (`uAetherProject.pas`)**:
   - Substituído `"pascal_src_dir": ".blaisevue/generated"` em `HandleProjectInit` (`compiler/src/uAetherProject.pas`) por `"build/pascal"` (alinhado com `"c_src_dir": "build/c"` e `"pascal_unit_dir": "build/units"`), adicionado `build/` e `.aether/` ao `.gitignore` padrão e removidas referências fixas a `BlaiseVue` em `HandleProjectAudit`, mantendo `aetherc` totalmente agnóstico de framework.
+- [ ] **7.7 Template de `aetherc new` com Arquivo Principal Nomeado pelo Projeto (`uAetherProject.pas`)**:
+  - Em `HandleProjectInit`, gerar o arquivo fonte principal como `src/<nome_do_projeto>.aeth` em vez de `src/main.aeth` (ex.: `aetherc new safira` → `src/safira.aeth`) e atualizar `"entry"` no `aether.json` gerado para `src/<nome_do_projeto>.aeth`.
+  - Dentro do arquivo gerado, declarar `module <NomeDoProjeto>;` (correspondendo ao nome do arquivo, respeitando a validação 1:1 de módulo `E0005`) seguido de `program Main;`, indicando que é o ponto de entrada executável e não uma biblioteca:
+    ```aether
+    module Safira;
+
+    import Math;
+
+    program Main;
+    ...
+    ```
+  - Manter o executável em `bin/<nome_do_projeto>.exe` (comportamento atual) e nomear o teste padrão como `tests/<nome_do_projeto>_test.aeth` com `module <NomeDoProjeto>Test;`.
+  - Sanitizar nomes de projeto que não sejam identificadores válidos (ex.: `meu-app` → arquivo `meu_app.aeth` e `module Meu_app;`), garantindo que o nome do módulo continue compatível com a regra de correspondência arquivo/módulo do compilador.
+  - Atualizar as mensagens de saída do `aetherc new` (árvore de estrutura inicializada) e o `README.md` gerado para refletir o novo nome do arquivo principal.
+  - Observação: isto vale apenas para o template inicial; a linguagem continua permitindo qualquer arquivo de entrada configurado em `"entry"` no `aether.json`.
 
 ### ✅ Fase 56: 8. Ferramental do Compilador (`fmt`, `emit-header`, `lexer`) - CONCLUÍDA
 - [x] **8.1 Correção do Formatador Canônico (`aetherc fmt` — `uAetherFormatter.pas`)**:
