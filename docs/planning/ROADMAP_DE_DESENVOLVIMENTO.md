@@ -436,13 +436,18 @@ Este documento traça o status oficial de desenvolvimento do compilador e as pr�
     - **Sanitização e Validação Tipada**: Desserialização estrita através de `[derive(JSON)]`, blindando os endpoints contra injeções (SQLi, NoSQLi, Command Injection) e payloads malformados.
     - **Proteções HTTP e Rate Limiting**: Middlewares nativos para CORS configurável, Security Headers (HSTS, CSP, X-Frame-Options, X-Content-Type-Options) e controle de taxa de requisições (*Rate Limiting*) por IP/Token.
     - **Transporte Seguro (TLS/HTTPS)**: Suporte nativo a conexões seguras criptografadas de ponta a ponta.
-- [ ] **Arquitetura Modular Não-Invasiva**:
-  - Preservação do core do BlaiseVue (`core/*.pas` e `bin/bv.pas`) em Object Pascal puro, garantindo estabilidade operacional, sem dependências circulares e sem necessidade de dois compiladores para desenvolver o framework.
-  - O Aether atua como linguagem de desenvolvimento de primeira classe para o desenvolvedor de aplicações.
-- [ ] **Frontend Reativo com Aether em Componentes `.bv` (`<script lang="aether">`)**:
+- [ ] **Arquitetura Modular Não-Invasiva & Uso no Core vs. Aplicações**:
+  - Preservação do core do BlaiseVue (`core/*.pas` e `bin/bv.pas`) em Object Pascal puro para manter build rápido com um único compilador (`fpc`/`pas2js`), acesso direto às internals de RTTI/DOM e zero dependências circulares.
+  - O Aether foca 100% na camada de desenvolvimento de aplicações (Frontend `.bv`, Backend API/Zephyr e regras de negócio), permitindo opcionalmente que módulos isolados e críticos de segurança do core (como parsers ou validadores) sejam escritos em Aether e pré-emitidos como `.pas` (`aetherc emit pascal --unit`) versionados no repositório.
+- [ ] **Separação Estrita de Responsabilidades: Aether Emite a `unit .pas` e o BlaiseVue Compila com seu `pas2js` Embutido/Configurado**:
+  - No contexto do BlaiseVue, o `aetherc` **não** invoca um `pas2js` externo por conta própria (`--target=js` fica restrito ao uso standalone fora do framework).
+  - O Aether atua exclusivamente como **Verificador Estático e Gerador de Units**: executa Type Checker, Exhaustive Match, contratos (`require`/`ensure`), Borrow Checker e expansão de `[derive(JSON, Debug, Clone, Equals)]` + `FromJSON`, emitindo uma `unit <Nome>;` Object Pascal padrão (com diretivas de compatibilidade `{$IFDEF PAS2JS}`) via `aetherc emit pascal <arquivo.aeth> --unit --out-dir=.blaisevue/generated --silent`.
+  - **Fonte Única de Verdade do Toolchain (`pas2js` / `fpc`) no BlaiseVue**: O próprio CLI do BlaiseVue (`bv`) assume as units `.pas` geradas em `.blaisevue/generated/` e as compila junto com o restante do projeto usando a versão do `pas2js` embutida ou selecionada/baixada pelo usuário no BlaiseVue (com seu próprio `rtl.js`, flags `-Jc`/`-Jirtl.js` e caminhos de units DOM/Web), eliminando qualquer risco de conflito de versões de `pas2js` ou incompatibilidade de `rtl.js`.
+- [ ] **Frontend Reativo com Aether em Componentes `.bv` (`<script lang="aether">`) & Compartilhamento Isomórfico Full-Stack**:
   - Detecção no parser de SFC do `bv` de blocos `<script lang="aether">`.
-  - Pipeline de pré-processador: extração do script para arquivo `.aeth` temporário e invocação transparente de `aetherc emit pascal --unit` na pasta `generated/`.
-  - Validação estática de posse (Borrow Checker) e checagem de tipos em tempo de compilação antes de entregar a unit Pascal para o `pas2js`.
+  - Pipeline de pré-processador: extração do script para arquivo `.aeth` temporário e invocação transparente de `aetherc emit pascal <arquivo.aeth> --unit --out-dir=.blaisevue/generated --silent`.
+  - Validação estática de posse (Borrow Checker), contratos (`require`/`ensure`), Exhaustive Match e checagem de tipos em tempo de compilação antes de entregar a unit Pascal gerada para o `pas2js` configurado no BlaiseVue.
+  - **Compartilhamento Isomórfico Full-Stack (Frontend + Backend)**: Um único arquivo `.aeth` de domínio (ex.: `shared/models/pedido.aeth` com structs, `[derive(JSON, Equals)]` e contratos `require`/`ensure`) é emitido como unit `.pas` pelo Aether e consumido simultaneamente pelo `pas2js` do BlaiseVue no Frontend e pelo `fpc` (ou backend C99 do Zephyr) no Backend.
   - Compatibilidade retroativa total: blocos `<script>` sem atributo continuam rodando Object Pascal puro.
 - [ ] **WebAssembly de Alta Performance por Convenção 1:1 (Abordagem A)**:
   - Suporte a `<script lang="aether" target="wasm">` em componentes de computação pesada (gráficos, física, IA local, processamento de dados).
