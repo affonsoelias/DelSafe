@@ -444,6 +444,27 @@ Este documento traça o status oficial de desenvolvimento do compilador e as pr�
 - [ ] **Compartilhamento Isomórfico Full-Stack & Validação Dupla de Contratos (Frontend + Backend)**:
   - Um único arquivo `.aeth` de domínio (ex.: `shared/models/pedido.aeth` com structs, `[derive(JSON, Equals)]` + `FromJSON` e contratos `require`/`ensure`) é emitido como unit `.pas` pelo Aether e consumido simultaneamente pelo `pas2js` do BlaiseVue no Frontend e pelo `fpc` (ou backend C99 do Zephyr) no Backend.
   - **Validação Dupla Sem Duplicação**: As cláusulas `require` rodam no navegador com latência zero antes da requisição HTTP e executam novamente no Backend nativo após `FromJSON`, barrando payloads inválidos ou bypass via `curl`/API com a mesma especificação única.
+- [ ] **Fluxo End-to-End do Compilador `.bv` no BlaiseVue com Aether (Pipeline `bv -> Pascal -> JS`)**:
+  - **1. Fluxo Padrão Preservado (`<script>` em Object Pascal)**: `Componente.bv` -> Parser/Gerador SFC do `bv` -> `Componente.pas` -> `pas2js` embutido/configurado do `bv` (+ `rtl.js`) -> `Componente.js`.
+  - **2. Fluxo Pré-Processado Aether (`<script lang="aether">` como degrau anterior ao Pascal -> JS)**:
+    ```text
+    Componente.bv
+       │
+       ▼ [1. Parser SFC do bv]      detecta <script lang="aether">, lê <template>, <style> e props:/data:/computed:/methods:
+       ▼ [2. Extrator/Cache do bv]  checa hash incremental; extrai para .blaisevue/tmp/Componente.aeth preservando offset de linhas
+       ▼ [3. aetherc emit pascal]   --unit --out-dir=.blaisevue/generated --silent
+       │                            valida Tipos, Borrow Checker, Exhaustive Match, require/ensure e [derive(JSON)];
+       │                            falhas abortam antes do pas2js apontando a linha real do .bv;
+       │                            sucesso emite Componente_logic.pas (+ uAetherRuntime.pas compartilhada)
+       ▼ [4. Gerador SFC do bv]     monta Componente.pas (<template> + <style> + Proxy Reativo) plugando a unit via uses
+       ▼ [5. pas2js do bv]          compila tudo (Componente.pas + Componente_logic.pas + core + rtl.js)
+       │
+       ▼
+    Componente.js (bundle final)
+    ```
+  - **3. Fluxos Complementares Gerenciados pelo `bv`**:
+    - **Módulos `.aeth` Puros (`shared/*.aeth`)**: Compilados diretamente via `aetherc emit pascal <mod.aeth> --unit --out-dir=.blaisevue/generated --silent` e consumidos via `uses` por qualquer `.bv` (com `<script>` Pascal ou `<script lang="aether">`).
+    - **Blocos Wasm (`<script lang="aether" target="wasm">`)**: O `bv` invoca `aetherc --target=wasm` gerando `dist/wasm/<Componente>.wasm` e emite apenas o stub `TBVWasm.LoadFromUrl` dentro de `Componente.pas` para o `pas2js` compilar no `.js`.
 
 #### Subfase 34.2 — Backend Nativo Zephyr Embutido em `vendor/zephyr`
 - [ ] **Módulo Backend Nativo Zephyr Embutido em `vendor/zephyr`**:
