@@ -10,59 +10,59 @@ type
         is_dir: Bool;
     end;
 
-function CriarDiretorio(borrow path: String) return Bool;
-function RemoverDiretorio(borrow path: String) return Bool;
-function ApagarArquivo(borrow path: String) return Bool;
-function ExisteDiretorio(borrow path: String) return Bool;
-function TamanhoArquivo(borrow path: String) return Int64;
-function ListarDiretorio(borrow path: String) return array of String;
-function CopiarArquivo(borrow origem, destino: String) return Bool;
-function RenomearArquivo(borrow antigo, novo: String) return Bool;
-function ObterInfo(borrow path: String) return FileInfo;
+function MakeDir(borrow path: String) return Bool;
+function DeleteDir(borrow path: String) return Bool;
+function RemoveFile(borrow path: String) return Bool;
+function HasDir(borrow path: String) return Bool;
+function GetFileSize(borrow path: String) return Int64;
+function ReadDir(borrow path: String) return array of String;
+function CopyFileTo(borrow src, dst: String) return Bool;
+function MoveFile(borrow old_path, new_path: String) return Bool;
+function GetFileInfo(borrow path: String) return FileInfo;
 
 implementation
 
-function CriarDiretorio(borrow path: String) return Bool is
+function MakeDir(borrow path: String) return Bool is
 begin
     return CreateDir(borrow path);
-end CriarDiretorio;
+end MakeDir;
 
-function RemoverDiretorio(borrow path: String) return Bool is
+function DeleteDir(borrow path: String) return Bool is
 begin
     return RemoveDir(borrow path);
-end RemoverDiretorio;
+end DeleteDir;
 
-function ApagarArquivo(borrow path: String) return Bool is
+function RemoveFile(borrow path: String) return Bool is
 begin
     return DeleteFile(borrow path);
-end ApagarArquivo;
+end RemoveFile;
 
-function ExisteDiretorio(borrow path: String) return Bool is
+function HasDir(borrow path: String) return Bool is
 begin
     return DirExists(borrow path);
-end ExisteDiretorio;
+end HasDir;
 
-function TamanhoArquivo(borrow path: String) return Int64 is
+function GetFileSize(borrow path: String) return Int64 is
 begin
     return FileSize(borrow path);
-end TamanhoArquivo;
+end GetFileSize;
 
-function ListarDiretorio(borrow path: String) return array of String is
+function ReadDir(borrow path: String) return array of String is
 begin
     return ListDir(path);
-end ListarDiretorio;
+end ReadDir;
 
-function CopiarArquivo(borrow origem, destino: String) return Bool is
+function CopyFileTo(borrow src, dst: String) return Bool is
 begin
-    return CopyFile(origem, destino);
-end CopiarArquivo;
+    return CopyFile(src, dst);
+end CopyFileTo;
 
-function RenomearArquivo(borrow antigo, novo: String) return Bool is
+function MoveFile(borrow old_path, new_path: String) return Bool is
 begin
-    return RenameFile(antigo, novo);
-end RenomearArquivo;
+    return RenameFile(old_path, new_path);
+end MoveFile;
 
-function ObterInfo(borrow path: String) return FileInfo is
+function GetFileInfo(borrow path: String) return FileInfo is
 var
     ex: Bool;
     is_d: Bool;
@@ -76,6 +76,6 @@ begin
         sz := FileSize(borrow path);
     end;
     return FileInfo(path: path, size_bytes: sz, exists: ex, is_dir: is_d);
-end ObterInfo;
+end GetFileInfo;
 
 end FS.

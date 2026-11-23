@@ -37,11 +37,11 @@ var
     cli: Client;
 begin
     PrintLn("=== 1. Testando std.time ===");
-    t := NovoTimer();
-    Iniciar(mut borrow t);
-    Dormir(20);
-    elapsed_ns := Parar(mut borrow t);
-    elapsed_ms := DecorridoMs(borrow t);
+    t := NewTimer();
+    StartTimer(mut borrow t);
+    Sleep(20);
+    elapsed_ns := StopTimer(mut borrow t);
+    elapsed_ms := ElapsedMs(borrow t);
     PrintLn("Tempo decorrido: %d ms (%d ns)", Int32(elapsed_ms), Int32(elapsed_ns));
     Assert(elapsed_ns > 0, "Timer deve registrar tempo positivo");
 
@@ -50,32 +50,32 @@ begin
     test_file := "temp_test_dir/arquivo_teste.txt";
     conteudo := "AetherLang - Sistema de Arquivos Seguro e Sem GC!";
 
-    criou_dir := CriarDiretorio(borrow test_dir);
+    criou_dir := MakeDir(borrow test_dir);
     PrintLn("Diretorio criado: %s", test_dir);
-    Assert(ExisteDiretorio(borrow test_dir), "Diretorio deve existir");
+    Assert(HasDir(borrow test_dir), "Diretorio deve existir");
 
     gravou := WriteFile(borrow test_file, borrow conteudo);
     Assert(gravou, "Arquivo deve ser gravado com sucesso");
     Assert(FileExists(borrow test_file), "Arquivo deve existir");
 
-    tam := TamanhoArquivo(borrow test_file);
+    tam := GetFileSize(borrow test_file);
     PrintLn("Tamanho do arquivo: %d bytes", Int32(tam));
     Assert(tam > 0, "Tamanho deve ser maior que zero");
 
     leu := ReadFile(borrow test_file);
     Assert(Length(borrow leu) > 0, "Conteudo lido nao deve ser vazio");
 
-    info := ObterInfo(borrow test_file);
+    info := GetFileInfo(borrow test_file);
     Assert(info.exists, "Info: arquivo deve existir");
     Assert(not info.is_dir, "Info: nao deve ser diretorio");
 
-    apagou := ApagarArquivo(borrow test_file);
+    apagou := RemoveFile(borrow test_file);
     Assert(apagou, "Arquivo deve ser apagado");
     Assert(not FileExists(borrow test_file), "Arquivo nao deve mais existir");
 
-    removeu_dir := RemoverDiretorio(borrow test_dir);
+    removeu_dir := DeleteDir(borrow test_dir);
     Assert(removeu_dir, "Diretorio deve ser removido");
-    Assert(not ExisteDiretorio(borrow test_dir), "Diretorio nao deve mais existir");
+    Assert(not HasDir(borrow test_dir), "Diretorio nao deve mais existir");
     PrintLn("Limpeza de arquivos e diretorios concluida com sucesso.");
 
     PrintLn("=== 3. Testando std.json ===");

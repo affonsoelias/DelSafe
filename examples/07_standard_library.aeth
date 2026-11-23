@@ -18,7 +18,7 @@ begin
     PrintLn("=== TESTE DA BIBLIOTECA PADRAO AETHER (STD/) ===");
 
     // 1. Testando std/io
-    Informar(borrow "Inicializando demonstracao da biblioteca padrao...");
+    LogInfo(borrow "Inicializando demonstracao da biblioteca padrao...");
 
     // 2. Testando std/strings
     PrintMessage(borrow "INFO", borrow "Modulo Strings carregado com sucesso!");
@@ -41,9 +41,9 @@ begin
     match res_sqrt do
         case Ok(let raiz):
             PrintLn("Math.SqrtSafe(81.0) = %f", raiz);
-        case Err(MathError.DominioInvalido):
+        case Err(MathError.InvalidDomain):
             PrintLn("Erro: Raiz de numero negativo!");
-        case Err(MathError.DivisaoPorZero):
+        case Err(MathError.DivisionByZero):
             PrintLn("Erro: Divisao por zero!");
     end;
 

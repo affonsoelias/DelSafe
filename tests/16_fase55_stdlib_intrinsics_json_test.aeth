@@ -66,8 +66,8 @@ begin
     Assert(optFltOk.is_some and (optFltOk.value > 3.24) and (optFltOk.value < 3.26));
     Assert(optFltErr.is_none);
 
-    Assert(Strings.Juntar(Strings.Dividir("a-b", "-"), "+") = "a+b");
-    Assert(Strings.Repetir("x", 4) = "xxxx");
+    Assert(Strings.JoinWith(Strings.SplitBy("a-b", "-"), "+") = "a+b");
+    Assert(Strings.RepeatText("x", 4) = "xxxx");
 
     let safeRt := Math.SqrtSafe(16.0);
     Assert(safeRt.is_ok and (safeRt.value > 3.99) and (safeRt.value < 4.01));
@@ -103,8 +103,8 @@ begin
     end;
     Assert(SetEnv("AETHER_FASE55_VAR", "valor_ok"));
     Assert(GetEnv("AETHER_FASE55_VAR") = "valor_ok");
-    Assert(IO.DefinirEnv("AETHER_FASE55_IO", "ok2"));
-    Assert(IO.ObterEnv("AETHER_FASE55_IO") = "ok2");
+    Assert(IO.SetEnvVar("AETHER_FASE55_IO", "ok2"));
+    Assert(IO.GetEnvVar("AETHER_FASE55_IO") = "ok2");
 
     baseDir := "build/tmp_fase55_fs_test";
     f1 := baseDir + "/a.txt";
@@ -120,7 +120,7 @@ begin
     okRen := RenameFile(f2, f3);
     Assert(okRen and FileExists(f3) and (not FileExists(f2)));
 
-    entries := FS.ListarDiretorio(baseDir);
+    entries := FS.ReadDir(baseDir);
     Assert(entries.Length() = 2);
     found1 := false;
     found3 := false;

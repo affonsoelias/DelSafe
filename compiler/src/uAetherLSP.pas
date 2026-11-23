@@ -972,7 +972,7 @@ begin
     end;
 
     // 2. QuickFix para imports canônicos da stdlib
-    if (Pos('FileInfo', DiagMsg) > 0) or (Pos('CreateDir', DiagMsg) > 0) or (Pos('ExisteDiretorio', DiagMsg) > 0) then
+    if (Pos('FileInfo', DiagMsg) > 0) or (Pos('CreateDir', DiagMsg) > 0) or (Pos('HasDir', DiagMsg) > 0) or (Pos('GetFileInfo', DiagMsg) > 0) then
     begin
       ActionObj := TJSONObject.Create;
       ActionObj.Add('title', '📦 Adicionar import "std.fs;"');
@@ -994,7 +994,7 @@ begin
       ActionObj.Add('edit', EditObj);
       Result.Add(ActionObj);
     end
-    else if (Pos('Timer', DiagMsg) > 0) or (Pos('NovoTimer', DiagMsg) > 0) or (Pos('GetNanoseconds', DiagMsg) > 0) then
+    else if (Pos('Timer', DiagMsg) > 0) or (Pos('NewTimer', DiagMsg) > 0) or (Pos('GetNanoseconds', DiagMsg) > 0) then
     begin
       ActionObj := TJSONObject.Create;
       ActionObj.Add('title', '📦 Adicionar import "std.time;"');

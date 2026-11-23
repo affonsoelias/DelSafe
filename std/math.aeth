@@ -4,8 +4,8 @@ interface
 
 type
     MathError = enum
-        DivisaoPorZero,
-        DominioInvalido
+        DivisionByZero,
+        InvalidDomain
     end;
 
 function Abs(borrow x: Float64) return Float64;
@@ -64,7 +64,7 @@ end Clamp;
 function SqrtSafe(borrow x: Float64) return Result<Float64, MathError> is
 begin
     if x < 0.0 then
-        return Err(MathError.DominioInvalido);
+        return Err(MathError.InvalidDomain);
     else
         return Ok(Sqrt(x));
     end;

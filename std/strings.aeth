@@ -7,17 +7,17 @@ extern function puts(borrow s: String) return Int32;
 function IsEmpty(borrow s: String) return Bool;
 function Equals(borrow a, b: String) return Bool;
 procedure PrintMessage(borrow prefix, msg: String);
-function Tamanho(borrow s: String) return UInt32;
-function Caractere(borrow s: String; borrow pos: UInt32) return String;
-function Fatia(borrow s: String; borrow inicio, qtd: UInt32) return String;
-function Dividir(borrow s, sep: String) return array of String;
-function Juntar(borrow partes: array of String; borrow sep: String) return String;
-function PreencherEsquerda(borrow s: String; largura: Int32; borrow preenchimento: String) return String;
-function PreencherDireita(borrow s: String; largura: Int32; borrow preenchimento: String) return String;
-function Repetir(borrow s: String; vezes: Int32) return String;
-function TextoParaFloat(borrow s: String) return Float64;
-function TentarTextoParaInt(borrow s: String) return Option<Int32>;
-function TentarTextoParaFloat(borrow s: String) return Option<Float64>;
+function StrLen(borrow s: String) return UInt32;
+function GetChar(borrow s: String; borrow pos: UInt32) return String;
+function Substr(borrow s: String; borrow start, count: UInt32) return String;
+function SplitBy(borrow s, sep: String) return array of String;
+function JoinWith(borrow parts: array of String; borrow sep: String) return String;
+function PadStart(borrow s: String; width: Int32; borrow pad: String) return String;
+function PadEnd(borrow s: String; width: Int32; borrow pad: String) return String;
+function RepeatText(borrow s: String; count: Int32) return String;
+function ParseFloat(borrow s: String) return Float64;
+function TryParseInt(borrow s: String) return Option<Int32>;
+function TryParseFloat(borrow s: String) return Option<Float64>;
 
 implementation
 
@@ -44,59 +44,59 @@ begin
     PrintLn("[%s] %s", prefix, msg);
 end PrintMessage;
 
-function Tamanho(borrow s: String) return UInt32 is
+function StrLen(borrow s: String) return UInt32 is
 begin
     return Length(borrow s);
-end Tamanho;
+end StrLen;
 
-function Caractere(borrow s: String; borrow pos: UInt32) return String is
+function GetChar(borrow s: String; borrow pos: UInt32) return String is
 begin
     return CharAt(borrow s, borrow pos);
-end Caractere;
+end GetChar;
 
-function Fatia(borrow s: String; borrow inicio, qtd: UInt32) return String is
+function Substr(borrow s: String; borrow start, count: UInt32) return String is
 begin
-    return Substring(borrow s, borrow inicio, borrow qtd);
-end Fatia;
+    return Substring(borrow s, borrow start, borrow count);
+end Substr;
 
-function Dividir(borrow s, sep: String) return array of String is
+function SplitBy(borrow s, sep: String) return array of String is
 begin
     return Split(s, sep);
-end Dividir;
+end SplitBy;
 
-function Juntar(borrow partes: array of String; borrow sep: String) return String is
+function JoinWith(borrow parts: array of String; borrow sep: String) return String is
 begin
-    return Join(partes, sep);
-end Juntar;
+    return Join(parts, sep);
+end JoinWith;
 
-function PreencherEsquerda(borrow s: String; largura: Int32; borrow preenchimento: String) return String is
+function PadStart(borrow s: String; width: Int32; borrow pad: String) return String is
 begin
-    return PadLeft(s, largura, preenchimento);
-end PreencherEsquerda;
+    return PadLeft(s, width, pad);
+end PadStart;
 
-function PreencherDireita(borrow s: String; largura: Int32; borrow preenchimento: String) return String is
+function PadEnd(borrow s: String; width: Int32; borrow pad: String) return String is
 begin
-    return PadRight(s, largura, preenchimento);
-end PreencherDireita;
+    return PadRight(s, width, pad);
+end PadEnd;
 
-function Repetir(borrow s: String; vezes: Int32) return String is
+function RepeatText(borrow s: String; count: Int32) return String is
 begin
-    return RepeatStr(s, vezes);
-end Repetir;
+    return RepeatStr(s, count);
+end RepeatText;
 
-function TextoParaFloat(borrow s: String) return Float64 is
+function ParseFloat(borrow s: String) return Float64 is
 begin
     return StrToFloat(s);
-end TextoParaFloat;
+end ParseFloat;
 
-function TentarTextoParaInt(borrow s: String) return Option<Int32> is
+function TryParseInt(borrow s: String) return Option<Int32> is
 begin
     return TryStrToInt(s);
-end TentarTextoParaInt;
+end TryParseInt;
 
-function TentarTextoParaFloat(borrow s: String) return Option<Float64> is
+function TryParseFloat(borrow s: String) return Option<Float64> is
 begin
     return TryStrToFloat(s);
-end TentarTextoParaFloat;
+end TryParseFloat;
 
 end Strings.

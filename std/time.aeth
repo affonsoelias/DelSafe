@@ -9,57 +9,57 @@ type
         is_running: Bool;
     end;
 
-function AgoraNanosegundos() return UInt64;
-procedure Dormir(ms: UInt32);
-function NovoTimer() return Timer;
-procedure Iniciar(mut borrow t: Timer);
-function Parar(mut borrow t: Timer) return UInt64;
-function DecorridoNs(borrow t: Timer) return UInt64;
-function DecorridoMs(borrow t: Timer) return UInt64;
+function NowNs() return UInt64;
+procedure Sleep(ms: UInt32);
+function NewTimer() return Timer;
+procedure StartTimer(mut borrow t: Timer);
+function StopTimer(mut borrow t: Timer) return UInt64;
+function ElapsedNs(borrow t: Timer) return UInt64;
+function ElapsedMs(borrow t: Timer) return UInt64;
 
 implementation
 
-function AgoraNanosegundos() return UInt64 is
+function NowNs() return UInt64 is
 begin
     return GetNanoseconds();
-end AgoraNanosegundos;
+end NowNs;
 
-procedure Dormir(ms: UInt32) is
+procedure Sleep(ms: UInt32) is
 begin
     SleepMs(ms);
-end Dormir;
+end Sleep;
 
-function NovoTimer() return Timer is
+function NewTimer() return Timer is
 begin
     return Timer(start_ns: 0, stop_ns: 0, is_running: false);
-end NovoTimer;
+end NewTimer;
 
-procedure Iniciar(mut borrow t: Timer) is
+procedure StartTimer(mut borrow t: Timer) is
 begin
     t.start_ns := GetNanoseconds();
     t.stop_ns := 0;
     t.is_running := true;
-end Iniciar;
+end StartTimer;
 
-function Parar(mut borrow t: Timer) return UInt64 is
+function StopTimer(mut borrow t: Timer) return UInt64 is
 begin
     t.stop_ns := GetNanoseconds();
     t.is_running := false;
     return t.stop_ns - t.start_ns;
-end Parar;
+end StopTimer;
 
-function DecorridoNs(borrow t: Timer) return UInt64 is
+function ElapsedNs(borrow t: Timer) return UInt64 is
 begin
     if t.is_running then
         return GetNanoseconds() - t.start_ns;
     else
         return t.stop_ns - t.start_ns;
     end;
-end DecorridoNs;
+end ElapsedNs;
 
-function DecorridoMs(borrow t: Timer) return UInt64 is
+function ElapsedMs(borrow t: Timer) return UInt64 is
 begin
-    return DecorridoNs(borrow t) / 1000000;
-end DecorridoMs;
+    return ElapsedNs(borrow t) / 1000000;
+end ElapsedMs;
 
 end Time.

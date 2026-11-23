@@ -9,55 +9,55 @@ type
         DiskError
     end;
 
-procedure Informar(borrow mensagem: String);
-procedure Imprimir(borrow texto: String);
-function LerLinha() return String;
-function ObterEnv(borrow nome: String) return String;
-function DefinirEnv(borrow nome, valor: String) return Bool;
-function ExisteArquivo(borrow path: String) return Bool;
-function LerArquivo(borrow path: String) return String;
-function GravarArquivo(borrow path, conteudo: String) return Bool;
+procedure LogInfo(borrow message: String);
+procedure WriteOut(borrow text: String);
+function ReadLine() return String;
+function GetEnvVar(borrow name: String) return String;
+function SetEnvVar(borrow name, value: String) return Bool;
+function Exists(borrow path: String) return Bool;
+function ReadAll(borrow path: String) return String;
+function WriteAll(borrow path, content: String) return Bool;
 
 implementation
 
-procedure Informar(borrow mensagem: String) is
+procedure LogInfo(borrow message: String) is
 begin
-    PrintLn("[IO]: %s", mensagem);
-end Informar;
+    PrintLn("[IO]: %s", message);
+end LogInfo;
 
-procedure Imprimir(borrow texto: String) is
+procedure WriteOut(borrow text: String) is
 begin
-    Print(texto);
-end Imprimir;
+    Print(text);
+end WriteOut;
 
-function LerLinha() return String is
+function ReadLine() return String is
 begin
     return ReadLn();
-end LerLinha;
+end ReadLine;
 
-function ObterEnv(borrow nome: String) return String is
+function GetEnvVar(borrow name: String) return String is
 begin
-    return GetEnv(nome);
-end ObterEnv;
+    return GetEnv(name);
+end GetEnvVar;
 
-function DefinirEnv(borrow nome, valor: String) return Bool is
+function SetEnvVar(borrow name, value: String) return Bool is
 begin
-    return SetEnv(nome, valor);
-end DefinirEnv;
+    return SetEnv(name, value);
+end SetEnvVar;
 
-function ExisteArquivo(borrow path: String) return Bool is
+function Exists(borrow path: String) return Bool is
 begin
     return FileExists(borrow path);
-end ExisteArquivo;
+end Exists;
 
-function LerArquivo(borrow path: String) return String is
+function ReadAll(borrow path: String) return String is
 begin
     return ReadFile(borrow path);
-end LerArquivo;
+end ReadAll;
 
-function GravarArquivo(borrow path, conteudo: String) return Bool is
+function WriteAll(borrow path, content: String) return Bool is
 begin
-    return WriteFile(borrow path, borrow conteudo);
-end GravarArquivo;
+    return WriteFile(borrow path, borrow content);
+end WriteAll;
 
 end IO.
