@@ -785,9 +785,41 @@ begin
   end;
 end;
 
+procedure SanitizeProjectIdent(const RawName: string; out FileBase, ModName: string);
+var
+  I: Integer;
+  C: Char;
+  Clean: string;
+  HasLetter: Boolean;
+begin
+  Clean := '';
+  HasLetter := False;
+  for I := 1 to Length(RawName) do
+  begin
+    C := RawName[I];
+    if C in ['a'..'z', 'A'..'Z'] then
+    begin
+      Clean := Clean + LowerCase(C);
+      HasLetter := True;
+    end
+    else if C in ['0'..'9', '_'] then
+      Clean := Clean + C
+    else
+      Clean := Clean + '_';
+  end;
+
+  if (Clean = '') or (not HasLetter) then
+    Clean := 'aether_app'
+  else if Clean[1] in ['0'..'9'] then
+    Clean := 'app_' + Clean;
+
+  FileBase := Clean;
+  ModName := UpCase(FileBase[1]) + Copy(FileBase, 2, Length(FileBase));
+end;
+
 procedure HandleProjectInit(const ProjectName: string);
 var
-  TargetDir, EffectiveName: string;
+  TargetDir, EffectiveName, FileBase, ModName: string;
   SrcDir, TestsDir, BinDir: string;
   ConfigFile, MainFile, TestFile, GitignoreFile, ReadmeFile: string;
   ConfigObj, PathsObj, OutputsObj: TJSONObject;
@@ -795,13 +827,15 @@ var
 begin
   if (ProjectName <> '') and (ProjectName <> '.') then
   begin
-    EffectiveName := ProjectName;
     TargetDir := ExpandFileName(GetCurrentDir + PathDelim + ProjectName);
     if not DirectoryExists(TargetDir) then
     begin
       if not ForceDirectories(TargetDir) then
         raise Exception.CreateFmt('Nao foi possivel criar o diretorio "%s"', [TargetDir]);
     end;
+    EffectiveName := ExtractFileName(ExcludeTrailingPathDelimiter(TargetDir));
+    if EffectiveName = '' then
+      EffectiveName := ProjectName;
   end
   else
   begin
@@ -810,6 +844,8 @@ begin
     if EffectiveName = '' then
       EffectiveName := 'aether_app';
   end;
+
+  SanitizeProjectIdent(EffectiveName, FileBase, ModName);
 
   ConfigFile := TargetDir + PathDelim + 'aether.json';
   if FileExists(ConfigFile) then
@@ -830,7 +866,7 @@ begin
     ConfigObj.Add('version', '0.1.0');
     ConfigObj.Add('description', 'Projeto desenvolvido na linguagem de sistemas Aether');
     ConfigObj.Add('backend', 'pascal');
-    ConfigObj.Add('entry', 'src/main.aeth');
+    ConfigObj.Add('entry', 'src/' + FileBase + '.aeth');
     ConfigObj.Add('output', 'bin/' + EffectiveName + '.exe');
 
     // Seção 'paths' para organização de código e interop C / Pascal / DLLs
@@ -860,10 +896,10 @@ begin
     ConfigObj.Free;
   end;
 
-  // 2. Gera src/main.aeth
-  MainFile := SrcDir + PathDelim + 'main.aeth';
+  // 2. Gera src/<FileBase>.aeth
+  MainFile := SrcDir + PathDelim + FileBase + '.aeth';
   WriteStringToFile(MainFile,
-    'module Main;' + LineEnding +
+    'module ' + ModName + ';' + LineEnding +
     '' + LineEnding +
     'import Math;' + LineEnding +
     '' + LineEnding +
@@ -887,10 +923,10 @@ begin
     'end.' + LineEnding
   );
 
-  // 3. Gera tests/main_test.aeth
-  TestFile := TestsDir + PathDelim + 'main_test.aeth';
+  // 3. Gera tests/<FileBase>_test.aeth
+  TestFile := TestsDir + PathDelim + FileBase + '_test.aeth';
   WriteStringToFile(TestFile,
-    'module MainTest;' + LineEnding +
+    'module ' + ModName + 'Test;' + LineEnding +
     '' + LineEnding +
     'import Math;' + LineEnding +
     '' + LineEnding +
@@ -929,8 +965,8 @@ begin
     '' + LineEnding +
     '## 🚀 Estrutura do Projeto' + LineEnding +
     '- `aether.json`: Manifesto de configuração do projeto.' + LineEnding +
-    '- `src/main.aeth`: Código-fonte principal da aplicação.' + LineEnding +
-    '- `tests/main_test.aeth`: Testes unitários do projeto.' + LineEnding +
+    '- `src/' + FileBase + '.aeth`: Código-fonte principal da aplicação.' + LineEnding +
+    '- `tests/' + FileBase + '_test.aeth`: Testes unitários do projeto.' + LineEnding +
     '' + LineEnding +
     '## 🛠️ Comandos Rápidos' + LineEnding +
     '- **Compilar o projeto:**' + LineEnding +
@@ -953,8 +989,8 @@ begin
   WriteLn(' Diretorio: ' + TargetDir);
   WriteLn(' Estrutura inicializada:');
   WriteLn('   ├── aether.json');
-  WriteLn('   ├── src/main.aeth');
-  WriteLn('   ├── tests/main_test.aeth');
+  WriteLn('   ├── src/' + FileBase + '.aeth');
+  WriteLn('   ├── tests/' + FileBase + '_test.aeth');
   WriteLn('   ├── .gitignore');
   WriteLn('   └── README.md');
   WriteLn('');
