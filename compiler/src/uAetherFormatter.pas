@@ -343,6 +343,26 @@ var
     Result := (L = WL) or (not IsAlphaNumChar(S[WL + 1]));
   end;
 
+  function IsEndLine(const S: string): Boolean;
+  var
+    Rest: string;
+    K: Integer;
+  begin
+    if (S = 'end') or (S = 'end;') or (S = 'end.') then
+      Exit(True);
+    if StartsWithWord(S, 'end') and (Length(S) > 4) and ((S[Length(S)] = ';') or (S[Length(S)] = '.')) then
+    begin
+      Rest := Trim(Copy(S, 4, Length(S) - 4));
+      if Length(Rest) > 0 then
+      begin
+        for K := 1 to Length(Rest) do
+          if not IsAlphaNumChar(Rest[K]) then Exit(False);
+        Exit(True);
+      end;
+    end;
+    Result := False;
+  end;
+
 begin
   Lines := TStringList.Create;
   OutputList := TStringList.Create;
@@ -389,15 +409,17 @@ begin
       end
       else
       begin
-        // Fim de secao no nivel superior antes de nova funcao, program ou outra secao de modulo
+        // Fim de secao no nivel superior antes de nova rotina, program ou outra secao de modulo
         if (Length(BlockStack) = 0) and (
              StartsWithWord(CodeOnly, 'pub') or StartsWithWord(CodeOnly, 'priv') or
              StartsWithWord(CodeOnly, 'private') or
-             StartsWithWord(CodeOnly, 'function') or StartsWithWord(CodeOnly, 'async') or
-             StartsWithWord(CodeOnly, 'extern') or StartsWithWord(CodeOnly, 'export') or
-             StartsWithWord(CodeOnly, 'program') or (CodeOnly = 'type') or
-             (CodeOnly = 'const') or (CodeOnly = 'var') or (CodeOnly = 'let') or
-             (CodeOnly = 'contract') or StartsWithWord(CodeOnly, 'impl')
+             StartsWithWord(CodeOnly, 'function') or StartsWithWord(CodeOnly, 'procedure') or
+             StartsWithWord(CodeOnly, 'async') or StartsWithWord(CodeOnly, 'extern') or
+             StartsWithWord(CodeOnly, 'export') or StartsWithWord(CodeOnly, 'program') or
+             (CodeOnly = 'interface') or (CodeOnly = 'implementation') or
+             (CodeOnly = 'initialization') or (CodeOnly = 'finalization') or
+             (CodeOnly = 'type') or (CodeOnly = 'const') or (CodeOnly = 'var') or
+             (CodeOnly = 'let') or (CodeOnly = 'contract') or StartsWithWord(CodeOnly, 'impl')
            ) then
           SectionIndent := 0;
 
@@ -408,7 +430,7 @@ begin
           SectionIndent := 0;
 
         // Fechamento de blocos
-        if (CodeOnly = 'end;') or (CodeOnly = 'end.') or (CodeOnly = 'end') then
+        if IsEndLine(CodeOnly) then
         begin
           if TopBlock = bkMatchArm then
           begin
@@ -418,6 +440,8 @@ begin
           if Length(BlockStack) > 0 then
             PopBlock;
           if IndentLevel > 0 then Dec(IndentLevel);
+          if Length(BlockStack) = 0 then
+            SectionIndent := 0;
           CurrentIndent := IndentLevel + SectionIndent;
         end
         else if StartsWithWord(CodeOnly, 'until') then
@@ -466,7 +490,8 @@ begin
           PushBlock(bkBlock);
           Inc(IndentLevel);
         end
-        else if (CodeOnly = 'type') or (CodeOnly = 'const') or (CodeOnly = 'var') or (CodeOnly = 'let') or (CodeOnly = 'contract') or
+        else if (CodeOnly = 'type') or (CodeOnly = 'const') or (CodeOnly = 'var') or (CodeOnly = 'let') or
+                (CodeOnly = 'contract') or (CodeOnly = 'initialization') or (CodeOnly = 'finalization') or
                 (CodeOnly = 'pub type') or (CodeOnly = 'priv type') or (CodeOnly = 'pub const') or (CodeOnly = 'priv const') then
         begin
           SectionIndent := 1;

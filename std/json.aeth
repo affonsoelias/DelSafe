@@ -2,18 +2,34 @@ module JSON;
 
 import Strings;
 
+interface
+
 type
     JsonBuilder = record
         buffer: String;
         count: UInt32;
     end;
 
-function NewJsonBuilder(): JsonBuilder
+function NewJsonBuilder() return JsonBuilder;
+procedure AddString(mut borrow jb: JsonBuilder; borrow key, val: String);
+procedure AddInt(mut borrow jb: JsonBuilder; borrow key: String; borrow val: Int32);
+procedure AddBool(mut borrow jb: JsonBuilder; borrow key: String; borrow val: Bool);
+function Build(borrow jb: JsonBuilder) return String;
+function FindSubstr(borrow haystack, needle: String) return Int32;
+function HasKey(borrow json, key: String) return Bool;
+function ExtractString(borrow json, key: String; mut borrow out_val: String) return Bool;
+function ExtractInt(borrow json, key: String; mut borrow out_val: Int32) return Bool;
+function ExtractBool(borrow json, key: String; mut borrow out_val: Bool) return Bool;
+function Validate(borrow json: String) return Bool;
+
+implementation
+
+function NewJsonBuilder() return JsonBuilder is
 begin
     return JsonBuilder(buffer: "{", count: 0);
-end;
+end NewJsonBuilder;
 
-function AddString(mut borrow jb: JsonBuilder; borrow key: String; borrow val: String): Void
+procedure AddString(mut borrow jb: JsonBuilder; borrow key, val: String) is
 begin
     if jb.count > 0 then
         jb.buffer := jb.buffer + ", ";
@@ -22,9 +38,9 @@ begin
     end;
     jb.buffer := jb.buffer + "\"" + key + "\": \"" + val + "\"";
     jb.count := jb.count + 1;
-end;
+end AddString;
 
-function AddInt(mut borrow jb: JsonBuilder; borrow key: String; borrow val: Int32): Void
+procedure AddInt(mut borrow jb: JsonBuilder; borrow key: String; borrow val: Int32) is
 begin
     if jb.count > 0 then
         jb.buffer := jb.buffer + ", ";
@@ -33,9 +49,9 @@ begin
     end;
     jb.buffer := jb.buffer + "\"" + key + "\": " + IntToStr(borrow val);
     jb.count := jb.count + 1;
-end;
+end AddInt;
 
-function AddBool(mut borrow jb: JsonBuilder; borrow key: String; borrow val: Bool): Void
+procedure AddBool(mut borrow jb: JsonBuilder; borrow key: String; borrow val: Bool) is
 var
     b_str: String;
 begin
@@ -52,18 +68,18 @@ begin
     end;
     jb.buffer := jb.buffer + "\"" + key + "\": " + b_str;
     jb.count := jb.count + 1;
-end;
+end AddBool;
 
-function Build(borrow jb: JsonBuilder): String
+function Build(borrow jb: JsonBuilder) return String is
 begin
     if jb.count > 0 then
         return jb.buffer + " }";
     else
         return "{}";
     end;
-end;
+end Build;
 
-function FindSubstr(borrow haystack: String; borrow needle: String): Int32
+function FindSubstr(borrow haystack, needle: String) return Int32 is
 var
     h_len: UInt32;
     n_len: UInt32;
@@ -86,9 +102,9 @@ begin
     end;
 
     return -1;
-end;
+end FindSubstr;
 
-function HasKey(borrow json: String; borrow key: String): Bool
+function HasKey(borrow json, key: String) return Bool is
 var
     needle: String;
     pos: Int32;
@@ -96,9 +112,9 @@ begin
     needle := "\"" + key + "\"";
     pos := FindSubstr(borrow json, borrow needle);
     return pos >= 0;
-end;
+end HasKey;
 
-function ExtractString(borrow json: String; borrow key: String; mut borrow out_val: String): Bool
+function ExtractString(borrow json, key: String; mut borrow out_val: String) return Bool is
 var
     needle: String;
     pos: Int32;
@@ -139,9 +155,9 @@ begin
     val_len := curr - val_start;
     out_val := Substring(borrow json, val_start, val_len);
     return true;
-end;
+end ExtractString;
 
-function ExtractInt(borrow json: String; borrow key: String; mut borrow out_val: Int32): Bool
+function ExtractInt(borrow json, key: String; mut borrow out_val: Int32) return Bool is
 var
     needle: String;
     pos: Int32;
@@ -192,9 +208,9 @@ begin
     num_str := Substring(borrow json, val_start, val_len);
     out_val := StrToInt(borrow num_str);
     return true;
-end;
+end ExtractInt;
 
-function ExtractBool(borrow json: String; borrow key: String; mut borrow out_val: Bool): Bool
+function ExtractBool(borrow json, key: String; mut borrow out_val: Bool) return Bool is
 var
     needle: String;
     pos: Int32;
@@ -231,9 +247,9 @@ begin
     end;
 
     return false;
-end;
+end ExtractBool;
 
-function Validate(borrow json: String): Bool
+function Validate(borrow json: String) return Bool is
 var
     len: UInt32;
     i: UInt32;
@@ -259,4 +275,6 @@ begin
     end;
 
     return (chaves_abertas = 0) and (colchetes_abertos = 0);
-end;
+end Validate;
+
+end JSON.

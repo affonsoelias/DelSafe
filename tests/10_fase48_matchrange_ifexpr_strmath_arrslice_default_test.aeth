@@ -14,7 +14,7 @@ type
     ListaInt = array of Int32;
     ListaStr = array of String;
 
-function ClassifyHttpAndInt(code: Int32): Int32
+function ClassifyHttpAndInt(code: Int32) return Int32 is
 var
     res: Int32;
 begin
@@ -30,9 +30,9 @@ begin
             res := 99;
     end;
     return res;
-end;
+end ClassifyHttpAndInt;
 
-function ClassifyChar(c: Char): Int32
+function ClassifyChar(c: Char) return Int32 is
 var
     res: Int32;
 begin
@@ -48,9 +48,9 @@ begin
             res := 9;
     end;
     return res;
-end;
+end ClassifyChar;
 
-function CheckJobExhaustive(s: JobState): Int32
+function CheckJobExhaustive(s: JobState) return Int32 is
 var
     outVal: Int32;
 begin
@@ -62,9 +62,9 @@ begin
             outVal := 2;
     end;
     return outVal;
-end;
+end CheckJobExhaustive;
 
-function MethodGroup(m: String): Int32
+function MethodGroup(m: String) return Int32 is
 var
     res: Int32;
 begin
@@ -78,7 +78,7 @@ begin
             res := 0;
     end;
     return res;
-end;
+end MethodGroup;
 
 program Main;
 var
@@ -231,4 +231,4 @@ begin
     Assert(subWords[1] = "C");
 
     PrintLn("=== FASE 48 TEST PASSOU (MATCH RANGE/MULTI, IF EXPR, STR/MATH, SLICE/INSERT/DELETE, NAMED CTOR/DEFAULT) ===");
-end.
+end Fase48MatchrangeIfexprStrmathArrsliceDefaultTest.

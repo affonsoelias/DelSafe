@@ -1,5 +1,7 @@
 module Sync;
 
+interface
+
 type
     AtomicInt32 = record
         val: Int32;
@@ -18,33 +20,50 @@ type
         is_closed: Bool;
     end;
 
-function NewAtomic(borrow initial: Int32): AtomicInt32
+function NewAtomic(borrow initial: Int32) return AtomicInt32;
+function AtomicLoad(borrow a: AtomicInt32) return Int32;
+procedure AtomicStore(mut borrow a: AtomicInt32; borrow new_val: Int32);
+function AtomicAdd(mut borrow a: AtomicInt32; borrow delta: Int32) return Int32;
+function NewMutex() return Mutex;
+function Lock(mut borrow m: Mutex; borrow thread_id: UInt32) return Bool;
+function Unlock(mut borrow m: Mutex; borrow thread_id: UInt32) return Bool;
+function IsLocked(borrow m: Mutex) return Bool;
+function NewChannel(borrow cap: UInt32) return Channel;
+function Send(mut borrow ch: Channel) return Bool;
+function Recv(mut borrow ch: Channel) return Bool;
+function IsChannelEmpty(borrow ch: Channel) return Bool;
+function IsChannelFull(borrow ch: Channel) return Bool;
+procedure CloseChannel(mut borrow ch: Channel);
+
+implementation
+
+function NewAtomic(borrow initial: Int32) return AtomicInt32 is
 begin
     return AtomicInt32(val: initial);
-end;
+end NewAtomic;
 
-function AtomicLoad(borrow a: AtomicInt32): Int32
+function AtomicLoad(borrow a: AtomicInt32) return Int32 is
 begin
     return a.val;
-end;
+end AtomicLoad;
 
-function AtomicStore(mut borrow a: AtomicInt32; borrow new_val: Int32): Void
+procedure AtomicStore(mut borrow a: AtomicInt32; borrow new_val: Int32) is
 begin
     a.val := new_val;
-end;
+end AtomicStore;
 
-function AtomicAdd(mut borrow a: AtomicInt32; borrow delta: Int32): Int32
+function AtomicAdd(mut borrow a: AtomicInt32; borrow delta: Int32) return Int32 is
 begin
     a.val := a.val + delta;
     return a.val;
-end;
+end AtomicAdd;
 
-function NewMutex(): Mutex
+function NewMutex() return Mutex is
 begin
     return Mutex(locked: false, holder_id: 0);
-end;
+end NewMutex;
 
-function Lock(mut borrow m: Mutex; borrow thread_id: UInt32): Bool
+function Lock(mut borrow m: Mutex; borrow thread_id: UInt32) return Bool is
 begin
     if not m.locked then
         m.locked := true;
@@ -53,9 +72,9 @@ begin
     else
         return false;
     end;
-end;
+end Lock;
 
-function Unlock(mut borrow m: Mutex; borrow thread_id: UInt32): Bool
+function Unlock(mut borrow m: Mutex; borrow thread_id: UInt32) return Bool is
 begin
     if m.locked and (m.holder_id = thread_id) then
         m.locked := false;
@@ -64,19 +83,19 @@ begin
     else
         return false;
     end;
-end;
+end Unlock;
 
-function IsLocked(borrow m: Mutex): Bool
+function IsLocked(borrow m: Mutex) return Bool is
 begin
     return m.locked;
-end;
+end IsLocked;
 
-function NewChannel(borrow cap: UInt32): Channel
+function NewChannel(borrow cap: UInt32) return Channel is
 begin
     return Channel(capacity: cap, count: 0, head: 0, tail: 0, is_closed: false);
-end;
+end NewChannel;
 
-function Send(mut borrow ch: Channel): Bool
+function Send(mut borrow ch: Channel) return Bool is
 begin
     if ch.is_closed or (ch.count >= ch.capacity) then
         return false;
@@ -85,9 +104,9 @@ begin
         ch.tail := (ch.tail + 1) mod ch.capacity;
         return true;
     end;
-end;
+end Send;
 
-function Recv(mut borrow ch: Channel): Bool
+function Recv(mut borrow ch: Channel) return Bool is
 begin
     if ch.count = 0 then
         return false;
@@ -96,19 +115,21 @@ begin
         ch.head := (ch.head + 1) mod ch.capacity;
         return true;
     end;
-end;
+end Recv;
 
-function IsChannelEmpty(borrow ch: Channel): Bool
+function IsChannelEmpty(borrow ch: Channel) return Bool is
 begin
     return ch.count = 0;
-end;
+end IsChannelEmpty;
 
-function IsChannelFull(borrow ch: Channel): Bool
+function IsChannelFull(borrow ch: Channel) return Bool is
 begin
     return ch.count >= ch.capacity;
-end;
+end IsChannelFull;
 
-function CloseChannel(mut borrow ch: Channel): Void
+procedure CloseChannel(mut borrow ch: Channel) is
 begin
     ch.is_closed := true;
-end;
+end CloseChannel;
+
+end Sync.

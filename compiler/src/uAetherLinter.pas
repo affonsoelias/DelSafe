@@ -518,6 +518,9 @@ begin
     AllModuleIdents.Sorted := True;
 
     // 1. Coleta todos os identificadores globais referenciados no módulo
+    for I := 0 to AModule.ModuleVars.Count - 1 do
+      CollectIdentifiersInExpr(TASTVarDecl(AModule.ModuleVars[I]).InitialExpr, AllModuleIdents);
+
     for I := 0 to AModule.Functions.Count - 1 do
     begin
       Func := TASTFunction(AModule.Functions[I]);
@@ -525,6 +528,9 @@ begin
       CollectIdentifiersInNodeList(Func.Requires, AllModuleIdents);
       CollectIdentifiersInNodeList(Func.Ensures, AllModuleIdents);
     end;
+
+    CollectIdentifiersInNodeList(AModule.InitBody, AllModuleIdents);
+    CollectIdentifiersInNodeList(AModule.FiniBody, AllModuleIdents);
 
     if Assigned(AModule.ProgramBlock) then
       CollectIdentifiersInNodeList(AModule.ProgramBlock.Body, AllModuleIdents);

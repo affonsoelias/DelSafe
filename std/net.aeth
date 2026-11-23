@@ -2,6 +2,8 @@ module Net;
 
 import Strings;
 
+interface
+
 type
     Socket = record
         fd: Int32;
@@ -22,12 +24,29 @@ type
         body: String;
     end;
 
-function NewSocket(borrow h: String; borrow p: UInt32): Socket
+function NewSocket(borrow h: String; borrow p: UInt32) return Socket;
+function Connect(mut borrow s: Socket) return Bool;
+function SendData(borrow s: Socket; borrow payload: String) return UInt32;
+procedure CloseSocket(mut borrow s: Socket);
+function SocketListenServer(borrow p: UInt32; borrow backlog: Int32) return Socket;
+function SocketAcceptClient(borrow server: Socket) return Socket;
+function SocketConnectClient(borrow h: String; borrow p: UInt32) return Socket;
+function SocketSendString(borrow s: Socket; borrow payload: String) return Int32;
+function SocketRecvString(borrow s: Socket; borrow max_len: Int32) return String;
+procedure SocketCloseHandle(mut borrow s: Socket);
+function BuildHttpRequest(borrow method, host, path: String) return String;
+function BuildHttpResponse(borrow status_code: UInt32; borrow content_type, body: String) return String;
+function ParseHttpRequest(borrow raw_request: String; mut borrow out_req: HttpRequest) return Bool;
+function ParseHttpResponse(borrow raw_response: String; mut borrow out_resp: HttpResponse) return Bool;
+
+implementation
+
+function NewSocket(borrow h: String; borrow p: UInt32) return Socket is
 begin
     return Socket(fd: -1, port: p, host: h, is_open: false);
-end;
+end NewSocket;
 
-function Connect(mut borrow s: Socket): Bool
+function Connect(mut borrow s: Socket) return Bool is
 begin
     if s.is_open then
         return false;
@@ -35,9 +54,9 @@ begin
     s.fd := SocketConnect(s.host, s.port);
     s.is_open := true;
     return true;
-end;
+end Connect;
 
-function SendData(borrow s: Socket; borrow payload: String): UInt32
+function SendData(borrow s: Socket; borrow payload: String) return UInt32 is
 begin
     if not s.is_open then
         return 0;
@@ -46,9 +65,9 @@ begin
         SocketSend(s.fd, payload);
     end;
     return Length(borrow payload);
-end;
+end SendData;
 
-function CloseSocket(mut borrow s: Socket): Void
+procedure CloseSocket(mut borrow s: Socket) is
 begin
     if s.is_open then
         if s.fd >= 0 then
@@ -57,9 +76,9 @@ begin
         end;
         s.is_open := false;
     end;
-end;
+end CloseSocket;
 
-function SocketListenServer(borrow p: UInt32; borrow backlog: Int32): Socket
+function SocketListenServer(borrow p: UInt32; borrow backlog: Int32) return Socket is
 var
     listen_fd: Int32;
 begin
@@ -68,9 +87,9 @@ begin
         return Socket(fd: -1, port: p, host: "0.0.0.0", is_open: false);
     end;
     return Socket(fd: listen_fd, port: p, host: "0.0.0.0", is_open: true);
-end;
+end SocketListenServer;
 
-function SocketAcceptClient(borrow server: Socket): Socket
+function SocketAcceptClient(borrow server: Socket) return Socket is
 var
     client_fd: Int32;
 begin
@@ -82,9 +101,9 @@ begin
         return Socket(fd: -1, port: 0, host: "", is_open: false);
     end;
     return Socket(fd: client_fd, port: server.port, host: "client", is_open: true);
-end;
+end SocketAcceptClient;
 
-function SocketConnectClient(borrow h: String; borrow p: UInt32): Socket
+function SocketConnectClient(borrow h: String; borrow p: UInt32) return Socket is
 var
     conn_fd: Int32;
 begin
@@ -93,34 +112,34 @@ begin
         return Socket(fd: -1, port: p, host: h, is_open: false);
     end;
     return Socket(fd: conn_fd, port: p, host: h, is_open: true);
-end;
+end SocketConnectClient;
 
-function SocketSendString(borrow s: Socket; borrow payload: String): Int32
+function SocketSendString(borrow s: Socket; borrow payload: String) return Int32 is
 begin
     if not s.is_open then
         return -1;
     end;
     return SocketSend(s.fd, payload);
-end;
+end SocketSendString;
 
-function SocketRecvString(borrow s: Socket; borrow max_len: Int32): String
+function SocketRecvString(borrow s: Socket; borrow max_len: Int32) return String is
 begin
     if not s.is_open then
         return "";
     end;
     return SocketRecv(s.fd, max_len);
-end;
+end SocketRecvString;
 
-function SocketCloseHandle(mut borrow s: Socket): Void
+procedure SocketCloseHandle(mut borrow s: Socket) is
 begin
     if s.is_open then
         SocketClose(s.fd);
         s.is_open := false;
         s.fd := -1;
     end;
-end;
+end SocketCloseHandle;
 
-function BuildHttpRequest(borrow method: String; borrow host: String; borrow path: String): String
+function BuildHttpRequest(borrow method, host, path: String) return String is
 var
     req: String;
 begin
@@ -129,9 +148,9 @@ begin
     req := req + "User-Agent: AetherLang/0.5 (BlaiseVue-Engine)\r\n";
     req := req + "Connection: close\r\n\r\n";
     return req;
-end;
+end BuildHttpRequest;
 
-function BuildHttpResponse(borrow status_code: UInt32; borrow content_type: String; borrow body: String): String
+function BuildHttpResponse(borrow status_code: UInt32; borrow content_type, body: String) return String is
 var
     res: String;
     status_text: String;
@@ -151,9 +170,9 @@ begin
     res := res + "Connection: close\r\n\r\n";
     res := res + body;
     return res;
-end;
+end BuildHttpResponse;
 
-function ParseHttpRequest(borrow raw_request: String; mut borrow out_req: HttpRequest): Bool
+function ParseHttpRequest(borrow raw_request: String; mut borrow out_req: HttpRequest) return Bool is
 var
     first_space: Int32;
     second_space: Int32;
@@ -197,9 +216,9 @@ begin
 
     out_req.body := "";
     return true;
-end;
+end ParseHttpRequest;
 
-function ParseHttpResponse(borrow raw_response: String; mut borrow out_resp: HttpResponse): Bool
+function ParseHttpResponse(borrow raw_response: String; mut borrow out_resp: HttpResponse) return Bool is
 begin
     if Length(borrow raw_response) = 0 then
         return false;
@@ -208,4 +227,6 @@ begin
     out_resp.content_type := "text/plain";
     out_resp.body := raw_response;
     return true;
-end;
+end ParseHttpResponse;
+
+end Net.

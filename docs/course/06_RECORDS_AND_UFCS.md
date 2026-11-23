@@ -62,7 +62,7 @@ begin
 
     PrintLn("Origin: (" + FloatToStr(rect.origin.x) + ", " + FloatToStr(rect.origin.y) + ")");
     PrintLn("Width: " + FloatToStr(rect.width));
-end.
+end geometry.
 ```
 
 ---
@@ -86,22 +86,22 @@ type
     end;
 
 // Read-Only Method: Takes an immutable borrow of self
-function Area(borrow self: Circle): Float64
+function Area(borrow self: Circle) return Float64 is
 begin
     return 3.1415926535 * self.radius * self.radius;
-end;
+end Area;
 
 // Read-Only Method: Computes perimeter
-function Perimeter(borrow self: Circle): Float64
+function Perimeter(borrow self: Circle) return Float64 is
 begin
     return 2.0 * 3.1415926535 * self.radius;
-end;
+end Perimeter;
 
 // Mutating Method: Takes an exclusive mutable borrow of self
-function Scale(mut borrow self: Circle, factor: Float64): Void
+procedure Scale(mut borrow self: Circle; factor: Float64) is
 begin
     self.radius := self.radius * factor;
-end;
+end Scale;
 
 program Main;
 var
@@ -121,7 +121,7 @@ begin
 
     // Both syntax forms are identical under the hood:
     // c.Area() <===> Area(c)
-end.
+end shapes.
 ```
 
 ### The Architectural Benefits of UFCS:
@@ -156,16 +156,16 @@ type
         navigation: GPS;
     end;
 
-function Start(mut borrow self: Engine): Void
+procedure Start(mut borrow self: Engine) is
 begin
     self.is_running := true;
-end;
+end Start;
 
-function Drive(mut borrow self: Car): Void
+procedure Drive(mut borrow self: Car) is
 begin
     self.engine.Start();
     PrintLn(self.model + " is driving smoothly!");
-end;
+end Drive;
 
 program Main;
 var
@@ -173,7 +173,7 @@ var
 begin
     my_car := Car("Aether GT", Engine(450, false), GPS(-23.5505, -46.6333));
     my_car.Drive();
-end.
+end vehicle_system.
 ```
 
 ---

@@ -1,36 +1,36 @@
 module Fase51TryopMatchexprInlinevarDivcompMaplitTest;
 
-function ParsePositive(n: Int32): Result<Int32, String>
+function ParsePositive(n: Int32) return Result<Int32, String> is
 begin
     if n <= 0 then
         return Err("non-positive");
     end;
     return Ok(n);
-end;
+end ParsePositive;
 
-function SumPositivesWithTry(a: Int32, b: Int32): Result<Int32, String>
+function SumPositivesWithTry(a, b: Int32) return Result<Int32, String> is
 begin
     let va := ParsePositive(a)?;
     let vb := try ParsePositive(b);
     return Ok(va + vb);
-end;
+end SumPositivesWithTry;
 
-function FindEven(n: Int32): Option<Int32>
+function FindEven(n: Int32) return Option<Int32> is
 begin
     if (n mod 2) = 0 then
         return Some(n);
     end;
     return None;
-end;
+end FindEven;
 
-function SumEvensWithTry(a: Int32, b: Int32): Option<Int32>
+function SumEvensWithTry(a, b: Int32) return Option<Int32> is
 begin
     let ea := FindEven(a)?;
     let eb := try FindEven(b);
     return Some(ea + eb);
-end;
+end SumEvensWithTry;
 
-function ClassifyCode(code: Int32): String
+function ClassifyCode(code: Int32) return String is
 begin
     let statusLabel := match code do
         case 200, 201 => "OK";
@@ -39,16 +39,16 @@ begin
         case _ => "OTHER";
     end;
     return statusLabel;
-end;
+end ClassifyCode;
 
-function ScoreResultExpr(res: Result<Int32, String>): Int32
+function ScoreResultExpr(res: Result<Int32, String>) return Int32 is
 begin
     return match res do
         case Ok(let v) if v > 50 => v * 2;
         case Ok(let v) => v + 1;
         case Err(let _msg) => -1;
     end;
-end;
+end ScoreResultExpr;
 
 program Main;
 var
@@ -171,4 +171,4 @@ begin
     Assert(escStr.Length() = 9);
 
     PrintLn("=== FASE 51 TEST PASSOU (TRY/?, MATCH EXPR/GUARDS, INLINE VAR/LET, DIV/COMPOSTOS, MAPLIT/ESCAPES) ===");
-end.
+end Fase51TryopMatchexprInlinevarDivcompMaplitTest.

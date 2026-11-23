@@ -30,11 +30,11 @@ type
         data: String;
     end;
 
-function ConsumeBuffer(take buf: Buffer): Void
+procedure ConsumeBuffer(take buf: Buffer) is
 begin
     PrintLn("Buffer consumed: " + buf.data);
-    // 'buf' is destroyed when this function exits!
-end;
+    // 'buf' is destroyed when this procedure exits!
+end ConsumeBuffer;
 
 program Main;
 var
@@ -46,7 +46,7 @@ begin
 
     // ERROR: my_buf was moved!
     // PrintLn(my_buf.data); // Compile Error: Use of moved variable 'my_buf'
-end.
+end ownership_move.
 ```
 
 ---
@@ -64,10 +64,10 @@ type
         word_count: Int32;
     end;
 
-function PrintSummary(borrow doc: Document): Void
+procedure PrintSummary(borrow doc: Document) is
 begin
     PrintLn("Title: " + doc.title + " (" + IntToStr(doc.word_count) + " words)");
-end;
+end PrintSummary;
 
 program Main;
 var
@@ -81,7 +81,7 @@ begin
 
     // 'doc' is still valid and owned here!
     PrintLn("Document is still accessible: " + doc.title);
-end.
+end borrow_read.
 ```
 
 ---
@@ -99,10 +99,10 @@ type
         balance: Float64;
     end;
 
-function Deposit(mut borrow acc: Account, amount: Float64): Void
+procedure Deposit(mut borrow acc: Account; amount: Float64) is
 begin
     acc.balance := acc.balance + amount;
-end;
+end Deposit;
 
 program Main;
 var
@@ -114,7 +114,7 @@ begin
     Deposit(mut borrow my_acc, 500.0);
 
     PrintLn("Final Balance for " + my_acc.holder + ": $" + FloatToStr(my_acc.balance));
-end.
+end borrow_mut.
 ```
 
 ---

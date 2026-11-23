@@ -68,4 +68,4 @@ begin
     Assert(s1.Equals(borrow s2), "s1 deve ser igual a s2");
 
     PrintLn("Derives Test: Todos os testes de derive passaram com sucesso!");
-end.
+end derives_test.

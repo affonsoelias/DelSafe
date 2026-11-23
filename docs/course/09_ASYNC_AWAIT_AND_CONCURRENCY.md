@@ -11,12 +11,12 @@ An `async function` runs cooperatively in the Aether runtime fiber pool without 
 ```aether
 module async_demo;
 
-async function FetchUserData(user_id: Int32): String
+async function FetchUserData(user_id: Int32) return String is
 begin
     PrintLn("Fetching data for user " + IntToStr(user_id) + " asynchronously...");
     // Simulated non-blocking work
     return "UserPayload { id: " + IntToStr(user_id) + ", name: Alice, verified: true }";
-end;
+end FetchUserData;
 ```
 
 When transpiled:
@@ -42,7 +42,7 @@ begin
     result := await task;
 
     PrintLn("Received result: " + result);
-end.
+end async_demo.
 ```
 
 ---
@@ -54,15 +54,15 @@ You can launch multiple asynchronous operations concurrently and await them all:
 ```aether
 module async_parallel;
 
-async function FetchSensorA(): Float64
+async function FetchSensorA() return Float64 is
 begin
     return 24.5;
-end;
+end FetchSensorA;
 
-async function FetchSensorB(): Float64
+async function FetchSensorB() return Float64 is
 begin
     return 1013.25;
-end;
+end FetchSensorB;
 
 program Main;
 var
@@ -81,7 +81,7 @@ begin
 
     PrintLn("Temperature: " + FloatToStr(temp) + " C");
     PrintLn("Atmospheric Pressure: " + FloatToStr(pressure) + " hPa");
-end.
+end async_parallel.
 ```
 
 ---

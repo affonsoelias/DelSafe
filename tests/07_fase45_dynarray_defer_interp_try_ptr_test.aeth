@@ -3,7 +3,7 @@ module Fase45DynarrayDeferInterpTryPtrTest;
 type
     ListaInt = array of Int32;
 
-function TestDeferOrdem(mut borrow log: ListaInt, cedo: Bool): Int32
+function TestDeferOrdem(mut borrow log: ListaInt; cedo: Bool) return Int32 is
 begin
     defer log.Push(1);
     defer log.Push(2);
@@ -13,14 +13,14 @@ begin
     end;
     log.Push(99);
     return 88;
-end;
+end TestDeferOrdem;
 
-function LancarErro(): Void
+procedure LancarErro is
 begin
     raise "Falha na subrotina";
-end;
+end LancarErro;
 
-function LerEscreverPonteiro(p: ^Int32, novoValor: Int32): Int32
+function LerEscreverPonteiro(p: ^Int32; novoValor: Int32) return Int32 is
 var
     anterior: Int32;
 begin
@@ -30,7 +30,7 @@ begin
         p^ := novoValor;
     end;
     return anterior;
-end;
+end LerEscreverPonteiro;
 
 program Main;
 var
@@ -135,4 +135,4 @@ begin
     assert(x = 789);
 
     PrintLn("Fase 45: Todos os testes passaram com sucesso em ambos os backends!");
-end.
+end Fase45DynarrayDeferInterpTryPtrTest.

@@ -24,9 +24,11 @@ my_project/
 │   └── main.aeth         <- module main;
 ```
 
-`database.aeth`:
+`database.aeth` (an Object Pascal-style Unit with `interface` and `implementation`):
 ```aether
 module database;
+
+interface
 
 type
     DbConnection = record
@@ -34,23 +36,37 @@ type
         port: Int32;
     end;
 
-function Connect(host: String, port: Int32): DbConnection
+function Connect(host: String; port: Int32) return DbConnection;
+
+implementation
+
+function Connect(host: String; port: Int32) return DbConnection is
 begin
     return DbConnection(host, port);
-end;
+end Connect;
+
+end database.
 ```
 
-`auth.aeth`:
+`auth.aeth` (a Unit with optional `initialization` / `finalization`):
 ```aether
 module auth;
 
 import database;
 
-function Authenticate(borrow db: DbConnection, token: String): Bool
+interface
+
+function Authenticate(borrow db: DbConnection; token: String) return Bool;
+
+implementation
+
+function Authenticate(borrow db: DbConnection; token: String) return Bool is
 begin
     // Validating against database
     return Length(token) >= 8;
-end;
+end Authenticate;
+
+end auth.
 ```
 
 `main.aeth`:
@@ -71,12 +87,13 @@ begin
     if is_ok then
         PrintLn("Authentication granted!");
     end;
-end.
+end main.
 ```
 
-### Visibility (`pub` / `priv`) and Import Aliases (`as`)
+### Structured Units & Visibility (`interface` / `implementation` / `pub` / `priv`)
+- Modules without `program Main;` are **Units** and require Object Pascal sections: `interface` (exported public declarations, routine signatures, contracts, and public module variables) followed by `implementation` (routine bodies and module-private state), plus optional `initialization` and `finalization` sections, closed with `end <ModuleName>.`.
 - Use `import module_path as alias;` to bind a short qualifier and reference symbols cleanly (`alias.Func()`, `alias.CONST`, `alias.Enum.Variant`, `alias.Record.Method()`).
-- Prefix declarations (`const`, `type`, `trait`, `function`, record fields, or `impl` methods) with `pub` or `priv`. Once a module uses `pub` or `priv` at top level, unqualified top-level declarations become module-private (`[E0603]` if accessed externally), while existing modules without explicit `pub` modifiers keep backwards-compatible exports.
+- Prefix declarations (`const`, `type`, `trait`, `function`, `procedure`, record fields, or `impl` methods) with `pub` or `priv` inside `interface`/`impl` to fine-tune access (`[E0603]` if a private item is accessed externally).
 
 ---
 
@@ -92,12 +109,12 @@ Aether generates the canonical directory hierarchy:
 
 ```text
 my_service/
-├── aether.json           <- Project manifest and dependency declarations
-├── aether.lock           <- Cryptographic lockfile (exact commit hashes)
+├── aether.json              <- Project manifest and dependency declarations
+├── aether.lock              <- Cryptographic lockfile (exact commit hashes)
 ├── src/
-│   └── main.aeth         <- Application entry point
+│   └── my_service.aeth      <- Application entry point (module my_service; program Main;)
 ├── tests/
-│   └── main_test.aeth    <- Automated test suite (run with 'aetherc test')
+│   └── my_service_test.aeth <- Automated test suite (run with 'aetherc test')
 ├── .aether/
 │   └── deps/             <- Installed dependencies (gitignored)
 ├── bin/                  <- Output native binaries (gitignored)

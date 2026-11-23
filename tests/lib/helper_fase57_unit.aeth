@@ -1,0 +1,74 @@
+module helper_fase57_unit;
+
+interface
+
+const
+    BASE_MULTIPLIER = 10;
+
+type
+    Ponto = record
+        x: Int32;
+        y: Int32;
+end;
+
+var
+    PublicCounter: Int32;
+
+function SomarIntervaloContrato(a, b: Int32) return Int32
+contract
+    require
+        a >= 0;
+        b >= 0;
+    ensure
+        result >= a;
+
+function SomaPontos(borrow a, b: Ponto) return Int32;
+procedure IncrementarEstado(delta: Int32);
+procedure ResetarEstado;
+function ObterEstado() return Int32;
+
+implementation
+
+var
+    PrivateAccum: Int32;
+
+function DobroPrivado(v: Int32) return Int32 is
+begin
+    return v * 2;
+end DobroPrivado;
+
+function SomarIntervaloContrato(a, b: Int32) return Int32 is
+begin
+    return a + b;
+end SomarIntervaloContrato;
+
+function SomaPontos(borrow a, b: Ponto) return Int32 is
+begin
+    return a.x + a.y + b.x + b.y;
+end SomaPontos;
+
+procedure IncrementarEstado(delta: Int32) is
+begin
+    PrivateAccum := PrivateAccum + DobroPrivado(delta);
+    PublicCounter := PublicCounter + delta;
+end IncrementarEstado;
+
+procedure ResetarEstado is
+begin
+    PrivateAccum := 0;
+    PublicCounter := 0;
+end ResetarEstado;
+
+function ObterEstado() return Int32 is
+begin
+    return PublicCounter + PrivateAccum;
+end ObterEstado;
+
+initialization
+    PublicCounter := 100;
+    PrivateAccum := 7;
+
+finalization
+    PublicCounter := PublicCounter + 1;
+
+end helper_fase57_unit.

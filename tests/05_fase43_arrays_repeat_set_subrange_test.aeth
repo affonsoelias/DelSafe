@@ -104,4 +104,4 @@ begin
     assert(dia = 22);
 
     PrintLn("Fase 43: Todos os testes de Arrays N-D, repeat-until, sets e subfaixas passaram com sucesso!");
-end.
+end Fase43ArraysRepeatSetSubrangeTest.

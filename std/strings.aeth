@@ -1,41 +1,54 @@
 module Strings;
 
-extern function puts(borrow s: String): Int32;
+interface
 
-function IsEmpty(borrow s: String): Bool
+extern function puts(borrow s: String) return Int32;
+
+function IsEmpty(borrow s: String) return Bool;
+function Equals(borrow a, b: String) return Bool;
+procedure PrintMessage(borrow prefix, msg: String);
+function Tamanho(borrow s: String) return UInt32;
+function Caractere(borrow s: String; borrow pos: UInt32) return String;
+function Fatia(borrow s: String; borrow inicio, qtd: UInt32) return String;
+
+implementation
+
+function IsEmpty(borrow s: String) return Bool is
 begin
     if s = "" then
         return true;
     else
         return false;
     end;
-end;
+end IsEmpty;
 
-function Equals(borrow a: String; borrow b: String): Bool
+function Equals(borrow a, b: String) return Bool is
 begin
     if a = b then
         return true;
     else
         return false;
     end;
-end;
+end Equals;
 
-function PrintMessage(borrow prefix: String; borrow msg: String): Void
+procedure PrintMessage(borrow prefix, msg: String) is
 begin
     PrintLn("[%s] %s", prefix, msg);
-end;
+end PrintMessage;
 
-function Tamanho(borrow s: String): UInt32
+function Tamanho(borrow s: String) return UInt32 is
 begin
     return Length(borrow s);
-end;
+end Tamanho;
 
-function Caractere(borrow s: String; borrow pos: UInt32): String
+function Caractere(borrow s: String; borrow pos: UInt32) return String is
 begin
     return CharAt(borrow s, borrow pos);
-end;
+end Caractere;
 
-function Fatia(borrow s: String; borrow inicio: UInt32; borrow qtd: UInt32): String
+function Fatia(borrow s: String; borrow inicio, qtd: UInt32) return String is
 begin
     return Substring(borrow s, borrow inicio, borrow qtd);
-end;
+end Fatia;
+
+end Strings.

@@ -10,7 +10,7 @@ type
         y: Int32;
     end;
 
-function SafeDoublePositive(x: Int32): Int32
+function SafeDoublePositive(x: Int32) return Int32 is
 contract
     require
         x > 0;
@@ -21,9 +21,9 @@ begin
         return x + 10;
     end;
     return x * 2;
-end;
+end SafeDoublePositive;
 
-function MakePositivePoint(ax: Int32, ay: Int32): Ponto
+function MakePositivePoint(ax, ay: Int32) return Ponto is
 contract
     require
         ax > 0;
@@ -32,9 +32,9 @@ contract
         (result.x > 0) and (result.y > 0);
 begin
     return Ponto(x: ax, y: ay);
-end;
+end MakePositivePoint;
 
-function NonEmptyTag(prefix: TextAlias): String
+function NonEmptyTag(prefix: TextAlias) return String is
 contract
     require
         prefix.Length() > 0;
@@ -42,9 +42,9 @@ contract
         result.Length() > 0;
 begin
     return "[" + prefix + "]";
-end;
+end NonEmptyTag;
 
-function ReturnWithDeferAndEnsure(mut borrow acc: Int32, val: Int32): Int32
+function ReturnWithDeferAndEnsure(mut borrow acc: Int32; val: Int32) return Int32 is
 contract
     require
         val > 0;
@@ -56,9 +56,9 @@ begin
         return 10;
     end;
     return val;
-end;
+end ReturnWithDeferAndEnsure;
 
-function BumpPointInPlace(mut borrow p: Ponto): Void
+procedure BumpPointInPlace(mut borrow p: Ponto) is
 contract
     require
         (p.x >= 0) and (p.y >= 0);
@@ -67,9 +67,9 @@ contract
 begin
     p.x := p.x + 1;
     p.y := p.y + 1;
-end;
+end BumpPointInPlace;
 
-function IdentityPositive<T>(val: T): T
+function IdentityPositive<T>(val: T) return T is
 contract
     require
         val > 0;
@@ -77,15 +77,15 @@ contract
         result > 0;
 begin
     return val;
-end;
+end IdentityPositive;
 
-export cdecl function ExportedStep(p: Ponto, phase: JobPhase, score: SmallScore, vec: Vec3): JobPhase
+export cdecl function ExportedStep(p: Ponto; phase: JobPhase; score: SmallScore; vec: Vec3) return JobPhase is
 begin
     if (p.x > 0) and (score >= 0) and (vec[0] >= 0) then
         return phase;
     end;
     return JobPhase.Queued;
-end;
+end ExportedStep;
 
 program Main;
 var
@@ -143,4 +143,4 @@ begin
     Assert(phaseOut = JobPhase.Finished);
 
     PrintLn("=== FASE 50 + 56 TEST PASSOU (ENSURE+RESULT, UFCS LITERAIS, FMT, EMIT-HEADER) ===");
-end.
+end Fase5056ContractsEnsureUfcsLitFmtHeaderTest.

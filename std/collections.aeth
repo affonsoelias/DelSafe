@@ -1,5 +1,7 @@
 module Collections;
 
+interface
+
 type
     FixedBuffer = record
         capacity: UInt32;
@@ -11,26 +13,36 @@ type
         length: UInt32;
     end;
 
-function NewBuffer(borrow cap: UInt32): FixedBuffer
+function NewBuffer(borrow cap: UInt32) return FixedBuffer;
+function IsFull(borrow buf: FixedBuffer) return Bool;
+function Available(borrow buf: FixedBuffer) return UInt32;
+function PushItem(mut borrow buf: FixedBuffer) return Bool;
+function NewStringBuilder() return StringBuilder;
+procedure Append(mut borrow sb: StringBuilder; borrow text: String);
+function ToString(borrow sb: StringBuilder) return String;
+
+implementation
+
+function NewBuffer(borrow cap: UInt32) return FixedBuffer is
 begin
     return FixedBuffer(capacity: cap, count: 0);
-end;
+end NewBuffer;
 
-function IsFull(borrow buf: FixedBuffer): Bool
+function IsFull(borrow buf: FixedBuffer) return Bool is
 begin
     if buf.count >= buf.capacity then
         return true;
     else
         return false;
     end;
-end;
+end IsFull;
 
-function Available(borrow buf: FixedBuffer): UInt32
+function Available(borrow buf: FixedBuffer) return UInt32 is
 begin
     return buf.capacity - buf.count;
-end;
+end Available;
 
-function PushItem(mut borrow buf: FixedBuffer): Bool
+function PushItem(mut borrow buf: FixedBuffer) return Bool is
 begin
     if buf.count < buf.capacity then
         buf.count := buf.count + 1;
@@ -38,20 +50,22 @@ begin
     else
         return false;
     end;
-end;
+end PushItem;
 
-function NewStringBuilder(): StringBuilder
+function NewStringBuilder() return StringBuilder is
 begin
     return StringBuilder(buffer: "", length: 0);
-end;
+end NewStringBuilder;
 
-function Append(mut borrow sb: StringBuilder; borrow text: String): Void
+procedure Append(mut borrow sb: StringBuilder; borrow text: String) is
 begin
     sb.buffer := sb.buffer + text;
     sb.length := sb.length + Length(borrow text);
-end;
+end Append;
 
-function ToString(borrow sb: StringBuilder): String
+function ToString(borrow sb: StringBuilder) return String is
 begin
     return sb.buffer;
-end;
+end ToString;
+
+end Collections.

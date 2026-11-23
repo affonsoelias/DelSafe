@@ -1052,6 +1052,13 @@ begin
     CollectMapsFromStmts(Func.Body, Tags, Keys, Vals);
     FCurrentFunc := nil;
   end;
+  for I := 0 to AModule.ModuleVars.Count - 1 do
+  begin
+    CollectMapsFromType(TASTVarDecl(AModule.ModuleVars[I]).TypeName, Tags, Keys, Vals);
+    CollectMapsFromExpr(TASTVarDecl(AModule.ModuleVars[I]).InitialExpr, Tags, Keys, Vals);
+  end;
+  CollectMapsFromStmts(AModule.InitBody, Tags, Keys, Vals);
+  CollectMapsFromStmts(AModule.FiniBody, Tags, Keys, Vals);
   if Assigned(AModule.ProgramBlock) then
   begin
     FProgramBlock := AModule.ProgramBlock;
@@ -3605,6 +3612,29 @@ begin
 
   Emit('begin');
   IncIndent;
+  if Assigned(FModule) then
+  begin
+    for I := 0 to FModule.ModuleVars.Count - 1 do
+    begin
+      VarDecl := TASTVarDecl(FModule.ModuleVars[I]);
+      if Assigned(VarDecl.InitialExpr) then
+      begin
+        if VarDecl.InitialExpr is TASTMapLiteralExpr then
+          EmitMapLiteralAssign(VarDecl.Name, VarDecl.TypeName, TASTMapLiteralExpr(VarDecl.InitialExpr))
+        else if (VarDecl.InitialExpr is TASTSetLiteralExpr) and (not IsSetType(VarDecl.TypeName)) then
+          EmitArrayLiteralAssign(VarDecl.Name, VarDecl.TypeName, TASTSetLiteralExpr(VarDecl.InitialExpr))
+        else
+          Emit(Format('%s := %s;', [VarDecl.Name, EmitExpr(VarDecl.InitialExpr)]));
+      end
+      else if (Pos('Box<', ResolveAliasType(VarDecl.TypeName)) = 1) or (Pos('^', VarDecl.TypeName) = 1) or SameText(VarDecl.TypeName, 'Pointer') then
+        Emit(Format('%s := nil;', [VarDecl.Name]))
+      else if IsMapType(VarDecl.TypeName, KeyT, ValT) then
+        Emit(Format('%s.count := 0; SetLength(%s.entries, 0);', [VarDecl.Name, VarDecl.Name]));
+    end;
+    for I := 0 to FModule.InitProcs.Count - 1 do
+      Emit(Format('%s;', [FModule.InitProcs[I]]));
+  end;
+
   for I := 0 to Prog.LocalVars.Count - 1 do
   begin
     VarDecl := TASTVarDecl(Prog.LocalVars[I]);
@@ -3622,6 +3652,13 @@ begin
     else if IsMapType(VarDecl.TypeName, KeyT, ValT) then
       Emit(Format('%s.count := 0; SetLength(%s.entries, 0);', [VarDecl.Name, VarDecl.Name]));
   end;
+
+  if Assigned(FModule) and (FModule.FiniProcs.Count > 0) then
+  begin
+    Emit('try');
+    IncIndent;
+  end;
+
   FActiveDefers.Clear;
   FLoopDeferBase := 0;
   FRaiiNames.Clear;
@@ -3640,6 +3677,18 @@ begin
   FRaiiNames.Clear;
   FRaiiTypes.Clear;
   FCurrentScopeList := nil;
+
+  if Assigned(FModule) and (FModule.FiniProcs.Count > 0) then
+  begin
+    DecIndent;
+    Emit('finally');
+    IncIndent;
+    for I := FModule.FiniProcs.Count - 1 downto 0 do
+      Emit(Format('%s;', [FModule.FiniProcs[I]]));
+    DecIndent;
+    Emit('end;');
+  end;
+
   DecIndent;
   Emit('end.');
 end;
@@ -4449,7 +4498,8 @@ var
   Func: TASTFunction;
   Rec: TASTRecordDecl;
   ConstDecl: TASTConstDecl;
-  EffectiveLibrary, KeepAll, Changed, NeedBox, HasCustomMap: Boolean;
+  VarDecl: TASTVarDecl;
+  EffectiveLibrary, KeepAll, Changed, NeedBox, HasCustomMap, HasVarsBlock: Boolean;
   MapTags, MapKeys, MapVals: TStringList;
   ConstUsed, TypeUsed, FuncUsed: array of Boolean;
   ConstBodies, TypeBodies, TypeNames, FuncBodies, FuncSigs: array of string;
@@ -4476,7 +4526,7 @@ begin
     end;
   end;
 
-  KeepAll := AsUnit or EffectiveLibrary;
+  KeepAll := AsUnit or EffectiveLibrary or AModule.IsUnit;
 
   // 1. Pre-renderizar declaracoes para analise de alcancabilidade (Tree-Shaking)
   SetLength(ConstUsed, AModule.Constants.Count);
@@ -4572,11 +4622,23 @@ begin
     else if not EffectiveLibrary then
       EmitProgramBlock(AModule.ProgramBlock);
   end;
+  if AsUnit or (not Assigned(AModule.ProgramBlock)) then
+  begin
+    for I := 0 to AModule.InitBody.Count - 1 do
+      EmitStmt(TASTStmt(AModule.InitBody[I]));
+    for I := 0 to AModule.FiniBody.Count - 1 do
+      EmitStmt(TASTStmt(AModule.FiniBody[I]));
+  end;
+  for I := 0 to AModule.ModuleVars.Count - 1 do
+    if Assigned(TASTVarDecl(AModule.ModuleVars[I]).InitialExpr) then
+      Emit(EmitExpr(TASTVarDecl(AModule.ModuleVars[I]).InitialExpr) + ';');
   ProgText := FOutput.Text;
 
   ReachText := ProgText + #10 + MapText;
   for I := 0 to AModule.Constants.Count - 1 do
     if ConstUsed[I] then ReachText := ReachText + #10 + ConstBodies[I];
+  for I := 0 to AModule.ModuleVars.Count - 1 do
+    ReachText := ReachText + #10 + TASTVarDecl(AModule.ModuleVars[I]).Name + ': ' + EmitTypeRef(TASTVarDecl(AModule.ModuleVars[I]).TypeName);
   for I := 0 to AModule.Types.Count - 1 do
     if TypeUsed[I] then ReachText := ReachText + #10 + TypeBodies[I];
   for I := 0 to AModule.Functions.Count - 1 do
@@ -4731,6 +4793,27 @@ begin
     EmitRuntimeHelpersInterface(ReachText);
     EmitMapRuntimeHelpers(MapTags, MapKeys, MapVals, True);
 
+    HasVarsBlock := False;
+    for I := 0 to AModule.ModuleVars.Count - 1 do
+      if TASTVarDecl(AModule.ModuleVars[I]).IsPublic then
+      begin
+        HasVarsBlock := True;
+        Break;
+      end;
+    if HasVarsBlock then
+    begin
+      Emit('var');
+      IncIndent;
+      for I := 0 to AModule.ModuleVars.Count - 1 do
+      begin
+        VarDecl := TASTVarDecl(AModule.ModuleVars[I]);
+        if VarDecl.IsPublic then
+          Emit(Format('%s: %s;', [VarDecl.Name, EmitTypeRef(VarDecl.TypeName)]));
+      end;
+      DecIndent;
+      Emit('');
+    end;
+
     for I := 0 to AModule.Functions.Count - 1 do
     begin
       if not FuncUsed[I] then Continue;
@@ -4746,6 +4829,27 @@ begin
 
     Emit('implementation');
     Emit('');
+
+    HasVarsBlock := False;
+    for I := 0 to AModule.ModuleVars.Count - 1 do
+      if not TASTVarDecl(AModule.ModuleVars[I]).IsPublic then
+      begin
+        HasVarsBlock := True;
+        Break;
+      end;
+    if HasVarsBlock then
+    begin
+      Emit('var');
+      IncIndent;
+      for I := 0 to AModule.ModuleVars.Count - 1 do
+      begin
+        VarDecl := TASTVarDecl(AModule.ModuleVars[I]);
+        if not VarDecl.IsPublic then
+          Emit(Format('%s: %s;', [VarDecl.Name, EmitTypeRef(VarDecl.TypeName)]));
+      end;
+      DecIndent;
+      Emit('');
+    end;
 
     if UsedTypeCount > 0 then
     begin
@@ -4774,13 +4878,46 @@ begin
       if FuncUsed[I] then
         EmitFunction(TASTFunction(AModule.Functions[I]));
 
-    if Assigned(AModule.ProgramBlock) then
+    HasVarsBlock := False;
+    for I := 0 to AModule.ModuleVars.Count - 1 do
+      if Assigned(TASTVarDecl(AModule.ModuleVars[I]).InitialExpr) then
+      begin
+        HasVarsBlock := True;
+        Break;
+      end;
+    if Assigned(AModule.ProgramBlock) or (AModule.InitBody.Count > 0) or HasVarsBlock then
     begin
       Emit('');
       Emit('initialization');
       IncIndent;
-      for I := 0 to AModule.ProgramBlock.Body.Count - 1 do
-        EmitStmt(TASTStmt(AModule.ProgramBlock.Body[I]));
+      for I := 0 to AModule.ModuleVars.Count - 1 do
+      begin
+        VarDecl := TASTVarDecl(AModule.ModuleVars[I]);
+        if Assigned(VarDecl.InitialExpr) then
+        begin
+          if VarDecl.InitialExpr is TASTMapLiteralExpr then
+            EmitMapLiteralAssign(VarDecl.Name, VarDecl.TypeName, TASTMapLiteralExpr(VarDecl.InitialExpr))
+          else if (VarDecl.InitialExpr is TASTSetLiteralExpr) and (not IsSetType(VarDecl.TypeName)) then
+            EmitArrayLiteralAssign(VarDecl.Name, VarDecl.TypeName, TASTSetLiteralExpr(VarDecl.InitialExpr))
+          else
+            Emit(Format('%s := %s;', [VarDecl.Name, EmitExpr(VarDecl.InitialExpr)]));
+        end;
+      end;
+      for I := 0 to AModule.InitBody.Count - 1 do
+        EmitStmt(TASTStmt(AModule.InitBody[I]));
+      if Assigned(AModule.ProgramBlock) then
+        for I := 0 to AModule.ProgramBlock.Body.Count - 1 do
+          EmitStmt(TASTStmt(AModule.ProgramBlock.Body[I]));
+      DecIndent;
+    end;
+
+    if AModule.FiniBody.Count > 0 then
+    begin
+      Emit('');
+      Emit('finalization');
+      IncIndent;
+      for I := 0 to AModule.FiniBody.Count - 1 do
+        EmitStmt(TASTStmt(AModule.FiniBody[I]));
       DecIndent;
     end;
 
@@ -4869,6 +5006,28 @@ begin
 
     EmitRuntimeHelpersImplementation(ReachText);
     EmitMapRuntimeHelpers(MapTags, MapKeys, MapVals, False);
+
+    HasVarsBlock := False;
+    for I := 0 to AModule.ModuleVars.Count - 1 do
+      if KeepAll or (TASTVarDecl(AModule.ModuleVars[I]).SourceModule = '') or
+         (Pos(TASTVarDecl(AModule.ModuleVars[I]).Name, ReachText) > 0) then
+      begin
+        HasVarsBlock := True;
+        Break;
+      end;
+    if HasVarsBlock then
+    begin
+      Emit('var');
+      IncIndent;
+      for I := 0 to AModule.ModuleVars.Count - 1 do
+      begin
+        VarDecl := TASTVarDecl(AModule.ModuleVars[I]);
+        if KeepAll or (VarDecl.SourceModule = '') or (Pos(VarDecl.Name, ReachText) > 0) then
+          Emit(Format('%s: %s;', [VarDecl.Name, EmitTypeRef(VarDecl.TypeName)]));
+      end;
+      DecIndent;
+      Emit('');
+    end;
 
     for I := 0 to AModule.Functions.Count - 1 do
     begin

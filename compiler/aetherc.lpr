@@ -532,7 +532,10 @@ Procedure CollectModuleImports(TargetMod: TASTModule; Const BaseDir: String;
                                Visited: TStringList; AllTypes, AllTraits,
                                AllImpls, AllFuncs: TFPList; PascalImports:
                                TStringList; DependencyFiles: TStrings = nil;
-                               AllConsts: TFPList = nil);
+                               AllConsts: TFPList = nil;
+                               AllModVars: TFPList = nil;
+                               InitProcs: TStringList = nil;
+                               FiniProcs: TStringList = nil);
 
 Var 
   I, J, K: Integer;
@@ -542,6 +545,7 @@ Var
   SubMod: TASTModule;
   RecDecl: TASTRecordDecl;
   ImplDecl: TASTImplDecl;
+  SynProc: TASTFunction;
   ExpectedName, LastSegment: string;
 Begin
   For I := 0 To TargetMod.Imports.Count - 1 Do
@@ -572,7 +576,8 @@ Begin
         ApplyCfgToModule(SubMod, GetCurrentOSName, 'pascal', False);
         Try
           CollectModuleImports(SubMod, ExtractFilePath(ModPath), Visited,
-          AllTypes, AllTraits, AllImpls, AllFuncs, PascalImports, DependencyFiles, AllConsts);
+          AllTypes, AllTraits, AllImpls, AllFuncs, PascalImports, DependencyFiles,
+          AllConsts, AllModVars, InitProcs, FiniProcs);
 
           // Validação Estrita 1:1 de Módulos Importados (Fase 13)
           ExpectedName := ModName;
@@ -588,13 +593,21 @@ Begin
           For J := 0 To SubMod.PascalImports.Count - 1 Do
             If PascalImports.IndexOf(SubMod.PascalImports[J]) < 0 Then
               PascalImports.Add(SubMod.PascalImports[J]);
+          For J := 0 To SubMod.CImports.Count - 1 Do
+            If TargetMod.CImports.IndexOf(SubMod.CImports[J]) < 0 Then
+              TargetMod.CImports.Add(SubMod.CImports[J]);
+          For J := 0 To SubMod.LinkDirectives.Count - 1 Do
+            If TargetMod.LinkDirectives.IndexOf(SubMod.LinkDirectives[J]) < 0 Then
+              TargetMod.LinkDirectives.Add(SubMod.LinkDirectives[J]);
 
-          // Visibilidade (Fase 54.1): se o modulo usa pub/priv explicitamente,
-          // declaracoes de topo sem modificador passam a ser privadas ao modulo.
+          // Visibilidade (Fase 54.1 / 57.2): se o modulo usa pub/priv explicitamente (ou e Unit),
+          // declaracoes sem modificador sao privadas ao modulo.
           If SubMod.HasExplicitPub Then
           Begin
             For J := 0 To SubMod.Constants.Count - 1 Do
               If Not SubMod.Constants[J].HasExplicitVis Then SubMod.Constants[J].IsPublic := False;
+            For J := 0 To SubMod.ModuleVars.Count - 1 Do
+              If Not SubMod.ModuleVars[J].HasExplicitVis Then SubMod.ModuleVars[J].IsPublic := False;
             For J := 0 To SubMod.Types.Count - 1 Do
               If Not SubMod.Types[J].HasExplicitVis Then SubMod.Types[J].IsPublic := False;
             For J := 0 To SubMod.Traits.Count - 1 Do
@@ -606,6 +619,9 @@ Begin
           For J := 0 To SubMod.Constants.Count - 1 Do
             If SubMod.Constants[J].SourceModule = '' Then
               SubMod.Constants[J].SourceModule := SubMod.Name;
+          For J := 0 To SubMod.ModuleVars.Count - 1 Do
+            If SubMod.ModuleVars[J].SourceModule = '' Then
+              SubMod.ModuleVars[J].SourceModule := SubMod.Name;
           For J := 0 To SubMod.Types.Count - 1 Do
           Begin
             If SubMod.Types[J].SourceModule = '' Then
@@ -638,6 +654,10 @@ Begin
             While SubMod.Constants.Count > 0 Do
               AllConsts.Add(SubMod.Constants.Extract(SubMod.Constants[0]));
 
+          If Assigned(AllModVars) Then
+            While SubMod.ModuleVars.Count > 0 Do
+              AllModVars.Add(SubMod.ModuleVars.Extract(SubMod.ModuleVars[0]));
+
           While SubMod.Types.Count > 0 Do
             AllTypes.Add(SubMod.Types.Extract(SubMod.Types[0]));
 
@@ -649,6 +669,34 @@ Begin
 
           While SubMod.Functions.Count > 0 Do
             AllFuncs.Add(SubMod.Functions.Extract(SubMod.Functions[0]));
+
+          If SubMod.InitBody.Count > 0 Then
+          Begin
+            SynProc := TASTFunction.Create(SubMod.Line, SubMod.Col, '_aether_init_' + SubMod.Name, 'Void');
+            SynProc.IsProcedure := True;
+            SynProc.IsPublic := True;
+            SynProc.HasExplicitVis := True;
+            SynProc.SourceModule := SubMod.Name;
+            While SubMod.InitBody.Count > 0 Do
+              SynProc.Body.Add(SubMod.InitBody.Extract(SubMod.InitBody[0]));
+            AllFuncs.Add(SynProc);
+            If Assigned(InitProcs) Then
+              InitProcs.Add(SynProc.Name);
+          End;
+
+          If SubMod.FiniBody.Count > 0 Then
+          Begin
+            SynProc := TASTFunction.Create(SubMod.Line, SubMod.Col, '_aether_fini_' + SubMod.Name, 'Void');
+            SynProc.IsProcedure := True;
+            SynProc.IsPublic := True;
+            SynProc.HasExplicitVis := True;
+            SynProc.SourceModule := SubMod.Name;
+            While SubMod.FiniBody.Count > 0 Do
+              SynProc.Body.Add(SubMod.FiniBody.Extract(SubMod.FiniBody[0]));
+            AllFuncs.Add(SynProc);
+            If Assigned(FiniProcs) Then
+              FiniProcs.Add(SynProc.Name);
+          End;
         Finally
           SubMod.Free;
     End;
@@ -663,19 +711,26 @@ Procedure ResolveModuleImports(TargetMod: TASTModule; Const BaseDir: String;
                                Visited: TStringList; DependencyFiles: TStrings = nil);
 
 Var 
-  AllConsts, AllTypes, AllTraits, AllImpls, AllFuncs: TFPList;
+  AllConsts, AllModVars, AllTypes, AllTraits, AllImpls, AllFuncs: TFPList;
+  InitList, FiniList: TStringList;
   I: Integer;
 Begin
   AllConsts := TFPList.Create;
+  AllModVars := TFPList.Create;
   AllTypes := TFPList.Create;
   AllTraits := TFPList.Create;
   AllImpls := TFPList.Create;
   AllFuncs := TFPList.Create;
+  InitList := TStringList.Create;
+  FiniList := TStringList.Create;
   Try
     CollectModuleImports(TargetMod, BaseDir, Visited, AllTypes, AllTraits,
-                         AllImpls, AllFuncs, TargetMod.PascalImports, DependencyFiles, AllConsts);
+                         AllImpls, AllFuncs, TargetMod.PascalImports, DependencyFiles,
+                         AllConsts, AllModVars, InitList, FiniList);
     For I := AllConsts.Count - 1 Downto 0 Do
       TargetMod.Constants.Insert(0, TASTNode(AllConsts[I]));
+    For I := AllModVars.Count - 1 Downto 0 Do
+      TargetMod.ModuleVars.Insert(0, TASTNode(AllModVars[I]));
     For I := AllTypes.Count - 1 Downto 0 Do
       TargetMod.Types.Insert(0, TASTNode(AllTypes[I]));
     For I := AllTraits.Count - 1 Downto 0 Do
@@ -684,12 +739,19 @@ Begin
       TargetMod.Impls.Insert(0, TASTNode(AllImpls[I]));
     For I := AllFuncs.Count - 1 Downto 0 Do
       TargetMod.Functions.Insert(0, TASTFunction(AllFuncs[I]));
+    For I := 0 To InitList.Count - 1 Do
+      TargetMod.InitProcs.Add(InitList[I]);
+    For I := 0 To FiniList.Count - 1 Do
+      TargetMod.FiniProcs.Add(FiniList[I]);
   Finally
     AllConsts.Free;
+    AllModVars.Free;
     AllTypes.Free;
     AllTraits.Free;
     AllImpls.Free;
     AllFuncs.Free;
+    InitList.Free;
+    FiniList.Free;
 End;
 End;
 

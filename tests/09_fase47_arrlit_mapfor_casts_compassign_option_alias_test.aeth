@@ -12,37 +12,37 @@ type
     Vet3 = array[3] of Int32;
     Placar = map[String]Int32;
 
-function FindPositive(n: Int32): Option<Int32>
+function FindPositive(n: Int32) return Option<Int32> is
 begin
     if n > 0 then
         return Some(n * 10);
     end;
     return None;
-end;
+end FindPositive;
 
-function FindLabel(flag: Bool): Option<String>
+function FindLabel(flag: Bool) return Option<String> is
 begin
     if flag then
         return Some("OkTag");
     end;
     return None;
-end;
+end FindLabel;
 
-function ParsePort(p: Int32): Result<Int32, String>
+function ParsePort(p: Int32) return Result<Int32, String> is
 begin
     if (p > 0) and (p <= 65535) then
         return Ok(p);
     end;
     return Err("porta invalida");
-end;
+end ParsePort;
 
-function MakeTextResult(ok: Bool): Result<String, Int32>
+function MakeTextResult(ok: Bool) return Result<String, Int32> is
 begin
     if ok then
         return Ok("Aether");
     end;
     return Err(503);
-end;
+end MakeTextResult;
 
 program Main;
 var
@@ -223,4 +223,4 @@ begin
     Assert(resStr.value = "Aether");
 
     PrintLn("=== FASE 47 TEST PASSOU (ARRLIT, MAPFOR, CASTS, COMPASS, OPTION/RESULT REAL, ALIAS) ===");
-end.
+end Fase47ArrlitMapforCastsCompassignOptionAliasTest.

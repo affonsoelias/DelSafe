@@ -1,51 +1,65 @@
 module Time;
 
+interface
+
 type
     Timer = record
-    start_ns: UInt64;
-    stop_ns: UInt64;
-    is_running: Bool;
-end;
+        start_ns: UInt64;
+        stop_ns: UInt64;
+        is_running: Bool;
+    end;
 
-function AgoraNanosegundos(): UInt64
+function AgoraNanosegundos() return UInt64;
+procedure Dormir(ms: UInt32);
+function NovoTimer() return Timer;
+procedure Iniciar(mut borrow t: Timer);
+function Parar(mut borrow t: Timer) return UInt64;
+function DecorridoNs(borrow t: Timer) return UInt64;
+function DecorridoMs(borrow t: Timer) return UInt64;
+
+implementation
+
+function AgoraNanosegundos() return UInt64 is
 begin
     return GetNanoseconds();
-end;
+end AgoraNanosegundos;
 
-function Dormir(ms: UInt32): Void
+procedure Dormir(ms: UInt32) is
 begin
     SleepMs(ms);
-end;
+end Dormir;
 
-function NovoTimer(): Timer
+function NovoTimer() return Timer is
 begin
     return Timer(start_ns: 0, stop_ns: 0, is_running: false);
-end;
+end NovoTimer;
 
-function Iniciar(mut borrow t: Timer): Void
+procedure Iniciar(mut borrow t: Timer) is
 begin
     t.start_ns := GetNanoseconds();
     t.stop_ns := 0;
     t.is_running := true;
-end;
+end Iniciar;
 
-function Parar(mut borrow t: Timer): UInt64
+function Parar(mut borrow t: Timer) return UInt64 is
 begin
     t.stop_ns := GetNanoseconds();
     t.is_running := false;
     return t.stop_ns - t.start_ns;
-end;
+end Parar;
 
-function DecorridoNs(borrow t: Timer): UInt64
+function DecorridoNs(borrow t: Timer) return UInt64 is
 begin
     if t.is_running then
-    return GetNanoseconds() - t.start_ns;
-else
-    return t.stop_ns - t.start_ns;
-end;
-end;
+        return GetNanoseconds() - t.start_ns;
+    else
+        return t.stop_ns - t.start_ns;
+    end;
+end DecorridoNs;
 
-function DecorridoMs(borrow t: Timer): UInt64
+function DecorridoMs(borrow t: Timer) return UInt64 is
 begin
     return DecorridoNs(borrow t) / 1000000;
-end;
+end DecorridoMs;
+
+end Time.

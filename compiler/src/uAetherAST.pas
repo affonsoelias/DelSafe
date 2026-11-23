@@ -471,6 +471,8 @@ type
     GenericParam: string;      // Parametro generico (ex: 'T')
     TraitBound: string;        // Trait bound (ex: 'Printable')
     OriginalName: string;      // Nome original do metodo (ex: 'ToString')
+    IsProcedure: Boolean;      // True para procedure (sem retorno), False para function
+    IsInterfaceDecl: Boolean;  // True para cabecalho declarado na secao interface
     Params: TASTNodeList;      // TASTParam
     ReturnType: string;
     Requires: TASTNodeList;    // TASTExpr
@@ -527,16 +529,22 @@ type
     Name: string;
     DocComment: string;
     HasExplicitPub: Boolean;
+    IsUnit: Boolean;
     Imports: TStringList;
     ImportAliases: TStringList;
     PascalImports: TStringList;
     CImports: TStringList;
     LinkDirectives: TStringList;
     Constants: TASTNodeList;   // TASTConstDecl
+    ModuleVars: TASTNodeList;  // TASTVarDecl em nivel de modulo/unit
     Types: TASTNodeList;       // TASTRecordDecl, TASTEnumDecl
     Traits: TASTNodeList;      // TASTTraitDecl
     Impls: TASTNodeList;       // TASTImplDecl
     Functions: TASTNodeList;   // TASTFunction
+    InitBody: TASTNodeList;    // TASTStmt de initialization (Units)
+    FiniBody: TASTNodeList;    // TASTStmt de finalization (Units)
+    InitProcs: TStringList;    // Procedimentos _aether_init_<Unit> a chamar no inicio de Main
+    FiniProcs: TStringList;    // Procedimentos _aether_fini_<Unit> a chamar no fim de Main
     ProgramBlock: TASTProgramBlock;
     constructor Create(ALine, ACol: Integer; const AName: string);
     destructor Destroy; override;
@@ -1727,6 +1735,8 @@ begin
   Ensures := TASTNodeList.Create;
   LocalVars := TASTNodeList.Create;
   Body := TASTNodeList.Create;
+  IsProcedure := False;
+  IsInterfaceDecl := False;
   IsExtern := False;
   IsAsync := False;
   IsExport := False;
@@ -1890,16 +1900,22 @@ begin
   inherited Create(ALine, ACol);
   Name := AName;
   HasExplicitPub := False;
+  IsUnit := False;
   Imports := TStringList.Create;
   ImportAliases := TStringList.Create;
   PascalImports := TStringList.Create;
   CImports := TStringList.Create;
   LinkDirectives := TStringList.Create;
   Constants := TASTNodeList.Create;
+  ModuleVars := TASTNodeList.Create;
   Types := TASTNodeList.Create;
   Traits := TASTNodeList.Create;
   Impls := TASTNodeList.Create;
   Functions := TASTNodeList.Create;
+  InitBody := TASTNodeList.Create;
+  FiniBody := TASTNodeList.Create;
+  InitProcs := TStringList.Create;
+  FiniProcs := TStringList.Create;
   ProgramBlock := nil;
 end;
 
@@ -1911,10 +1927,15 @@ begin
   CImports.Free;
   LinkDirectives.Free;
   Constants.Free;
+  ModuleVars.Free;
   Types.Free;
   Traits.Free;
   Impls.Free;
   Functions.Free;
+  InitBody.Free;
+  FiniBody.Free;
+  InitProcs.Free;
+  FiniProcs.Free;
   ProgramBlock.Free;
   inherited Destroy;
 end;
@@ -1934,6 +1955,13 @@ begin
     Result := Result + LineEnding + MakeIndent(Indent + 1) + 'Constantes Declaradas:';
     for I := 0 to Constants.Count - 1 do
       Result := Result + LineEnding + Constants[I].Dump(Indent + 2);
+  end;
+
+  if ModuleVars.Count > 0 then
+  begin
+    Result := Result + LineEnding + MakeIndent(Indent + 1) + 'Variaveis do Modulo:';
+    for I := 0 to ModuleVars.Count - 1 do
+      Result := Result + LineEnding + ModuleVars[I].Dump(Indent + 2);
   end;
 
   if Types.Count > 0 then
@@ -1962,6 +1990,20 @@ begin
     Result := Result + LineEnding + MakeIndent(Indent + 1) + 'Funcoes:';
     for I := 0 to Functions.Count - 1 do
       Result := Result + LineEnding + Functions[I].Dump(Indent + 2);
+  end;
+
+  if InitBody.Count > 0 then
+  begin
+    Result := Result + LineEnding + MakeIndent(Indent + 1) + 'Initialization:';
+    for I := 0 to InitBody.Count - 1 do
+      Result := Result + LineEnding + InitBody[I].Dump(Indent + 2);
+  end;
+
+  if FiniBody.Count > 0 then
+  begin
+    Result := Result + LineEnding + MakeIndent(Indent + 1) + 'Finalization:';
+    for I := 0 to FiniBody.Count - 1 do
+      Result := Result + LineEnding + FiniBody[I].Dump(Indent + 2);
   end;
 
   if Assigned(ProgramBlock) then

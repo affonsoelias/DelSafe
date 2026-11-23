@@ -1130,16 +1130,36 @@ procedure TAetherBorrowChecker.CheckModule(AModule: TASTModule);
 var
   I: Integer;
   Func: TASTFunction;
+  VarDecl: TASTVarDecl;
 begin
   FModule := AModule;
-  for I := 0 to AModule.Functions.Count - 1 do
-  begin
-    Func := TASTFunction(AModule.Functions[I]);
-    CheckFunction(Func);
-  end;
+  EnterScope;
+  try
+    for I := 0 to AModule.ModuleVars.Count - 1 do
+    begin
+      VarDecl := TASTVarDecl(AModule.ModuleVars[I]);
+      if Assigned(VarDecl.InitialExpr) then
+        CheckExpr(VarDecl.InitialExpr, accRead);
+      FCurrentScope.AddVar(VarDecl.Name, VarDecl.TypeName, vsOwned, VarDecl.Line, VarDecl.Col, IsPrimitiveType(VarDecl.TypeName));
+    end;
 
-  if Assigned(AModule.ProgramBlock) then
-    CheckProgramBlock(AModule.ProgramBlock);
+    for I := 0 to AModule.Functions.Count - 1 do
+    begin
+      Func := TASTFunction(AModule.Functions[I]);
+      CheckFunction(Func);
+    end;
+
+    for I := 0 to AModule.InitBody.Count - 1 do
+      CheckStmt(TASTStmt(AModule.InitBody[I]));
+
+    for I := 0 to AModule.FiniBody.Count - 1 do
+      CheckStmt(TASTStmt(AModule.FiniBody[I]));
+
+    if Assigned(AModule.ProgramBlock) then
+      CheckProgramBlock(AModule.ProgramBlock);
+  finally
+    LeaveScope;
+  end;
 end;
 
 end.

@@ -15,22 +15,22 @@ The `@cfg(...)` attribute controls whether a declaration (function, type, or con
 module platform_demo;
 
 @cfg(target_os = "windows")
-function GetOSName(): String
+function GetOSName() return String is
 begin
     return "Microsoft Windows";
-end;
+end GetOSName;
 
 @cfg(target_os = "linux")
-function GetOSName(): String
+function GetOSName() return String is
 begin
     return "GNU/Linux";
-end;
+end GetOSName;
 
 @cfg(target_os = "darwin")
-function GetOSName(): String
+function GetOSName() return String is
 begin
     return "Apple macOS";
-end;
+end GetOSName;
 ```
 
 ### Supported `@cfg` Queries:
@@ -54,16 +54,16 @@ In performance-critical hot loops, function call overhead (stack frame push/pop)
 module inline_demo;
 
 @inline(always)
-function VectorDotProduct(x1: Float64, y1: Float64, x2: Float64, y2: Float64): Float64
+function VectorDotProduct(x1, y1, x2, y2: Float64) return Float64 is
 begin
     return (x1 * x2) + (y1 * y2);
-end;
+end VectorDotProduct;
 
 @inline(never)
-function SlowLogOperation(msg: String): Void
+procedure SlowLogOperation(msg: String) is
 begin
     PrintLn("[AUDIT LOG] " + msg);
-end;
+end SlowLogOperation;
 ```
 
 ### Backend Code Generation:
@@ -78,11 +78,11 @@ Error handling routines or panic handlers are rarely executed. Annotating them w
 
 ```aether
 @cold
-function OnCriticalStorageFailure(errorCode: Int32): Void
+procedure OnCriticalStorageFailure(errorCode: Int32) is
 begin
     PrintLn("CRITICAL ERROR: Disk write failed with code: " + IntToStr(errorCode));
     // Rare failure recovery
-end;
+end OnCriticalStorageFailure;
 ```
 
 On GCC/Clang, this emits `__attribute__((cold))`, moving the cold code to a separate memory section and keeping the CPU L1 instruction cache hot for high-throughput loops.

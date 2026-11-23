@@ -542,7 +542,7 @@ begin
                 SL.Add('');
               end;
 
-              SL.Add('end.');
+              SL.Add('end bench_runner_' + ModNode.Name + '.');
               SL.SaveToFile(GenRunnerFile);
             finally
               SL.Free;

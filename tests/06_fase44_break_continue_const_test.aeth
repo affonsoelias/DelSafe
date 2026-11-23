@@ -8,10 +8,10 @@ const
     APP_NAME = "AetherFase44";
     FACTOR: Int32 = 2;
 
-function SomarComFator(x: Int32): Int32
+function SomarComFator(x: Int32) return Int32 is
 begin
     return x * FACTOR;
-end;
+end SomarComFator;
 
 program Main;
 var
@@ -86,4 +86,4 @@ begin
     assert(count = 4);
 
     PrintLn("Fase 44: Todos os testes de break, continue e const passaram com sucesso!");
-end.
+end Fase44BreakContinueConstTest.

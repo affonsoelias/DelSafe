@@ -1,14 +1,14 @@
 module SuiteMatematicaTest;
 
-function Somar(a: Int32, b: Int32): Int32
+function Somar(a, b: Int32) return Int32 is
 begin
     return a + b;
-end;
+end Somar;
 
-function Multiplicar(a: Int32, b: Int32): Int32
+function Multiplicar(a, b: Int32) return Int32 is
 begin
     return a * b;
-end;
+end Multiplicar;
 
 program Main;
 var
@@ -26,4 +26,4 @@ begin
     Assert(soma = mult, "Soma e Multiplicacao devem ter o mesmo resultado");
 
     PrintLn("Todos os testes matematicos foram aprovados com sucesso!");
-end.
+end SuiteMatematicaTest.

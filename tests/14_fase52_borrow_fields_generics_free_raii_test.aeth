@@ -32,59 +32,59 @@ type
     end;
 
 impl Drop for Recurso
-    function Drop(mut borrow self): Void
+    procedure Drop(mut borrow self) is
     begin
         unsafe
             self.tracker^.drops := self.tracker^.drops + 1;
             self.tracker^.ordem := (self.tracker^.ordem * 10) + self.id;
         end;
-    end;
+    end Drop;
 end;
 
-function DobrarAlias(x: MeuInt; e: Estado; d: Digito; s: ConjuntoDigitos): Int32
+function DobrarAlias(x: MeuInt; e: Estado; d: Digito; s: ConjuntoDigitos) return Int32 is
 begin
     if (e = Estado.Ativo) and (d in s) then
         return x * 2;
     end;
     return x;
-end;
+end DobrarAlias;
 
-function LerGenerico<T>(borrow v: T): T
+function LerGenerico<T>(borrow v: T) return T is
 begin
     return v;
-end;
+end LerGenerico;
 
-function IncMut(mut borrow v: Int32): Void
+procedure IncMut(mut borrow v: Int32) is
 begin
     v := v + 10;
-end;
+end IncMut;
 
-function IncERetornar(mut borrow v: Int32): Int32
+function IncERetornar(mut borrow v: Int32) return Int32 is
 begin
     v := v + 5;
     return v;
-end;
+end IncERetornar;
 
-function TrocarCampos(mut borrow x: Int32; mut borrow y: Int32): Void
+procedure TrocarCampos(mut borrow x, y: Int32) is
 var
     tmp: Int32;
 begin
     tmp := x;
     x := y;
     y := tmp;
-end;
+end TrocarCampos;
 
-function ConsumirTexto(take s: String): Int32
+function ConsumirTexto(take s: String) return Int32 is
 begin
     return Length(s);
-end;
+end ConsumirTexto;
 
-function LerCaixa(borrow c: CaixaMista): Int32
+function LerCaixa(borrow c: CaixaMista) return Int32 is
 begin
     return Length(c.nome) + c.valor;
-end;
+end LerCaixa;
 
-function TestarRaiiEscopos(tracker: PtrContador): Void
+procedure TestarRaiiEscopos(tracker: PtrContador) is
 var
     r1: Recurso;
     r2: Recurso;
@@ -101,9 +101,9 @@ begin
         Assert(tracker^.drops = 1);
         Assert(tracker^.ordem = 3);
     end;
-end;
+end TestarRaiiEscopos;
 
-function TestarRaiiEarlyReturn(tracker: PtrContador; early: Bool): Int32
+function TestarRaiiEarlyReturn(tracker: PtrContador; early: Bool) return Int32 is
 var
     r4: Recurso;
 begin
@@ -112,9 +112,9 @@ begin
         return r4.id * 10;
     end;
     return 0;
-end;
+end TestarRaiiEarlyReturn;
 
-function TestarRaiiLoopBreak(tracker: PtrContador): Void
+procedure TestarRaiiLoopBreak(tracker: PtrContador) is
 var
     k: Int32;
 begin
@@ -124,15 +124,15 @@ begin
             break;
         end;
     end;
-end;
+end TestarRaiiLoopBreak;
 
-function TestarRaiiBox(tracker: PtrContador): Void
+procedure TestarRaiiBox(tracker: PtrContador) is
 var
     bx: Box<Recurso>;
 begin
     bx := Box(Recurso(7, tracker));
     Assert(bx.id = 7);
-end;
+end TestarRaiiBox;
 
 program Main;
 var
@@ -238,4 +238,4 @@ begin
     Assert(cnt.ordem = 3214127);
 
     PrintLn("=== FASE 52 TEST PASSOU (BORROW POS-INFERENCIA, GENERICS, CAMPOS DISJUNTOS, FREE/DISPOSE & RAII DROP) ===");
-end.
+end Fase52BorrowFieldsGenericsFreeRaiiTest.

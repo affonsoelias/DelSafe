@@ -2,8 +2,10 @@ module Math;
 
 import pascal Math;
 
-extern function sqrt(borrow x: Float64): Float64;
-extern function pow(borrow base: Float64; borrow exp: Float64): Float64;
+interface
+
+extern function sqrt(borrow x: Float64) return Float64;
+extern function pow(borrow base, exp: Float64) return Float64;
 
 type
     MathError = enum
@@ -11,39 +13,47 @@ type
         DominioInvalido
     end;
 
-function Abs(borrow x: Float64): Float64
+function Abs(borrow x: Float64) return Float64;
+function Max(borrow a, b: Float64) return Float64;
+function Min(borrow a, b: Float64) return Float64;
+function Clamp(borrow val, min_val, max_val: Float64) return Float64
+contract
+    require
+        min_val <= max_val;
+    ensure
+        true;
+function SqrtSafe(borrow x: Float64) return Result<Float64, MathError>;
+
+implementation
+
+function Abs(borrow x: Float64) return Float64 is
 begin
     if x < 0.0 then
         return 0.0 - x;
     else
         return x;
     end;
-end;
+end Abs;
 
-function Max(borrow a: Float64; borrow b: Float64): Float64
+function Max(borrow a, b: Float64) return Float64 is
 begin
     if a > b then
         return a;
     else
         return b;
     end;
-end;
+end Max;
 
-function Min(borrow a: Float64; borrow b: Float64): Float64
+function Min(borrow a, b: Float64) return Float64 is
 begin
     if a < b then
         return a;
     else
         return b;
     end;
-end;
+end Min;
 
-function Clamp(borrow val: Float64; borrow min_val: Float64; borrow max_val: Float64): Float64
-contract
-    require
-        min_val <= max_val;
-    ensure
-        true;
+function Clamp(borrow val, min_val, max_val: Float64) return Float64 is
 begin
     if val < min_val then
         return min_val;
@@ -54,13 +64,15 @@ begin
             return val;
         end;
     end;
-end;
+end Clamp;
 
-function SqrtSafe(borrow x: Float64): Result<Float64, MathError>
+function SqrtSafe(borrow x: Float64) return Result<Float64, MathError> is
 begin
     if x < 0.0 then
         return Err(MathError.DominioInvalido);
     else
         return Ok(sqrt(borrow x));
     end;
-end;
+end SqrtSafe;
+
+end Math.

@@ -920,7 +920,7 @@ begin
     '    PrintLn("  Abs(-99.0)      = %f", val_abs);' + LineEnding +
     '    PrintLn("");' + LineEnding +
     '    PrintLn("Projeto compilado e executado com sucesso!");' + LineEnding +
-    'end.' + LineEnding
+    'end ' + ModName + '.' + LineEnding
   );
 
   // 3. Gera tests/<FileBase>_test.aeth
@@ -940,7 +940,7 @@ begin
     '        PrintLn("  [PASS] Teste Abs passou com sucesso!");' + LineEnding +
     '    end;' + LineEnding +
     '    PrintLn("[SUCESSO] Todos os testes passaram!");' + LineEnding +
-    'end.' + LineEnding
+    'end ' + ModName + 'Test.' + LineEnding
   );
 
   // 4. Gera .gitignore

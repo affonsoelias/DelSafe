@@ -1,6 +1,6 @@
 module for_loop_test;
 
-function SomarIntervalo(inicio: Int32, fim: Int32): Int32
+function SomarIntervalo(inicio, fim: Int32) return Int32 is
 var
     total: Int32;
     i: Int32;
@@ -10,9 +10,9 @@ begin
         total := total + i;
     end;
     return total;
-end;
+end SomarIntervalo;
 
-function ContagemRegressiva(inicio: Int32, fim: Int32): Int32
+function ContagemRegressiva(inicio, fim: Int32) return Int32 is
 var
     soma: Int32;
     k: Int32;
@@ -22,7 +22,7 @@ begin
         soma := soma + k;
     end;
     return soma;
-end;
+end ContagemRegressiva;
 
 program Main;
 var
@@ -50,4 +50,4 @@ begin
     Assert(matriz_soma = 9, "Laco aninhado 3x3 deve iterar 9 vezes");
 
     PrintLn("For Loop Test: Todos os testes do laco FOR passaram com sucesso!");
-end.
+end for_loop_test.

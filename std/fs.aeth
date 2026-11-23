@@ -1,39 +1,50 @@
 module FS;
 
+interface
+
 type
     FileInfo = record
-    path: String;
-    size_bytes: Int64;
-    exists: Bool;
-    is_dir: Bool;
-end;
+        path: String;
+        size_bytes: Int64;
+        exists: Bool;
+        is_dir: Bool;
+    end;
 
-function CriarDiretorio(borrow path: String): Bool
+function CriarDiretorio(borrow path: String) return Bool;
+function RemoverDiretorio(borrow path: String) return Bool;
+function ApagarArquivo(borrow path: String) return Bool;
+function ExisteDiretorio(borrow path: String) return Bool;
+function TamanhoArquivo(borrow path: String) return Int64;
+function ObterInfo(borrow path: String) return FileInfo;
+
+implementation
+
+function CriarDiretorio(borrow path: String) return Bool is
 begin
     return CreateDir(borrow path);
-end;
+end CriarDiretorio;
 
-function RemoverDiretorio(borrow path: String): Bool
+function RemoverDiretorio(borrow path: String) return Bool is
 begin
     return RemoveDir(borrow path);
-end;
+end RemoverDiretorio;
 
-function ApagarArquivo(borrow path: String): Bool
+function ApagarArquivo(borrow path: String) return Bool is
 begin
     return DeleteFile(borrow path);
-end;
+end ApagarArquivo;
 
-function ExisteDiretorio(borrow path: String): Bool
+function ExisteDiretorio(borrow path: String) return Bool is
 begin
     return DirExists(borrow path);
-end;
+end ExisteDiretorio;
 
-function TamanhoArquivo(borrow path: String): Int64
+function TamanhoArquivo(borrow path: String) return Int64 is
 begin
     return FileSize(borrow path);
-end;
+end TamanhoArquivo;
 
-function ObterInfo(borrow path: String): FileInfo
+function ObterInfo(borrow path: String) return FileInfo is
 var
     ex: Bool;
     is_d: Bool;
@@ -42,9 +53,11 @@ begin
     is_d := DirExists(borrow path);
     ex := is_d or FileExists(borrow path);
     if is_d then
-    sz := 0;
-else
-    sz := FileSize(borrow path);
-end;
-return FileInfo(path: path, size_bytes: sz, exists: ex, is_dir: is_d);
-end;
+        sz := 0;
+    else
+        sz := FileSize(borrow path);
+    end;
+    return FileInfo(path: path, size_bytes: sz, exists: ex, is_dir: is_d);
+end ObterInfo;
+
+end FS.

@@ -28,6 +28,7 @@ type
     GenericParam: string;
     TraitBound: string;
     ReturnType: string;
+    IsProcedure: Boolean;
     IsAsync: Boolean;
     IsExtern: Boolean;
     RawDoc: string;
@@ -425,6 +426,7 @@ begin
           GenericParam := FuncNode.GenericParam;
           TraitBound := FuncNode.TraitBound;
           ReturnType := FuncNode.ReturnType;
+          IsProcedure := FuncNode.IsProcedure;
           IsAsync := FuncNode.IsAsync;
           IsExtern := FuncNode.IsExtern;
           RawDoc := FuncNode.DocComment;
@@ -457,6 +459,7 @@ begin
       GenericParam := FuncNode.GenericParam;
       TraitBound := FuncNode.TraitBound;
       ReturnType := FuncNode.ReturnType;
+      IsProcedure := FuncNode.IsProcedure;
       IsAsync := FuncNode.IsAsync;
       IsExtern := FuncNode.IsExtern;
       RawDoc := FuncNode.DocComment;
@@ -895,7 +898,10 @@ begin
             for K := 0 to High(Methods) do
             begin
               WriteLn(F, '        <div class="code-block">');
-              WriteLn(F, Format('          function %s(...): %s;', [Methods[K].Name, Methods[K].ReturnType]));
+              if Methods[K].IsProcedure then
+                WriteLn(F, Format('          procedure %s(...);', [Methods[K].Name]))
+              else
+                WriteLn(F, Format('          function %s(...) return %s;', [Methods[K].Name, Methods[K].ReturnType]));
               WriteLn(F, '        </div>');
             end;
           end;
@@ -921,7 +927,8 @@ begin
           // Assinatura de Código
           WriteLn(F, '        <div class="code-block">');
           if IsAsync then Write(F, 'async ');
-          Write(F, 'function ' + Name);
+          if IsProcedure then Write(F, 'procedure ') else Write(F, 'function ');
+          Write(F, Name);
           if GenericParam <> '' then
           begin
             Write(F, '<' + GenericParam);
@@ -940,7 +947,7 @@ begin
             Write(F, Params[K].Name + ': ' + Params[K].TypeName);
           end;
           Write(F, ')');
-          if ReturnType <> '' then Write(F, ': ' + ReturnType);
+          if (not IsProcedure) and (ReturnType <> '') then Write(F, ' return ' + ReturnType);
           WriteLn(F, ';');
           WriteLn(F, '        </div>');
 
@@ -1034,7 +1041,8 @@ begin
 
           WriteLn(F, '```aether');
           if IsAsync then Write(F, 'async ');
-          Write(F, 'function ' + Name + '(');
+          if IsProcedure then Write(F, 'procedure ') else Write(F, 'function ');
+          Write(F, Name + '(');
           for K := 0 to High(Params) do
           begin
             if K > 0 then Write(F, ', ');
@@ -1046,7 +1054,7 @@ begin
             Write(F, Params[K].Name + ': ' + Params[K].TypeName);
           end;
           Write(F, ')');
-          if ReturnType <> '' then Write(F, ': ' + ReturnType);
+          if (not IsProcedure) and (ReturnType <> '') then Write(F, ' return ' + ReturnType);
           WriteLn(F, ';');
           WriteLn(F, '```');
           WriteLn(F, '');
@@ -1150,7 +1158,7 @@ begin
           WriteLn(F, Format('module test_%s_%d;', [ModDoc.Name, TotalTests]));
           WriteLn(F, Format('import %s;', [ModDoc.Name]));
           WriteLn(F, '');
-          WriteLn(F, Format('program test_runner_%d;', [TotalTests]));
+          WriteLn(F, 'program Main;');
           if VarLines <> '' then
           begin
             WriteLn(F, 'var');
@@ -1158,7 +1166,7 @@ begin
           end;
           WriteLn(F, 'begin');
           Write(F, BodyLines);
-          WriteLn(F, 'end.');
+          WriteLn(F, Format('end test_%s_%d.', [ModDoc.Name, TotalTests]));
         end;
         CloseFile(F);
 

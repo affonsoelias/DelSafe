@@ -25,25 +25,25 @@ type
     end;
 
 impl Vetor2D
-    function New(ax: Int32; ay: Int32): Self
+    function New(ax, ay: Int32) return Self is
     begin
         return Vetor2D(ax, ay);
-    end;
+    end New;
 
-    function Zero(): Self
+    function Zero() return Self is
     begin
         return Vetor2D(0, 0);
-    end;
+    end Zero;
 
-    function Add(borrow self; other: Self): Self
+    function Add(borrow self; other: Self) return Self is
     begin
         return Vetor2D(self.x + other.x, self.y + other.y);
-    end;
+    end Add;
 
-    function Dot(borrow self; other: Self): Int32
+    function Dot(borrow self; other: Self) return Int32 is
     begin
         return (self.x * other.x) + (self.y * other.y);
-    end;
+    end Dot;
 end;
 
 type
@@ -139,4 +139,4 @@ begin
     Assert(p2.vazio.is_none);
 
     PrintLn("=== FASE 54 TEST PASSOU (MODULOS/PUB, IMPL TIPO, DERIVES EXPANDIDOS & FROMJSON) ===");
-end.
+end Fase54ModulesPubInherentImplDerivesFromjsonTest.

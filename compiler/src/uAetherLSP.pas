@@ -332,7 +332,10 @@ begin
     if I > 0 then ParamsStr := ParamsStr + '; ';
     ParamsStr := ParamsStr + OwnershipToString(P.Ownership) + P.Name + ': ' + P.TypeName;
   end;
-  Result := Format('function %s(%s): %s', [Func.Name, ParamsStr, Func.ReturnType]);
+  if Func.IsProcedure then
+    Result := Format('procedure %s(%s)', [Func.Name, ParamsStr])
+  else
+    Result := Format('function %s(%s) return %s', [Func.Name, ParamsStr, Func.ReturnType]);
 end;
 
 function HandleCompletion(Params: TJSONObject): TJSONArray;
@@ -364,9 +367,15 @@ begin
   // Palavras-chave fundamentais
   AddItem('module', 14, 'Declaração de Módulo');
   AddItem('program', 14, 'Bloco de Programa Principal');
+  AddItem('interface', 14, 'Seção Pública de Unit');
+  AddItem('implementation', 14, 'Seção de Implementação de Unit');
+  AddItem('initialization', 14, 'Bloco de Inicialização de Unit');
+  AddItem('finalization', 14, 'Bloco de Finalização de Unit');
   AddItem('import', 14, 'Importar Módulo Aether');
   AddItem('extern', 14, 'Declarar Função Externa C');
-  AddItem('function', 14, 'Declaração de Função');
+  AddItem('function', 14, 'Declaração de Função (com retorno)');
+  AddItem('procedure', 14, 'Declaração de Procedimento (sem retorno)');
+  AddItem('is', 14, 'Início de definição de rotina Ada');
   AddItem('contract', 14, 'Bloco de Contratos (require / ensure)');
   AddItem('require', 14, 'Pré-condição Contratual');
   AddItem('ensure', 14, 'Pós-condição Contratual');
@@ -407,7 +416,7 @@ begin
   AddItem('Float64', 7, 'Ponto Flutuante 64-bit');
   AddItem('Bool', 7, 'Booleano (true/false)');
   AddItem('String', 7, 'Texto UTF-8');
-  AddItem('Void', 7, 'Retorno Vazio');
+  AddItem('Char', 7, 'Caractere Unicode');
 
   // Mônades
   AddItem('Result', 7, 'Mônade de Resultado Result<T, E>');

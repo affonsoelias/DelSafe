@@ -1,34 +1,34 @@
 module cfg_inline_comptime_test;
 
 @cfg(target_os = "windows")
-function get_os_name(): String
+function get_os_name() return String is
 begin
   return "Windows";
-end;
+end get_os_name;
 
 @cfg(target_os = "linux")
-function get_os_name(): String
+function get_os_name() return String is
 begin
   return "Linux";
-end;
+end get_os_name;
 
 @cfg(target_os = "darwin")
-function get_os_name(): String
+function get_os_name() return String is
 begin
   return "macOS";
-end;
+end get_os_name;
 
 @inline(always)
-function compute_fast_math(x: Int32, y: Int32): Int32
+function compute_fast_math(x, y: Int32) return Int32 is
 begin
   return (x * y) + 10;
-end;
+end compute_fast_math;
 
 @cold
-function error_handler(): String
+function error_handler() return String is
 begin
   return "erro raro";
-end;
+end error_handler;
 
 @cfg(target_os = "windows")
 type
@@ -61,4 +61,4 @@ begin
   Assert(cfg.is_win, "is_win deve ser true");
 
   PrintLn("CFG and Inline Test: Todos os testes passaram com sucesso!");
-end.
+end cfg_inline_comptime_test.

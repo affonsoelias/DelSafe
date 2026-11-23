@@ -1,0 +1,79 @@
+module Fase57AdaSyntaxUnitsTest;
+
+import lib.helper_fase57_unit as h57;
+
+procedure MarcarFlag(mut borrow flag: Int32) is
+begin
+    if flag < 0 then
+        return;
+    end;
+    flag := flag + 1;
+end MarcarFlag;
+
+procedure SemParens is
+begin
+    return;
+end SemParens;
+
+procedure SomarEmOut(a, b: Int32; mut borrow saida: Int32) is
+begin
+    saida := a + b;
+end SomarEmOut;
+
+function CalcularDobro(numero: Int32) return Int32 is
+begin
+    return numero * 2;
+end CalcularDobro;
+
+function DividirSeguro(num, den: Int32) return Int32 is
+contract
+    require
+        den <> 0;
+    ensure
+        (result * den) <= num;
+begin
+    return num / den;
+end DividirSeguro;
+
+program Main;
+var
+    p1, p2: h57.Ponto;
+    saida, flagVal: Int32;
+begin
+    // 1. Initialization da Unit deve ter inicializado PublicCounter=100 e PrivateAccum=7
+    Assert(h57.BASE_MULTIPLIER = 10);
+    Assert(h57.PublicCounter = 100);
+    Assert(h57.ObterEstado() = 107);
+
+    // 2. Procedures e mutacao de estado encapsulado na Unit
+    h57.IncrementarEstado(5);
+    Assert(h57.PublicCounter = 105);
+    Assert(h57.ObterEstado() = 122);
+
+    h57.ResetarEstado();
+    Assert(h57.PublicCounter = 0);
+    Assert(h57.ObterEstado() = 0);
+
+    // 3. Contrato na interface (executado na implementacao) e parametros agrupados com borrow
+    Assert(h57.SomarIntervaloContrato(10, 15) = 25);
+    p1 := h57.Ponto(1, 2);
+    p2 := h57.Ponto(3, 4);
+    Assert(h57.SomaPontos(borrow p1, borrow p2) = 10);
+
+    // 4. Procedures/Functions locais no estilo Ada (sem (), mut borrow agrupado, return vazio, contrato)
+    SemParens();
+    flagVal := -3;
+    MarcarFlag(mut borrow flagVal);
+    Assert(flagVal = -3);
+    flagVal := 4;
+    MarcarFlag(mut borrow flagVal);
+    Assert(flagVal = 5);
+
+    saida := 0;
+    SomarEmOut(17, 25, mut borrow saida);
+    Assert(saida = 42);
+    Assert(CalcularDobro(21) = 42);
+    Assert(DividirSeguro(42, 6) = 7);
+
+    PrintLn("=== FASE 57 TEST PASSOU (SINTAXE ADA, OBJECT PASCAL UNITS, MODULE VARS, INIT/FINI) ===");
+end Fase57AdaSyntaxUnitsTest.

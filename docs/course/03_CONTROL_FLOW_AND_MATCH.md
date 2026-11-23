@@ -29,7 +29,7 @@ begin
     end;
 
     PrintLn("Final grade: " + grade);
-end.
+end conditionals_demo.
 ```
 
 Notice:
@@ -70,7 +70,7 @@ begin
     end;
 
     PrintLn("Sum of 1 to 10 is: " + IntToStr(total));
-end.
+end loop_demo.
 ```
 
 ---
@@ -105,7 +105,7 @@ begin
         PrintLn("  T-minus: " + IntToStr(k));
     end;
     PrintLn("Blast off!");
-end.
+end for_demo.
 ```
 
 You can also iterate directly over fixed arrays, dynamic arrays (`array of T`), and `String` values (`Char` elements) using `for item in collection do ... end;`:
@@ -159,7 +159,7 @@ begin
     until success;
 
     PrintLn("Finished with " + IntToStr(attempts) + " attempts.");
-end.
+end repeat_demo.
 ```
 
 Notice:
@@ -200,7 +200,7 @@ begin
     end;
 
     PrintLn("Sum of odd numbers: " + IntToStr(sum)); // 25
-end.
+end loop_control_demo.
 ```
 
 The compiler strictly verifies that `break` and `continue` only occur inside active loop bodies (rejecting top-level or standalone uses with error `E0310`).
@@ -214,7 +214,7 @@ The `defer` statement schedules a statement to execute deterministically in **LI
 ```aether
 module defer_demo;
 
-function ProcessData(mut borrow log: array of Int32, exitEarly: Bool): Int32
+function ProcessData(mut borrow log: array of Int32; exitEarly: Bool) return Int32 is
 begin
     defer log.Push(1); // Runs 2nd
     defer log.Push(2); // Runs 1st
@@ -224,7 +224,7 @@ begin
     end;
 
     return 1;
-end;
+end ProcessData;
 ```
 
 ---
@@ -250,7 +250,7 @@ begin
         PrintLn("Fault safely intercepted!");
     end;
     assert(recovered = true);
-end.
+end exceptions_demo.
 ```
 
 ---
@@ -260,12 +260,12 @@ end.
 When writing functions returning `Result<T, E>` or `Option<T>`, you can unwrap the inner value or propagate an early error/empty return cleanly with either the postfix `?` operator or prefix `try <expr>`:
 
 ```aether
-function SumPositivesWithTry(a: Int32, b: Int32): Result<Int32, String>
+function SumPositivesWithTry(a, b: Int32) return Result<Int32, String> is
 begin
     let va := ParsePositive(a)?;
     let vb := try ParsePositive(b);
     return Ok(va + vb);
-end;
+end SumPositivesWithTry;
 ```
 
 If `ParsePositive(b)` returns `Err("non-positive")`, `SumPositivesWithTry` immediately executes any active `defer` statements and returns `Err("non-positive")` without extra boilerplate.
@@ -312,7 +312,7 @@ type
         Cancelled
     end;
 
-function GetStatusDescription(st: OrderStatus): String
+function GetStatusDescription(st: OrderStatus) return String is
 begin
     match st with
         OrderStatus.Draft =>
@@ -326,7 +326,7 @@ begin
         OrderStatus.Cancelled =>
             return "Order was cancelled.";
     end;
-end;
+end GetStatusDescription;
 
 program Main;
 var
@@ -334,7 +334,7 @@ var
 begin
     status := OrderStatus.Shipped;
     PrintLn("Order state: " + GetStatusDescription(status));
-end.
+end match_demo.
 ```
 
 If you omit any variant (e.g., forget `Cancelled`), the Aether compiler will refuse to compile with an exhaustive-check error:
@@ -421,14 +421,14 @@ let statusLabel := match code do
     case _ => "OTHER";
 end;
 
-function ScoreResultExpr(res: Result<Int32, String>): Int32
+function ScoreResultExpr(res: Result<Int32, String>) return Int32 is
 begin
     return match res do
         case Ok(let v) if v > 50 => v * 2;
         case Ok(let v) => v + 1;
         case Err(let _msg) => -1;
     end;
-end;
+end ScoreResultExpr;
 ```
 
 Guarded patterns do not act as unconditional wildcards during exhaustiveness checking, preserving full compile-time safety.

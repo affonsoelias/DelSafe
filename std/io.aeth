@@ -1,5 +1,7 @@
 module IO;
 
+interface
+
 type
     IOError = enum
         FileNotFound,
@@ -7,22 +9,31 @@ type
         DiskError
     end;
 
-function Informar(borrow mensagem: String): Void
+procedure Informar(borrow mensagem: String);
+function ExisteArquivo(borrow path: String) return Bool;
+function LerArquivo(borrow path: String) return String;
+function GravarArquivo(borrow path, conteudo: String) return Bool;
+
+implementation
+
+procedure Informar(borrow mensagem: String) is
 begin
     PrintLn("[IO]: %s", mensagem);
-end;
+end Informar;
 
-function ExisteArquivo(borrow path: String): Bool
+function ExisteArquivo(borrow path: String) return Bool is
 begin
     return FileExists(borrow path);
-end;
+end ExisteArquivo;
 
-function LerArquivo(borrow path: String): String
+function LerArquivo(borrow path: String) return String is
 begin
     return ReadFile(borrow path);
-end;
+end LerArquivo;
 
-function GravarArquivo(borrow path: String; borrow conteudo: String): Bool
+function GravarArquivo(borrow path, conteudo: String) return Bool is
 begin
     return WriteFile(borrow path, borrow conteudo);
-end;
+end GravarArquivo;
+
+end IO.

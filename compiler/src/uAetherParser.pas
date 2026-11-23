@@ -56,10 +56,10 @@ type
     function ParseEnumDecl(const AName: string; ALine, ACol: Integer): TASTEnumDecl;
     function ParseTraitDecl(const AName: string; ALine, ACol: Integer): TASTTraitDecl;
     function ParseImplDecl: TASTImplDecl;
-    function ParseFunction(IsSignatureOnly: Boolean; const Attrs: TParsedAttributes): TASTFunction; overload;
-    function ParseFunction(IsSignatureOnly: Boolean = False): TASTFunction; overload;
-    function ParseProgramBlock: TASTProgramBlock;
-    procedure ParseVarSection(ALocalVars: TASTNodeList);
+    function ParseFunction(IsSignatureOnly: Boolean; const Attrs: TParsedAttributes; AllowInterfaceContracts: Boolean = False): TASTFunction; overload;
+    function ParseFunction(IsSignatureOnly: Boolean = False; AllowInterfaceContracts: Boolean = False): TASTFunction; overload;
+    function ParseProgramBlock(const AModuleName: string): TASTProgramBlock;
+    procedure ParseVarSection(ALocalVars: TASTNodeList; ForcePublic: Boolean = True; HasExplicitVis: Boolean = False);
 
     function IsShorthandMatchCaseStart(AllowBareLet: Boolean = False): Boolean;
     function ParseSingleMatchPatternItem: string;
@@ -841,10 +841,10 @@ begin
   try
     while not Check(tokEnd) and not Check(tokEOF) do
     begin
-      if Check(tokFunction) or Check(tokAsync) then
+      if Check(tokFunction) or Check(tokProcedure) or Check(tokAsync) then
         Result.Methods.Add(ParseFunction(True))
       else
-        raise EAetherParserError.Create('Esperado "function" na declaracao da trait', FCurTok.Line, FCurTok.Col);
+        raise EAetherParserError.Create('Esperado "function" ou "procedure" na declaracao da trait', FCurTok.Line, FCurTok.Col);
     end;
     Expect(tokEnd, 'Esperado "end" no fechamento da trait');
     if AName = '' then
@@ -894,7 +894,7 @@ begin
         MIsPub := False;
       end;
 
-      if Check(tokFunction) or Check(tokAsync) then
+      if Check(tokFunction) or Check(tokProcedure) or Check(tokAsync) then
       begin
         FuncNode := ParseFunction(False);
         if MHasVis then
@@ -914,7 +914,7 @@ begin
         Result.Methods.Add(FuncNode);
       end
       else
-        raise EAetherParserError.Create('Esperado "function" no bloco impl', FCurTok.Line, FCurTok.Col);
+        raise EAetherParserError.Create('Esperado "function" ou "procedure" no bloco impl', FCurTok.Line, FCurTok.Col);
     end;
     Expect(tokEnd, 'Esperado "end" no fechamento do bloco impl');
     Expect(tokSemicolon, 'Esperado ";" apos "end" do bloco impl');
@@ -924,13 +924,14 @@ begin
   end;
 end;
 
-procedure TAetherParser.ParseVarSection(ALocalVars: TASTNodeList);
+procedure TAetherParser.ParseVarSection(ALocalVars: TASTNodeList; ForcePublic: Boolean; HasExplicitVis: Boolean);
 var
   VarNames: TStringList;
   VarType: string;
   InitExpr, ClonedInit: TASTExpr;
   VLine, VCol, I: Integer;
   IsMut: Boolean;
+  VD: TASTVarDecl;
 begin
   IsMut := Check(tokVar);
   Advance; // consome 'var' ou 'let'
@@ -966,7 +967,10 @@ begin
           ClonedInit := TASTExpr(CloneASTNode(InitExpr))
         else
           ClonedInit := nil;
-        ALocalVars.Add(TASTVarDecl.Create(VLine, VCol, VarNames[I], VarType, ClonedInit, IsMut));
+        VD := TASTVarDecl.Create(VLine, VCol, VarNames[I], VarType, ClonedInit, IsMut);
+        VD.HasExplicitVis := HasExplicitVis;
+        VD.IsPublic := ForcePublic;
+        ALocalVars.Add(VD);
       end;
     end;
   finally
@@ -974,14 +978,43 @@ begin
   end;
 end;
 
-function TAetherParser.ParseFunction(IsSignatureOnly: Boolean; const Attrs: TParsedAttributes): TASTFunction;
+function TAetherParser.ParseFunction(IsSignatureOnly: Boolean; const Attrs: TParsedAttributes; AllowInterfaceContracts: Boolean): TASTFunction;
 var
-  FuncName, ReturnType, ParamName, ParamType, FDoc: string;
-  FLine, FCol: Integer;
+  FuncName, ReturnType, ParamType, FDoc, CloseName: string;
+  FLine, FCol, I, PLine, PCol: Integer;
   Ownership: TOwnershipKind;
-  IsExt, IsAsyncFunc, IsExportFunc: Boolean;
+  IsProc, IsExt, IsAsyncFunc, IsExportFunc, HasContracts: Boolean;
   FHasVis, FIsPub: Boolean;
   ExtLib, ExtAbi, ExportAbi: string;
+  ParamNames: TStringList;
+
+  procedure ParseOptionalContracts;
+  begin
+    if Match(tokContract) or Check(tokRequire) or Check(tokEnsure) then
+    begin
+      if Match(tokRequire) then
+      begin
+        while not Check(tokEnsure) and not Check(tokVar) and not Check(tokLet) and not Check(tokBegin) and
+              not Check(tokEnd) and not Check(tokFunction) and not Check(tokProcedure) and not Check(tokType) and
+              not Check(tokConst) and not Check(tokTrait) and not Check(tokImplementation) and not Check(tokEOF) do
+        begin
+          Result.Requires.Add(ParseExpr);
+          Expect(tokSemicolon, 'Esperado ";" apos expressao de require');
+        end;
+      end;
+
+      if Match(tokEnsure) then
+      begin
+        while not Check(tokVar) and not Check(tokLet) and not Check(tokBegin) and
+              not Check(tokEnd) and not Check(tokFunction) and not Check(tokProcedure) and not Check(tokType) and
+              not Check(tokConst) and not Check(tokTrait) and not Check(tokImplementation) and not Check(tokEOF) do
+        begin
+          Result.Ensures.Add(ParseExpr);
+          Expect(tokSemicolon, 'Esperado ";" apos expressao de ensure');
+        end;
+      end;
+    end;
+  end;
 begin
   FLine := FCurTok.Line;
   FCol := FCurTok.Col;
@@ -1054,10 +1087,13 @@ begin
   if (FDoc = '') and (FCurTok.DocComment <> '') then
     FDoc := FCurTok.DocComment;
 
-  Expect(tokFunction);
-  FuncName := Expect(tokIdentifier, 'Esperado nome da funcao').Value;
+  IsProc := Match(tokProcedure);
+  if not IsProc then
+    Expect(tokFunction, 'Esperado "function" ou "procedure"');
+  FuncName := Expect(tokIdentifier, 'Esperado nome da rotina').Value;
 
   Result := TASTFunction.Create(FLine, FCol, FuncName, '');
+  Result.IsProcedure := IsProc;
   Result.DocComment := FDoc;
   Result.IsAsync := IsAsyncFunc;
   Result.IsExtern := IsExt;
@@ -1070,6 +1106,7 @@ begin
   Result.CfgCondition := Attrs.CfgCondition;
   Result.HasExplicitVis := FHasVis;
   Result.IsPublic := FIsPub;
+  ParamNames := TStringList.Create;
   try
     // Parametro generico com bound opcional: function Imprimir<T: Printable>(...)
     if Match(tokLess) then
@@ -1080,46 +1117,70 @@ begin
       Expect(tokGreater, 'Esperado ">" no fechamento do parametro generico');
     end;
 
-    Expect(tokLParen, 'Esperado "(" apos nome da funcao');
-    if not Check(tokRParen) then
+    // Parenteses opcionais quando nao ha parametros
+    if Match(tokLParen) then
     begin
-      repeat
-        Ownership := owNone;
-        if Match(tokTake) then
-          Ownership := owTake
-        else if Match(tokBorrow) then
-          Ownership := owBorrow
-        else if Match(tokMut) then
-        begin
-          Expect(tokBorrow, 'Esperado "borrow" apos "mut"');
-          Ownership := owMutBorrow;
-        end;
+      if not Check(tokRParen) then
+      begin
+        repeat
+          Ownership := owNone;
+          if Match(tokTake) then
+            Ownership := owTake
+          else if Match(tokBorrow) then
+            Ownership := owBorrow
+          else if Match(tokMut) then
+          begin
+            Expect(tokBorrow, 'Esperado "borrow" apos "mut"');
+            Ownership := owMutBorrow;
+          end;
 
-        ParamName := Expect(tokIdentifier, 'Esperado nome do parametro').Value;
-        if Match(tokColon) then
-          ParamType := ParseTypeRef
-        else if SameText(ParamName, 'self') then
-          ParamType := 'Self'
-        else
-          raise EAetherParserError.Create('Esperado ":" apos nome do parametro', FCurTok.Line, FCurTok.Col);
+          ParamNames.Clear;
+          PLine := FCurTok.Line;
+          PCol := FCurTok.Col;
+          ParamNames.Add(Expect(tokIdentifier, 'Esperado nome do parametro').Value);
+          while Match(tokComma) do
+            ParamNames.Add(Expect(tokIdentifier, 'Esperado nome do parametro apos ","').Value);
 
-        Result.Params.Add(TASTParam.Create(FCurTok.Line, FCurTok.Col, ParamName, ParamType, Ownership));
-      until (not Match(tokSemicolon)) and (not Match(tokComma));
+          if Match(tokColon) then
+            ParamType := ParseTypeRef
+          else if (ParamNames.Count = 1) and SameText(ParamNames[0], 'self') then
+            ParamType := 'Self'
+          else
+            raise EAetherParserError.Create('Esperado ":" apos nome do parametro', FCurTok.Line, FCurTok.Col);
+
+          for I := 0 to ParamNames.Count - 1 do
+            Result.Params.Add(TASTParam.Create(PLine, PCol, ParamNames[I], ParamType, Ownership));
+        until (not Match(tokSemicolon)) and (not Match(tokComma));
+      end;
+      Expect(tokRParen, 'Esperado ")" no fechamento dos parametros');
     end;
-    Expect(tokRParen, 'Esperado ")" no fechamento dos parametros');
 
-    Expect(tokColon, 'Esperado ":" apos parametros da funcao');
-    ReturnType := ParseTypeRef;
-    Result.ReturnType := ReturnType;
+    // Cláusula de retorno (hard cutover: procedure sem retorno; function obriga "return <Tipo>")
+    if IsProc then
+    begin
+      if Check(tokReturn) or Check(tokColon) then
+        raise EAetherParserError.Create('Procedures nao possuem tipo de retorno; use "function ... return <Tipo>"', FCurTok.Line, FCurTok.Col);
+      Result.ReturnType := 'Void';
+    end
+    else
+    begin
+      if Check(tokColon) then
+        raise EAetherParserError.Create('Sintaxe legada ": Tipo" removida. Use "return <Tipo>" na declaracao de function', FCurTok.Line, FCurTok.Col);
+      Expect(tokReturn, 'Esperado "return <Tipo>" apos parametros da function');
+      ReturnType := ParseTypeRef;
+      if SameText(ReturnType, 'Void') then
+        raise EAetherParserError.Create('Functions nao podem retornar "Void". Use "procedure"', FCurTok.Line, FCurTok.Col);
+      Result.ReturnType := ReturnType;
+    end;
 
-    // Modificadores opcionais apos retorno: export; cdecl; stdcall;
-    while Check(tokSemicolon) or Check(tokExport) or Check(tokCdecl) or (Check(tokIdentifier) and (SameText(FCurTok.Value, 'export') or SameText(FCurTok.Value, 'cdecl') or SameText(FCurTok.Value, 'stdcall'))) do
+    // Modificadores opcionais apos retorno/assinatura: export; cdecl; stdcall;
+    while Check(tokExport) or Check(tokCdecl) or
+          (Check(tokIdentifier) and (SameText(FCurTok.Value, 'export') or SameText(FCurTok.Value, 'cdecl') or SameText(FCurTok.Value, 'stdcall'))) or
+          (Check(tokSemicolon) and ((FPeekTok.Kind in [tokExport, tokCdecl]) or
+            ((FPeekTok.Kind = tokIdentifier) and (SameText(FPeekTok.Value, 'export') or SameText(FPeekTok.Value, 'cdecl') or SameText(FPeekTok.Value, 'stdcall'))))) do
     begin
       if Match(tokSemicolon) then
-      begin
-        if not (Check(tokExport) or Check(tokCdecl) or (Check(tokIdentifier) and (SameText(FCurTok.Value, 'export') or SameText(FCurTok.Value, 'cdecl') or SameText(FCurTok.Value, 'stdcall')))) then
-          Break;
-      end
+        Continue
       else if Match(tokExport) or (Check(tokIdentifier) and SameText(FCurTok.Value, 'export')) then
       begin
         if not Match(tokExport) then Advance;
@@ -1137,36 +1198,7 @@ begin
       end;
     end;
 
-    // Se for assinatura de trait, nao possui contratos nem corpo
-    if IsSignatureOnly then
-    begin
-      Expect(tokSemicolon, 'Esperado ";" apos assinatura do metodo da trait');
-      Exit;
-    end;
-
-    // Bloco de Contratos Opcional (com ou sem a palavra-chave "contract")
-    if Match(tokContract) or Check(tokRequire) or Check(tokEnsure) then
-    begin
-      if Match(tokRequire) then
-      begin
-        while not Check(tokEnsure) and not Check(tokVar) and not Check(tokLet) and not Check(tokBegin) and not Check(tokSemicolon) and not Check(tokEOF) do
-        begin
-          Result.Requires.Add(ParseExpr);
-          Expect(tokSemicolon, 'Esperado ";" apos expressao de require');
-        end;
-      end;
-
-      if Match(tokEnsure) then
-      begin
-        while not Check(tokVar) and not Check(tokLet) and not Check(tokBegin) and not Check(tokSemicolon) and not Check(tokEOF) do
-        begin
-          Result.Ensures.Add(ParseExpr);
-          Expect(tokSemicolon, 'Esperado ";" apos expressao de ensure');
-        end;
-      end;
-    end;
-
-    // Se for extern, nao possui corpo begin..end
+    // Se for extern, nao possui "is" nem corpo
     if IsExt then
     begin
       if Check(tokSemicolon) then
@@ -1174,40 +1206,70 @@ begin
       Exit;
     end;
 
+    // Se for assinatura (trait ou secao interface de unit)
+    if IsSignatureOnly then
+    begin
+      if AllowInterfaceContracts then
+      begin
+        HasContracts := Check(tokContract) or Check(tokRequire) or Check(tokEnsure);
+        if HasContracts then
+          ParseOptionalContracts
+        else
+        begin
+          Expect(tokSemicolon, 'Esperado ";" apos assinatura na secao interface');
+          if Check(tokContract) or Check(tokRequire) or Check(tokEnsure) then
+            ParseOptionalContracts;
+        end;
+      end
+      else
+        Expect(tokSemicolon, 'Esperado ";" apos assinatura do metodo da trait');
+      Exit;
+    end;
+
+    // Definicao completa estilo Ada: ... is [contract] [var/let] begin ... end Nome;
+    Expect(tokIs, Format('Esperado "is" na definicao de "%s"', [FuncName]));
+
+    ParseOptionalContracts;
+
     // Variaveis Locais
     while Check(tokVar) or Check(tokLet) do
       ParseVarSection(Result.LocalVars);
 
-    // Corpo begin...end;
-    Expect(tokBegin, 'Esperado "begin" para iniciar o corpo da funcao');
+    // Corpo begin...end <Nome>;
+    Expect(tokBegin, 'Esperado "begin" para iniciar o corpo da rotina');
     while not Check(tokEnd) and not Check(tokEOF) do
     begin
       Result.Body.Add(ParseStatement);
       Expect(tokSemicolon, 'Esperado ";" apos instrucao');
     end;
-    Expect(tokEnd, 'Esperado "end" para fechar a funcao');
-    Expect(tokSemicolon, 'Esperado ";" apos "end" da funcao');
+    Expect(tokEnd, Format('Esperado "end %s;" para fechar a rotina', [FuncName]));
+    CloseName := Expect(tokIdentifier, Format('Esperado nome "%s" apos "end"', [FuncName])).Value;
+    if not SameText(CloseName, FuncName) then
+      raise EAetherParserError.Create(Format('Nome de fechamento divergente: esperado "end %s;", mas encontrado "end %s"', [FuncName, CloseName]), FCurTok.Line, FCurTok.Col);
+    Expect(tokSemicolon, Format('Esperado ";" apos "end %s"', [FuncName]));
   except
+    ParamNames.Free;
     Result.Free;
     raise;
   end;
+  ParamNames.Free;
 end;
 
-function TAetherParser.ParseFunction(IsSignatureOnly: Boolean): TASTFunction;
+function TAetherParser.ParseFunction(IsSignatureOnly: Boolean; AllowInterfaceContracts: Boolean): TASTFunction;
 var
   EmptyAttrs: TParsedAttributes;
 begin
   InitAttributes(EmptyAttrs);
   try
-    Result := ParseFunction(IsSignatureOnly, EmptyAttrs);
+    Result := ParseFunction(IsSignatureOnly, EmptyAttrs, AllowInterfaceContracts);
   finally
     FreeAttributes(EmptyAttrs);
   end;
 end;
 
-function TAetherParser.ParseProgramBlock: TASTProgramBlock;
+function TAetherParser.ParseProgramBlock(const AModuleName: string): TASTProgramBlock;
 var
-  ProgName: string;
+  ProgName, CloseMod: string;
   PLine, PCol: Integer;
 begin
   PLine := FCurTok.Line;
@@ -1229,8 +1291,11 @@ begin
       Result.Body.Add(ParseStatement);
       Expect(tokSemicolon, 'Esperado ";" apos instrucao');
     end;
-    Expect(tokEnd, 'Esperado "end" para finalizar o programa');
-    Expect(tokDot, 'Esperado "." apos "end" do programa principal');
+    Expect(tokEnd, Format('Esperado "end %s." para finalizar o programa', [AModuleName]));
+    CloseMod := Expect(tokIdentifier, Format('Esperado nome do modulo "%s" apos "end"', [AModuleName])).Value;
+    if not SameText(CloseMod, AModuleName) then
+      raise EAetherParserError.Create(Format('Fechamento de modulo divergente: esperado "end %s.", mas encontrado "end %s."', [AModuleName, CloseMod]), FCurTok.Line, FCurTok.Col);
+    Expect(tokDot, Format('Esperado "." apos "end %s"', [AModuleName]));
   except
     Result.Free;
     raise;
@@ -2229,9 +2294,11 @@ end;
 
 function TAetherParser.ParseModule: TASTModule;
 var
-  ModName, ModDoc: string;
-  MLine, MCol: Integer;
+  ModName, ModDoc, CloseMod: string;
+  MLine, MCol, I, J, StubIdx: Integer;
   PendingAttrs: TParsedAttributes;
+  ImplFunc, StubFunc: TASTFunction;
+  TraitNode: TASTTraitDecl;
 begin
   MLine := FCurTok.Line;
   MCol := FCurTok.Col;
@@ -2244,66 +2311,308 @@ begin
   Result.DocComment := ModDoc;
   InitAttributes(PendingAttrs);
   try
-    // Imports
+    // Imports iniciais
     while Check(tokImport) do
       ParseImport(Result);
 
-    // Tipos, Traits, Impls, Funcoes e Programa Principal
-    while not Check(tokEOF) do
+    if Check(tokInterface) then
     begin
-      while Check(tokLBracket) or Check(tokAt) or Check(tokPub) or Check(tokPriv) do
+      // Estrutura de Unit Object Pascal: interface ... implementation ... [initialization] [finalization] end <ModName>.
+      Result.IsUnit := True;
+      Result.HasExplicitPub := True;
+      Advance; // consome 'interface'
+
+      while Check(tokImport) do
+        ParseImport(Result);
+
+      while not Check(tokImplementation) and not Check(tokEOF) do
       begin
-        if Match(tokPub) then
+        while Check(tokLBracket) or Check(tokAt) or Check(tokPub) or Check(tokPriv) do
+        begin
+          if Match(tokPub) then
+          begin
+            PendingAttrs.HasVis := True;
+            PendingAttrs.IsPublic := True;
+          end
+          else if Match(tokPriv) then
+            raise EAetherParserError.Create('Declaracoes privadas ("priv") devem ficar na secao "implementation", nao na "interface"', FCurTok.Line, FCurTok.Col)
+          else
+            ParseAttribute(PendingAttrs);
+        end;
+
+        if Check(tokConst) then
         begin
           PendingAttrs.HasVis := True;
           PendingAttrs.IsPublic := True;
-          Result.HasExplicitPub := True;
+          ParseConstSection(Result, PendingAttrs);
         end
-        else if Match(tokPriv) then
+        else if Check(tokType) then
         begin
           PendingAttrs.HasVis := True;
-          PendingAttrs.IsPublic := False;
-          Result.HasExplicitPub := True;
+          PendingAttrs.IsPublic := True;
+          ParseTypeSection(Result, PendingAttrs);
+        end
+        else if Check(tokVar) or Check(tokLet) then
+        begin
+          ParseVarSection(Result.ModuleVars, True, True);
+          ClearAttributes(PendingAttrs);
+        end
+        else if Check(tokTrait) then
+        begin
+          TraitNode := ParseTraitDecl('', FCurTok.Line, FCurTok.Col);
+          TraitNode.HasExplicitVis := True;
+          TraitNode.IsPublic := True;
+          Result.Traits.Add(TraitNode);
+          ClearAttributes(PendingAttrs);
+        end
+        else if Check(tokFunction) or Check(tokProcedure) or Check(tokExtern) or Check(tokAsync) or Check(tokExport) then
+        begin
+          PendingAttrs.HasVis := True;
+          PendingAttrs.IsPublic := True;
+          StubFunc := ParseFunction(True, PendingAttrs, True);
+          if not StubFunc.IsExtern then
+            StubFunc.IsInterfaceDecl := True;
+          Result.Functions.Add(StubFunc);
+          ClearAttributes(PendingAttrs);
         end
         else
-          ParseAttribute(PendingAttrs);
+          raise EAetherParserError.Create(Format('Declaracao inesperada na secao "interface": "%s"', [FCurTok.Value]), FCurTok.Line, FCurTok.Col);
       end;
 
-      if Check(tokConst) then
+      Expect(tokImplementation, Format('Esperado "implementation" na unit "%s"', [ModName]));
+
+      while Check(tokImport) do
+        ParseImport(Result);
+
+      while not Check(tokInitialization) and not Check(tokFinalization) and not Check(tokEnd) and not Check(tokEOF) do
       begin
-        ParseConstSection(Result, PendingAttrs);
-      end
-      else if Check(tokType) then
-      begin
-        ParseTypeSection(Result, PendingAttrs);
-      end
-      else if Check(tokTrait) then
-      begin
-        Result.Traits.Add(ParseTraitDecl('', FCurTok.Line, FCurTok.Col));
-        if PendingAttrs.HasVis then
+        while Check(tokLBracket) or Check(tokAt) or Check(tokPub) or Check(tokPriv) do
         begin
-          TASTNode(Result.Traits[Result.Traits.Count - 1]).HasExplicitVis := True;
-          TASTNode(Result.Traits[Result.Traits.Count - 1]).IsPublic := PendingAttrs.IsPublic;
+          if Match(tokPub) then
+          begin
+            PendingAttrs.HasVis := True;
+            PendingAttrs.IsPublic := True;
+          end
+          else if Match(tokPriv) then
+          begin
+            PendingAttrs.HasVis := True;
+            PendingAttrs.IsPublic := False;
+          end
+          else
+            ParseAttribute(PendingAttrs);
         end;
-        ClearAttributes(PendingAttrs);
-      end
-      else if Check(tokImpl) then
+
+        if Check(tokConst) then
+        begin
+          if not PendingAttrs.HasVis then
+          begin
+            PendingAttrs.HasVis := True;
+            PendingAttrs.IsPublic := False;
+          end;
+          ParseConstSection(Result, PendingAttrs);
+        end
+        else if Check(tokType) then
+        begin
+          if not PendingAttrs.HasVis then
+          begin
+            PendingAttrs.HasVis := True;
+            PendingAttrs.IsPublic := False;
+          end;
+          ParseTypeSection(Result, PendingAttrs);
+        end
+        else if Check(tokVar) or Check(tokLet) then
+        begin
+          ParseVarSection(Result.ModuleVars, PendingAttrs.HasVis and PendingAttrs.IsPublic, True);
+          ClearAttributes(PendingAttrs);
+        end
+        else if Check(tokTrait) then
+        begin
+          TraitNode := ParseTraitDecl('', FCurTok.Line, FCurTok.Col);
+          TraitNode.HasExplicitVis := True;
+          TraitNode.IsPublic := PendingAttrs.HasVis and PendingAttrs.IsPublic;
+          Result.Traits.Add(TraitNode);
+          ClearAttributes(PendingAttrs);
+        end
+        else if Check(tokImpl) then
+        begin
+          Result.Impls.Add(ParseImplDecl);
+          ClearAttributes(PendingAttrs);
+        end
+        else if Check(tokFunction) or Check(tokProcedure) or Check(tokExtern) or Check(tokAsync) or Check(tokExport) then
+        begin
+          ImplFunc := ParseFunction(False, PendingAttrs, False);
+          ClearAttributes(PendingAttrs);
+
+          StubIdx := -1;
+          for I := 0 to Result.Functions.Count - 1 do
+          begin
+            StubFunc := TASTFunction(Result.Functions[I]);
+            if StubFunc.IsInterfaceDecl and SameText(StubFunc.Name, ImplFunc.Name) then
+            begin
+              StubIdx := I;
+              Break;
+            end;
+          end;
+
+          if StubIdx >= 0 then
+          begin
+            StubFunc := TASTFunction(Result.Functions[StubIdx]);
+            if StubFunc.IsProcedure <> ImplFunc.IsProcedure then
+              raise EAetherParserError.Create(Format('Assinatura divergente na implementation para "%s" (function/procedure)', [ImplFunc.Name]), ImplFunc.Line, ImplFunc.Col);
+            if (not SameText(StubFunc.GenericParam, ImplFunc.GenericParam)) or (not SameText(StubFunc.TraitBound, ImplFunc.TraitBound)) then
+              raise EAetherParserError.Create(Format('Parametro generico divergente na implementation para "%s"', [ImplFunc.Name]), ImplFunc.Line, ImplFunc.Col);
+            if not SameText(StubFunc.ReturnType, ImplFunc.ReturnType) then
+              raise EAetherParserError.Create(Format('Tipo de retorno divergente na implementation para "%s": esperado "%s", encontrado "%s"',
+                [ImplFunc.Name, StubFunc.ReturnType, ImplFunc.ReturnType]), ImplFunc.Line, ImplFunc.Col);
+            if StubFunc.Params.Count <> ImplFunc.Params.Count then
+              raise EAetherParserError.Create(Format('Quantidade de parametros divergente na implementation para "%s": esperado %d, encontrado %d',
+                [ImplFunc.Name, StubFunc.Params.Count, ImplFunc.Params.Count]), ImplFunc.Line, ImplFunc.Col);
+            for J := 0 to StubFunc.Params.Count - 1 do
+            begin
+              if (TASTParam(StubFunc.Params[J]).Ownership <> TASTParam(ImplFunc.Params[J]).Ownership) or
+                 (not SameText(TASTParam(StubFunc.Params[J]).TypeName, TASTParam(ImplFunc.Params[J]).TypeName)) then
+                raise EAetherParserError.Create(Format('Parametro %d de "%s" na implementation diverge da assinatura na interface',
+                  [J + 1, ImplFunc.Name]), ImplFunc.Line, ImplFunc.Col);
+            end;
+
+            if (StubFunc.Requires.Count > 0) or (StubFunc.Ensures.Count > 0) then
+            begin
+              if (ImplFunc.Requires.Count > 0) or (ImplFunc.Ensures.Count > 0) then
+                raise EAetherParserError.Create(Format('Contratos de "%s" devem ser declarados apenas na secao "interface", sem duplicacao na "implementation"',
+                  [ImplFunc.Name]), ImplFunc.Line, ImplFunc.Col);
+              while StubFunc.Requires.Count > 0 do
+                ImplFunc.Requires.Add(StubFunc.Requires.Extract(StubFunc.Requires[0]));
+              while StubFunc.Ensures.Count > 0 do
+                ImplFunc.Ensures.Add(StubFunc.Ensures.Extract(StubFunc.Ensures[0]));
+            end;
+
+            if ImplFunc.DocComment = '' then
+              ImplFunc.DocComment := StubFunc.DocComment;
+            if StubFunc.IsExport then ImplFunc.IsExport := True;
+            if ImplFunc.InlineMode = '' then ImplFunc.InlineMode := StubFunc.InlineMode;
+            if StubFunc.IsCold then ImplFunc.IsCold := True;
+            if ImplFunc.CfgCondition = '' then ImplFunc.CfgCondition := StubFunc.CfgCondition;
+
+            ImplFunc.HasExplicitVis := True;
+            ImplFunc.IsPublic := True;
+            ImplFunc.IsInterfaceDecl := False;
+            Result.Functions[StubIdx] := ImplFunc;
+          end
+          else
+          begin
+            if not ImplFunc.HasExplicitVis then
+            begin
+              ImplFunc.HasExplicitVis := True;
+              ImplFunc.IsPublic := False;
+            end;
+            Result.Functions.Add(ImplFunc);
+          end;
+        end
+        else
+          raise EAetherParserError.Create(Format('Declaracao inesperada na secao "implementation": "%s"', [FCurTok.Value]), FCurTok.Line, FCurTok.Col);
+      end;
+
+      // Garante que toda assinatura declarada na interface foi implementada
+      for I := 0 to Result.Functions.Count - 1 do
       begin
-        Result.Impls.Add(ParseImplDecl);
-        ClearAttributes(PendingAttrs);
-      end
-      else if Check(tokFunction) or Check(tokExtern) or Check(tokAsync) or Check(tokExport) then
+        StubFunc := TASTFunction(Result.Functions[I]);
+        if StubFunc.IsInterfaceDecl and (not StubFunc.IsExtern) then
+          raise EAetherParserError.Create(Format('Rotina "%s" declarada na secao "interface" nao foi implementada na secao "implementation"',
+            [StubFunc.Name]), StubFunc.Line, StubFunc.Col);
+      end;
+
+      if Match(tokInitialization) then
       begin
-        Result.Functions.Add(ParseFunction(False, PendingAttrs));
-        ClearAttributes(PendingAttrs);
-      end
-      else if Check(tokProgram) then
+        while not Check(tokFinalization) and not Check(tokEnd) and not Check(tokEOF) do
+        begin
+          Result.InitBody.Add(ParseStatement);
+          Expect(tokSemicolon, 'Esperado ";" apos instrucao na secao initialization');
+        end;
+      end;
+
+      if Match(tokFinalization) then
       begin
-        Result.ProgramBlock := ParseProgramBlock;
-        Break;
-      end
-      else
-        raise EAetherParserError.Create(Format('Declaracao inesperada no modulo: "%s"', [FCurTok.Value]), FCurTok.Line, FCurTok.Col);
+        while not Check(tokEnd) and not Check(tokEOF) do
+        begin
+          Result.FiniBody.Add(ParseStatement);
+          Expect(tokSemicolon, 'Esperado ";" apos instrucao na secao finalization');
+        end;
+      end;
+
+      Expect(tokEnd, Format('Esperado "end %s." no fechamento da unit', [ModName]));
+      CloseMod := Expect(tokIdentifier, Format('Esperado nome "%s" apos "end"', [ModName])).Value;
+      if not SameText(CloseMod, ModName) then
+        raise EAetherParserError.Create(Format('Fechamento de unit divergente: esperado "end %s.", mas encontrado "end %s."', [ModName, CloseMod]), FCurTok.Line, FCurTok.Col);
+      Expect(tokDot, Format('Esperado "." apos "end %s"', [ModName]));
+    end
+    else
+    begin
+      // Modulo executavel com "program Main;"
+      while not Check(tokEOF) do
+      begin
+        while Check(tokLBracket) or Check(tokAt) or Check(tokPub) or Check(tokPriv) do
+        begin
+          if Match(tokPub) then
+          begin
+            PendingAttrs.HasVis := True;
+            PendingAttrs.IsPublic := True;
+            Result.HasExplicitPub := True;
+          end
+          else if Match(tokPriv) then
+          begin
+            PendingAttrs.HasVis := True;
+            PendingAttrs.IsPublic := False;
+            Result.HasExplicitPub := True;
+          end
+          else
+            ParseAttribute(PendingAttrs);
+        end;
+
+        if Check(tokConst) then
+        begin
+          ParseConstSection(Result, PendingAttrs);
+        end
+        else if Check(tokType) then
+        begin
+          ParseTypeSection(Result, PendingAttrs);
+        end
+        else if Check(tokVar) or Check(tokLet) then
+        begin
+          ParseVarSection(Result.ModuleVars, not (PendingAttrs.HasVis and (not PendingAttrs.IsPublic)), PendingAttrs.HasVis);
+          ClearAttributes(PendingAttrs);
+        end
+        else if Check(tokTrait) then
+        begin
+          Result.Traits.Add(ParseTraitDecl('', FCurTok.Line, FCurTok.Col));
+          if PendingAttrs.HasVis then
+          begin
+            TASTNode(Result.Traits[Result.Traits.Count - 1]).HasExplicitVis := True;
+            TASTNode(Result.Traits[Result.Traits.Count - 1]).IsPublic := PendingAttrs.IsPublic;
+          end;
+          ClearAttributes(PendingAttrs);
+        end
+        else if Check(tokImpl) then
+        begin
+          Result.Impls.Add(ParseImplDecl);
+          ClearAttributes(PendingAttrs);
+        end
+        else if Check(tokFunction) or Check(tokProcedure) or Check(tokExtern) or Check(tokAsync) or Check(tokExport) then
+        begin
+          Result.Functions.Add(ParseFunction(False, PendingAttrs, False));
+          ClearAttributes(PendingAttrs);
+        end
+        else if Check(tokProgram) then
+        begin
+          Result.ProgramBlock := ParseProgramBlock(ModName);
+          Break;
+        end
+        else
+          raise EAetherParserError.Create(Format('Declaracao inesperada no modulo: "%s"', [FCurTok.Value]), FCurTok.Line, FCurTok.Col);
+      end;
+
+      if not Assigned(Result.ProgramBlock) then
+        raise EAetherParserError.Create(Format('Modulo "%s" sem "program Main;" deve declarar a estrutura de Unit Object Pascal ("interface" ... "implementation" ... end %s.)',
+          [ModName, ModName]), FCurTok.Line, FCurTok.Col);
     end;
 
     // Expande derivacoes automaticas (Debug, JSON, Clone, Equals)

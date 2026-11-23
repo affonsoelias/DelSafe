@@ -49,33 +49,33 @@ type
 
 // 4. Inlined Calculation for Hash/Key Normalization
 @inline(always)
-function NormalizeKey(k: String): String
+function NormalizeKey(k: String) return String is
 begin
     return Trim(k);
-end;
+end NormalizeKey;
 
 // 5. Cache Constructor with Pre-condition Contracts
-function CreateCache(name: String, ttl: UInt64): SecureCache
+function CreateCache(name: String; ttl: UInt64) return SecureCache is
 contract
     require
         ttl > 0;
         Length(name) > 0;
 begin
     return SecureCache(name, ttl, 0);
-end;
+end CreateCache;
 
 // 6. Inspecting Cache State via Read-Only Borrowing (borrow)
-function PrintCacheReport(borrow cache: SecureCache): Void
+procedure PrintCacheReport(borrow cache: SecureCache) is
 begin
     PrintLn("========================================");
     PrintLn(" Cache Report: " + cache.name);
     PrintLn(" TTL Policy:   " + IntToStr(Int32(cache.ttl_seconds)) + "s");
     PrintLn(" Total Ops:    " + IntToStr(cache.total_queries));
     PrintLn("========================================");
-end;
+end PrintCacheReport;
 
 // 7. Simulating Cache Query with Mutation (mut borrow)
-function QueryItem(mut borrow cache: SecureCache, raw_key: String): CacheLookupResult
+function QueryItem(mut borrow cache: SecureCache; raw_key: String) return CacheLookupResult is
 var
     norm_key: String;
     now_ticks: UInt64;
@@ -94,7 +94,7 @@ begin
     else
         return CacheLookupResult.Miss;
     end;
-end;
+end QueryItem;
 
 program Main;
 var
@@ -145,7 +145,7 @@ begin
     PrintCacheReport(borrow cache);
 
     PrintLn("\nCapstone project completed successfully with 100% memory safety!");
-end.
+end secure_cache.
 ```
 
 ---

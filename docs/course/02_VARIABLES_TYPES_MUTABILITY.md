@@ -28,7 +28,7 @@ begin
     // greeting := 42; // Compile error: E0308 (Type mismatch)
 
     PrintLn(greeting + "! Counter = " + IntToStr(counter));
-end.
+end variables_demo.
 ```
 
 ### 1.1 Module-Level Constants (`const`)
@@ -101,7 +101,7 @@ begin
 
     PrintLn("Converted large: " + IntToStr(large));
     PrintLn("Truncated float: " + IntToStr(rounded));
-end.
+end conversions_demo.
 ```
 
 ---
@@ -124,7 +124,7 @@ begin
     // let bad := 10 / 0; // Compile Error E0301: Division by zero detected at compile-time
 
     PrintLn("Buffer size: " + IntToStr(buffer_size) + " bytes");
-end.
+end comptime_demo.
 ```
 
 ---
@@ -160,7 +160,7 @@ begin
 
     PrintLn("vec[0] = " + IntToStr(vec[0]));
     PrintLn("mat[1, 2] = " + FloatToStr(mat[1, 2]));
-end.
+end arrays_demo.
 ```
 
 The compiler enforces strict bounds checking at compile-time for constant indices (e.g. `vec[5]` produces `E0309`).
@@ -195,7 +195,7 @@ begin
     if Execute in combined then
         PrintLn("Combined set has Execute permission.");
     end;
-end.
+end sets_demo.
 ```
 
 ### 5.3 Subrange Types
@@ -215,7 +215,7 @@ var
 begin
     day := 22; // OK: Within 1..31
     PrintLn("Day: " + IntToStr(day));
-end.
+end subrange_demo.
 ```
 
 ### 5.4 Dynamic Arrays (`array of T`)
@@ -240,7 +240,7 @@ begin
 
     names.Push("Alice");
     PrintLn($"Scores count: {scores.Length()}, First user: {names[0]}");
-end.
+end dyn_arrays_demo.
 ```
 
 ### 5.5 String Interpolation (`$"..."`)
@@ -262,7 +262,7 @@ begin
 
     // Desugared at compile-time with zero runtime format-parsing overhead
     PrintLn($"User {user} is at level {level + 1} (active: {active})");
-end.
+end interp_demo.
 ```
 
 ### 5.6 Raw Pointers (`^T`, `@var`, `nil`) and `unsafe` Blocks
@@ -288,7 +288,7 @@ begin
     end;
 
     PrintLn($"Updated value: {value}"); // 99
-end.
+end unsafe_pointers_demo.
 ```
 
 ### 5.7 Multi-Variable Declarations & Type Inference (`var` / `let`)
@@ -310,6 +310,8 @@ let
 Aether includes first-class associative dictionaries using `map[KeyType]ValueType`, declared either as a named `type` alias or inline in `var` sections. Supported operations use bracket indexing and UFCS methods:
 
 ```aether
+module maps_demo;
+
 type
     ScoreBoard = map[String]Int32;
 
@@ -328,7 +330,7 @@ begin
     scores.Remove("Bob");
     PrintLn(scores.Count()); // 1 (scores.Length() is also supported)
     labels[1] := "Primary";
-end.
+end maps_demo.
 ```
 
 ### 5.9 Bitwise Operators & Hex/Binary Literals
@@ -343,7 +345,7 @@ begin
     mask := 0x0F;
     nibble := (flags shr 4) and mask; // 10
     flags := ((1 shl 3) or 0b0001) xor %0101;
-end.
+end;
 ```
 
 ### 5.10 Array Literals (`[...]`), `.Pop()`, `.Clear()`, & `String[i]`
@@ -359,7 +361,7 @@ begin
     last := nums.Pop();   // 30 (nums now has 2 elements)
     nums.Clear();
     ch := "Aether"[0];    // 'A' (Ord(ch) = 65, Chr(66) = 'B')
-end.
+end;
 ```
 
 ### 5.11 Simple Type Aliases & Value `Option<T>` / Typed `Result<T, E>`
@@ -402,7 +404,7 @@ begin
 
     pt := Point(y: 20, x: 10);
     zeroPt := Default(Point); // { x = 0, y = 0 }
-end.
+end;
 ```
 
 ---

@@ -11,12 +11,14 @@ A `trait` defines a contract of method signatures:
 ```aether
 module traits_demo;
 
+interface
+
 trait Printable
-    function PrintInfo(): Void;
+    procedure PrintInfo;
 end;
 
 trait AreaCalculable
-    function GetArea(): Float64;
+    function GetArea() return Float64;
 end;
 ```
 
@@ -37,17 +39,17 @@ type
     end;
 
 impl AreaCalculable for Circle
-    function GetArea(): Float64
+    function GetArea() return Float64 is
     begin
         return 3.14159 * self.radius * self.radius;
-    end;
+    end GetArea;
 end;
 
 impl AreaCalculable for Square
-    function GetArea(): Float64
+    function GetArea() return Float64 is
     begin
         return self.side * self.side;
-    end;
+    end GetArea;
 end;
 ```
 
@@ -65,15 +67,15 @@ type
     end;
 
 impl Vector2D
-    function New(ax: Int32; ay: Int32): Self
+    function New(ax, ay: Int32) return Self is
     begin
         return Vector2D(ax, ay);
-    end;
+    end New;
 
-    function Add(borrow self; other: Self): Self
+    function Add(borrow self; other: Self) return Self is
     begin
         return Vector2D(self.x + other.x, self.y + other.y);
-    end;
+    end Add;
 end;
 ```
 
@@ -86,10 +88,10 @@ Call static associated functions with `Type.Method(...)` (`Vector2D.New(3, 4)`) 
 You can write generic functions constrained by traits using `<T: Trait>` bounds:
 
 ```aether
-function DisplayArea<T: AreaCalculable>(shape: T): Void
+procedure DisplayArea<T: AreaCalculable>(shape: T) is
 begin
     PrintLn("Calculated area: " + FloatToStr(shape.GetArea()));
-end;
+end DisplayArea;
 ```
 
 ---
@@ -159,7 +161,7 @@ begin
     if it1.Equals(borrow it2) then
         PrintLn("it1 and it2 are structurally identical!");
     end;
-end.
+end derives_example.
 ```
 
 ---

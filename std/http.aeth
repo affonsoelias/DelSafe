@@ -3,24 +3,36 @@ module HTTP;
 import Net;
 import JSON;
 
+interface
+
 type
     Client = record
-    host: String;
-    port: UInt32;
-end;
+        host: String;
+        port: UInt32;
+    end;
 
-Server = record
-port: UInt32;
-sock: Socket;
-is_running: Bool;
-end;
+    Server = record
+        port: UInt32;
+        sock: Socket;
+        is_running: Bool;
+    end;
 
-function NewClient(borrow h: String; p: UInt32): Client
+function NewClient(borrow h: String; p: UInt32) return Client;
+function Get(borrow client: Client; borrow path: String) return HttpResponse;
+function Post(borrow client: Client; borrow path, content_type, body: String) return HttpResponse;
+function NewServer(p: UInt32) return Server;
+function AcceptRequest(borrow server: Server; mut borrow out_client: Socket; mut borrow out_req: HttpRequest) return Bool;
+procedure SendResponse(mut borrow client: Socket; status_code: UInt32; borrow content_type, body: String);
+procedure StopServer(mut borrow server: Server);
+
+implementation
+
+function NewClient(borrow h: String; p: UInt32) return Client is
 begin
     return Client(host: h, port: p);
-end;
+end NewClient;
 
-function Get(borrow client: Client; borrow path: String): HttpResponse
+function Get(borrow client: Client; borrow path: String) return HttpResponse is
 var
     s: Socket;
     raw_req: String;
@@ -29,17 +41,17 @@ var
 begin
     s := SocketConnectClient(client.host, client.port);
     if not s.is_open then
-    return HttpResponse(status_code: 500, content_type: "text/plain", body: "Connection Failed");
-end;
-raw_req := BuildHttpRequest("GET", client.host, path);
-SocketSendString(borrow s, borrow raw_req);
-raw_res := SocketRecvString(borrow s, 4096);
-SocketCloseHandle(mut borrow s);
-ParseHttpResponse(borrow raw_res, mut borrow res);
-return res;
-end;
+        return HttpResponse(status_code: 500, content_type: "text/plain", body: "Connection Failed");
+    end;
+    raw_req := BuildHttpRequest("GET", client.host, path);
+    SocketSendString(borrow s, borrow raw_req);
+    raw_res := SocketRecvString(borrow s, 4096);
+    SocketCloseHandle(mut borrow s);
+    ParseHttpResponse(borrow raw_res, mut borrow res);
+    return res;
+end Get;
 
-function Post(borrow client: Client; borrow path: String; borrow content_type: String; borrow body: String): HttpResponse
+function Post(borrow client: Client; borrow path, content_type, body: String) return HttpResponse is
 var
     s: Socket;
     raw_req: String;
@@ -48,57 +60,59 @@ var
 begin
     s := SocketConnectClient(client.host, client.port);
     if not s.is_open then
-    return HttpResponse(status_code: 500, content_type: "text/plain", body: "Connection Failed");
-end;
-raw_req := "POST " + path + " HTTP/1.1\r\n" +
-"Host: " + client.host + "\r\n" +
-"Content-Type: " + content_type + "\r\n" +
-"Content-Length: " + IntToStr(Int32(Length(borrow body))) + "\r\n" +
-"Connection: close\r\n\r\n" +
-body;
-SocketSendString(borrow s, borrow raw_req);
-raw_res := SocketRecvString(borrow s, 4096);
-SocketCloseHandle(mut borrow s);
-ParseHttpResponse(borrow raw_res, mut borrow res);
-return res;
-end;
+        return HttpResponse(status_code: 500, content_type: "text/plain", body: "Connection Failed");
+    end;
+    raw_req := "POST " + path + " HTTP/1.1\r\n" +
+        "Host: " + client.host + "\r\n" +
+        "Content-Type: " + content_type + "\r\n" +
+        "Content-Length: " + IntToStr(Int32(Length(borrow body))) + "\r\n" +
+        "Connection: close\r\n\r\n" +
+        body;
+    SocketSendString(borrow s, borrow raw_req);
+    raw_res := SocketRecvString(borrow s, 4096);
+    SocketCloseHandle(mut borrow s);
+    ParseHttpResponse(borrow raw_res, mut borrow res);
+    return res;
+end Post;
 
-function NewServer(p: UInt32): Server
+function NewServer(p: UInt32) return Server is
 var
     s: Socket;
 begin
     s := SocketListenServer(p, 10);
     return Server(port: p, sock: s, is_running: s.is_open);
-end;
+end NewServer;
 
-function AcceptRequest(borrow server: Server; mut borrow out_client: Socket; mut borrow out_req: HttpRequest): Bool
+function AcceptRequest(borrow server: Server; mut borrow out_client: Socket; mut borrow out_req: HttpRequest) return Bool is
 var
     raw_req: String;
 begin
     if not server.is_running then
-    return false;
-end;
-out_client := SocketAcceptClient(borrow server.sock);
-if not out_client.is_open then
-return false;
-end;
-raw_req := SocketRecvString(borrow out_client, 2048);
-return ParseHttpRequest(borrow raw_req, mut borrow out_req);
-end;
+        return false;
+    end;
+    out_client := SocketAcceptClient(borrow server.sock);
+    if not out_client.is_open then
+        return false;
+    end;
+    raw_req := SocketRecvString(borrow out_client, 2048);
+    return ParseHttpRequest(borrow raw_req, mut borrow out_req);
+end AcceptRequest;
 
-function SendResponse(mut borrow client: Socket; status_code: UInt32; borrow content_type: String; borrow body: String): Void
+procedure SendResponse(mut borrow client: Socket; status_code: UInt32; borrow content_type, body: String) is
 var
     raw_res: String;
 begin
     raw_res := BuildHttpResponse(status_code, content_type, body);
     SocketSendString(borrow client, borrow raw_res);
     SocketCloseHandle(mut borrow client);
-end;
+end SendResponse;
 
-function StopServer(mut borrow server: Server): Void
+procedure StopServer(mut borrow server: Server) is
 begin
     if server.is_running then
-    SocketCloseHandle(mut borrow server.sock);
-    server.is_running := false;
-end;
-end;
+        SocketCloseHandle(mut borrow server.sock);
+        server.is_running := false;
+    end;
+end StopServer;
+
+end HTTP.

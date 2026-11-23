@@ -87,7 +87,7 @@ begin
     PrintLn("C sqrt(3^2 + 4^2) = " + FloatToStr(hypotenuse));
 
     PrintLn("\nSuccess: C and Pascal called with zero manual binding lines!");
-end.
+end interop_auto.
 ```
 
 ### Compiling and Running:
@@ -120,14 +120,14 @@ When consuming **custom C libraries, third-party DLLs (`.dll`, `.so`, `.dylib`),
 
 ```aether
 // Format:
-// extern c ["optional_library_name"] function Name(param: Type): ReturnType;
+// extern c ["optional_library_name"] (function Name(params) return Type; | procedure Name(params);)
 
 // Case A: Standard C runtime (libc / msvcrt)
-extern c function puts(s: String): Int32;
+extern c function puts(s: String) return Int32;
 
 // Case B: Dynamic shared library (.dll / .so)
-extern c "sqlite3" function sqlite3_libversion(): String;
-extern c "raylib" function InitWindow(width: Int32, height: Int32, title: String): Void;
+extern c "sqlite3" function sqlite3_libversion() return String;
+extern c "raylib" procedure InitWindow(width, height: Int32; title: String);
 ```
 
 ### 2. Calling Conventions: `cdecl` vs `stdcall`
@@ -135,7 +135,7 @@ extern c "raylib" function InitWindow(width: Int32, height: Int32, title: String
 By default, `extern c` uses the standard **`cdecl`** calling convention. For Windows Win32 APIs, specify `stdcall`:
 
 ```aether
-extern c "kernel32" stdcall function GetCurrentProcessId(): UInt32;
+extern c "kernel32" stdcall function GetCurrentProcessId() return UInt32;
 ```
 
 ---
@@ -172,13 +172,13 @@ In Aether, **you can attach Design-by-Contract (`require`) to foreign C function
 module safe_c_contracts;
 
 // Foreign C function wrapped in a contract:
-extern c function sqrt(x: Float64): Float64
+extern c function sqrt(x: Float64) return Float64
 contract
     require
         x >= 0.0; // The C function will NEVER receive a negative number!
 ;
 
-extern c function puts(s: String): Int32
+extern c function puts(s: String) return Int32
 contract
     require
         Length(s) > 0; // Guard against empty or null strings
@@ -193,7 +193,7 @@ begin
 
     // This contract violation will be caught by Aether BEFORE touching C:
     // val := sqrt(-25.0); // Contract Violation: Pre-condition 'x >= 0.0' failed!
-end.
+end safe_c_contracts.
 ```
 
 ---
@@ -206,7 +206,7 @@ If you have legacy Pascal code or specialized Free Pascal units without auto-imp
 module custom_pascal;
 
 // Consuming Pascal functions with native Pascal ABI
-extern pascal function FormatDateTime(fmt: String; dt: Float64): String;
+extern pascal function FormatDateTime(fmt: String; dt: Float64) return String;
 
 program Main;
 var
@@ -214,7 +214,7 @@ var
 begin
     formatted := FormatDateTime("YYYY-MM-DD", 45000.0);
     PrintLn("Formatted date: " + formatted);
-end.
+end custom_pascal.
 ```
 
 ---
@@ -230,7 +230,14 @@ Create `algorithms.aeth`:
 ```aether
 module algorithms;
 
-export cdecl function ComputeHash(data: String): UInt32
+interface
+
+export cdecl function ComputeHash(data: String) return UInt32;
+export cdecl function FastMultiply(a, b: Int32) return Int32;
+
+implementation
+
+export cdecl function ComputeHash(data: String) return UInt32 is
 var
     hash: UInt32;
     i: Int32;
@@ -242,12 +249,14 @@ begin
         i := i + 1;
     end;
     return hash;
-end;
+end ComputeHash;
 
-export cdecl function FastMultiply(a: Int32, b: Int32): Int32
+export cdecl function FastMultiply(a, b: Int32) return Int32 is
 begin
     return a * b;
-end;
+end FastMultiply;
+
+end algorithms.
 ```
 
 ### Step 2: Automatically Generate C Header (`.h`)

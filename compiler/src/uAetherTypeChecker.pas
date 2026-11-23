@@ -30,6 +30,7 @@ type
   private
     FSymbols: TSymbolTable;
     FCurrentFunction: TASTFunction;
+    FCurrentSourceModule: string;
     FModule: TASTModule;
     FTraitImpls: TFPList;
     FLoopDepth: Integer;
@@ -829,6 +830,8 @@ begin
   CurMod := '';
   if Assigned(FCurrentFunction) and (FCurrentFunction.SourceModule <> '') then
     CurMod := FCurrentFunction.SourceModule
+  else if FCurrentSourceModule <> '' then
+    CurMod := FCurrentSourceModule
   else if Assigned(FModule) then
     CurMod := FModule.Name;
 
@@ -2201,15 +2204,21 @@ begin
   if not Assigned(FCurrentFunction) then
     Error('E0572', 'Instrucao "return" fora do corpo de uma funcao', Ret.Line, Ret.Col);
 
-  if Assigned(Ret.Expr) then
+  if FCurrentFunction.IsProcedure then
   begin
-    RetType := CheckExpr(Ret.Expr);
-    if (Ret.Expr is TASTIdentifierExpr) and SameText(TASTIdentifierExpr(Ret.Expr).Name, 'None') and
-       IsValueOptionType(FCurrentFunction.ReturnType) then
-      TASTIdentifierExpr(Ret.Expr).Name := '__ValueNone';
-  end
-  else
-    RetType := 'Void';
+    if Assigned(Ret.Expr) then
+      Error('E0308', Format('Procedure "%s" nao pode retornar valor; use apenas "return;"', [FCurrentFunction.Name]), Ret.Line, Ret.Col);
+    Exit;
+  end;
+
+  if not Assigned(Ret.Expr) then
+    Error('E0308', Format('Function "%s" espera retorno "%s", mas encontrou "return;" vazio',
+      [FCurrentFunction.Name, FCurrentFunction.ReturnType]), Ret.Line, Ret.Col);
+
+  RetType := CheckExpr(Ret.Expr);
+  if (Ret.Expr is TASTIdentifierExpr) and SameText(TASTIdentifierExpr(Ret.Expr).Name, 'None') and
+     IsValueOptionType(FCurrentFunction.ReturnType) then
+    TASTIdentifierExpr(Ret.Expr).Name := '__ValueNone';
 
   if not TypesAreCompatible(FCurrentFunction.ReturnType, RetType) then
     Error('E0308', Format('Funcao "%s" espera retorno "%s", mas instrucao retornou "%s"',
@@ -2756,6 +2765,7 @@ var
   VarInitType, ElemType: string;
   IsFixed: Boolean;
   DimN, I: Integer;
+  Sym: TSymbol;
 begin
   if VarDecl.TypeName = '' then
   begin
@@ -2804,7 +2814,63 @@ begin
         [VarDecl.Name, VarDecl.TypeName, VarInitType]), VarDecl.Line, VarDecl.Col);
   end;
 
-  FSymbols.Define(TSymbol.Create(VarDecl.Name, skVariable, VarDecl.TypeName, VarDecl.Line, VarDecl.Col, VarDecl.IsMutable));
+  Sym := TSymbol.Create(VarDecl.Name, skVariable, VarDecl.TypeName, VarDecl.Line, VarDecl.Col, VarDecl.IsMutable);
+  Sym.IsPublic := VarDecl.IsPublic;
+  Sym.SourceModule := VarDecl.SourceModule;
+  FSymbols.Define(Sym);
+end;
+
+function StmtListAlwaysReturns(Stmts: TASTNodeList): Boolean;
+var
+  I, K: Integer;
+  S: TASTStmt;
+  IfS: TASTIfStmt;
+  MS: TASTMatchStmt;
+  AllCasesRet: Boolean;
+begin
+  Result := False;
+  if not Assigned(Stmts) then Exit;
+  for I := 0 to Stmts.Count - 1 do
+  begin
+    S := TASTStmt(Stmts[I]);
+    if (S is TASTReturnStmt) or (S is TASTRaiseStmt) then
+      Exit(True)
+    else if S is TASTIfStmt then
+    begin
+      IfS := TASTIfStmt(S);
+      if (IfS.ElseBranch.Count > 0) and
+         StmtListAlwaysReturns(IfS.ThenBranch) and
+         StmtListAlwaysReturns(IfS.ElseBranch) then
+        Exit(True);
+    end
+    else if S is TASTMatchStmt then
+    begin
+      MS := TASTMatchStmt(S);
+      if MS.Cases.Count > 0 then
+      begin
+        AllCasesRet := True;
+        for K := 0 to MS.Cases.Count - 1 do
+        begin
+          if not StmtListAlwaysReturns(TASTMatchCase(MS.Cases[K]).Body) then
+          begin
+            AllCasesRet := False;
+            Break;
+          end;
+        end;
+        if AllCasesRet then Exit(True);
+      end;
+    end
+    else if S is TASTUnsafeStmt then
+    begin
+      if StmtListAlwaysReturns(TASTUnsafeStmt(S).Body) then Exit(True);
+    end
+    else if S is TASTTryStmt then
+    begin
+      if StmtListAlwaysReturns(TASTTryStmt(S).TryBody) and
+         ((TASTTryStmt(S).ExceptBody.Count = 0) or StmtListAlwaysReturns(TASTTryStmt(S).ExceptBody)) then
+        Exit(True);
+    end;
+  end;
 end;
 
 procedure TAetherTypeChecker.CheckFunction(Func: TASTFunction);
@@ -2815,6 +2881,9 @@ begin
   FCurrentFunction := Func;
   FSymbols.EnterScope;
   try
+    if (not Func.IsProcedure) and ((Func.ReturnType = '') or SameText(Func.ReturnType, 'Void')) then
+      Error('E0308', Format('Function "%s" deve declarar um tipo de retorno diferente de Void (use "procedure")', [Func.Name]), Func.Line, Func.Col);
+
     // Registra parametros no escopo da funcao
     for I := 0 to Func.Params.Count - 1 do
     begin
@@ -2836,7 +2905,7 @@ begin
     begin
       FSymbols.EnterScope;
       try
-        if (Func.ReturnType <> '') and (not SameText(Func.ReturnType, 'Void')) then
+        if (not Func.IsProcedure) and (Func.ReturnType <> '') and (not SameText(Func.ReturnType, 'Void')) then
           FSymbols.Define(TSymbol.Create('result', skVariable, Func.ReturnType, Func.Line, Func.Col, False));
         for I := 0 to Func.Ensures.Count - 1 do
         begin
@@ -2859,6 +2928,11 @@ begin
     // Verifica corpo da funcao
     for I := 0 to Func.Body.Count - 1 do
       CheckStmt(TASTStmt(Func.Body[I]));
+
+    // Verifica retorno garantido em todos os caminhos para functions (nao procedures / nao moldes)
+    if (not Func.IsProcedure) and (Func.GenericParam = '') and (not StmtListAlwaysReturns(Func.Body)) then
+      Error('E0308', Format('Nem todos os caminhos da function "%s" retornam valor do tipo "%s"',
+        [Func.Name, Func.ReturnType]), Func.Line, Func.Col);
   finally
     FSymbols.LeaveScope;
     FCurrentFunction := nil;
@@ -3079,6 +3153,7 @@ var
   VType: string;
 begin
   Result := TASTFunction.Create(OriginalFunc.Line, OriginalFunc.Col, OriginalFunc.Name + '_' + ConcreteType, OriginalFunc.ReturnType);
+  Result.IsProcedure := OriginalFunc.IsProcedure;
   if SameText(Result.ReturnType, OriginalFunc.GenericParam) then
     Result.ReturnType := ConcreteType;
 
@@ -3114,21 +3189,46 @@ procedure TAetherTypeChecker.CheckModule(AModule: TASTModule);
 var
   I: Integer;
   Func: TASTFunction;
+  VD: TASTVarDecl;
 begin
   FModule := AModule;
+  FCurrentSourceModule := '';
   RegisterConstants(AModule);
   RegisterTypes(AModule);
   RegisterTraits(AModule);
   RegisterImpls(AModule);
   RegisterFunctions(AModule);
 
+  for I := 0 to AModule.ModuleVars.Count - 1 do
+  begin
+    VD := TASTVarDecl(AModule.ModuleVars[I]);
+    FCurrentSourceModule := VD.SourceModule;
+    CheckVarDecl(VD);
+  end;
+  FCurrentSourceModule := '';
+
   I := 0;
   while I < AModule.Functions.Count do
   begin
     Func := TASTFunction(AModule.Functions[I]);
-    if Func.GenericParam = '' then
+    if (Func.GenericParam = '') and (not Func.IsInterfaceDecl) then
       CheckFunction(Func);
     Inc(I);
+  end;
+
+  if (AModule.InitBody.Count > 0) or (AModule.FiniBody.Count > 0) then
+  begin
+    FCurrentSourceModule := AModule.Name;
+    FSymbols.EnterScope;
+    try
+      for I := 0 to AModule.InitBody.Count - 1 do
+        CheckStmt(TASTStmt(AModule.InitBody[I]));
+      for I := 0 to AModule.FiniBody.Count - 1 do
+        CheckStmt(TASTStmt(AModule.FiniBody[I]));
+    finally
+      FSymbols.LeaveScope;
+      FCurrentSourceModule := '';
+    end;
   end;
 
   if Assigned(AModule.ProgramBlock) then

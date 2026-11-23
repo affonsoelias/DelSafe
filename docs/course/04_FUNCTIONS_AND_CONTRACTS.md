@@ -4,22 +4,22 @@ Functions in Aether are first-class constructs. Furthermore, Aether natively inc
 
 ---
 
-## 1. Function Syntax
+## 1. Routine Syntax (`procedure` and `function`)
 
-A function defines parameters with explicit types and a return type:
+Aether distinguishes between routines that do not return a value (**`procedure`**) and routines that return a value (**`function ... return <Type>`**), with Ada-style `is` headers and explicit named `end <Name>;` closings:
 
 ```aether
 module functions_demo;
 
-function AddNumbers(a: Int32, b: Int32): Int32
+function AddNumbers(a, b: Int32) return Int32 is
 begin
     return a + b;
-end;
+end AddNumbers;
 
-function GreetUser(name: String): Void
+procedure GreetUser(name: String) is
 begin
     PrintLn("Hello, " + name + "!");
-end;
+end GreetUser;
 ```
 
 ---
@@ -28,21 +28,21 @@ end;
 
 Contracts turn documentation into executable specifications verified by the compiler:
 
-- **`require` (Pre-condition):** What the caller **must guarantee** before invoking the function.
-- **`ensure` (Post-condition):** What the function **guarantees** to deliver before returning. Within `ensure` clauses, Aether automatically provides the special read-only identifier `result` bound to the function's return value (in both the Free Pascal and GCC C99 backends). Post-conditions are verified automatically at **every** `return` statement—including early returns—as well as at the implicit end of `Void` functions. Contracts declared on generic functions (such as `function IdentityPositive<T>(val: T): T`) are also preserved across monomorphization.
+- **`require` (Pre-condition):** What the caller **must guarantee** before invoking the routine.
+- **`ensure` (Post-condition):** What the routine **guarantees** to deliver before returning. Within `ensure` clauses on functions, Aether automatically provides the special read-only identifier `result` bound to the function's return value (in both the Free Pascal and GCC C99 backends). Post-conditions are verified automatically at **every** `return` statement—including early returns—as well as at the end of `procedure` routines. Contracts declared on generic functions (such as `function IdentityPositive<T>(val: T) return T is`) are also preserved across monomorphization.
 
 ```aether
 module contracts_demo;
 
-function Divide(numerator: Int32, denominator: Int32): Int32
+function Divide(numerator, denominator: Int32) return Int32 is
 contract
     require
         denominator <> 0;
 begin
     return numerator / denominator;
-end;
+end Divide;
 
-function SafeStep(x: Int32): Int32
+function SafeStep(x: Int32) return Int32 is
 contract
     require
         x >= -100;
@@ -53,9 +53,9 @@ begin
         return 0; // `ensure` still checks `result >= 0` before returning
     end;
     return x;
-end;
+end SafeStep;
 
-function IdentityPositive<T>(val: T): T
+function IdentityPositive<T>(val: T) return T is
 contract
     require
         val > 0;
@@ -63,9 +63,9 @@ contract
         result > 0;
 begin
     return val;
-end;
+end IdentityPositive;
 
-function CalculateSquareRoot(x: Float64): Float64
+function CalculateSquareRoot(x: Float64) return Float64 is
 contract
     require
         x >= 0.0;
@@ -73,7 +73,7 @@ contract
         result >= 0.0;
 begin
     return sqrt(x);
-end;
+end CalculateSquareRoot;
 
 program Main;
 var
@@ -92,7 +92,7 @@ begin
 
     // Calling with denominator 0 triggers an immediate contract violation assert:
     // Divide(10, 0); // Contract violation: Pre-condition failed!
-end.
+end contracts_demo.
 ```
 
 ---
@@ -109,7 +109,7 @@ end.
 Aether allows attaching contracts even to external C functions! For example:
 
 ```aether
-extern c function sqrt(x: Float64): Float64
+extern c function sqrt(x: Float64) return Float64
 contract
     require
         x >= 0.0;
@@ -121,8 +121,8 @@ This ensures your Aether code protects against passing bad data to foreign C rou
 ---
 
 ## 5. Summary
-1. Functions use `function Name(params): ReturnType begin ... end;`.
-2. Contracts use `contract require <expr>; ensure <expr>;`.
-3. Pre-conditions defend your functions against invalid caller input at zero architectural cost.
+1. Procedures use `procedure Name[(params)] is ... begin ... end Name;`, and functions use `function Name[(params)] return Type is ... begin ... end Name;`.
+2. Contracts use `contract require <expr>; ensure <expr>;` placed after `is` (or on `interface` / `extern` signatures).
+3. Pre-conditions defend your routines against invalid caller input at zero architectural cost.
 
 ➡️ **Next:** **[Chapter 05: The Borrow Checker (Memory Safety)](05_THE_BORROW_CHECKER.md)**

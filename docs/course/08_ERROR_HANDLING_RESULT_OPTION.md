@@ -19,7 +19,7 @@ type
         Some(Int32)
     end;
 
-function FindUserIndex(name: String): IntOption
+function FindUserIndex(name: String) return IntOption is
 begin
     if name = "Alice" then
         return IntOption.Some(0);
@@ -28,7 +28,7 @@ begin
     else
         return IntOption.None;
     end;
-end;
+end FindUserIndex;
 
 program Main;
 var
@@ -42,7 +42,7 @@ begin
         IntOption.None =>
             PrintLn("User does not exist in registry.");
     end;
-end.
+end option_demo.
 ```
 
 Because `Option` must be unpacked with `match`, it is **impossible** to forget to check for absence and crash at runtime.
@@ -65,13 +65,13 @@ type
         Err(String)
     end;
 
-function SafeDivide(a: Int32, b: Int32): MathResult
+function SafeDivide(a, b: Int32) return MathResult is
 begin
     if b = 0 then
         return MathResult.Err("Division by zero error!");
     end;
     return MathResult.Ok(a / b);
-end;
+end SafeDivide;
 
 program Main;
 var
@@ -92,7 +92,7 @@ begin
         MathResult.Err(msg) =>
             PrintLn("Handled gracefully: " + msg);
     end;
-end.
+end result_demo.
 ```
 
 ---

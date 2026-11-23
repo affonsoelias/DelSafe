@@ -6,12 +6,12 @@ type
     Vetor4 = array[4] of Int32;
     Placar = map[String]Int32;
 
-function ExtractNibble(val: UInt32): UInt32
+function ExtractNibble(val: UInt32) return UInt32 is
 begin
     return (val shr 4) and $0F;
-end;
+end ExtractNibble;
 
-function ClassifyCode(code: Int32): Int32
+function ClassifyCode(code: Int32) return Int32 is
 var
     res: Int32;
 begin
@@ -27,9 +27,9 @@ begin
             res := 99;
     end;
     return res;
-end;
+end ClassifyCode;
 
-function StatusToNumber(s: HttpStatus): Int32
+function StatusToNumber(s: HttpStatus) return Int32 is
 var
     outVal: Int32;
 begin
@@ -43,26 +43,26 @@ begin
             outVal := 500;
     end;
     return outVal;
-end;
+end StatusToNumber;
 
-function AddScore(mut borrow tabela: Placar, nome: String, delta: Int32): Void
+procedure AddScore(mut borrow tabela: Placar; nome: String; delta: Int32) is
 begin
     if tabela.Contains(nome) then
         tabela[nome] := tabela[nome] + delta;
     else
         tabela[nome] := delta;
     end;
-end;
+end AddScore;
 
-function MakeOk(v: Float64): Result<Float64, Int32>
+function MakeOk(v: Float64) return Result<Float64, Int32> is
 begin
     return Ok(v);
-end;
+end MakeOk;
 
-function MakeErr(e: Int32): Result<Float64, Int32>
+function MakeErr(e: Int32) return Result<Float64, Int32> is
 begin
     return Err(e);
-end;
+end MakeErr;
 
 program Main;
 var
@@ -236,4 +236,4 @@ begin
     Assert(names[99] = "");
 
     PrintLn("=== FASE 46 TEST PASSOU (BITWISE, FOR..IN, MATCH, VAR/LET, MAP) ===");
-end.
+end Fase46BitwiseForInMatchVarMapTest.

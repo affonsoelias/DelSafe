@@ -24,6 +24,10 @@ type
     // Palavras-chave: Estrutura
     tokModule,
     tokProgram,
+    tokInterface,
+    tokImplementation,
+    tokInitialization,
+    tokFinalization,
     tokImport,
     tokAs,
     tokPub,
@@ -50,8 +54,10 @@ type
     tokSpawn,
     tokYield,
 
-    // Palavras-chave: Funções e Contratos
+    // Palavras-chave: Funções, Procedimentos e Contratos
     tokFunction,
+    tokProcedure,
+    tokIs,
     tokContract,
     tokRequire,
     tokEnsure,
@@ -173,6 +179,10 @@ begin
 
     tokModule:        Result := 'module';
     tokProgram:       Result := 'program';
+    tokInterface:     Result := 'interface';
+    tokImplementation: Result := 'implementation';
+    tokInitialization: Result := 'initialization';
+    tokFinalization:  Result := 'finalization';
     tokImport:        Result := 'import';
     tokAs:            Result := 'as';
     tokPub:           Result := 'pub';
@@ -191,6 +201,8 @@ begin
     tokSet:           Result := 'set';
     tokMap:           Result := 'map';
     tokFunction:      Result := 'function';
+    tokProcedure:     Result := 'procedure';
+    tokIs:            Result := 'is';
     tokContract:      Result := 'contract';
     tokRequire:       Result := 'require';
     tokEnsure:        Result := 'ensure';
@@ -289,6 +301,10 @@ begin
   Lower := LowerCase(S);
   if Lower = 'module' then Result := tokModule
   else if Lower = 'program' then Result := tokProgram
+  else if Lower = 'interface' then Result := tokInterface
+  else if Lower = 'implementation' then Result := tokImplementation
+  else if Lower = 'initialization' then Result := tokInitialization
+  else if Lower = 'finalization' then Result := tokFinalization
   else if Lower = 'import' then Result := tokImport
   else if Lower = 'as' then Result := tokAs
   else if Lower = 'pub' then Result := tokPub
@@ -307,6 +323,8 @@ begin
   else if Lower = 'set' then Result := tokSet
   else if Lower = 'map' then Result := tokMap
   else if Lower = 'function' then Result := tokFunction
+  else if Lower = 'procedure' then Result := tokProcedure
+  else if Lower = 'is' then Result := tokIs
   else if Lower = 'contract' then Result := tokContract
   else if Lower = 'require' then Result := tokRequire
   else if Lower = 'ensure' then Result := tokEnsure
