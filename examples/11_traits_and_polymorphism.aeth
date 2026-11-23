@@ -2,13 +2,13 @@ module TraitsAndPolymorphism;
 
 // Definicao de Contrato de Tipo (Trait) para representacao em texto
 trait Printable
-    function ToString(borrow self): String;
+    function ToString(borrow self) return String;
 end;
 
 // Definicao de Contrato de Tipo (Trait) para calculos geometricos
 trait Shape
-    function Area(borrow self): Int32;
-    function Perimeter(borrow self): Int32;
+    function Area(borrow self) return Int32;
+    function Perimeter(borrow self) return Int32;
 end;
 
 type
@@ -23,52 +23,52 @@ type
 
 // Implementacao da Trait Printable para Circle
 impl Printable for Circle
-    function ToString(borrow self): String
+    function ToString(borrow self) return String is
     begin
         return "Circulo Geometrico";
-    end;
+    end ToString;
 end;
 
 // Implementacao da Trait Shape para Circle
 impl Shape for Circle
-    function Area(borrow self): Int32
+    function Area(borrow self) return Int32 is
     begin
         // Pi aproximado = 3 para calculo inteiro exato
         return 3 * self.radius * self.radius;
-    end;
+    end Area;
 
-    function Perimeter(borrow self): Int32
+    function Perimeter(borrow self) return Int32 is
     begin
         return 2 * 3 * self.radius;
-    end;
+    end Perimeter;
 end;
 
 // Implementacao da Trait Printable para Rectangle
 impl Printable for Rectangle
-    function ToString(borrow self): String
+    function ToString(borrow self) return String is
     begin
         return "Retangulo Geometrico";
-    end;
+    end ToString;
 end;
 
 // Implementacao da Trait Shape para Rectangle
 impl Shape for Rectangle
-    function Area(borrow self): Int32
+    function Area(borrow self) return Int32 is
     begin
         return self.width * self.height;
-    end;
+    end Area;
 
-    function Perimeter(borrow self): Int32
+    function Perimeter(borrow self) return Int32 is
     begin
         return 2 * (self.width + self.height);
-    end;
+    end Perimeter;
 end;
 
 // Funcao Polimorfica Estatica com Trait Bound (Zero-Cost Abstraction)
-function ExibirElemento<T: Printable>(borrow item: T): Void
+procedure ExibirElemento<T: Printable>(borrow item: T) is
 begin
     PrintLn("Exibindo elemento via Polimorfismo Estatico: %s", item.ToString());
-end;
+end ExibirElemento;
 
 program Main;
 var
@@ -103,4 +103,4 @@ begin
     ExibirElemento(r);
 
     PrintLn("\n[PASS] Todos os contratos de tipo e despachos estaticos executados com sucesso!");
-end.
+end TraitsAndPolymorphism.

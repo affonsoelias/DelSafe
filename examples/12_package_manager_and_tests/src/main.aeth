@@ -15,4 +15,4 @@ begin
     PrintLn("  Dobro(21)  = %d", d);
     PrintLn("  Triplo(14) = %d", t);
     PrintLn("\nExecutado com sucesso via aetherc run!");
-end.
+end Main.

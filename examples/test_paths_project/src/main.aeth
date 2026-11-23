@@ -4,7 +4,7 @@ import arvores.carvalho;
 import caverna.dragao;
 import c "auxiliar.h";
 
-extern function MultiplicarC(a: Int32, b: Int32): Int32;
+extern function MultiplicarC(a, b: Int32) return Int32;
 
 program Main;
 var
@@ -25,4 +25,4 @@ begin
     PrintLn("MultiplicarC(6, 7) retornou: %d", res_c);
 
     PrintLn("=== SUCESSO: Todos os modulos, subpastas e interop operacionais! ===");
-end.
+end Main.

@@ -5,7 +5,7 @@ import Strings;
 import Net;
 import Json;
 
-function RunDemo(): Void
+procedure RunDemo is
 var
     server: Socket;
     client: Socket;
@@ -91,9 +91,9 @@ begin
     PrintLn("==================================================");
     PrintLn(" [OK] Servidor HTTP e Sockets Nativos Testados!");
     PrintLn("==================================================");
-end;
+end RunDemo;
 
 program Main;
 begin
     RunDemo();
-end.
+end HttpServerAndSockets.

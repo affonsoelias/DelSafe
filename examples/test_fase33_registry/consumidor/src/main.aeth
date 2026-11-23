@@ -16,4 +16,4 @@ begin
 
     PrintLn("P3 X = %f, Y = %f", p3.x, p3.y);
     PrintLn("Norma p1 = %f", n);
-end.
+end main.

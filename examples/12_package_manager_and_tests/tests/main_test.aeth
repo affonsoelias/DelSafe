@@ -11,4 +11,4 @@ begin
     if d = 100 then
         PrintLn("  [PASS] Dobro(50) = 100");
     end;
-end.
+end MainTest.

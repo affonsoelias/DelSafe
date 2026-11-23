@@ -9,7 +9,7 @@ type
         right: Option<Box<ExprNode>>;
     end;
 
-function CriarValor(borrow v: Int64): ExprNode
+function CriarValor(borrow v: Int64) return ExprNode is
 begin
     return ExprNode(
         kind: 1,
@@ -17,9 +17,9 @@ begin
         left: None,
         right: None
     );
-end;
+end CriarValor;
 
-function CriarSoma(take l: ExprNode; take r: ExprNode): ExprNode
+function CriarSoma(take l, r: ExprNode) return ExprNode is
 begin
     return ExprNode(
         kind: 2,
@@ -27,9 +27,9 @@ begin
         left: Some(Box(l)),
         right: Some(Box(r))
     );
-end;
+end CriarSoma;
 
-function Avaliar(borrow no: ExprNode): Int64
+function Avaliar(borrow no: ExprNode) return Int64 is
 var
     val_esq: Int64;
     val_dir: Int64;
@@ -50,7 +50,7 @@ begin
 
         return val_esq + val_dir;
     end;
-end;
+end Avaliar;
 
 program Main;
 var
@@ -75,4 +75,4 @@ begin
     else
         PrintLn("FALHA na avaliacao da arvore.");
     end;
-end.
+end BoxAndRecursion.

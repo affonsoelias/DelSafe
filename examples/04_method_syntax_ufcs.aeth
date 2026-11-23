@@ -6,10 +6,10 @@ type
         size: UInt64;
     end;
 
-function Inspecionar(borrow buf: DataBuffer): Void
+procedure Inspecionar(borrow buf: DataBuffer) is
 begin
     PrintLn("Inspecionando buffer via chamada estilo metodo: id = %d, size = %d", buf.id, buf.size);
-end;
+end Inspecionar;
 
 program Main;
 var
@@ -19,4 +19,4 @@ begin
 
     // Chamada estilo metodo (UFCS)!
     meu_buffer.Inspecionar();
-end.
+end MethodSyntaxUFCS.

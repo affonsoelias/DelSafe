@@ -6,7 +6,7 @@ type
         NumeroNegativo
     end;
 
-function Dividir(borrow dividendo: Float64; borrow divisor: Float64): Result<Float64, MathError>
+function Dividir(borrow dividendo, divisor: Float64) return Result<Float64, MathError> is
 contract
     require
         true;
@@ -18,7 +18,7 @@ begin
     else
         return Ok(dividendo / divisor);
     end;
-end;
+end Dividir;
 
 program Main;
 var
@@ -34,4 +34,4 @@ begin
         case Err(MathError.NumeroNegativo):
             PrintLn("Erro detectado: Numero negativo invalido.");
     end;
-end.
+end ResultAndMatch.

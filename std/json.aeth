@@ -13,16 +13,404 @@ type
 function NewJsonBuilder() return JsonBuilder;
 procedure AddString(mut borrow jb: JsonBuilder; borrow key, val: String);
 procedure AddInt(mut borrow jb: JsonBuilder; borrow key: String; borrow val: Int32);
+procedure AddFloat(mut borrow jb: JsonBuilder; borrow key: String; borrow val: Float64);
 procedure AddBool(mut borrow jb: JsonBuilder; borrow key: String; borrow val: Bool);
+procedure AddRaw(mut borrow jb: JsonBuilder; borrow key, raw_json: String);
 function Build(borrow jb: JsonBuilder) return String;
 function FindSubstr(borrow haystack, needle: String) return Int32;
 function HasKey(borrow json, key: String) return Bool;
 function ExtractString(borrow json, key: String; mut borrow out_val: String) return Bool;
 function ExtractInt(borrow json, key: String; mut borrow out_val: Int32) return Bool;
+function ExtractFloat(borrow json, key: String; mut borrow out_val: Float64) return Bool;
 function ExtractBool(borrow json, key: String; mut borrow out_val: Bool) return Bool;
+function ExtractObject(borrow json, key: String; mut borrow out_json: String) return Bool;
+function ExtractArray(borrow json, key: String; mut borrow out_json: String) return Bool;
+function ArrayLength(borrow json_array: String) return Int32;
+function ArrayGet(borrow json_array: String; index: Int32; mut borrow out_elem: String) return Bool;
+function ArrayGetString(borrow json_array: String; index: Int32; mut borrow out_val: String) return Bool;
+function ArrayGetInt(borrow json_array: String; index: Int32; mut borrow out_val: Int32) return Bool;
+function ArrayGetFloat(borrow json_array: String; index: Int32; mut borrow out_val: Float64) return Bool;
 function Validate(borrow json: String) return Bool;
 
 implementation
+
+function IsWsChar(borrow ch: String) return Bool is
+begin
+    return (ch = " ") or (ch = "\t") or (ch = "\n") or (ch = "\r");
+end IsWsChar;
+
+function IsDigitChar(borrow ch: String) return Bool is
+begin
+    return (ch >= "0") and (ch <= "9");
+end IsDigitChar;
+
+function IsHexDigitChar(borrow ch: String) return Bool is
+begin
+    if (ch >= "0") and (ch <= "9") then return true; end;
+    if (ch >= "a") and (ch <= "f") then return true; end;
+    if (ch >= "A") and (ch <= "F") then return true; end;
+    return false;
+end IsHexDigitChar;
+
+procedure SkipWs(borrow s: String; mut borrow pos: UInt32) is
+var
+    n: UInt32;
+begin
+    n := Length(borrow s);
+    while (pos < n) and IsWsChar(CharAt(borrow s, pos)) do
+        pos := pos + 1;
+    end;
+end SkipWs;
+
+function EscapeJsonString(borrow s: String) return String is
+var
+    n, i: UInt32;
+    ch, out_s: String;
+begin
+    n := Length(borrow s);
+    out_s := "";
+    i := 0;
+    while i < n do
+        ch := CharAt(borrow s, i);
+        if ch = "\"" then
+            out_s := out_s + "\\\"";
+        else if ch = "\\" then
+            out_s := out_s + "\\\\";
+        else if ch = "\n" then
+            out_s := out_s + "\\n";
+        else if ch = "\t" then
+            out_s := out_s + "\\t";
+        else if ch = "\r" then
+            out_s := out_s + "\\r";
+        else
+            out_s := out_s + ch;
+        end;
+        end;
+        end;
+        end;
+        end;
+        i := i + 1;
+    end;
+    return out_s;
+end EscapeJsonString;
+
+function UnescapeJsonRawString(borrow raw: String) return String is
+var
+    n, i: UInt32;
+    ch, nxt, out_s: String;
+begin
+    n := Length(borrow raw);
+    if n < 2 then
+        return "";
+    end;
+    if (CharAt(borrow raw, 0) <> "\"") or (CharAt(borrow raw, n - 1) <> "\"") then
+        return "";
+    end;
+    out_s := "";
+    i := 1;
+    while i < (n - 1) do
+        ch := CharAt(borrow raw, i);
+        if (ch = "\\") and ((i + 1) < (n - 1)) then
+            nxt := CharAt(borrow raw, i + 1);
+            if nxt = "\"" then
+                out_s := out_s + "\"";
+            else if nxt = "\\" then
+                out_s := out_s + "\\";
+            else if nxt = "/" then
+                out_s := out_s + "/";
+            else if nxt = "n" then
+                out_s := out_s + "\n";
+            else if nxt = "t" then
+                out_s := out_s + "\t";
+            else if nxt = "r" then
+                out_s := out_s + "\r";
+            else
+                out_s := out_s + nxt;
+            end;
+            end;
+            end;
+            end;
+            end;
+            end;
+            i := i + 2;
+        else
+            out_s := out_s + ch;
+            i := i + 1;
+        end;
+    end;
+    return out_s;
+end UnescapeJsonRawString;
+
+function ParseStringSpan(borrow s: String; mut borrow pos: UInt32) return Bool is
+var
+    n: UInt32;
+    ch, esc: String;
+    k: Int32;
+begin
+    n := Length(borrow s);
+    if (pos >= n) or (CharAt(borrow s, pos) <> "\"") then
+        return false;
+    end;
+    pos := pos + 1;
+    while pos < n do
+        ch := CharAt(borrow s, pos);
+        if ch = "\"" then
+            pos := pos + 1;
+            return true;
+        end;
+        if (ch = "\n") or (ch = "\r") or (ch = "\t") then
+            return false;
+        end;
+        if ch = "\\" then
+            pos := pos + 1;
+            if pos >= n then
+                return false;
+            end;
+            esc := CharAt(borrow s, pos);
+            if esc = "u" then
+                pos := pos + 1;
+                k := 0;
+                while k < 4 do
+                    if (pos >= n) or (not IsHexDigitChar(CharAt(borrow s, pos))) then
+                        return false;
+                    end;
+                    pos := pos + 1;
+                    k := k + 1;
+                end;
+            else
+                if (esc = "\"") or (esc = "\\") or (esc = "/") or (esc = "b") or
+                   (esc = "f") or (esc = "n") or (esc = "r") or (esc = "t") then
+                    pos := pos + 1;
+                else
+                    return false;
+                end;
+            end;
+        else
+            pos := pos + 1;
+        end;
+    end;
+    return false;
+end ParseStringSpan;
+
+function ParseNumberSpan(borrow s: String; mut borrow pos: UInt32) return Bool is
+var
+    n: UInt32;
+    ch: String;
+begin
+    n := Length(borrow s);
+    if (pos < n) and (CharAt(borrow s, pos) = "-") then
+        pos := pos + 1;
+    end;
+    if (pos >= n) or (not IsDigitChar(CharAt(borrow s, pos))) then
+        return false;
+    end;
+    if CharAt(borrow s, pos) = "0" then
+        pos := pos + 1;
+        if (pos < n) and IsDigitChar(CharAt(borrow s, pos)) then
+            return false;
+        end;
+    else
+        while (pos < n) and IsDigitChar(CharAt(borrow s, pos)) do
+            pos := pos + 1;
+        end;
+    end;
+    if (pos < n) and (CharAt(borrow s, pos) = ".") then
+        pos := pos + 1;
+        if (pos >= n) or (not IsDigitChar(CharAt(borrow s, pos))) then
+            return false;
+        end;
+        while (pos < n) and IsDigitChar(CharAt(borrow s, pos)) do
+            pos := pos + 1;
+        end;
+    end;
+    if pos < n then
+        ch := CharAt(borrow s, pos);
+        if (ch = "e") or (ch = "E") then
+            pos := pos + 1;
+            if pos < n then
+                ch := CharAt(borrow s, pos);
+                if (ch = "+") or (ch = "-") then
+                    pos := pos + 1;
+                end;
+            end;
+            if (pos >= n) or (not IsDigitChar(CharAt(borrow s, pos))) then
+                return false;
+            end;
+            while (pos < n) and IsDigitChar(CharAt(borrow s, pos)) do
+                pos := pos + 1;
+            end;
+        end;
+    end;
+    return true;
+end ParseNumberSpan;
+
+function ParseValueSpan(borrow s: String; mut borrow pos: UInt32; depth: Int32) return Bool is
+var
+    n: UInt32;
+    ch, kw: String;
+    first_item: Bool;
+begin
+    if depth > 64 then
+        return false;
+    end;
+    n := Length(borrow s);
+    SkipWs(borrow s, mut borrow pos);
+    if pos >= n then
+        return false;
+    end;
+
+    ch := CharAt(borrow s, pos);
+    if ch = "{" then
+        pos := pos + 1;
+        SkipWs(borrow s, mut borrow pos);
+        if (pos < n) and (CharAt(borrow s, pos) = "}") then
+            pos := pos + 1;
+            return true;
+        end;
+        first_item := true;
+        while true do
+            if not first_item then
+                SkipWs(borrow s, mut borrow pos);
+                if (pos >= n) or (CharAt(borrow s, pos) <> ",") then
+                    break;
+                end;
+                pos := pos + 1;
+            end;
+            first_item := false;
+            SkipWs(borrow s, mut borrow pos);
+            if not ParseStringSpan(borrow s, mut borrow pos) then
+                return false;
+            end;
+            SkipWs(borrow s, mut borrow pos);
+            if (pos >= n) or (CharAt(borrow s, pos) <> ":") then
+                return false;
+            end;
+            pos := pos + 1;
+            if not ParseValueSpan(borrow s, mut borrow pos, depth + 1) then
+                return false;
+            end;
+        end;
+        SkipWs(borrow s, mut borrow pos);
+        if (pos < n) and (CharAt(borrow s, pos) = "}") then
+            pos := pos + 1;
+            return true;
+        end;
+        return false;
+    end;
+
+    if ch = "[" then
+        pos := pos + 1;
+        SkipWs(borrow s, mut borrow pos);
+        if (pos < n) and (CharAt(borrow s, pos) = "]") then
+            pos := pos + 1;
+            return true;
+        end;
+        first_item := true;
+        while true do
+            if not first_item then
+                SkipWs(borrow s, mut borrow pos);
+                if (pos >= n) or (CharAt(borrow s, pos) <> ",") then
+                    break;
+                end;
+                pos := pos + 1;
+            end;
+            first_item := false;
+            if not ParseValueSpan(borrow s, mut borrow pos, depth + 1) then
+                return false;
+            end;
+        end;
+        SkipWs(borrow s, mut borrow pos);
+        if (pos < n) and (CharAt(borrow s, pos) = "]") then
+            pos := pos + 1;
+            return true;
+        end;
+        return false;
+    end;
+
+    if ch = "\"" then
+        return ParseStringSpan(borrow s, mut borrow pos);
+    end;
+
+    if (ch = "-") or IsDigitChar(ch) then
+        return ParseNumberSpan(borrow s, mut borrow pos);
+    end;
+
+    if (pos + 4 <= n) and (Substring(borrow s, pos, 4) = "true") then
+        pos := pos + 4;
+        return true;
+    end;
+    if (pos + 5 <= n) then
+        kw := Substring(borrow s, pos, 5);
+        if kw = "false" then
+            pos := pos + 5;
+            return true;
+        end;
+    end;
+    if (pos + 4 <= n) and (Substring(borrow s, pos, 4) = "null") then
+        pos := pos + 4;
+        return true;
+    end;
+
+    return false;
+end ParseValueSpan;
+
+function FindTopLevelKeyValue(borrow json, target_key: String; mut borrow out_raw: String) return Bool is
+var
+    n, pos, key_start, val_start: UInt32;
+    key_raw, key_un: String;
+    first_item: Bool;
+begin
+    out_raw := "";
+    n := Length(borrow json);
+    pos := 0;
+    SkipWs(borrow json, mut borrow pos);
+    if (pos >= n) or (CharAt(borrow json, pos) <> "{") then
+        return false;
+    end;
+    pos := pos + 1;
+    SkipWs(borrow json, mut borrow pos);
+    if (pos < n) and (CharAt(borrow json, pos) = "}") then
+        return false;
+    end;
+
+    first_item := true;
+    while pos < n do
+        if not first_item then
+            SkipWs(borrow json, mut borrow pos);
+            if (pos >= n) or (CharAt(borrow json, pos) <> ",") then
+                return false;
+            end;
+            pos := pos + 1;
+        end;
+        first_item := false;
+
+        SkipWs(borrow json, mut borrow pos);
+        key_start := pos;
+        if not ParseStringSpan(borrow json, mut borrow pos) then
+            return false;
+        end;
+        key_raw := Substring(borrow json, key_start, pos - key_start);
+        key_un := UnescapeJsonRawString(borrow key_raw);
+
+        SkipWs(borrow json, mut borrow pos);
+        if (pos >= n) or (CharAt(borrow json, pos) <> ":") then
+            return false;
+        end;
+        pos := pos + 1;
+
+        SkipWs(borrow json, mut borrow pos);
+        val_start := pos;
+        if not ParseValueSpan(borrow json, mut borrow pos, 1) then
+            return false;
+        end;
+
+        if key_un = target_key then
+            out_raw := Substring(borrow json, val_start, pos - val_start);
+            return true;
+        end;
+    end;
+    return false;
+end FindTopLevelKeyValue;
 
 function NewJsonBuilder() return JsonBuilder is
 begin
@@ -36,7 +424,7 @@ begin
     else
         jb.buffer := jb.buffer + " ";
     end;
-    jb.buffer := jb.buffer + "\"" + key + "\": \"" + val + "\"";
+    jb.buffer := jb.buffer + "\"" + EscapeJsonString(borrow key) + "\": \"" + EscapeJsonString(borrow val) + "\"";
     jb.count := jb.count + 1;
 end AddString;
 
@@ -47,9 +435,20 @@ begin
     else
         jb.buffer := jb.buffer + " ";
     end;
-    jb.buffer := jb.buffer + "\"" + key + "\": " + IntToStr(borrow val);
+    jb.buffer := jb.buffer + "\"" + EscapeJsonString(borrow key) + "\": " + IntToStr(borrow val);
     jb.count := jb.count + 1;
 end AddInt;
+
+procedure AddFloat(mut borrow jb: JsonBuilder; borrow key: String; borrow val: Float64) is
+begin
+    if jb.count > 0 then
+        jb.buffer := jb.buffer + ", ";
+    else
+        jb.buffer := jb.buffer + " ";
+    end;
+    jb.buffer := jb.buffer + "\"" + EscapeJsonString(borrow key) + "\": " + FloatToStr(borrow val);
+    jb.count := jb.count + 1;
+end AddFloat;
 
 procedure AddBool(mut borrow jb: JsonBuilder; borrow key: String; borrow val: Bool) is
 var
@@ -66,9 +465,20 @@ begin
     else
         jb.buffer := jb.buffer + " ";
     end;
-    jb.buffer := jb.buffer + "\"" + key + "\": " + b_str;
+    jb.buffer := jb.buffer + "\"" + EscapeJsonString(borrow key) + "\": " + b_str;
     jb.count := jb.count + 1;
 end AddBool;
+
+procedure AddRaw(mut borrow jb: JsonBuilder; borrow key, raw_json: String) is
+begin
+    if jb.count > 0 then
+        jb.buffer := jb.buffer + ", ";
+    else
+        jb.buffer := jb.buffer + " ";
+    end;
+    jb.buffer := jb.buffer + "\"" + EscapeJsonString(borrow key) + "\": " + raw_json;
+    jb.count := jb.count + 1;
+end AddRaw;
 
 function Build(borrow jb: JsonBuilder) return String is
 begin
@@ -81,9 +491,7 @@ end Build;
 
 function FindSubstr(borrow haystack, needle: String) return Int32 is
 var
-    h_len: UInt32;
-    n_len: UInt32;
-    i: UInt32;
+    h_len, n_len, i: UInt32;
     sub: String;
 begin
     h_len := Length(borrow haystack);
@@ -106,175 +514,248 @@ end FindSubstr;
 
 function HasKey(borrow json, key: String) return Bool is
 var
-    needle: String;
-    pos: Int32;
+    raw: String;
 begin
-    needle := "\"" + key + "\"";
-    pos := FindSubstr(borrow json, borrow needle);
-    return pos >= 0;
+    return FindTopLevelKeyValue(borrow json, borrow key, mut borrow raw);
 end HasKey;
 
 function ExtractString(borrow json, key: String; mut borrow out_val: String) return Bool is
 var
-    needle: String;
-    pos: Int32;
-    len: UInt32;
-    curr: UInt32;
-    val_start: UInt32;
-    val_len: UInt32;
+    raw: String;
 begin
-    needle := "\"" + key + "\"";
-    pos := FindSubstr(borrow json, borrow needle);
-    if pos < 0 then
+    if not FindTopLevelKeyValue(borrow json, borrow key, mut borrow raw) then
         return false;
     end;
-
-    len := Length(borrow json);
-    curr := UInt32(pos) + Length(borrow needle);
-
-    // Pula espacos e ':' ate a abertura de aspas
-    while (curr < len) and (CharAt(borrow json, curr) <> "\"") do
-        curr := curr + 1;
-    end;
-
-    if curr >= len then
+    if (Length(borrow raw) < 2) or (CharAt(borrow raw, 0) <> "\"") then
         return false;
     end;
-
-    curr := curr + 1; // Pula aspas de abertura
-    val_start := curr;
-
-    while (curr < len) and (CharAt(borrow json, curr) <> "\"") do
-        curr := curr + 1;
-    end;
-
-    if curr > len then
-        return false;
-    end;
-
-    val_len := curr - val_start;
-    out_val := Substring(borrow json, val_start, val_len);
+    out_val := UnescapeJsonRawString(borrow raw);
     return true;
 end ExtractString;
 
 function ExtractInt(borrow json, key: String; mut borrow out_val: Int32) return Bool is
 var
-    needle: String;
-    pos: Int32;
-    len: UInt32;
-    curr: UInt32;
-    ch: String;
-    val_start: UInt32;
-    val_len: UInt32;
-    num_str: String;
-    searching: Bool;
+    raw: String;
+    parsed: Option<Int32>;
 begin
-    needle := "\"" + key + "\"";
-    pos := FindSubstr(borrow json, borrow needle);
-    if pos < 0 then
+    if not FindTopLevelKeyValue(borrow json, borrow key, mut borrow raw) then
         return false;
     end;
-
-    len := Length(borrow json);
-    curr := UInt32(pos) + Length(borrow needle);
-
-    // Pula espacos e ':' ate achar o primeiro digito ou sinal negativo '-'
-    searching := true;
-    while (curr < len) and searching do
-        ch := CharAt(borrow json, curr);
-        if ((ch >= "0") and (ch <= "9")) or (ch = "-") then
-            searching := false;
-        else
-            curr := curr + 1;
-        end;
+    parsed := TryStrToInt(raw);
+    if parsed.is_some then
+        out_val := Int32(parsed.value);
+        return true;
     end;
-
-    if curr >= len then
-        return false;
-    end;
-
-    val_start := curr;
-    searching := true;
-    while (curr < len) and searching do
-        ch := CharAt(borrow json, curr);
-        if ((ch >= "0") and (ch <= "9")) or (ch = "-") then
-            curr := curr + 1;
-        else
-            searching := false;
-        end;
-    end;
-
-    val_len := curr - val_start;
-    num_str := Substring(borrow json, val_start, val_len);
-    out_val := StrToInt(borrow num_str);
-    return true;
+    return false;
 end ExtractInt;
+
+function ExtractFloat(borrow json, key: String; mut borrow out_val: Float64) return Bool is
+var
+    raw: String;
+    parsed: Option<Float64>;
+begin
+    if not FindTopLevelKeyValue(borrow json, borrow key, mut borrow raw) then
+        return false;
+    end;
+    parsed := TryStrToFloat(raw);
+    if parsed.is_some then
+        out_val := parsed.value;
+        return true;
+    end;
+    return false;
+end ExtractFloat;
 
 function ExtractBool(borrow json, key: String; mut borrow out_val: Bool) return Bool is
 var
-    needle: String;
-    pos: Int32;
-    len: UInt32;
-    curr: UInt32;
-    four_chars: String;
-    five_chars: String;
+    raw: String;
 begin
-    needle := "\"" + key + "\"";
-    pos := FindSubstr(borrow json, borrow needle);
-    if pos < 0 then
+    if not FindTopLevelKeyValue(borrow json, borrow key, mut borrow raw) then
         return false;
     end;
-
-    len := Length(borrow json);
-    curr := UInt32(pos) + Length(borrow needle);
-
-    while curr < len do
-        if curr + 4 <= len then
-            four_chars := Substring(borrow json, curr, 4);
-            if four_chars = "true" then
-                out_val := true;
-                return true;
-            end;
-        end;
-        if curr + 5 <= len then
-            five_chars := Substring(borrow json, curr, 5);
-            if five_chars = "false" then
-                out_val := false;
-                return true;
-            end;
-        end;
-        curr := curr + 1;
+    if raw = "true" then
+        out_val := true;
+        return true;
     end;
-
+    if raw = "false" then
+        out_val := false;
+        return true;
+    end;
     return false;
 end ExtractBool;
 
-function Validate(borrow json: String) return Bool is
+function ExtractObject(borrow json, key: String; mut borrow out_json: String) return Bool is
 var
-    len: UInt32;
-    i: UInt32;
-    ch: String;
-    chaves_abertas: Int32;
-    colchetes_abertos: Int32;
+    raw: String;
 begin
-    len := Length(borrow json);
-    chaves_abertas := 0;
-    colchetes_abertos := 0;
-    i := 0;
+    if not FindTopLevelKeyValue(borrow json, borrow key, mut borrow raw) then
+        return false;
+    end;
+    if (Length(borrow raw) >= 2) and (CharAt(borrow raw, 0) = "{") then
+        out_json := raw;
+        return true;
+    end;
+    return false;
+end ExtractObject;
 
-    while i < len do
-        ch := CharAt(borrow json, i);
-        if ch = "{" then chaves_abertas := chaves_abertas + 1; end;
-        if ch = "}" then chaves_abertas := chaves_abertas - 1; end;
-        if ch = "[" then colchetes_abertos := colchetes_abertos + 1; end;
-        if ch = "]" then colchetes_abertos := colchetes_abertos - 1; end;
-        if (chaves_abertas < 0) or (colchetes_abertos < 0) then
-            return false;
-        end;
-        i := i + 1;
+function ExtractArray(borrow json, key: String; mut borrow out_json: String) return Bool is
+var
+    raw: String;
+begin
+    if not FindTopLevelKeyValue(borrow json, borrow key, mut borrow raw) then
+        return false;
+    end;
+    if (Length(borrow raw) >= 2) and (CharAt(borrow raw, 0) = "[") then
+        out_json := raw;
+        return true;
+    end;
+    return false;
+end ExtractArray;
+
+function ArrayLength(borrow json_array: String) return Int32 is
+var
+    n, pos: UInt32;
+    cnt: Int32;
+    first_item: Bool;
+begin
+    n := Length(borrow json_array);
+    pos := 0;
+    SkipWs(borrow json_array, mut borrow pos);
+    if (pos >= n) or (CharAt(borrow json_array, pos) <> "[") then
+        return -1;
+    end;
+    pos := pos + 1;
+    SkipWs(borrow json_array, mut borrow pos);
+    if (pos < n) and (CharAt(borrow json_array, pos) = "]") then
+        return 0;
     end;
 
-    return (chaves_abertas = 0) and (colchetes_abertos = 0);
+    cnt := 0;
+    first_item := true;
+    while true do
+        if not first_item then
+            SkipWs(borrow json_array, mut borrow pos);
+            if (pos >= n) or (CharAt(borrow json_array, pos) <> ",") then
+                break;
+            end;
+            pos := pos + 1;
+        end;
+        first_item := false;
+        if not ParseValueSpan(borrow json_array, mut borrow pos, 1) then
+            return -1;
+        end;
+        cnt := cnt + 1;
+    end;
+    SkipWs(borrow json_array, mut borrow pos);
+    if (pos < n) and (CharAt(borrow json_array, pos) = "]") then
+        return cnt;
+    end;
+    return -1;
+end ArrayLength;
+
+function ArrayGet(borrow json_array: String; index: Int32; mut borrow out_elem: String) return Bool is
+var
+    n, pos, el_start: UInt32;
+    cur: Int32;
+    first_item: Bool;
+begin
+    out_elem := "";
+    if index < 0 then
+        return false;
+    end;
+    n := Length(borrow json_array);
+    pos := 0;
+    SkipWs(borrow json_array, mut borrow pos);
+    if (pos >= n) or (CharAt(borrow json_array, pos) <> "[") then
+        return false;
+    end;
+    pos := pos + 1;
+    SkipWs(borrow json_array, mut borrow pos);
+    if (pos < n) and (CharAt(borrow json_array, pos) = "]") then
+        return false;
+    end;
+
+    cur := 0;
+    first_item := true;
+    while true do
+        if not first_item then
+            SkipWs(borrow json_array, mut borrow pos);
+            if (pos >= n) or (CharAt(borrow json_array, pos) <> ",") then
+                return false;
+            end;
+            pos := pos + 1;
+        end;
+        first_item := false;
+        SkipWs(borrow json_array, mut borrow pos);
+        el_start := pos;
+        if not ParseValueSpan(borrow json_array, mut borrow pos, 1) then
+            return false;
+        end;
+        if cur = index then
+            out_elem := Substring(borrow json_array, el_start, pos - el_start);
+            return true;
+        end;
+        cur := cur + 1;
+    end;
+    return false;
+end ArrayGet;
+
+function ArrayGetString(borrow json_array: String; index: Int32; mut borrow out_val: String) return Bool is
+var
+    raw: String;
+begin
+    if not ArrayGet(borrow json_array, index, mut borrow raw) then
+        return false;
+    end;
+    if (Length(borrow raw) < 2) or (CharAt(borrow raw, 0) <> "\"") then
+        return false;
+    end;
+    out_val := UnescapeJsonRawString(borrow raw);
+    return true;
+end ArrayGetString;
+
+function ArrayGetInt(borrow json_array: String; index: Int32; mut borrow out_val: Int32) return Bool is
+var
+    raw: String;
+    parsed: Option<Int32>;
+begin
+    if not ArrayGet(borrow json_array, index, mut borrow raw) then
+        return false;
+    end;
+    parsed := TryStrToInt(raw);
+    if parsed.is_some then
+        out_val := Int32(parsed.value);
+        return true;
+    end;
+    return false;
+end ArrayGetInt;
+
+function ArrayGetFloat(borrow json_array: String; index: Int32; mut borrow out_val: Float64) return Bool is
+var
+    raw: String;
+    parsed: Option<Float64>;
+begin
+    if not ArrayGet(borrow json_array, index, mut borrow raw) then
+        return false;
+    end;
+    parsed := TryStrToFloat(raw);
+    if parsed.is_some then
+        out_val := parsed.value;
+        return true;
+    end;
+    return false;
+end ArrayGetFloat;
+
+function Validate(borrow json: String) return Bool is
+var
+    n, pos: UInt32;
+begin
+    n := Length(borrow json);
+    pos := 0;
+    if not ParseValueSpan(borrow json, mut borrow pos, 0) then
+        return false;
+    end;
+    SkipWs(borrow json, mut borrow pos);
+    return pos = n;
 end Validate;
 
 end JSON.

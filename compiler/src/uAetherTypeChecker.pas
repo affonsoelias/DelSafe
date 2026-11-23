@@ -1293,6 +1293,76 @@ begin
       Exit('String');
     end;
 
+    if SameText(Call.Callee, 'Split') then
+    begin
+      if Call.Args.Count <> 2 then
+        Error('E0061', 'Funcao "Split" espera 2 argumentos (String, Separador)', Call.Line, Call.Col);
+      ArgType := ResolveAliasType(CheckExpr(TASTCallArg(Call.Args[0]).Expr));
+      if ArgType <> 'String' then
+        Error('E0308', Format('Primeiro argumento de "Split" deve ser String, recebeu: "%s"', [ArgType]), Call.Line, Call.Col);
+      ArgType := ResolveAliasType(CheckExpr(TASTCallArg(Call.Args[1]).Expr));
+      if ArgType <> 'String' then
+        Error('E0308', Format('Segundo argumento de "Split" deve ser String, recebeu: "%s"', [ArgType]), Call.Line, Call.Col);
+      Exit('array of String');
+    end;
+
+    if SameText(Call.Callee, 'Join') then
+    begin
+      if Call.Args.Count <> 2 then
+        Error('E0061', 'Funcao "Join" espera 2 argumentos (Array de String, Separador)', Call.Line, Call.Col);
+      ArgType := ResolveAliasType(CheckExpr(TASTCallArg(Call.Args[0]).Expr));
+      if (not IsDynamicArrayType(ArgType, ElemType)) or (ResolveAliasType(ElemType) <> 'String') then
+        Error('E0308', Format('Primeiro argumento de "Join" deve ser array of String, recebeu: "%s"', [ArgType]), Call.Line, Call.Col);
+      ArgType := ResolveAliasType(CheckExpr(TASTCallArg(Call.Args[1]).Expr));
+      if ArgType <> 'String' then
+        Error('E0308', Format('Segundo argumento de "Join" deve ser String, recebeu: "%s"', [ArgType]), Call.Line, Call.Col);
+      Exit('String');
+    end;
+
+    if SameText(Call.Callee, 'PadLeft') or SameText(Call.Callee, 'PadRight') then
+    begin
+      if (Call.Args.Count < 2) or (Call.Args.Count > 3) then
+        Error('E0061', Format('Funcao "%s" espera 2 ou 3 argumentos (String, Largura [, Preenchimento])', [Call.Callee]), Call.Line, Call.Col);
+      ArgType := ResolveAliasType(CheckExpr(TASTCallArg(Call.Args[0]).Expr));
+      if ArgType <> 'String' then
+        Error('E0308', Format('Primeiro argumento de "%s" deve ser String, recebeu: "%s"', [Call.Callee, ArgType]), Call.Line, Call.Col);
+      ArgType := ResolveAliasType(CheckExpr(TASTCallArg(Call.Args[1]).Expr));
+      if (not IsIntegerType(ArgType)) and (ArgType <> 'IntLiteral') then
+        Error('E0308', Format('Segundo argumento de "%s" deve ser inteiro, recebeu: "%s"', [Call.Callee, ArgType]), Call.Line, Call.Col);
+      if Call.Args.Count = 3 then
+      begin
+        ArgType := ResolveAliasType(CheckExpr(TASTCallArg(Call.Args[2]).Expr));
+        if (ArgType <> 'String') and (ArgType <> 'Char') then
+          Error('E0308', Format('Terceiro argumento de "%s" deve ser Char ou String, recebeu: "%s"', [Call.Callee, ArgType]), Call.Line, Call.Col);
+      end;
+      Exit('String');
+    end;
+
+    if SameText(Call.Callee, 'RepeatStr') then
+    begin
+      if Call.Args.Count <> 2 then
+        Error('E0061', 'Funcao "RepeatStr" espera 2 argumentos (String, Contagem)', Call.Line, Call.Col);
+      ArgType := ResolveAliasType(CheckExpr(TASTCallArg(Call.Args[0]).Expr));
+      if ArgType <> 'String' then
+        Error('E0308', Format('Primeiro argumento de "RepeatStr" deve ser String, recebeu: "%s"', [ArgType]), Call.Line, Call.Col);
+      ArgType := ResolveAliasType(CheckExpr(TASTCallArg(Call.Args[1]).Expr));
+      if (not IsIntegerType(ArgType)) and (ArgType <> 'IntLiteral') then
+        Error('E0308', Format('Segundo argumento de "RepeatStr" deve ser inteiro, recebeu: "%s"', [ArgType]), Call.Line, Call.Col);
+      Exit('String');
+    end;
+
+    if SameText(Call.Callee, 'StrToFloat') or SameText(Call.Callee, 'TryStrToInt') or SameText(Call.Callee, 'TryStrToFloat') then
+    begin
+      if Call.Args.Count <> 1 then
+        Error('E0061', Format('Funcao "%s" espera 1 argumento (String)', [Call.Callee]), Call.Line, Call.Col);
+      ArgType := ResolveAliasType(CheckExpr(TASTCallArg(Call.Args[0]).Expr));
+      if ArgType <> 'String' then
+        Error('E0308', Format('Argumento de "%s" deve ser String, recebeu: "%s"', [Call.Callee, ArgType]), Call.Line, Call.Col);
+      if SameText(Call.Callee, 'StrToFloat') then Exit('Float64')
+      else if SameText(Call.Callee, 'TryStrToInt') then Exit('Option<Int32>')
+      else Exit('Option<Float64>');
+    end;
+
     if SameText(Call.Callee, 'Abs') then
     begin
       if Call.Args.Count <> 1 then
@@ -1353,6 +1423,48 @@ begin
       else if T2 <> 'IntLiteral' then Exit(T2)
       else if T3 <> 'IntLiteral' then Exit(T3)
       else Exit('Int32');
+    end;
+
+    if SameText(Call.Callee, 'Sqrt') or SameText(Call.Callee, 'Floor') or SameText(Call.Callee, 'Ceil') or
+       SameText(Call.Callee, 'Round') or SameText(Call.Callee, 'Exp') or SameText(Call.Callee, 'Log') or
+       SameText(Call.Callee, 'Sin') or SameText(Call.Callee, 'Cos') or SameText(Call.Callee, 'Tan') then
+    begin
+      if Call.Args.Count <> 1 then
+        Error('E0061', Format('Funcao "%s" espera 1 argumento numerico', [Call.Callee]), Call.Line, Call.Col);
+      T1 := ResolveAliasType(CheckExpr(TASTCallArg(Call.Args[0]).Expr));
+      if (not IsNumericType(T1)) and (T1 <> 'IntLiteral') and (T1 <> 'FloatLiteral') then
+        Error('E0308', Format('Argumento de "%s" deve ser numerico, recebeu: "%s"', [Call.Callee, T1]), Call.Line, Call.Col);
+      Exit('Float64');
+    end;
+
+    if SameText(Call.Callee, 'Pow') or SameText(Call.Callee, 'Atan2') then
+    begin
+      if Call.Args.Count <> 2 then
+        Error('E0061', Format('Funcao "%s" espera 2 argumentos numericos', [Call.Callee]), Call.Line, Call.Col);
+      T1 := ResolveAliasType(CheckExpr(TASTCallArg(Call.Args[0]).Expr));
+      T2 := ResolveAliasType(CheckExpr(TASTCallArg(Call.Args[1]).Expr));
+      if ((not IsNumericType(T1)) and (T1 <> 'IntLiteral') and (T1 <> 'FloatLiteral')) or
+         ((not IsNumericType(T2)) and (T2 <> 'IntLiteral') and (T2 <> 'FloatLiteral')) then
+        Error('E0308', Format('Argumentos de "%s" devem ser numericos, recebeu: "%s", "%s"', [Call.Callee, T1, T2]), Call.Line, Call.Col);
+      Exit('Float64');
+    end;
+
+    if SameText(Call.Callee, 'RandomInt') then
+    begin
+      if Call.Args.Count <> 2 then
+        Error('E0061', 'Funcao "RandomInt" espera 2 argumentos inteiros (Min, Max)', Call.Line, Call.Col);
+      T1 := ResolveAliasType(CheckExpr(TASTCallArg(Call.Args[0]).Expr));
+      T2 := ResolveAliasType(CheckExpr(TASTCallArg(Call.Args[1]).Expr));
+      if ((not IsIntegerType(T1)) and (T1 <> 'IntLiteral')) or ((not IsIntegerType(T2)) and (T2 <> 'IntLiteral')) then
+        Error('E0308', Format('Argumentos de "RandomInt" devem ser inteiros, recebeu: "%s", "%s"', [T1, T2]), Call.Line, Call.Col);
+      Exit('Int32');
+    end;
+
+    if SameText(Call.Callee, 'RandomFloat') then
+    begin
+      if Call.Args.Count <> 0 then
+        Error('E0061', 'Funcao "RandomFloat" nao espera argumentos', Call.Line, Call.Col);
+      Exit('Float64');
     end;
 
     if SameText(Call.Callee, 'Delete') then
@@ -1656,6 +1768,37 @@ begin
       if ArgType <> 'String' then
         Error('E0308', Format('Funcao "FileSize" espera String, recebeu: "%s"', [ArgType]), Call.Line, Call.Col);
       Exit('Int64');
+    end;
+
+    if SameText(Call.Callee, 'ReadLn') then
+    begin
+      if Call.Args.Count <> 0 then
+        Error('E0061', 'Funcao "ReadLn" nao espera argumentos', Call.Line, Call.Col);
+      Exit('String');
+    end;
+
+    if SameText(Call.Callee, 'GetEnv') or SameText(Call.Callee, 'ListDir') then
+    begin
+      if Call.Args.Count <> 1 then
+        Error('E0061', Format('Funcao "%s" espera 1 argumento (String)', [Call.Callee]), Call.Line, Call.Col);
+      ArgType := ResolveAliasType(CheckExpr(TASTCallArg(Call.Args[0]).Expr));
+      if ArgType <> 'String' then
+        Error('E0308', Format('Argumento de "%s" deve ser String, recebeu: "%s"', [Call.Callee, ArgType]), Call.Line, Call.Col);
+      if SameText(Call.Callee, 'ListDir') then Exit('array of String')
+      else Exit('String');
+    end;
+
+    if SameText(Call.Callee, 'SetEnv') or SameText(Call.Callee, 'CopyFile') or SameText(Call.Callee, 'RenameFile') then
+    begin
+      if Call.Args.Count <> 2 then
+        Error('E0061', Format('Funcao "%s" espera 2 argumentos (String, String)', [Call.Callee]), Call.Line, Call.Col);
+      ArgType := ResolveAliasType(CheckExpr(TASTCallArg(Call.Args[0]).Expr));
+      if ArgType <> 'String' then
+        Error('E0308', Format('Primeiro argumento de "%s" deve ser String, recebeu: "%s"', [Call.Callee, ArgType]), Call.Line, Call.Col);
+      ArgType := ResolveAliasType(CheckExpr(TASTCallArg(Call.Args[1]).Expr));
+      if ArgType <> 'String' then
+        Error('E0308', Format('Segundo argumento de "%s" deve ser String, recebeu: "%s"', [Call.Callee, ArgType]), Call.Line, Call.Col);
+      Exit('Bool');
     end;
 
     if Call.Callee = 'GetNanoseconds' then

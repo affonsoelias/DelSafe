@@ -6,4 +6,4 @@ var
 begin
   x := 10 / 0;
   PrintLn(IntToStr(x));
-end.
+end bad_comptime.

@@ -1,6 +1,6 @@
 module OptimizerAndRelease;
 
-function CalcularDiasEmSegundos(borrow dias: Int32): Int32
+function CalcularDiasEmSegundos(borrow dias: Int32) return Int32 is
 var
     segundosPorDia: Int32;
     resultado: Int32;
@@ -9,14 +9,14 @@ begin
     segundosPorDia := 24 * 60 * 60;
     resultado := dias * segundosPorDia;
     return resultado;
-end;
+end CalcularDiasEmSegundos;
 
-function TesteDeadCode(): Int32
+function TesteDeadCode() return Int32 is
 begin
     return 777;
     // Dead Code Elimination: código após return incondicional é eliminado na AST
     PrintLn("ERRO: Codigo morto executado!");
-end;
+end TesteDeadCode;
 
 program Main;
 var
@@ -77,4 +77,4 @@ begin
     Assert(morto = 777, "Retorno de TesteDeadCode deve ser 777");
 
     PrintLn("=== SUCESSO: Todas as otimizacoes de AST validadas! ===");
-end.
+end OptimizerAndRelease.

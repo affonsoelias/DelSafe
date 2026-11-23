@@ -4,6 +4,8 @@ module BlaisevueComponentStore;
 
 import pascal SysUtils;
 
+interface
+
 type
     UserSession = record
         username: String;
@@ -11,18 +13,24 @@ type
         is_authenticated: Bool;
     end;
 
-function CreateUserSession(borrow name: String): UserSession
+function CreateUserSession(borrow name: String) return UserSession;
+function IncrementCounter(mut borrow session: UserSession; borrow delta: Int32) return Int32;
+function GetSessionReport(borrow session: UserSession) return String;
+
+implementation
+
+function CreateUserSession(borrow name: String) return UserSession is
 begin
     return UserSession(name, 0, true);
-end;
+end CreateUserSession;
 
-function IncrementCounter(mut borrow session: UserSession; borrow delta: Int32): Int32
+function IncrementCounter(mut borrow session: UserSession; borrow delta: Int32) return Int32 is
 begin
     session.counter := session.counter + delta;
     return session.counter;
-end;
+end IncrementCounter;
 
-function GetSessionReport(borrow session: UserSession): String
+function GetSessionReport(borrow session: UserSession) return String is
 var
     status: String;
 begin
@@ -33,4 +41,6 @@ begin
     end;
 
     return "Usuario: " + session.username + " | Cliques: " + IntToStr(session.counter) + " | Status: " + status;
-end;
+end GetSessionReport;
+
+end BlaisevueComponentStore.

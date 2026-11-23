@@ -31,4 +31,4 @@ begin
 
     PrintLn("");
     PrintLn("SUCESSO: Codigo Assembly Intel executado nativamente!");
-end.
+end InlineAssemblyIntel.

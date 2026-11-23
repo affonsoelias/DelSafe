@@ -1,24 +1,32 @@
 module vetores_2d;
 
+interface
+
 type
     Ponto2D = record
         x: Float64;
         y: Float64;
     end;
 
-function CriarPonto(x: Float64, y: Float64): Ponto2D
-begin
-    result.x := x;
-    result.y := y;
-end;
+function CriarPonto(x, y: Float64) return Ponto2D;
+function SomarPontos(p1, p2: Ponto2D) return Ponto2D;
+function NormaAoQuadrado(p: Ponto2D) return Float64;
 
-function SomarPontos(p1: Ponto2D, p2: Ponto2D): Ponto2D
-begin
-    result.x := p1.x + p2.x;
-    result.y := p1.y + p2.y;
-end;
+implementation
 
-function NormaAoQuadrado(p: Ponto2D): Float64
+function CriarPonto(x, y: Float64) return Ponto2D is
 begin
-    result := (p.x * p.x) + (p.y * p.y);
-end;
+    return Ponto2D(x: x, y: y);
+end CriarPonto;
+
+function SomarPontos(p1, p2: Ponto2D) return Ponto2D is
+begin
+    return Ponto2D(x: p1.x + p2.x, y: p1.y + p2.y);
+end SomarPontos;
+
+function NormaAoQuadrado(p: Ponto2D) return Float64 is
+begin
+    return (p.x * p.x) + (p.y * p.y);
+end NormaAoQuadrado;
+
+end vetores_2d.

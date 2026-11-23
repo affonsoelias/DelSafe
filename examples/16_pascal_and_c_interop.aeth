@@ -9,7 +9,7 @@ import c "<math.h>";
 // O compilador Aether resolve automaticamente os simbolos
 // a partir dos modulos "import pascal" e "import c" declarados!
 
-function DemonstrarInteroperabilidade(): Void
+procedure DemonstrarInteroperabilidade is
 var
     inicio_ticks: UInt64;
     fim_ticks: UInt64;
@@ -54,9 +54,9 @@ begin
     PrintLn(" [OK] Funcoes externas consumidas de forma 100% transparente");
     PrintLn("      sem nenhuma linha de 'extern' manual!");
     PrintLn("==========================================================");
-end;
+end DemonstrarInteroperabilidade;
 
 program Main;
 begin
     DemonstrarInteroperabilidade();
-end.
+end PascalAndCInterop.

@@ -4,7 +4,7 @@ import arvores.carvalho;
 import caverna.dragao;
 import pascal "AuxiliarPascal";
 
-extern pascal function TriploPascal(x: Int32): Int32;
+extern pascal function TriploPascal(x: Int32) return Int32;
 
 program Main;
 var
@@ -25,4 +25,4 @@ begin
     PrintLn("TriploPascal(15) retornou: %d", res_pas);
 
     PrintLn("=== SUCESSO: Backend Pascal e units externas operacionais! ===");
-end.
+end MainPascal.

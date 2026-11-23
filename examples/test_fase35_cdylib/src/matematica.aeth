@@ -1,5 +1,7 @@
 module matematica;
 
+interface
+
 type
     Ponto2D = record
         x: Float64;
@@ -7,33 +9,41 @@ type
     end;
 
 /// Cria e inicializa uma coordenada 2D
-export function CriarPonto(x: Float64, y: Float64): Ponto2D; cdecl;
-begin
-    result.x := x;
-    result.y := y;
-end;
-
+export cdecl function CriarPonto(x, y: Float64) return Ponto2D;
 /// Soma dois pontos 2D
-export function SomarPontos(p1: Ponto2D, p2: Ponto2D): Ponto2D; cdecl;
-begin
-    result.x := p1.x + p2.x;
-    result.y := p1.y + p2.y;
-end;
-
+export cdecl function SomarPontos(p1, p2: Ponto2D) return Ponto2D;
 /// Retorna a norma euclidiana ao quadrado de um ponto
-export function NormaAoQuadrado(p: Ponto2D): Float64; cdecl;
-begin
-    result := (p.x * p.x) + (p.y * p.y);
-end;
-
+export cdecl function NormaAoQuadrado(p: Ponto2D) return Float64;
 /// Funcao simples para somar dois inteiros de 32 bits
-export function SomarInteiros(a: Int32, b: Int32): Int32; cdecl;
-begin
-    result := a + b;
-end;
-
+export cdecl function SomarInteiros(a, b: Int32) return Int32;
 /// Multiplica dois inteiros de 32 bits
-export function MultiplicarInteiros(a: Int32, b: Int32): Int32; cdecl;
+export cdecl function MultiplicarInteiros(a, b: Int32) return Int32;
+
+implementation
+
+export cdecl function CriarPonto(x, y: Float64) return Ponto2D is
 begin
-    result := a * b;
-end;
+    return Ponto2D(x: x, y: y);
+end CriarPonto;
+
+export cdecl function SomarPontos(p1, p2: Ponto2D) return Ponto2D is
+begin
+    return Ponto2D(x: p1.x + p2.x, y: p1.y + p2.y);
+end SomarPontos;
+
+export cdecl function NormaAoQuadrado(p: Ponto2D) return Float64 is
+begin
+    return (p.x * p.x) + (p.y * p.y);
+end NormaAoQuadrado;
+
+export cdecl function SomarInteiros(a, b: Int32) return Int32 is
+begin
+    return a + b;
+end SomarInteiros;
+
+export cdecl function MultiplicarInteiros(a, b: Int32) return Int32 is
+begin
+    return a * b;
+end MultiplicarInteiros;
+
+end matematica.

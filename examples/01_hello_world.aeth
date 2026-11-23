@@ -4,4 +4,4 @@ program Main;
 begin
     PrintLn("Ola, Mundo do Aether!");
     PrintLn("Unindo a elegancia do Pascal com a forca do Rust.");
-end.
+end HelloWorld.

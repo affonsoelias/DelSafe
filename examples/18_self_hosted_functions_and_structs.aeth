@@ -1,4 +1,4 @@
-module ExemploFuncoesEStructs;
+module self_hosted_functions_and_structs;
 
 type
     Ponto = record
@@ -6,15 +6,15 @@ type
         y: Int32;
     end;
 
-function Dobro(val: Int32): Int32
+function Dobro(val: Int32) return Int32 is
 begin
     return val * 2;
-end;
+end Dobro;
 
-function Somar(a: Int32, b: Int32): Int32
+function Somar(a, b: Int32) return Int32 is
 begin
     return a + b;
-end;
+end Somar;
 
 program Main;
 var
@@ -33,4 +33,4 @@ begin
     resultado := Dobro(resultado);
     PrintLn("Dobro do resultado calculado com sucesso!");
     PrintLn("--- Fim da Execucao! ---");
-end.
+end self_hosted_functions_and_structs.

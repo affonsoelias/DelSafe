@@ -12,4 +12,4 @@ begin
     PrintLn("  Texto: %s", tok.text);
     PrintLn("  Kind : %s", TokenKindToString(borrow tok.kind));
     PrintLn("SUCESSO! Modulo importado via namespace com ponto com exito!");
-end.
+end HierarchicalModules.

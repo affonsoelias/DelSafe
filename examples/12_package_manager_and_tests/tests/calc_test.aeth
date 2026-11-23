@@ -11,4 +11,4 @@ begin
     if t = 30 then
         PrintLn("  [PASS] Triplo(10) = 30");
     end;
-end.
+end CalcTest.

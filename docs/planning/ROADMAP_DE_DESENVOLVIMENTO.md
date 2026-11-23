@@ -876,15 +876,15 @@ Mapeamento técnico completo dos recursos pendentes identificados no compilador 
 - [x] **6.3 Expansão de `[derive(Debug, JSON, Clone, Equals)]` & `FromJSON`**:
   - Estender `uAetherDerives.pas` para suportar campos `Char`, `Enum`, subfaixas, `array` fixo/dinâmico, `Option<T>` e `Result<T, E>`, além de geração automática de `Tipo.FromJSON(json)` para records e enums que derivam `JSON`, com helpers de runtime em Free Pascal e GCC C99. Validado com `tests/13_fase54_modules_pub_inherent_impl_derives_fromjson_test.aeth` (`13/13 PASS` nos dois backends).
 
-### 📋 Fase 55: 7. Biblioteca Padrão (`std/*.aeth`) e Intrínsecos de Sistema - PLANEJADA
-- [ ] **7.1 Strings & Conversões Avançadas (`Split`, `Join`, `PadLeft`, `PadRight`, `RepeatStr`, `StrToFloat`, `TryStrToInt`, `TryStrToFloat`)**:
-  - Implementar utilitários de texto essenciais para processamento de dados e conversões seguras retornando `Option<T>` nos dois backends.
-- [ ] **7.2 Matemática Completa na `SymbolTable` e Runtime**:
-  - Registrar e emitir `Floor`, `Ceil`, `Round`, `Pow`, `Exp`, `Log`, `Sin`, `Cos`, `Tan`, `Atan2`, `RandomInt` e `RandomFloat` de forma uniforme no Free Pascal e GCC C99.
-- [ ] **7.3 Console, Variáveis de Ambiente e Sistema de Arquivos (`Print`, `ReadLn`, `GetEnv`, `SetEnv`, `ListDir`, `CopyFile`, `RenameFile`)**:
-  - Completar I/O interativo, acesso a ambiente do SO e manipulação de arquivos/diretórios em `std/io.aeth` e `std/fs.aeth`.
-- [ ] **7.4 Parser JSON Estruturado em `std/json.aeth`**:
-  - Substituir a busca por substring por um parser recursivo compatível com objetos aninhados, arrays `[...]`, `Float64` e escapes `\"`/`\\`/`\n`.
+### ✅ Fase 55: 7. Biblioteca Padrão (`std/*.aeth`) e Intrínsecos de Sistema - CONCLUÍDA
+- [x] **7.1 Strings & Conversões Avançadas (`Split`, `Join`, `PadLeft`, `PadRight`, `RepeatStr`, `StrToFloat`, `TryStrToInt`, `TryStrToFloat`)**:
+  - Implementados na `TSymbolTable`, `uAetherTypeChecker.pas`, `uAetherEmitterPascal.pas`, `uAetherEmitterC.pas` e encapsulados em `std/strings.aeth`.
+- [x] **7.2 Matemática Completa na `SymbolTable` e Runtime**:
+  - Registrados e emitidos `Sqrt`, `Floor`, `Ceil`, `Round`, `Pow`, `Exp`, `Log`, `Sin`, `Cos`, `Tan`, `Atan2`, `RandomInt` e `RandomFloat` de forma uniforme no Free Pascal e GCC C99, atualizando `std/math.aeth`.
+- [x] **7.3 Console, Variáveis de Ambiente e Sistema de Arquivos (`Print`, `ReadLn`, `GetEnv`, `SetEnv`, `ListDir`, `CopyFile`, `RenameFile`)**:
+  - Completados I/O interativo, acesso a ambiente do SO e manipulação de arquivos/diretórios em `std/io.aeth`, `std/fs.aeth` e nos dois back-ends nativos.
+- [x] **7.4 Parser JSON Estruturado em `std/json.aeth`**:
+  - Implementado parser descendente recursivo estruturado em `std/json.aeth` compatível com validação gramatical completa, objetos aninhados (`ExtractObject`), arrays (`ExtractArray`, `ArrayLength`, `ArrayGet`, `ArrayGetString`, `ArrayGetInt`, `ArrayGetFloat`), `Float64` (`AddFloat`, `ExtractFloat`, `AddRaw`) e escapes (`\"`/`\\`/`\n`/`\t`/`\r`). Validado em `tests/16_fase55_stdlib_intrinsics_json_test.aeth` (`16/16 PASS` em Free Pascal e GCC C99).
 - [x] **7.5 Emissão Sob Demanda do Mini-Runtime Embutido (*On-Demand Runtime / Tree-Shaking no Emissor Pascal e C99*)**:
   - Refatorado `uAetherEmitterPascal.pas` e `uAetherEmitterC.pas` com análise de alcançabilidade (eliminando símbolos importados não utilizados de `std/*.aeth`) e emissão sob demanda dos helpers do runtime (`AetherSocket*`, `AetherFile*`, `AetherJson*`, `AetherDynPop_*`, `AetherResult`, `AetherOption`, `AetherTask`, etc.). Projetos simples como o template de `aetherc new` caíram para ~32 linhas em Pascal e ~64 linhas em C99.
 - [x] **7.6 Padronização Agnóstica de Diretórios de Build em `aetherc new` / `init` (`uAetherProject.pas`)**:

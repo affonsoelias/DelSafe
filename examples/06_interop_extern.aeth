@@ -4,16 +4,15 @@ import pascal Math;
 
 // 1. FFI Explícita (extern c): Necessária para invocar funções C de bibliotecas
 // nativas / libc (como puts) nos backends FPC e GCC com checagem rigorosa de tipos.
-extern c function puts(s: String): Int32;
+extern c function puts(s: String) return Int32;
 
 // 2. Nota sobre 'sqrt': Funções de módulos padrão (como Math e SysUtils)
 // são auto-importadas sem necessidade de 'extern' manual (Zero-Boilerplate).
 // Aqui declaramos com 'contract require' para demonstrar contratos em funções FFI:
-extern c function sqrt(x: Float64): Float64
+extern c function sqrt(x: Float64) return Float64
 contract
     require
         x >= 0.0;
-;
 
 program Main;
 var
@@ -34,4 +33,4 @@ begin
 
     PrintLn("");
     PrintLn("Interoperabilidade C (extern c) e import Pascal funcionando com sucesso!");
-end.
+end InteropExtern.

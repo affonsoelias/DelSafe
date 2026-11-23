@@ -113,7 +113,6 @@ extern c function sqrt(x: Float64) return Float64
 contract
     require
         x >= 0.0;
-;
 ```
 
 This ensures your Aether code protects against passing bad data to foreign C routines before the foreign call even occurs.

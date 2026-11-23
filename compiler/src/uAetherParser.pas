@@ -989,14 +989,21 @@ var
   ParamNames: TStringList;
 
   procedure ParseOptionalContracts;
+    function AtContractBoundary: Boolean;
+    begin
+      Result := Check(tokVar) or Check(tokLet) or Check(tokBegin) or Check(tokEnd) or
+                Check(tokFunction) or Check(tokProcedure) or Check(tokType) or Check(tokConst) or
+                Check(tokTrait) or Check(tokImplementation) or Check(tokProgram) or Check(tokExtern) or
+                Check(tokExport) or Check(tokAsync) or Check(tokPub) or Check(tokPriv) or
+                Check(tokImpl) or Check(tokSemicolon) or Check(tokAt) or Check(tokLBracket) or
+                Check(tokEOF);
+    end;
   begin
     if Match(tokContract) or Check(tokRequire) or Check(tokEnsure) then
     begin
       if Match(tokRequire) then
       begin
-        while not Check(tokEnsure) and not Check(tokVar) and not Check(tokLet) and not Check(tokBegin) and
-              not Check(tokEnd) and not Check(tokFunction) and not Check(tokProcedure) and not Check(tokType) and
-              not Check(tokConst) and not Check(tokTrait) and not Check(tokImplementation) and not Check(tokEOF) do
+        while (not Check(tokEnsure)) and (not AtContractBoundary) do
         begin
           Result.Requires.Add(ParseExpr);
           Expect(tokSemicolon, 'Esperado ";" apos expressao de require');
@@ -1005,9 +1012,7 @@ var
 
       if Match(tokEnsure) then
       begin
-        while not Check(tokVar) and not Check(tokLet) and not Check(tokBegin) and
-              not Check(tokEnd) and not Check(tokFunction) and not Check(tokProcedure) and not Check(tokType) and
-              not Check(tokConst) and not Check(tokTrait) and not Check(tokImplementation) and not Check(tokEOF) do
+        while not AtContractBoundary do
         begin
           Result.Ensures.Add(ParseExpr);
           Expect(tokSemicolon, 'Esperado ";" apos expressao de ensure');
@@ -1173,10 +1178,10 @@ begin
       Result.ReturnType := ReturnType;
     end;
 
-    // Modificadores opcionais apos retorno/assinatura: export; cdecl; stdcall;
+    // Modificadores opcionais apos retorno/assinatura (na mesma linha): export; cdecl; stdcall;
     while Check(tokExport) or Check(tokCdecl) or
           (Check(tokIdentifier) and (SameText(FCurTok.Value, 'export') or SameText(FCurTok.Value, 'cdecl') or SameText(FCurTok.Value, 'stdcall'))) or
-          (Check(tokSemicolon) and ((FPeekTok.Kind in [tokExport, tokCdecl]) or
+          (Check(tokSemicolon) and (FPeekTok.Line = FCurTok.Line) and ((FPeekTok.Kind in [tokExport, tokCdecl]) or
             ((FPeekTok.Kind = tokIdentifier) and (SameText(FPeekTok.Value, 'export') or SameText(FPeekTok.Value, 'cdecl') or SameText(FPeekTok.Value, 'stdcall'))))) do
     begin
       if Match(tokSemicolon) then
@@ -1198,9 +1203,11 @@ begin
       end;
     end;
 
-    // Se for extern, nao possui "is" nem corpo
+    // Se for extern, nao possui "is" nem corpo (pode ter contract antes de ";")
     if IsExt then
     begin
+      if Check(tokContract) or Check(tokRequire) or Check(tokEnsure) then
+        ParseOptionalContracts;
       if Check(tokSemicolon) then
         Match(tokSemicolon);
       Exit;

@@ -15,6 +15,9 @@ function RemoverDiretorio(borrow path: String) return Bool;
 function ApagarArquivo(borrow path: String) return Bool;
 function ExisteDiretorio(borrow path: String) return Bool;
 function TamanhoArquivo(borrow path: String) return Int64;
+function ListarDiretorio(borrow path: String) return array of String;
+function CopiarArquivo(borrow origem, destino: String) return Bool;
+function RenomearArquivo(borrow antigo, novo: String) return Bool;
 function ObterInfo(borrow path: String) return FileInfo;
 
 implementation
@@ -43,6 +46,21 @@ function TamanhoArquivo(borrow path: String) return Int64 is
 begin
     return FileSize(borrow path);
 end TamanhoArquivo;
+
+function ListarDiretorio(borrow path: String) return array of String is
+begin
+    return ListDir(path);
+end ListarDiretorio;
+
+function CopiarArquivo(borrow origem, destino: String) return Bool is
+begin
+    return CopyFile(origem, destino);
+end CopiarArquivo;
+
+function RenomearArquivo(borrow antigo, novo: String) return Bool is
+begin
+    return RenameFile(antigo, novo);
+end RenomearArquivo;
 
 function ObterInfo(borrow path: String) return FileInfo is
 var

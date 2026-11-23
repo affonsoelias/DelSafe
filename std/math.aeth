@@ -1,11 +1,6 @@
 module Math;
 
-import pascal Math;
-
 interface
-
-extern function sqrt(borrow x: Float64) return Float64;
-extern function pow(borrow base, exp: Float64) return Float64;
 
 type
     MathError = enum
@@ -71,7 +66,7 @@ begin
     if x < 0.0 then
         return Err(MathError.DominioInvalido);
     else
-        return Ok(sqrt(borrow x));
+        return Ok(Sqrt(x));
     end;
 end SqrtSafe;
 

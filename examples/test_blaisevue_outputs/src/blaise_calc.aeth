@@ -1,11 +1,20 @@
 module blaise_calc;
 
-function SomarValores(a: Int32, b: Int32): Int32
+interface
+
+function SomarValores(a, b: Int32) return Int32;
+function MultiplicarValores(a, b: Int32) return Int32;
+
+implementation
+
+function SomarValores(a, b: Int32) return Int32 is
 begin
     return a + b;
-end;
+end SomarValores;
 
-function MultiplicarValores(a: Int32, b: Int32): Int32
+function MultiplicarValores(a, b: Int32) return Int32 is
 begin
     return a * b;
-end;
+end MultiplicarValores;
+
+end blaise_calc.

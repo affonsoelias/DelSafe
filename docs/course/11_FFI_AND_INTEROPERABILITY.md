@@ -176,13 +176,11 @@ extern c function sqrt(x: Float64) return Float64
 contract
     require
         x >= 0.0; // The C function will NEVER receive a negative number!
-;
 
 extern c function puts(s: String) return Int32
 contract
     require
         Length(s) > 0; // Guard against empty or null strings
-;
 
 program Main;
 var

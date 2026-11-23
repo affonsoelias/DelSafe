@@ -1,4 +1,4 @@
-module SelfHostedDemo;
+module self_hosted_compiler_demo;
 
 program Main;
 var
@@ -16,4 +16,4 @@ begin
         contador := contador + 1;
     end;
     PrintLn("Fim do teste!");
-end.
+end self_hosted_compiler_demo.

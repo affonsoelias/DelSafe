@@ -1306,7 +1306,12 @@ begin
        (Call.Callee = 'IntToStr') or (Call.Callee = 'FloatToStr') or (Call.Callee = 'BoolToStr') or (Call.Callee = 'CharToStr') or
        (Call.Callee = '__InterpToStr') or (Call.Callee = '__JsonGetStr') or (Call.Callee = '__JsonGetObj') or
        (Call.Callee = 'SocketRecv') or (Call.Callee = 'ParamStr') or
-       SameText(Call.Callee, 'Trim') or SameText(Call.Callee, 'UpperCase') or SameText(Call.Callee, 'LowerCase') or SameText(Call.Callee, 'Replace') then Exit('String');
+       SameText(Call.Callee, 'Trim') or SameText(Call.Callee, 'UpperCase') or SameText(Call.Callee, 'LowerCase') or SameText(Call.Callee, 'Replace') or
+       SameText(Call.Callee, 'Join') or SameText(Call.Callee, 'PadLeft') or SameText(Call.Callee, 'PadRight') or
+       SameText(Call.Callee, 'RepeatStr') or SameText(Call.Callee, 'ReadLn') or SameText(Call.Callee, 'GetEnv') then Exit('String');
+    if SameText(Call.Callee, 'Split') or SameText(Call.Callee, 'ListDir') then Exit('array of String');
+    if SameText(Call.Callee, 'TryStrToInt') then Exit('Option<Int32>');
+    if SameText(Call.Callee, 'TryStrToFloat') then Exit('Option<Float64>');
     if (Call.Callee = '__JsonGetInt') then Exit('Int32');
     if (Call.Callee = '__JsonGetFloat') then Exit('Float64');
     if (Call.Callee = '__JsonGetBool') or (Call.Callee = '__JsonHasValue') then Exit('Bool');
@@ -1344,18 +1349,23 @@ begin
             Exit(TASTArrayDecl(FModule.Types[I]).ElemType);
     end;
     if SameText(Call.Callee, 'Length') or SameText(Call.Callee, 'Count') or SameText(Call.Callee, 'Ord') or SameText(Call.Callee, 'SizeOf') or
-       SameText(Call.Callee, 'IndexOf') or (Call.Callee = 'StrToInt') or (Call.Callee = 'SocketCreate') or
+       SameText(Call.Callee, 'IndexOf') or (Call.Callee = 'StrToInt') or SameText(Call.Callee, 'RandomInt') or (Call.Callee = 'SocketCreate') or
        (Call.Callee = 'SocketListen') or (Call.Callee = 'SocketAccept') or (Call.Callee = 'SocketConnect') or
        (Call.Callee = 'SocketSend') or (Call.Callee = 'ParamCount') then Exit('Int32');
-    if (Call.Callee = 'sin') or (Call.Callee = 'cos') or (Call.Callee = 'tan') or (Call.Callee = 'sqrt') or (Call.Callee = 'Now') then Exit('Float64');
+    if SameText(Call.Callee, 'sin') or SameText(Call.Callee, 'cos') or SameText(Call.Callee, 'tan') or
+       SameText(Call.Callee, 'sqrt') or SameText(Call.Callee, 'floor') or SameText(Call.Callee, 'ceil') or
+       SameText(Call.Callee, 'round') or SameText(Call.Callee, 'pow') or SameText(Call.Callee, 'exp') or
+       SameText(Call.Callee, 'log') or SameText(Call.Callee, 'atan2') or SameText(Call.Callee, 'RandomFloat') or
+       SameText(Call.Callee, 'StrToFloat') or (Call.Callee = 'Now') then Exit('Float64');
     if (Call.Callee = 'GetTickCount64') or (Call.Callee = 'GetNanoseconds') then Exit('UInt64');
     if (Call.Callee = 'FileSize') then Exit('Int64');
     if SameText(Call.Callee, 'Contains') or SameText(Call.Callee, 'StartsWith') or SameText(Call.Callee, 'EndsWith') or
        (Call.Callee = 'FileExists') or (Call.Callee = 'WriteFile') or (Call.Callee = 'CreateDir') or (Call.Callee = 'RemoveDir') or
-       (Call.Callee = 'DeleteFile') or (Call.Callee = 'DirExists') then Exit('Bool');
+       (Call.Callee = 'DeleteFile') or (Call.Callee = 'DirExists') or
+       SameText(Call.Callee, 'SetEnv') or SameText(Call.Callee, 'CopyFile') or SameText(Call.Callee, 'RenameFile') then Exit('Bool');
     if SameText(Call.Callee, 'Clear') or SameText(Call.Callee, 'Delete') or SameText(Call.Callee, 'Insert') or
        SameText(Call.Callee, 'Inc') or SameText(Call.Callee, 'Dec') or SameText(Call.Callee, 'Remove') or
-       (Call.Callee = 'SocketClose') or (Call.Callee = 'Assert') or (Call.Callee = 'SleepMs') then Exit('Void');
+       SameText(Call.Callee, 'Print') or (Call.Callee = 'SocketClose') or (Call.Callee = 'Assert') or (Call.Callee = 'SleepMs') then Exit('Void');
     if IsTypeIdentifier(Call.Callee) then Exit(Call.Callee);
     if Assigned(FModule) then
     begin
@@ -1843,28 +1853,29 @@ begin
   begin
     Call := TASTCallExpr(Expr);
 
-    if (Call.Callee = 'PrintLn') or (Call.Callee = 'WriteLn') then
+    if (Call.Callee = 'PrintLn') or (Call.Callee = 'WriteLn') or (Call.Callee = 'Print') then
     begin
+      if Call.Callee = 'Print' then ValF := '' else ValF := '\n';
       if Call.Args.Count = 1 then
       begin
         ArgType := ResolveAliasType(GetExprTypeName(TASTCallArg(Call.Args[0]).Expr));
         if (ArgType = 'Int32') or (ArgType = 'Int16') or (ArgType = 'Int8') or (ArgType = 'UInt16') or (ArgType = 'UInt8') then
-          Result := 'printf("%d\n", ' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + ')'
+          Result := 'printf("%d' + ValF + '", ' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + ')'
         else if (ArgType = 'Int64') or (ArgType = 'UInt64') or (ArgType = 'UInt32') then
-          Result := 'printf("%lld\n", (long long)(' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + '))'
+          Result := 'printf("%lld' + ValF + '", (long long)(' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + '))'
         else if (ArgType = 'Float64') or (ArgType = 'Float32') then
-          Result := 'printf("%f\n", ' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + ')'
+          Result := 'printf("%f' + ValF + '", ' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + ')'
         else if (ArgType = 'Bool') then
-          Result := 'printf("%s\n", (' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + ') ? "true" : "false")'
+          Result := 'printf("%s' + ValF + '", (' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + ') ? "true" : "false")'
         else if (ArgType = 'Char') then
-          Result := 'printf("%c\n", ' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + ')'
+          Result := 'printf("%c' + ValF + '", ' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + ')'
         else
-          Result := 'printf("%s\n", ' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + ')';
+          Result := 'printf("%s' + ValF + '", ' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + ')';
       end
       else
       begin
         ArgsStr := EmitExpr(TASTCallArg(Call.Args[0]).Expr);
-        if (Length(ArgsStr) >= 2) and (ArgsStr[Length(ArgsStr)] = '"') then
+        if (ValF <> '') and (Length(ArgsStr) >= 2) and (ArgsStr[Length(ArgsStr)] = '"') then
           ArgsStr := Copy(ArgsStr, 1, Length(ArgsStr) - 1) + '\n"';
         for I := 1 to Call.Args.Count - 1 do
         begin
@@ -2172,6 +2183,121 @@ begin
       Exit;
     end;
 
+    if SameText(Call.Callee, 'Split') then
+    begin
+      Result := Format('AetherStrSplit(%s, %s)', [EmitExpr(TASTCallArg(Call.Args[0]).Expr), EmitExpr(TASTCallArg(Call.Args[1]).Expr)]);
+      Exit;
+    end;
+
+    if SameText(Call.Callee, 'Join') then
+    begin
+      Result := Format('AetherStrJoin(%s, %s)', [EmitExpr(TASTCallArg(Call.Args[0]).Expr), EmitExpr(TASTCallArg(Call.Args[1]).Expr)]);
+      Exit;
+    end;
+
+    if SameText(Call.Callee, 'PadLeft') or SameText(Call.Callee, 'PadRight') then
+    begin
+      if Call.Args.Count = 2 then
+        TargetStr := '" "'
+      else
+      begin
+        TargetT := ResolveAliasType(GetExprTypeName(TASTCallArg(Call.Args[2]).Expr));
+        if TargetT = 'Char' then
+          TargetStr := 'AetherCharToStr(' + EmitExpr(TASTCallArg(Call.Args[2]).Expr) + ')'
+        else
+          TargetStr := EmitExpr(TASTCallArg(Call.Args[2]).Expr);
+      end;
+      if SameText(Call.Callee, 'PadLeft') then
+        Result := Format('AetherPadLeft(%s, %s, %s)', [EmitExpr(TASTCallArg(Call.Args[0]).Expr), EmitExpr(TASTCallArg(Call.Args[1]).Expr), TargetStr])
+      else
+        Result := Format('AetherPadRight(%s, %s, %s)', [EmitExpr(TASTCallArg(Call.Args[0]).Expr), EmitExpr(TASTCallArg(Call.Args[1]).Expr), TargetStr]);
+      Exit;
+    end;
+
+    if SameText(Call.Callee, 'RepeatStr') then
+    begin
+      Result := Format('AetherRepeatStr(%s, %s)', [EmitExpr(TASTCallArg(Call.Args[0]).Expr), EmitExpr(TASTCallArg(Call.Args[1]).Expr)]);
+      Exit;
+    end;
+
+    if SameText(Call.Callee, 'Sqrt') then
+    begin
+      Result := 'sqrt((double)(' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + '))';
+      Exit;
+    end;
+
+    if SameText(Call.Callee, 'Floor') then
+    begin
+      Result := 'floor((double)(' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + '))';
+      Exit;
+    end;
+
+    if SameText(Call.Callee, 'Ceil') then
+    begin
+      Result := 'ceil((double)(' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + '))';
+      Exit;
+    end;
+
+    if SameText(Call.Callee, 'Round') then
+    begin
+      Result := 'round((double)(' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + '))';
+      Exit;
+    end;
+
+    if SameText(Call.Callee, 'Pow') then
+    begin
+      Result := Format('pow((double)(%s), (double)(%s))', [EmitExpr(TASTCallArg(Call.Args[0]).Expr), EmitExpr(TASTCallArg(Call.Args[1]).Expr)]);
+      Exit;
+    end;
+
+    if SameText(Call.Callee, 'Exp') then
+    begin
+      Result := 'exp((double)(' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + '))';
+      Exit;
+    end;
+
+    if SameText(Call.Callee, 'Log') then
+    begin
+      Result := 'log((double)(' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + '))';
+      Exit;
+    end;
+
+    if SameText(Call.Callee, 'Sin') then
+    begin
+      Result := 'sin((double)(' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + '))';
+      Exit;
+    end;
+
+    if SameText(Call.Callee, 'Cos') then
+    begin
+      Result := 'cos((double)(' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + '))';
+      Exit;
+    end;
+
+    if SameText(Call.Callee, 'Tan') then
+    begin
+      Result := 'tan((double)(' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + '))';
+      Exit;
+    end;
+
+    if SameText(Call.Callee, 'Atan2') then
+    begin
+      Result := Format('atan2((double)(%s), (double)(%s))', [EmitExpr(TASTCallArg(Call.Args[0]).Expr), EmitExpr(TASTCallArg(Call.Args[1]).Expr)]);
+      Exit;
+    end;
+
+    if SameText(Call.Callee, 'RandomInt') then
+    begin
+      Result := Format('AetherRandomInt(%s, %s)', [EmitExpr(TASTCallArg(Call.Args[0]).Expr), EmitExpr(TASTCallArg(Call.Args[1]).Expr)]);
+      Exit;
+    end;
+
+    if SameText(Call.Callee, 'RandomFloat') then
+    begin
+      Result := 'AetherRandomFloat()';
+      Exit;
+    end;
+
     if SameText(Call.Callee, 'Abs') then
     begin
       TargetT := ResolveAliasType(GetExprTypeName(TASTCallArg(Call.Args[0]).Expr));
@@ -2349,6 +2475,42 @@ begin
       Exit;
     end;
 
+    if SameText(Call.Callee, 'ListDir') then
+    begin
+      Result := 'AetherListDir(' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + ')';
+      Exit;
+    end;
+
+    if SameText(Call.Callee, 'CopyFile') then
+    begin
+      Result := Format('AetherCopyFile(%s, %s)', [EmitExpr(TASTCallArg(Call.Args[0]).Expr), EmitExpr(TASTCallArg(Call.Args[1]).Expr)]);
+      Exit;
+    end;
+
+    if SameText(Call.Callee, 'RenameFile') then
+    begin
+      Result := Format('AetherRenameFile(%s, %s)', [EmitExpr(TASTCallArg(Call.Args[0]).Expr), EmitExpr(TASTCallArg(Call.Args[1]).Expr)]);
+      Exit;
+    end;
+
+    if SameText(Call.Callee, 'ReadLn') then
+    begin
+      Result := 'AetherReadLn()';
+      Exit;
+    end;
+
+    if SameText(Call.Callee, 'GetEnv') then
+    begin
+      Result := 'AetherGetEnv(' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + ')';
+      Exit;
+    end;
+
+    if SameText(Call.Callee, 'SetEnv') then
+    begin
+      Result := Format('AetherSetEnv(%s, %s)', [EmitExpr(TASTCallArg(Call.Args[0]).Expr), EmitExpr(TASTCallArg(Call.Args[1]).Expr)]);
+      Exit;
+    end;
+
     if Call.Callee = 'GetNanoseconds' then
     begin
       Result := 'AetherGetNanoseconds()';
@@ -2382,6 +2544,24 @@ begin
     if Call.Callee = 'StrToInt' then
     begin
       Result := 'AetherStrToInt(' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + ')';
+      Exit;
+    end;
+
+    if SameText(Call.Callee, 'StrToFloat') then
+    begin
+      Result := 'AetherStrToFloat(' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + ')';
+      Exit;
+    end;
+
+    if SameText(Call.Callee, 'TryStrToInt') then
+    begin
+      Result := 'AetherTryStrToInt(' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + ')';
+      Exit;
+    end;
+
+    if SameText(Call.Callee, 'TryStrToFloat') then
+    begin
+      Result := 'AetherTryStrToFloat(' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + ')';
       Exit;
     end;
 
@@ -2618,12 +2798,17 @@ function TAetherEmitterC.IsNonBorrowArgCapture(Call: TASTCallExpr; ArgIdx: Integ
 var
   Fn: TASTFunction;
 begin
-  if SameText(Call.Callee, 'PrintLn') or SameText(Call.Callee, 'WriteLn') or SameText(Call.Callee, 'Assert') or
+  if SameText(Call.Callee, 'PrintLn') or SameText(Call.Callee, 'Print') or SameText(Call.Callee, 'WriteLn') or SameText(Call.Callee, 'Assert') or
      SameText(Call.Callee, 'Length') or SameText(Call.Callee, 'Count') or SameText(Call.Callee, 'Contains') or
      SameText(Call.Callee, 'High') or SameText(Call.Callee, 'Low') or SameText(Call.Callee, 'Pop') or
      SameText(Call.Callee, 'Clear') or SameText(Call.Callee, 'Remove') or SameText(Call.Callee, 'Delete') or
      SameText(Call.Callee, 'Slice') or SameText(Call.Callee, 'SetLength') or SameText(Call.Callee, 'Free') or
-     SameText(Call.Callee, 'Dispose') or SameText(Call.Callee, 'Addr') then
+     SameText(Call.Callee, 'Dispose') or SameText(Call.Callee, 'Addr') or
+     SameText(Call.Callee, 'Split') or SameText(Call.Callee, 'Join') or SameText(Call.Callee, 'PadLeft') or
+     SameText(Call.Callee, 'PadRight') or SameText(Call.Callee, 'RepeatStr') or SameText(Call.Callee, 'StrToFloat') or
+     SameText(Call.Callee, 'TryStrToInt') or SameText(Call.Callee, 'TryStrToFloat') or SameText(Call.Callee, 'GetEnv') or
+     SameText(Call.Callee, 'SetEnv') or SameText(Call.Callee, 'ListDir') or SameText(Call.Callee, 'CopyFile') or
+     SameText(Call.Callee, 'RenameFile') then
     Exit(False);
   if SameText(Call.Callee, 'Push') then
     Exit(ArgIdx = 1);
@@ -4089,14 +4274,19 @@ begin
   NeedFileIO := (Pos('AetherFileExists', ReachText) > 0) or (Pos('AetherReadFile', ReachText) > 0) or
                 (Pos('AetherWriteFile', ReachText) > 0) or (Pos('AetherCreateDir', ReachText) > 0) or
                 (Pos('AetherRemoveDir', ReachText) > 0) or (Pos('AetherDeleteFile', ReachText) > 0) or
-                (Pos('AetherDirExists', ReachText) > 0) or (Pos('AetherFileSize', ReachText) > 0);
+                (Pos('AetherDirExists', ReachText) > 0) or (Pos('AetherFileSize', ReachText) > 0) or
+                (Pos('AetherListDir', ReachText) > 0) or (Pos('AetherCopyFile', ReachText) > 0) or
+                (Pos('AetherRenameFile', ReachText) > 0);
   NeedJson := (Pos('AetherJson', ReachText) > 0);
-  NeedDyn := (Pos('AetherDyn', ReachText) > 0);
+  NeedDyn := (Pos('AetherDyn', ReachText) > 0) or (Pos('AetherStrSplit', ReachText) > 0) or
+             (Pos('AetherStrJoin', ReachText) > 0) or (Pos('AetherListDir', ReachText) > 0);
   NeedRaise := (Pos('AetherRaise', ReachText) > 0) or (Pos('g_aether_jmp_', ReachText) > 0);
   NeedTime := (Pos('AetherGetNanoseconds', ReachText) > 0) or (Pos('AetherSleepMs', ReachText) > 0) or
-              (Pos('AetherPascalNow', ReachText) > 0) or (Pos('AetherPascalGetTickCount64', ReachText) > 0);
+              (Pos('AetherPascalNow', ReachText) > 0) or (Pos('AetherPascalGetTickCount64', ReachText) > 0) or
+              (Pos('AetherRandomInt', ReachText) > 0) or (Pos('AetherRandomFloat', ReachText) > 0);
   NeedResult := (Pos('AetherResult', ReachText) > 0);
-  NeedOption := (Pos('AetherOption', ReachText) > 0);
+  NeedOption := (Pos('AetherOption', ReachText) > 0) or (Pos('AetherTryStrToInt', ReachText) > 0) or
+                (Pos('AetherTryStrToFloat', ReachText) > 0);
   NeedTask := (Pos('AetherTask', ReachText) > 0);
   FNeedCliArgs := (Pos('AetherParamCount', ReachText) > 0) or (Pos('AetherParamStr', ReachText) > 0);
 
@@ -4175,6 +4365,8 @@ begin
       Emit('#include <netinet/in.h>');
       Emit('#include <arpa/inet.h>');
     end;
+    if NeedFileIO then
+      Emit('#include <dirent.h>');
     Emit('#include <unistd.h>');
     Emit('#endif');
   end;
@@ -4959,6 +5151,7 @@ begin
     Emit('');
   end;
 
+  if Pos('AetherOption', ReachText) > 0 then begin end; // keep anchor
   if NeedOption then
   begin
     Emit('typedef struct {');
@@ -4967,6 +5160,323 @@ begin
     Emit('    double num_val;');
     Emit('    const char* str_val;');
     Emit('} AetherOption;');
+    Emit('');
+  end;
+
+  if Pos('AetherPadLeft', ReachText) > 0 then
+  begin
+    Emit('static inline char* AetherPadLeft(const char* s, int32_t width, const char* pad) {');
+    Emit('    const char* src = s ? s : "";');
+    Emit('    size_t sl = strlen(src);');
+    Emit('    if ((int32_t)sl >= width) { char* c = (char*)malloc(sl + 1); memcpy(c, src, sl + 1); return c; }');
+    Emit('    const char* p = (pad && pad[0]) ? pad : " ";');
+    Emit('    size_t pl = strlen(p);');
+    Emit('    size_t need = (size_t)width - sl;');
+    Emit('    char* res = (char*)malloc((size_t)width + 1);');
+    Emit('    for (size_t i = 0; i < need; i++) res[i] = p[i % pl];');
+    Emit('    memcpy(res + need, src, sl + 1);');
+    Emit('    return res;');
+    Emit('}');
+    Emit('');
+  end;
+
+  if Pos('AetherPadRight', ReachText) > 0 then
+  begin
+    Emit('static inline char* AetherPadRight(const char* s, int32_t width, const char* pad) {');
+    Emit('    const char* src = s ? s : "";');
+    Emit('    size_t sl = strlen(src);');
+    Emit('    if ((int32_t)sl >= width) { char* c = (char*)malloc(sl + 1); memcpy(c, src, sl + 1); return c; }');
+    Emit('    const char* p = (pad && pad[0]) ? pad : " ";');
+    Emit('    size_t pl = strlen(p);');
+    Emit('    size_t need = (size_t)width - sl;');
+    Emit('    char* res = (char*)malloc((size_t)width + 1);');
+    Emit('    memcpy(res, src, sl);');
+    Emit('    for (size_t i = 0; i < need; i++) res[sl + i] = p[i % pl];');
+    Emit('    res[sl + need] = ''\0'';');
+    Emit('    return res;');
+    Emit('}');
+    Emit('');
+  end;
+
+  if Pos('AetherRepeatStr', ReachText) > 0 then
+  begin
+    Emit('static inline char* AetherRepeatStr(const char* s, int32_t count) {');
+    Emit('    if (!s || s[0] == ''\0'' || count <= 0) { char* e = (char*)malloc(1); e[0] = ''\0''; return e; }');
+    Emit('    size_t sl = strlen(s);');
+    Emit('    size_t total = sl * (size_t)count;');
+    Emit('    char* res = (char*)malloc(total + 1);');
+    Emit('    for (int32_t i = 0; i < count; i++) memcpy(res + (size_t)i * sl, s, sl);');
+    Emit('    res[total] = ''\0'';');
+    Emit('    return res;');
+    Emit('}');
+    Emit('');
+  end;
+
+  if Pos('AetherStrToFloat', ReachText) > 0 then
+  begin
+    Emit('static inline double AetherStrToFloat(const char* s) {');
+    Emit('    if (!s) return 0.0;');
+    Emit('    while (*s == '' '' || *s == ''\t'' || *s == ''\n'' || *s == ''\r'') s++;');
+    Emit('    if (*s == ''\0'') return 0.0;');
+    Emit('    char* endp = NULL;');
+    Emit('    double v = strtod(s, &endp);');
+    Emit('    if (endp == s) return 0.0;');
+    Emit('    return v;');
+    Emit('}');
+    Emit('');
+  end;
+
+  if Pos('AetherTryStrToInt', ReachText) > 0 then
+  begin
+    Emit('static inline AetherOption AetherTryStrToInt(const char* s) {');
+    Emit('    if (!s) return ((AetherOption){ .is_some = false, .is_none = true, .num_val = 0, .str_val = "" });');
+    Emit('    while (*s == '' '' || *s == ''\t'' || *s == ''\n'' || *s == ''\r'') s++;');
+    Emit('    if (*s == ''\0'') return ((AetherOption){ .is_some = false, .is_none = true, .num_val = 0, .str_val = "" });');
+    Emit('    char* endp = NULL;');
+    Emit('    long long v = strtoll(s, &endp, 10);');
+    Emit('    if (endp == s) return ((AetherOption){ .is_some = false, .is_none = true, .num_val = 0, .str_val = "" });');
+    Emit('    while (*endp == '' '' || *endp == ''\t'' || *endp == ''\n'' || *endp == ''\r'') endp++;');
+    Emit('    if (*endp != ''\0'' || v < (-2147483647LL - 1LL) || v > 2147483647LL)');
+    Emit('        return ((AetherOption){ .is_some = false, .is_none = true, .num_val = 0, .str_val = "" });');
+    Emit('    return ((AetherOption){ .is_some = true, .is_none = false, .num_val = (double)(int32_t)v, .str_val = "" });');
+    Emit('}');
+    Emit('');
+  end;
+
+  if Pos('AetherTryStrToFloat', ReachText) > 0 then
+  begin
+    Emit('static inline AetherOption AetherTryStrToFloat(const char* s) {');
+    Emit('    if (!s) return ((AetherOption){ .is_some = false, .is_none = true, .num_val = 0, .str_val = "" });');
+    Emit('    while (*s == '' '' || *s == ''\t'' || *s == ''\n'' || *s == ''\r'') s++;');
+    Emit('    if (*s == ''\0'') return ((AetherOption){ .is_some = false, .is_none = true, .num_val = 0, .str_val = "" });');
+    Emit('    char* endp = NULL;');
+    Emit('    double v = strtod(s, &endp);');
+    Emit('    if (endp == s) return ((AetherOption){ .is_some = false, .is_none = true, .num_val = 0, .str_val = "" });');
+    Emit('    while (*endp == '' '' || *endp == ''\t'' || *endp == ''\n'' || *endp == ''\r'') endp++;');
+    Emit('    if (*endp != ''\0'') return ((AetherOption){ .is_some = false, .is_none = true, .num_val = 0, .str_val = "" });');
+    Emit('    return ((AetherOption){ .is_some = true, .is_none = false, .num_val = v, .str_val = "" });');
+    Emit('}');
+    Emit('');
+  end;
+
+  if Pos('AetherStrSplit', ReachText) > 0 then
+  begin
+    Emit('static inline const char** AetherStrSplit(const char* s, const char* sep) {');
+    Emit('    const char* src = s ? s : "";');
+    Emit('    const char* sp = sep ? sep : "";');
+    Emit('    const char** res = (const char**)AetherDynSetLength(NULL, sizeof(const char*), 0);');
+    Emit('    size_t sl = strlen(src), spl = strlen(sp);');
+    Emit('    if (spl == 0) {');
+    Emit('        res = (const char**)AetherDynSetLength((void*)res, sizeof(const char*), sl);');
+    Emit('        for (size_t i = 0; i < sl; i++) {');
+    Emit('            char* c = (char*)malloc(2); c[0] = src[i]; c[1] = ''\0''; res[i] = c;');
+    Emit('        }');
+    Emit('        return res;');
+    Emit('    }');
+    Emit('    const char* cur = src;');
+    Emit('    while (1) {');
+    Emit('        const char* found = strstr(cur, sp);');
+    Emit('        size_t part_len = found ? (size_t)(found - cur) : strlen(cur);');
+    Emit('        char* part = (char*)malloc(part_len + 1);');
+    Emit('        if (part_len > 0) memcpy(part, cur, part_len);');
+    Emit('        part[part_len] = ''\0'';');
+    Emit('        size_t n = AetherDynLen(res);');
+    Emit('        res = (const char**)AetherDynSetLength((void*)res, sizeof(const char*), n + 1);');
+    Emit('        res[n] = part;');
+    Emit('        if (!found) break;');
+    Emit('        cur = found + spl;');
+    Emit('    }');
+    Emit('    return res;');
+    Emit('}');
+    Emit('');
+  end;
+
+  if Pos('AetherStrJoin', ReachText) > 0 then
+  begin
+    Emit('static inline char* AetherStrJoin(const char** parts, const char* sep) {');
+    Emit('    size_t n = AetherDynLen(parts);');
+    Emit('    if (n == 0) { char* e = (char*)malloc(1); e[0] = ''\0''; return e; }');
+    Emit('    const char* sp = sep ? sep : "";');
+    Emit('    size_t spl = strlen(sp);');
+    Emit('    size_t total = (n - 1) * spl;');
+    Emit('    for (size_t i = 0; i < n; i++) total += strlen(parts[i] ? parts[i] : "");');
+    Emit('    char* res = (char*)malloc(total + 1);');
+    Emit('    size_t pos = 0;');
+    Emit('    for (size_t i = 0; i < n; i++) {');
+    Emit('        if (i > 0 && spl > 0) { memcpy(res + pos, sp, spl); pos += spl; }');
+    Emit('        const char* p = parts[i] ? parts[i] : "";');
+    Emit('        size_t pl = strlen(p);');
+    Emit('        if (pl > 0) { memcpy(res + pos, p, pl); pos += pl; }');
+    Emit('    }');
+    Emit('    res[pos] = ''\0'';');
+    Emit('    return res;');
+    Emit('}');
+    Emit('');
+  end;
+
+  if (Pos('AetherRandomInt', ReachText) > 0) or (Pos('AetherRandomFloat', ReachText) > 0) then
+  begin
+    Emit('static bool g_aether_rand_seeded = false;');
+    Emit('static inline void AetherEnsureRandSeed(void) {');
+    Emit('    if (!g_aether_rand_seeded) { srand((unsigned int)time(NULL)); g_aether_rand_seeded = true; }');
+    Emit('}');
+    Emit('');
+  end;
+
+  if Pos('AetherRandomInt', ReachText) > 0 then
+  begin
+    Emit('static inline int32_t AetherRandomInt(int32_t min_v, int32_t max_v) {');
+    Emit('    AetherEnsureRandSeed();');
+    Emit('    int32_t lo = min_v <= max_v ? min_v : max_v;');
+    Emit('    int32_t hi = min_v <= max_v ? max_v : min_v;');
+    Emit('    if (lo == hi) return lo;');
+    Emit('    uint64_t span = (uint64_t)((int64_t)hi - (int64_t)lo + 1);');
+    Emit('    uint64_t r = ((uint64_t)rand() << 15) ^ (uint64_t)rand();');
+    Emit('    return lo + (int32_t)(r % span);');
+    Emit('}');
+    Emit('');
+  end;
+
+  if Pos('AetherRandomFloat', ReachText) > 0 then
+  begin
+    Emit('static inline double AetherRandomFloat(void) {');
+    Emit('    AetherEnsureRandSeed();');
+    Emit('    return (double)rand() / ((double)RAND_MAX + 1.0);');
+    Emit('}');
+    Emit('');
+  end;
+
+  if Pos('AetherReadLn', ReachText) > 0 then
+  begin
+    Emit('static inline char* AetherReadLn(void) {');
+    Emit('#if defined(__wasm__)');
+    Emit('    char* e = (char*)malloc(1); e[0] = ''\0''; return e;');
+    Emit('#else');
+    Emit('    char buf[4096];');
+    Emit('    if (!fgets(buf, sizeof(buf), stdin)) { char* e = (char*)malloc(1); e[0] = ''\0''; return e; }');
+    Emit('    size_t l = strlen(buf);');
+    Emit('    while (l > 0 && (buf[l - 1] == ''\n'' || buf[l - 1] == ''\r'')) l--;');
+    Emit('    char* out = (char*)malloc(l + 1);');
+    Emit('    if (l > 0) memcpy(out, buf, l);');
+    Emit('    out[l] = ''\0'';');
+    Emit('    return out;');
+    Emit('#endif');
+    Emit('}');
+    Emit('');
+  end;
+
+  if Pos('AetherGetEnv', ReachText) > 0 then
+  begin
+    Emit('static inline char* AetherGetEnv(const char* name) {');
+    Emit('#if defined(__wasm__)');
+    Emit('    (void)name; char* e = (char*)malloc(1); e[0] = ''\0''; return e;');
+    Emit('#else');
+    Emit('    const char* v = name ? getenv(name) : NULL;');
+    Emit('    if (!v) { char* e = (char*)malloc(1); e[0] = ''\0''; return e; }');
+    Emit('    size_t l = strlen(v); char* copy = (char*)malloc(l + 1); memcpy(copy, v, l + 1); return copy;');
+    Emit('#endif');
+    Emit('}');
+    Emit('');
+  end;
+
+  if Pos('AetherSetEnv', ReachText) > 0 then
+  begin
+    Emit('static inline bool AetherSetEnv(const char* name, const char* val) {');
+    Emit('#if defined(__wasm__)');
+    Emit('    (void)name; (void)val; return false;');
+    Emit('#elif defined(_WIN32)');
+    Emit('    return (name && val) ? (_putenv_s(name, val) == 0) : false;');
+    Emit('#else');
+    Emit('    return (name && val) ? (setenv(name, val, 1) == 0) : false;');
+    Emit('#endif');
+    Emit('}');
+    Emit('');
+  end;
+
+  if Pos('AetherListDir', ReachText) > 0 then
+  begin
+    Emit('static inline const char** AetherListDir(const char* path) {');
+    Emit('    const char** res = (const char**)AetherDynSetLength(NULL, sizeof(const char*), 0);');
+    Emit('#if defined(__wasm__)');
+    Emit('    (void)path; return res;');
+    Emit('#elif defined(_WIN32)');
+    Emit('    const char* p = (path && path[0]) ? path : ".";');
+    Emit('    size_t pl = strlen(p);');
+    Emit('    bool has_sep = (p[pl - 1] == ''\\'' || p[pl - 1] == ''/'');');
+    Emit('    char* pat = (char*)malloc(pl + 3);');
+    Emit('    memcpy(pat, p, pl);');
+    Emit('    if (!has_sep) pat[pl++] = ''\\'';');
+    Emit('    pat[pl++] = ''*''; pat[pl] = ''\0'';');
+    Emit('    WIN32_FIND_DATAA ffd;');
+    Emit('    HANDLE h = FindFirstFileA(pat, &ffd);');
+    Emit('    free(pat);');
+    Emit('    if (h != INVALID_HANDLE_VALUE) {');
+    Emit('        do {');
+    Emit('            if (strcmp(ffd.cFileName, ".") != 0 && strcmp(ffd.cFileName, "..") != 0) {');
+    Emit('                size_t nl = strlen(ffd.cFileName);');
+    Emit('                char* item = (char*)malloc(nl + 1);');
+    Emit('                memcpy(item, ffd.cFileName, nl + 1);');
+    Emit('                size_t n = AetherDynLen(res);');
+    Emit('                res = (const char**)AetherDynSetLength((void*)res, sizeof(const char*), n + 1);');
+    Emit('                res[n] = item;');
+    Emit('            }');
+    Emit('        } while (FindNextFileA(h, &ffd));');
+    Emit('        FindClose(h);');
+    Emit('    }');
+    Emit('    return res;');
+    Emit('#else');
+    Emit('    DIR* d = opendir((path && path[0]) ? path : ".");');
+    Emit('    if (d) {');
+    Emit('        struct dirent* ent;');
+    Emit('        while ((ent = readdir(d)) != NULL) {');
+    Emit('            if (strcmp(ent->d_name, ".") != 0 && strcmp(ent->d_name, "..") != 0) {');
+    Emit('                size_t nl = strlen(ent->d_name);');
+    Emit('                char* item = (char*)malloc(nl + 1);');
+    Emit('                memcpy(item, ent->d_name, nl + 1);');
+    Emit('                size_t n = AetherDynLen(res);');
+    Emit('                res = (const char**)AetherDynSetLength((void*)res, sizeof(const char*), n + 1);');
+    Emit('                res[n] = item;');
+    Emit('            }');
+    Emit('        }');
+    Emit('        closedir(d);');
+    Emit('    }');
+    Emit('    return res;');
+    Emit('#endif');
+    Emit('}');
+    Emit('');
+  end;
+
+  if Pos('AetherCopyFile', ReachText) > 0 then
+  begin
+    Emit('static inline bool AetherCopyFile(const char* src, const char* dst) {');
+    Emit('#if defined(__wasm__)');
+    Emit('    (void)src; (void)dst; return false;');
+    Emit('#else');
+    Emit('    FILE* fs = fopen(src, "rb");');
+    Emit('    if (!fs) return false;');
+    Emit('    FILE* fd = fopen(dst, "wb");');
+    Emit('    if (!fd) { fclose(fs); return false; }');
+    Emit('    char buf[4096]; size_t r; bool ok = true;');
+    Emit('    while ((r = fread(buf, 1, sizeof(buf), fs)) > 0) {');
+    Emit('        if (fwrite(buf, 1, r, fd) != r) { ok = false; break; }');
+    Emit('    }');
+    Emit('    if (ferror(fs) || ferror(fd)) ok = false;');
+    Emit('    fclose(fd); fclose(fs);');
+    Emit('    return ok;');
+    Emit('#endif');
+    Emit('}');
+    Emit('');
+  end;
+
+  if Pos('AetherRenameFile', ReachText) > 0 then
+  begin
+    Emit('static inline bool AetherRenameFile(const char* oldp, const char* newp) {');
+    Emit('#if defined(__wasm__)');
+    Emit('    (void)oldp; (void)newp; return false;');
+    Emit('#else');
+    Emit('    return (oldp && newp) ? (rename(oldp, newp) == 0) : false;');
+    Emit('#endif');
+    Emit('}');
     Emit('');
   end;
 

@@ -7,17 +7,17 @@ type
     end;
 
 // 'borrow' apenas pega emprestado (leitura)
-function Inspecionar(borrow buf: DataBuffer): Void
+procedure Inspecionar(borrow buf: DataBuffer) is
 begin
     PrintLn("Inspecionando buffer id: %d, tamanho: %d", buf.id, buf.size);
-end;
+end Inspecionar;
 
 // 'take' consome o buffer (transfere posse)
-function Consumir(take buf: DataBuffer): Void
+procedure Consumir(take buf: DataBuffer) is
 begin
     PrintLn("Buffer %d consumido com sucesso!", buf.id);
     // Ao sair deste escopo, a memoria do buffer e liberada automaticamente!
-end;
+end Consumir;
 
 program Main;
 var
@@ -34,4 +34,4 @@ begin
     // ERRO DE COMPILACAO proposital (Borrow Checker):
     // Descomentar a linha abaixo acusara erro E0382: 'meu_buffer' ja foi movido!
     // Inspecionar(borrow meu_buffer);
-end.
+end OwnershipAndBorrow.

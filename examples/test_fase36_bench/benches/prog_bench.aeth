@@ -1,6 +1,6 @@
 module prog_bench;
 
-function ExecutaCalculo(): Int32;
+function ExecutaCalculo() return Int32 is
 var
     i: Int32;
     s: Int32;
@@ -12,11 +12,11 @@ begin
         i := i + 1;
     end;
     return s;
-end;
+end ExecutaCalculo;
 
 program Main;
 var
     res: Int32;
 begin
     res := ExecutaCalculo();
-end.
+end prog_bench.

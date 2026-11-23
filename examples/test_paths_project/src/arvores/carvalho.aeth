@@ -1,12 +1,20 @@
 module Carvalho;
 
+interface
+
 type
     Arvore = record
         altura: Int32;
         idade: Int32;
     end;
 
-function CriarCarvalho(h: Int32, anos: Int32): Arvore
+function CriarCarvalho(h, anos: Int32) return Arvore;
+
+implementation
+
+function CriarCarvalho(h, anos: Int32) return Arvore is
 begin
     return Arvore(altura: h, idade: anos);
-end;
+end CriarCarvalho;
+
+end Carvalho.

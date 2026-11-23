@@ -11,12 +11,12 @@ type
         saldo: Float64;
     end;
 
-function ExibirSaldo(borrow c: ContaBancaria): Void
+procedure ExibirSaldo(borrow c: ContaBancaria) is
 begin
     PrintLn("Conta #%d - Saldo atual: R$ %f", c.id, c.saldo);
-end;
+end ExibirSaldo;
 
-function Depositar(mut borrow c: ContaBancaria; borrow valor: Float64): Result<Float64, ContaError>
+function Depositar(mut borrow c: ContaBancaria; borrow valor: Float64) return Result<Float64, ContaError> is
 contract
     require
         valor > 0.0;
@@ -29,9 +29,9 @@ begin
         c.saldo := c.saldo + valor;
         return Ok(c.saldo);
     end;
-end;
+end Depositar;
 
-function Sacar(mut borrow c: ContaBancaria; borrow valor: Float64): Result<Float64, ContaError>
+function Sacar(mut borrow c: ContaBancaria; borrow valor: Float64) return Result<Float64, ContaError> is
 contract
     require
         valor > 0.0;
@@ -48,7 +48,7 @@ begin
             return Ok(c.saldo);
         end;
     end;
-end;
+end Sacar;
 
 program Main;
 var
@@ -89,4 +89,4 @@ begin
     // Saldo final
     PrintLn("\nExtrato final:");
     minha_conta.ExibirSaldo();
-end.
+end CursoProjetoFinal.

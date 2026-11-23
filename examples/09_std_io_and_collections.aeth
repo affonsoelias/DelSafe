@@ -60,4 +60,4 @@ begin
     PrintLn("Conteudo lido do arquivo:\n--> %s", conteudo_lido);
 
     PrintLn("\nSUCESSO! Fase 11 - I/O, Strings e Collections validados com exito!");
-end.
+end StdIoAndCollections.

@@ -81,4 +81,4 @@ begin
     Assert(s1.Equals(borrow s2), "s1 deve ser igual a s2");
 
     PrintLn("Todos os testes de [derive(Debug, JSON, Clone, Equals)] passaram com sucesso!");
-end.
+end main.

@@ -8,7 +8,7 @@ type
         valor: Float64;
     end;
 
-function ProcessarLista(qtd: Int32): Float64
+function ProcessarLista(qtd: Int32) return Float64 is
 var
     i: Int32;
     total: Float64;
@@ -22,7 +22,7 @@ begin
         i := i + 1;
     end;
     return total;
-end;
+end ProcessarLista;
 
 program Main;
 var
@@ -30,4 +30,4 @@ var
 begin
     res := ProcessarLista(1000);
     PrintLn("Processamento concluido. Total: %f", res);
-end.
+end app_profile.

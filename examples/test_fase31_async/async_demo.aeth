@@ -1,19 +1,19 @@
 module async_demo;
 
-async function CalcularSoma(a: Int32, b: Int32): Int32
+async function CalcularSoma(a, b: Int32) return Int32 is
 begin
     return a + b;
-end;
+end CalcularSoma;
 
-async function MultiplicarLento(x: Int32, y: Int32): Int32
+async function MultiplicarLento(x, y: Int32) return Int32 is
 begin
     return x * y;
-end;
+end MultiplicarLento;
 
-async function ObterMensagem(nome: String): String
+async function ObterMensagem(nome: String) return String is
 begin
     return "Ola assincrono, " + nome;
-end;
+end ObterMensagem;
 
 program Main;
 var
@@ -51,4 +51,4 @@ begin
     PrintLn(msg);
 
     PrintLn("SUCESSO: Todos os testes de async/await passaram com perfeicao!");
-end.
+end async_demo.

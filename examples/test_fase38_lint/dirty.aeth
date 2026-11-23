@@ -9,7 +9,7 @@ type
         y: Float64;
     end;
 
-function Calcular(a: Int32; b: Int32): Int32
+function Calcular(a, b: Int32) return Int32 is
 var
     unused_local: Int32;
 begin
@@ -21,7 +21,7 @@ begin
 
     // Dead code apos return:
     PrintLn("Isto nunca sera executado!");
-end;
+end Calcular;
 
 program Main;
 var
@@ -31,4 +31,4 @@ begin
     p := ponto(1.0, 2.0);
     PrintLn("X: %f", p.x);
     PrintLn("Resultado: %d", Calcular(5, 10));
-end.
+end dirty_test.

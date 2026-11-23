@@ -10,6 +10,14 @@ procedure PrintMessage(borrow prefix, msg: String);
 function Tamanho(borrow s: String) return UInt32;
 function Caractere(borrow s: String; borrow pos: UInt32) return String;
 function Fatia(borrow s: String; borrow inicio, qtd: UInt32) return String;
+function Dividir(borrow s, sep: String) return array of String;
+function Juntar(borrow partes: array of String; borrow sep: String) return String;
+function PreencherEsquerda(borrow s: String; largura: Int32; borrow preenchimento: String) return String;
+function PreencherDireita(borrow s: String; largura: Int32; borrow preenchimento: String) return String;
+function Repetir(borrow s: String; vezes: Int32) return String;
+function TextoParaFloat(borrow s: String) return Float64;
+function TentarTextoParaInt(borrow s: String) return Option<Int32>;
+function TentarTextoParaFloat(borrow s: String) return Option<Float64>;
 
 implementation
 
@@ -50,5 +58,45 @@ function Fatia(borrow s: String; borrow inicio, qtd: UInt32) return String is
 begin
     return Substring(borrow s, borrow inicio, borrow qtd);
 end Fatia;
+
+function Dividir(borrow s, sep: String) return array of String is
+begin
+    return Split(s, sep);
+end Dividir;
+
+function Juntar(borrow partes: array of String; borrow sep: String) return String is
+begin
+    return Join(partes, sep);
+end Juntar;
+
+function PreencherEsquerda(borrow s: String; largura: Int32; borrow preenchimento: String) return String is
+begin
+    return PadLeft(s, largura, preenchimento);
+end PreencherEsquerda;
+
+function PreencherDireita(borrow s: String; largura: Int32; borrow preenchimento: String) return String is
+begin
+    return PadRight(s, largura, preenchimento);
+end PreencherDireita;
+
+function Repetir(borrow s: String; vezes: Int32) return String is
+begin
+    return RepeatStr(s, vezes);
+end Repetir;
+
+function TextoParaFloat(borrow s: String) return Float64 is
+begin
+    return StrToFloat(s);
+end TextoParaFloat;
+
+function TentarTextoParaInt(borrow s: String) return Option<Int32> is
+begin
+    return TryStrToInt(s);
+end TentarTextoParaInt;
+
+function TentarTextoParaFloat(borrow s: String) return Option<Float64> is
+begin
+    return TryStrToFloat(s);
+end TentarTextoParaFloat;
 
 end Strings.

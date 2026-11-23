@@ -10,6 +10,10 @@ type
     end;
 
 procedure Informar(borrow mensagem: String);
+procedure Imprimir(borrow texto: String);
+function LerLinha() return String;
+function ObterEnv(borrow nome: String) return String;
+function DefinirEnv(borrow nome, valor: String) return Bool;
 function ExisteArquivo(borrow path: String) return Bool;
 function LerArquivo(borrow path: String) return String;
 function GravarArquivo(borrow path, conteudo: String) return Bool;
@@ -20,6 +24,26 @@ procedure Informar(borrow mensagem: String) is
 begin
     PrintLn("[IO]: %s", mensagem);
 end Informar;
+
+procedure Imprimir(borrow texto: String) is
+begin
+    Print(texto);
+end Imprimir;
+
+function LerLinha() return String is
+begin
+    return ReadLn();
+end LerLinha;
+
+function ObterEnv(borrow nome: String) return String is
+begin
+    return GetEnv(nome);
+end ObterEnv;
+
+function DefinirEnv(borrow nome, valor: String) return Bool is
+begin
+    return SetEnv(nome, valor);
+end DefinirEnv;
 
 function ExisteArquivo(borrow path: String) return Bool is
 begin

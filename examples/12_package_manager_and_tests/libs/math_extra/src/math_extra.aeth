@@ -1,11 +1,20 @@
 module MathExtra;
 
-function Dobro(borrow v: Int32): Int32
+interface
+
+function Dobro(borrow v: Int32) return Int32;
+function Triplo(borrow v: Int32) return Int32;
+
+implementation
+
+function Dobro(borrow v: Int32) return Int32 is
 begin
     return v * 2;
-end;
+end Dobro;
 
-function Triplo(borrow v: Int32): Int32
+function Triplo(borrow v: Int32) return Int32 is
 begin
     return v * 3;
-end;
+end Triplo;
+
+end MathExtra.

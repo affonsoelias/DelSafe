@@ -1,6 +1,14 @@
 module Dragao;
 
-function Rugir(): Void
+interface
+
+procedure Rugir;
+
+implementation
+
+procedure Rugir is
 begin
     PrintLn("O dragao da caverna acordou com sucesso!");
-end;
+end Rugir;
+
+end Dragao.

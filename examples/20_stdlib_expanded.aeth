@@ -104,4 +104,4 @@ begin
     PrintLn("Cliente HTTP configurado para %s:%d", cli.host, Int32(cli.port));
 
     PrintLn("=== Todos os testes da Fase 25 foram concluidos com 100% de sucesso! ===");
-end.
+end StdlibExpanded.

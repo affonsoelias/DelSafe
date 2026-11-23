@@ -1,28 +1,28 @@
 module main;
 
 @cfg(target_os = "windows")
-function get_platform(): String
+function get_platform() return String is
 begin
   return "Plataforma: Windows";
-end;
+end get_platform;
 
 @cfg(target_os = "linux")
-function get_platform(): String
+function get_platform() return String is
 begin
   return "Plataforma: Linux";
-end;
+end get_platform;
 
 @inline(always)
-function fast_add(a: Int32, b: Int32): Int32
+function fast_add(a, b: Int32) return Int32 is
 begin
   return a + b;
-end;
+end fast_add;
 
 @cold
-function handle_rare_case(): String
+function handle_rare_case() return String is
 begin
   return "Caso raro executado";
-end;
+end handle_rare_case;
 
 @cfg(target_os = "windows")
 type
@@ -57,4 +57,4 @@ begin
   end;
 
   PrintLn("Fase 40 CFG e Inline testados com sucesso!");
-end.
+end main.
