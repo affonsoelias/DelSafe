@@ -391,6 +391,8 @@ begin
       begin
         // Fim de secao no nivel superior antes de nova funcao, program ou outra secao de modulo
         if (Length(BlockStack) = 0) and (
+             StartsWithWord(CodeOnly, 'pub') or StartsWithWord(CodeOnly, 'priv') or
+             StartsWithWord(CodeOnly, 'private') or
              StartsWithWord(CodeOnly, 'function') or StartsWithWord(CodeOnly, 'async') or
              StartsWithWord(CodeOnly, 'extern') or StartsWithWord(CodeOnly, 'export') or
              StartsWithWord(CodeOnly, 'program') or (CodeOnly = 'type') or
@@ -464,7 +466,8 @@ begin
           PushBlock(bkBlock);
           Inc(IndentLevel);
         end
-        else if (CodeOnly = 'type') or (CodeOnly = 'const') or (CodeOnly = 'var') or (CodeOnly = 'let') or (CodeOnly = 'contract') then
+        else if (CodeOnly = 'type') or (CodeOnly = 'const') or (CodeOnly = 'var') or (CodeOnly = 'let') or (CodeOnly = 'contract') or
+                (CodeOnly = 'pub type') or (CodeOnly = 'priv type') or (CodeOnly = 'pub const') or (CodeOnly = 'priv const') then
         begin
           SectionIndent := 1;
         end
@@ -491,6 +494,8 @@ begin
                 (EndsWithWord(CodeOnly, 'enum') and (Pos('end;', CodeOnly) = 0)) or
                 (StartsWithWord(CodeOnly, 'impl') and (Pos('end;', CodeOnly) = 0)) or
                 (StartsWithWord(CodeOnly, 'trait') and (Pos('end;', CodeOnly) = 0)) or
+                (StartsWithWord(CodeOnly, 'pub trait') and (Pos('end;', CodeOnly) = 0)) or
+                (StartsWithWord(CodeOnly, 'priv trait') and (Pos('end;', CodeOnly) = 0)) or
                 ((Pos('= trait', CodeOnly) > 0) and (Pos('end;', CodeOnly) = 0)) or
                 (StartsWithWord(CodeOnly, 'if') and EndsWithWord(CodeOnly, 'then')) or
                 (StartsWithWord(CodeOnly, 'while') and EndsWithWord(CodeOnly, 'do')) or

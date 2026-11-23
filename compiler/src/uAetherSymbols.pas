@@ -20,6 +20,8 @@ type
     IsMutable: Boolean;
     Ownership: TOwnershipKind;
     Node: TASTNode; // Referencia opcional ao no da AST (ex: TASTFunction, TASTEnumDecl)
+    IsPublic: Boolean;
+    SourceModule: string;
     constructor Create(const AName: string; AKind: TSymbolKind; const AType: string;
       ALine, ACol: Integer; AMut: Boolean = True; AOwn: TOwnershipKind = owNone; ANode: TASTNode = nil);
   end;
@@ -76,6 +78,8 @@ begin
   IsMutable := AMut;
   Ownership := AOwn;
   Node := ANode;
+  IsPublic := True;
+  SourceModule := '';
 end;
 
 { TScope }
@@ -250,6 +254,13 @@ begin
   FGlobalScope.Define(TSymbol.Create('Slice', skFunction, 'Any', 0, 0));
   FGlobalScope.Define(TSymbol.Create('Default', skFunction, 'Any', 0, 0));
   FGlobalScope.Define(TSymbol.Create('__InterpToStr', skFunction, 'String', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('__JsonGetStr', skFunction, 'String', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('__JsonGetInt', skFunction, 'Int32', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('__JsonGetFloat', skFunction, 'Float64', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('__JsonGetBool', skFunction, 'Bool', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('__JsonGetChar', skFunction, 'Char', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('__JsonHasValue', skFunction, 'Bool', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('__JsonGetObj', skFunction, 'String', 0, 0));
   FGlobalScope.Define(TSymbol.Create('CharToStr', skFunction, 'String', 0, 0));
   FGlobalScope.Define(TSymbol.Create('CharAt', skFunction, 'String', 0, 0));
   FGlobalScope.Define(TSymbol.Create('Substring', skFunction, 'String', 0, 0));

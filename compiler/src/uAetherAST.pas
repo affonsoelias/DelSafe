@@ -15,6 +15,9 @@ type
   public
     Line: Integer;
     Col: Integer;
+    IsPublic: Boolean;
+    HasExplicitVis: Boolean;
+    SourceModule: string;
     constructor Create(ALine, ACol: Integer);
     function Dump(Indent: Integer = 0): string; virtual; abstract;
   end;
@@ -115,6 +118,7 @@ type
   TASTCallExpr = class(TASTExpr)
   public
     Callee: string;
+    IsQualified: Boolean;
     Args: TASTNodeList; // lista de TASTCallArg
     constructor Create(ALine, ACol: Integer; const ACallee: string);
     destructor Destroy; override;
@@ -522,7 +526,9 @@ type
   public
     Name: string;
     DocComment: string;
+    HasExplicitPub: Boolean;
     Imports: TStringList;
+    ImportAliases: TStringList;
     PascalImports: TStringList;
     CImports: TStringList;
     LinkDirectives: TStringList;
@@ -566,6 +572,9 @@ begin
   inherited Create;
   Line := ALine;
   Col := ACol;
+  IsPublic := True;
+  HasExplicitVis := False;
+  SourceModule := '';
 end;
 
 { TASTNodeList }
@@ -1880,7 +1889,9 @@ constructor TASTModule.Create(ALine, ACol: Integer; const AName: string);
 begin
   inherited Create(ALine, ACol);
   Name := AName;
+  HasExplicitPub := False;
   Imports := TStringList.Create;
+  ImportAliases := TStringList.Create;
   PascalImports := TStringList.Create;
   CImports := TStringList.Create;
   LinkDirectives := TStringList.Create;
@@ -1895,6 +1906,7 @@ end;
 destructor TASTModule.Destroy;
 begin
   Imports.Free;
+  ImportAliases.Free;
   PascalImports.Free;
   CImports.Free;
   LinkDirectives.Free;
@@ -1990,6 +2002,7 @@ begin
   else if Node is TASTCallExpr then
   begin
     Result := TASTCallExpr.Create(Node.Line, Node.Col, TASTCallExpr(Node).Callee);
+    TASTCallExpr(Result).IsQualified := TASTCallExpr(Node).IsQualified;
     for I := 0 to TASTCallExpr(Node).Args.Count - 1 do
       TASTCallExpr(Result).Args.Add(CloneASTNode(TASTCallExpr(Node).Args[I]));
     Exit;

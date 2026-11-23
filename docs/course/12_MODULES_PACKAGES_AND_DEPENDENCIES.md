@@ -57,22 +57,26 @@ end;
 ```aether
 module main;
 
-import database;
+import database as db_mod;
 import auth;
 
 program Main;
 var
-    db: DbConnection;
+    conn: db_mod.DbConnection;
     is_ok: Bool;
 begin
-    db := Connect("127.0.0.1", 5432);
-    is_ok := Authenticate(borrow db, "secure_session_token");
+    conn := db_mod.Connect("127.0.0.1", 5432);
+    is_ok := Authenticate(borrow conn, "secure_session_token");
 
     if is_ok then
         PrintLn("Authentication granted!");
     end;
 end.
 ```
+
+### Visibility (`pub` / `priv`) and Import Aliases (`as`)
+- Use `import module_path as alias;` to bind a short qualifier and reference symbols cleanly (`alias.Func()`, `alias.CONST`, `alias.Enum.Variant`, `alias.Record.Method()`).
+- Prefix declarations (`const`, `type`, `trait`, `function`, record fields, or `impl` methods) with `pub` or `priv`. Once a module uses `pub` or `priv` at top level, unqualified top-level declarations become module-private (`[E0603]` if accessed externally), while existing modules without explicit `pub` modifiers keep backwards-compatible exports.
 
 ---
 

@@ -1,0 +1,142 @@
+module Fase54ModulesPubInherentImplDerivesFromjsonTest;
+
+import lib.helper_fase54_mod as hmod;
+
+type
+    NotasArr = array[2] of Int32;
+
+    [derive(Debug, JSON, Clone, Equals)]
+    Prioridade = enum
+        Baixa,
+        Media,
+        Alta
+    end;
+
+    [derive(Debug, JSON, Clone, Equals)]
+    Meta = record
+        code: Int32;
+        tag: Char;
+    end;
+
+    [derive(Debug, JSON, Clone, Equals)]
+    Vetor2D = record
+        x: Int32;
+        y: Int32;
+    end;
+
+impl Vetor2D
+    function New(ax: Int32; ay: Int32): Self
+    begin
+        return Vetor2D(ax, ay);
+    end;
+
+    function Zero(): Self
+    begin
+        return Vetor2D(0, 0);
+    end;
+
+    function Add(borrow self; other: Self): Self
+    begin
+        return Vetor2D(self.x + other.x, self.y + other.y);
+    end;
+
+    function Dot(borrow self; other: Self): Int32
+    begin
+        return (self.x * other.x) + (self.y * other.y);
+    end;
+end;
+
+type
+    [derive(Debug, JSON, Clone, Equals)]
+    Registro = record
+        id: Int32;
+        nome: String;
+        inicial: Char;
+        ativo: Bool;
+        prio: Prioridade;
+        meta: Meta;
+        bonus: Option<Int32>;
+        vazio: Option<Int32>;
+        resOk: Result<Int32, String>;
+        notas: NotasArr;
+    end;
+
+    [derive(Debug, JSON, Clone, Equals)]
+    Payload = record
+        id: Int32;
+        nome: String;
+        inicial: Char;
+        ativo: Bool;
+        ratio: Float64;
+        prio: Prioridade;
+        meta: Meta;
+        bonus: Option<Int32>;
+        vazio: Option<Int32>;
+    end;
+
+program Main;
+var
+    c: hmod.Caixa;
+    nv: hmod.Nivel;
+    v0, v1, v2, v3: Vetor2D;
+    r1, r2: Registro;
+    p1, p2: Payload;
+    arr: NotasArr;
+    dbg, js, pjs: String;
+begin
+    // 1. Fase 54.1: Alias de modulo (as), pub/priv e acesso qualificado
+    Assert(hmod.PUBLIC_FACTOR = 3);
+    Assert(hmod.Escalar(14) = 42);
+    nv := hmod.Nivel.Alto;
+    Assert(nv = hmod.Nivel.Alto);
+    c := hmod.Caixa.Create("cofre", 77);
+    Assert(c.titulo = "cofre");
+    Assert(c.ReadSecret() = 77);
+
+    // 2. Fase 54.2: impl Tipo direto (sem trait) + Tipo.Metodo()
+    v0 := Vetor2D.Zero();
+    Assert((v0.x = 0) and (v0.y = 0));
+    v1 := Vetor2D.New(3, 4);
+    v2 := Vetor2D.New(1, 2);
+    v3 := v1.Add(v2);
+    Assert((v3.x = 4) and (v3.y = 6));
+    Assert(v1.Dot(v2) = 11);
+
+    // 3. Fase 54.3: derive(Debug, JSON, Clone, Equals) com Char, Enum, Option, Result, array e nested record
+    arr[0] := 10;
+    arr[1] := 20;
+    r1 := Registro(7, "Aether", 'A', true, Prioridade.Alta, Meta(9, 'Z'), Some(50), None, Ok(200), arr);
+    dbg := r1.ToString();
+    Assert(Contains(dbg, "inicial: 'A'"));
+    Assert(Contains(dbg, "prio: Prioridade.Alta"));
+    Assert(Contains(dbg, "bonus: Some(50)"));
+    Assert(Contains(dbg, "vazio: None"));
+    Assert(Contains(dbg, "resOk: Ok(200)"));
+    Assert(Contains(dbg, "notas: [10, 20]"));
+
+    js := r1.ToJSON();
+    Assert(Contains(js, "\"vazio\": null"));
+    Assert(Contains(js, "\"bonus\": 50"));
+    Assert(Contains(js, "\"ok\": 200"));
+    Assert(Contains(js, "\"notas\": [10, 20]"));
+
+    r2 := r1.Clone();
+    Assert(r1.Equals(r2));
+
+    // 4. Fase 54.3: Round-trip JSON -> FromJSON
+    p1 := Payload(42, "Bento", 'B', true, 3.5, Prioridade.Media, Meta(12, 'K'), Some(88), None);
+    pjs := p1.ToJSON();
+    p2 := Payload.FromJSON(pjs);
+    Assert(p1.Equals(p2));
+    Assert(p2.id = 42);
+    Assert(p2.nome = "Bento");
+    Assert(p2.inicial = 'B');
+    Assert(p2.ativo);
+    Assert(p2.prio = Prioridade.Media);
+    Assert(p2.meta.code = 12);
+    Assert(p2.meta.tag = 'K');
+    Assert(p2.bonus.is_some and (p2.bonus.value = 88));
+    Assert(p2.vazio.is_none);
+
+    PrintLn("=== FASE 54 TEST PASSOU (MODULOS/PUB, IMPL TIPO, DERIVES EXPANDIDOS & FROMJSON) ===");
+end.

@@ -344,8 +344,9 @@ var
   AllModuleIdents: TStringList;
   BodyIdents: TStringList;
   UnusedImports: TStringList;
-  I, J: Integer;
+  I, J, K: Integer;
   ImpName, SubName: string;
+  IsImpUsed: Boolean;
   Func: TASTFunction;
   ParamNode: TASTParam;
   VarNode: TASTVarDecl;
@@ -537,7 +538,21 @@ begin
       if Pos('.', SubName) > 0 then
         SubName := Copy(SubName, LastDelimiter('.', SubName) + 1, Length(SubName));
 
-      if (AllModuleIdents.IndexOf(ImpName) < 0) and (AllModuleIdents.IndexOf(SubName) < 0) then
+      IsImpUsed := (AllModuleIdents.IndexOf(ImpName) >= 0) or (AllModuleIdents.IndexOf(SubName) >= 0);
+      if (not IsImpUsed) and Assigned(AModule.ImportAliases) then
+      begin
+        for K := 0 to AModule.ImportAliases.Count - 1 do
+        begin
+          if SameText(AModule.ImportAliases.ValueFromIndex[K], ImpName) and
+             (AllModuleIdents.IndexOf(AModule.ImportAliases.Names[K]) >= 0) then
+          begin
+            IsImpUsed := True;
+            Break;
+          end;
+        end;
+      end;
+
+      if not IsImpUsed then
       begin
         UnusedImports.Add(ImpName);
         AddIssue(Result, 'unused-import', 'L002',

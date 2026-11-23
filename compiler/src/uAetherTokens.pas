@@ -26,6 +26,8 @@ type
     tokProgram,
     tokImport,
     tokAs,
+    tokPub,
+    tokPriv,
     tokExtern,
     tokExport,
     tokCdecl,
@@ -173,6 +175,8 @@ begin
     tokProgram:       Result := 'program';
     tokImport:        Result := 'import';
     tokAs:            Result := 'as';
+    tokPub:           Result := 'pub';
+    tokPriv:          Result := 'priv';
     tokExtern:        Result := 'extern';
     tokExport:        Result := 'export';
     tokCdecl:         Result := 'cdecl';
@@ -287,6 +291,8 @@ begin
   else if Lower = 'program' then Result := tokProgram
   else if Lower = 'import' then Result := tokImport
   else if Lower = 'as' then Result := tokAs
+  else if Lower = 'pub' then Result := tokPub
+  else if (Lower = 'priv') or (Lower = 'private') then Result := tokPriv
   else if Lower = 'extern' then Result := tokExtern
   else if Lower = 'export' then Result := tokExport
   else if Lower = 'cdecl' then Result := tokCdecl

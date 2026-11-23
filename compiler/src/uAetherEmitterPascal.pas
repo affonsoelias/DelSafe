@@ -31,6 +31,8 @@ type
     procedure EmitStmtList(List: TASTNodeList; IsLoopBody: Boolean = False);
 
     function IsEnumName(const AName: string): Boolean;
+    function IsRecordName(const AName: string): Boolean;
+    function IsModulePrefixName(const AName: string): Boolean;
     function ResolveAliasType(const AType: string): string;
     function IsSetType(const AName: string): Boolean;
     function IsDynamicArrayType(const AType: string): Boolean;
@@ -137,6 +139,57 @@ begin
       if (TASTNode(FModule.Types[I]) is TASTEnumDecl) and
          (TASTEnumDecl(FModule.Types[I]).Name = AName) then
         Exit(True);
+end;
+
+function TAetherEmitterPascal.IsRecordName(const AName: string): Boolean;
+var
+  I: Integer;
+begin
+  Result := False;
+  if Assigned(FModule) then
+    for I := 0 to FModule.Types.Count - 1 do
+      if (TASTNode(FModule.Types[I]) is TASTRecordDecl) and
+         SameText(TASTRecordDecl(FModule.Types[I]).Name, AName) then
+        Exit(True);
+end;
+
+function TAetherEmitterPascal.IsModulePrefixName(const AName: string): Boolean;
+var
+  I: Integer;
+  Imp, LastSeg: string;
+begin
+  Result := False;
+  if Assigned(FCurrentFunc) then
+  begin
+    for I := 0 to FCurrentFunc.LocalVars.Count - 1 do
+      if SameText(TASTVarDecl(FCurrentFunc.LocalVars[I]).Name, AName) then Exit(False);
+    for I := 0 to FCurrentFunc.Params.Count - 1 do
+      if SameText(TASTParam(FCurrentFunc.Params[I]).Name, AName) then Exit(False);
+    if FindInlineVarType(FCurrentFunc.Body, AName) <> '' then Exit(False);
+  end;
+  if Assigned(FProgramBlock) then
+  begin
+    for I := 0 to FProgramBlock.LocalVars.Count - 1 do
+      if SameText(TASTVarDecl(FProgramBlock.LocalVars[I]).Name, AName) then Exit(False);
+    if FindInlineVarType(FProgramBlock.Body, AName) <> '' then Exit(False);
+  end;
+  if IsTypeIdentifier(AName) then Exit(False);
+
+  if Assigned(FModule) and Assigned(FModule.ImportAliases) and (FModule.ImportAliases.Values[AName] <> '') then
+    Exit(True);
+
+  if Assigned(FModule) and Assigned(FModule.Imports) then
+  begin
+    for I := 0 to FModule.Imports.Count - 1 do
+    begin
+      Imp := FModule.Imports[I];
+      LastSeg := Imp;
+      if Pos('.', LastSeg) > 0 then
+        LastSeg := Copy(LastSeg, LastDelimiter('.', LastSeg) + 1, Length(LastSeg));
+      if SameText(AName, Imp) or SameText(AName, LastSeg) then
+        Exit(True);
+    end;
+  end;
 end;
 
 function TAetherEmitterPascal.EscapePascalString(const S: string): string;
@@ -1345,9 +1398,13 @@ begin
       Exit(TASTIdentifierExpr(TASTCallArg(Call.Args[0]).Expr).Name);
     if (Call.Callee = 'ReadFile') or (Call.Callee = 'CharAt') or (Call.Callee = 'Substring') or (Call.Callee = 'ToString') or
        (Call.Callee = 'IntToStr') or (Call.Callee = 'FloatToStr') or (Call.Callee = 'BoolToStr') or (Call.Callee = 'CharToStr') or
-       (Call.Callee = '__InterpToStr') or (Call.Callee = 'SocketRecv') or (Call.Callee = 'ParamStr') or
+       (Call.Callee = '__InterpToStr') or (Call.Callee = '__JsonGetStr') or (Call.Callee = '__JsonGetObj') or
+       (Call.Callee = 'SocketRecv') or (Call.Callee = 'ParamStr') or
        SameText(Call.Callee, 'Trim') or SameText(Call.Callee, 'UpperCase') or SameText(Call.Callee, 'LowerCase') or SameText(Call.Callee, 'Replace') then Exit('String');
-    if SameText(Call.Callee, 'Chr') or SameText(Call.Callee, 'Char') then Exit('Char');
+    if (Call.Callee = '__JsonGetInt') then Exit('Int32');
+    if (Call.Callee = '__JsonGetFloat') then Exit('Float64');
+    if (Call.Callee = '__JsonGetBool') or (Call.Callee = '__JsonHasValue') then Exit('Bool');
+    if (Call.Callee = '__JsonGetChar') or SameText(Call.Callee, 'Chr') or SameText(Call.Callee, 'Char') then Exit('Char');
     if SameText(Call.Callee, 'Slice') and (Call.Args.Count >= 1) then
     begin
       TargetType := ResolveAliasType(GetExprTypeName(TASTCallArg(Call.Args[0]).Expr));
@@ -1562,10 +1619,13 @@ begin
   if Expr is TASTMemberAccessExpr then
   begin
     Acc := TASTMemberAccessExpr(Expr);
+    if (Acc.Target is TASTIdentifierExpr) and IsModulePrefixName(TASTIdentifierExpr(Acc.Target).Name) then
+      Exit(Acc.Member);
     TargetStr := EmitExpr(Acc.Target);
     TargetT := ResolveAliasType(GetExprTypeName(Acc.Target));
-    // Caso Enum.Variante
-    if (Acc.Target is TASTIdentifierExpr) and IsEnumName(TASTIdentifierExpr(Acc.Target).Name) then
+    // Caso Enum.Variante ou Alias.Enum.Variante
+    if ((Acc.Target is TASTIdentifierExpr) and IsEnumName(TASTIdentifierExpr(Acc.Target).Name)) or
+       ((Acc.Target is TASTMemberAccessExpr) and IsEnumName(TargetStr)) then
       Result := TargetStr + '_' + Acc.Member
     else if Pos('Result', TargetT) = 1 then
     begin
@@ -2055,7 +2115,7 @@ begin
       Exit;
     end;
 
-    if (Call.Args.Count = 1) and IsTypeIdentifier(Call.Callee) and not IsEnumName(Call.Callee) then
+    if (Call.Args.Count = 1) and IsTypeIdentifier(Call.Callee) and not IsEnumName(Call.Callee) and not IsRecordName(Call.Callee) then
     begin
       ValF := ResolveAliasType(Call.Callee);
       TargetT := ResolveAliasType(GetExprTypeName(TASTCallArg(Call.Args[0]).Expr));
@@ -2063,6 +2123,48 @@ begin
         Result := EmitTypeRef(Call.Callee) + '(Trunc(' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + '))'
       else
         Result := EmitTypeRef(Call.Callee) + '(' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + ')';
+      Exit;
+    end;
+
+    if Call.Callee = '__JsonGetStr' then
+    begin
+      Result := 'AetherJsonGetStr(' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + ', ' + EmitExpr(TASTCallArg(Call.Args[1]).Expr) + ')';
+      Exit;
+    end;
+
+    if Call.Callee = '__JsonGetInt' then
+    begin
+      Result := 'AetherJsonGetInt(' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + ', ' + EmitExpr(TASTCallArg(Call.Args[1]).Expr) + ')';
+      Exit;
+    end;
+
+    if Call.Callee = '__JsonGetFloat' then
+    begin
+      Result := 'AetherJsonGetFloat(' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + ', ' + EmitExpr(TASTCallArg(Call.Args[1]).Expr) + ')';
+      Exit;
+    end;
+
+    if Call.Callee = '__JsonGetBool' then
+    begin
+      Result := 'AetherJsonGetBool(' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + ', ' + EmitExpr(TASTCallArg(Call.Args[1]).Expr) + ')';
+      Exit;
+    end;
+
+    if Call.Callee = '__JsonGetChar' then
+    begin
+      Result := 'AetherJsonGetChar(' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + ', ' + EmitExpr(TASTCallArg(Call.Args[1]).Expr) + ')';
+      Exit;
+    end;
+
+    if Call.Callee = '__JsonHasValue' then
+    begin
+      Result := 'AetherJsonHasValue(' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + ', ' + EmitExpr(TASTCallArg(Call.Args[1]).Expr) + ')';
+      Exit;
+    end;
+
+    if Call.Callee = '__JsonGetObj' then
+    begin
+      Result := 'AetherJsonGetObj(' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + ', ' + EmitExpr(TASTCallArg(Call.Args[1]).Expr) + ')';
       Exit;
     end;
 
@@ -3247,6 +3349,14 @@ begin
   Emit('function AetherFileSize(const APath: string): {$IFDEF PAS2JS}NativeInt{$ELSE}Int64{$ENDIF};');
   Emit('function AetherBoolToStr(B: Boolean): string;');
   Emit('function AetherFloatToStr(AVal: Double): string;');
+  Emit('function AetherJsonExtractRaw(const Json, Key: string): string;');
+  Emit('function AetherJsonGetStr(const Json, Key: string): string;');
+  Emit('function AetherJsonGetInt(const Json, Key: string): Int32;');
+  Emit('function AetherJsonGetFloat(const Json, Key: string): Double;');
+  Emit('function AetherJsonGetBool(const Json, Key: string): Boolean;');
+  Emit('function AetherJsonGetChar(const Json, Key: string): Char;');
+  Emit('function AetherJsonHasValue(const Json, Key: string): Boolean;');
+  Emit('function AetherJsonGetObj(const Json, Key: string): string;');
   Emit('function AetherGetNanoseconds: {$IFDEF PAS2JS}Double{$ELSE}QWord{$ENDIF};');
   Emit('procedure AetherSleepMs(AMs: Cardinal);');
   Emit('function AetherSocketCreate(): LongInt;');
@@ -3448,6 +3558,108 @@ begin
   Emit('  FS := DefaultFormatSettings;');
   Emit('  FS.DecimalSeparator := ''.'';');
   Emit('  Result := FloatToStr(AVal, FS);');
+  Emit('end;');
+  Emit('');
+  Emit('function AetherJsonExtractRaw(const Json, Key: string): string;');
+  Emit('var');
+  Emit('  Pattern: string;');
+  Emit('  P, SearchPos, JLen, Depth, StartPos: Integer;');
+  Emit('  InStr: Boolean;');
+  Emit('begin');
+  Emit('  Pattern := ''"'' + Key + ''"'';');
+  Emit('  SearchPos := 1;');
+  Emit('  JLen := Length(Json);');
+  Emit('  while SearchPos <= JLen do');
+  Emit('  begin');
+  Emit('    P := Pos(Pattern, Copy(Json, SearchPos, JLen - SearchPos + 1));');
+  Emit('    if P = 0 then Exit('''');');
+  Emit('    P := SearchPos + P - 1 + Length(Pattern);');
+  Emit('    while (P <= JLen) and (Json[P] in ['' '', #9, #10, #13]) do Inc(P);');
+  Emit('    if (P <= JLen) and (Json[P] = '':'') then');
+  Emit('    begin');
+  Emit('      Inc(P);');
+  Emit('      while (P <= JLen) and (Json[P] in ['' '', #9, #10, #13]) do Inc(P);');
+  Emit('      if P > JLen then Exit('''');');
+  Emit('      if Json[P] = ''"'' then');
+  Emit('      begin');
+  Emit('        StartPos := P; Inc(P);');
+  Emit('        while P <= JLen do');
+  Emit('        begin');
+  Emit('          if (Json[P] = ''"'') and ((P = StartPos + 1) or (Json[P - 1] <> ''\'')) then');
+  Emit('            Exit(Copy(Json, StartPos, P - StartPos + 1));');
+  Emit('          Inc(P);');
+  Emit('        end;');
+  Emit('        Exit(Copy(Json, StartPos, JLen - StartPos + 1));');
+  Emit('      end');
+  Emit('      else if Json[P] = ''{'' then');
+  Emit('      begin');
+  Emit('        StartPos := P; Depth := 0; InStr := False;');
+  Emit('        while P <= JLen do');
+  Emit('        begin');
+  Emit('          if (Json[P] = ''"'') and ((P = 1) or (Json[P - 1] <> ''\'')) then InStr := not InStr');
+  Emit('          else if not InStr then');
+  Emit('          begin');
+  Emit('            if Json[P] = ''{'' then Inc(Depth)');
+  Emit('            else if Json[P] = ''}'' then begin Dec(Depth); if Depth = 0 then Exit(Copy(Json, StartPos, P - StartPos + 1)); end;');
+  Emit('          end;');
+  Emit('          Inc(P);');
+  Emit('        end;');
+  Emit('        Exit(Copy(Json, StartPos, JLen - StartPos + 1));');
+  Emit('      end');
+  Emit('      else');
+  Emit('      begin');
+  Emit('        StartPos := P;');
+  Emit('        while (P <= JLen) and not (Json[P] in ['','', ''}'', '']'', '' '', #9, #10, #13]) do Inc(P);');
+  Emit('        Exit(Copy(Json, StartPos, P - StartPos));');
+  Emit('      end;');
+  Emit('    end;');
+  Emit('    SearchPos := P;');
+  Emit('  end;');
+  Emit('  Result := '''';');
+  Emit('end;');
+  Emit('');
+  Emit('function AetherJsonGetStr(const Json, Key: string): string;');
+  Emit('begin');
+  Emit('  Result := AetherJsonExtractRaw(Json, Key);');
+  Emit('  if (Length(Result) >= 2) and (Result[1] = ''"'') and (Result[Length(Result)] = ''"'') then');
+  Emit('    Result := Copy(Result, 2, Length(Result) - 2);');
+  Emit('end;');
+  Emit('');
+  Emit('function AetherJsonGetInt(const Json, Key: string): Int32;');
+  Emit('begin');
+  Emit('  Result := StrToIntDef(AetherJsonExtractRaw(Json, Key), 0);');
+  Emit('end;');
+  Emit('');
+  Emit('function AetherJsonGetFloat(const Json, Key: string): Double;');
+  Emit('var FS: TFormatSettings;');
+  Emit('begin');
+  Emit('  FS := DefaultFormatSettings;');
+  Emit('  FS.DecimalSeparator := ''.'';');
+  Emit('  Result := StrToFloatDef(AetherJsonExtractRaw(Json, Key), 0.0, FS);');
+  Emit('end;');
+  Emit('');
+  Emit('function AetherJsonGetBool(const Json, Key: string): Boolean;');
+  Emit('begin');
+  Emit('  Result := SameText(AetherJsonExtractRaw(Json, Key), ''true'');');
+  Emit('end;');
+  Emit('');
+  Emit('function AetherJsonGetChar(const Json, Key: string): Char;');
+  Emit('var S: string;');
+  Emit('begin');
+  Emit('  S := AetherJsonGetStr(Json, Key);');
+  Emit('  if Length(S) > 0 then Result := S[1] else Result := #0;');
+  Emit('end;');
+  Emit('');
+  Emit('function AetherJsonHasValue(const Json, Key: string): Boolean;');
+  Emit('var Raw: string;');
+  Emit('begin');
+  Emit('  Raw := AetherJsonExtractRaw(Json, Key);');
+  Emit('  Result := (Raw <> '''') and (not SameText(Raw, ''null''));');
+  Emit('end;');
+  Emit('');
+  Emit('function AetherJsonGetObj(const Json, Key: string): string;');
+  Emit('begin');
+  Emit('  Result := AetherJsonExtractRaw(Json, Key);');
   Emit('end;');
   Emit('');
   Emit('function AetherGetNanoseconds: {$IFDEF PAS2JS}Double{$ELSE}QWord{$ENDIF};');

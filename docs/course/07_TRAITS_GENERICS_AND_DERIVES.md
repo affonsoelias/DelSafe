@@ -53,6 +53,34 @@ end;
 
 ---
 
+## 2b. Inherent `impl` Blocks & Associated Functions
+
+Types can also define methods and constructors directly via inherent `impl Type` blocks without declaring a separate trait:
+
+```aether
+type
+    Vector2D = record
+        x: Int32;
+        y: Int32;
+    end;
+
+impl Vector2D
+    function New(ax: Int32; ay: Int32): Self
+    begin
+        return Vector2D(ax, ay);
+    end;
+
+    function Add(borrow self; other: Self): Self
+    begin
+        return Vector2D(self.x + other.x, self.y + other.y);
+    end;
+end;
+```
+
+Call static associated functions with `Type.Method(...)` (`Vector2D.New(3, 4)`) and instance methods with dot notation (`v1.Add(v2)`).
+
+---
+
 ## 3. Generics & Trait Bounds
 
 You can write generic functions constrained by traits using `<T: Trait>` bounds:
@@ -86,10 +114,12 @@ When annotated with `[derive(...)]`, the compiler automatically generates:
    ```aether
    p.ToString() // "Player { id: 1, nickname: Alice, score: 9500 }"
    ```
-2. **`JSON` (`ToJSON()`):**
+2. **`JSON` (`ToJSON()` and `FromJSON()`):**
    ```aether
-   p.ToJSON() // '{"id": 1, "nickname": "Alice", "score": 9500}'
+   let raw := p.ToJSON(); // '{"id": 1, "nickname": "Alice", "score": 9500}'
+   let restored := Player.FromJSON(raw);
    ```
+   `[derive(...)]` also supports `Char`, nested `Record` and `Enum` types, `Option<T>`, `Result<T, E>`, subranges, and fixed/dynamic `array` fields (`Debug`, `JSON`, `Equals`).
 3. **`Clone` (`Clone()`):**
    Deep copy of the record with independent ownership.
 4. **`Equals` (`Equals(borrow other)`):**
@@ -137,6 +167,6 @@ end.
 ## 5. Summary
 1. Traits decouple interface definitions from data representations.
 2. Trait bounds `<T: Bound>` enable zero-cost generic dispatch (monomorphization).
-3. The `[derive(...)]` attribute eliminates boilerplate for debugging, JSON serialization, cloning, and comparisons.
+3. The `[derive(...)]` attribute eliminates boilerplate for debugging, JSON serialization, deserialization (`FromJSON`), cloning, and comparisons.
 
 ➡️ **Next:** **[Chapter 08: Error Handling (Result & Option)](08_ERROR_HANDLING_RESULT_OPTION.md)**

@@ -1,0 +1,43 @@
+module helper_fase54_mod;
+
+pub const
+    PUBLIC_FACTOR = 3;
+
+priv const
+    SECRET_SALT = 999;
+
+pub type
+    Nivel = enum
+        Baixo,
+        Medio,
+        Alto
+    end;
+
+pub type
+    [derive(Debug, JSON, Clone, Equals)]
+    Caixa = record
+        pub titulo: String;
+        priv secret: Int32;
+    end;
+
+impl Caixa
+    pub function Create(lbl: String; sec: Int32): Self
+    begin
+        return Caixa(lbl, sec);
+    end;
+
+    pub function ReadSecret(borrow self): Int32
+    begin
+        return self.secret;
+    end;
+end;
+
+priv function HelperInterno(n: Int32): Int32
+begin
+    return n + SECRET_SALT;
+end;
+
+pub function Escalar(n: Int32): Int32
+begin
+    return (n * PUBLIC_FACTOR) + HelperInterno(0) - SECRET_SALT;
+end;

@@ -84,6 +84,9 @@ type
     function MonomorphizeFunction(OriginalFunc: TASTFunction; const ConcreteType: string): TASTFunction;
     function HasForeignImports: Boolean;
     function InferForeignFunctionReturnType(const FuncName: string): string;
+    procedure CheckVisibility(AIsPublic: Boolean; const ASrcMod, ASymName: string; ALine, ACol: Integer);
+    function IsModulePrefix(const APrefix: string; out AModName: string): Boolean;
+    function MatchesModuleName(const AImpName, ASrcMod: string): Boolean;
     procedure CheckFunction(Func: TASTFunction);
     procedure CheckProgramBlock(Prog: TASTProgramBlock);
     procedure CheckVarDecl(VarDecl: TASTVarDecl);
@@ -440,12 +443,13 @@ begin
   if not Assigned(Sym) then
     Error('E0425', Format('Identificador nao encontrado: "%s"', [Id.Name]), Id.Line, Id.Col);
 
+  CheckVisibility(Sym.IsPublic, Sym.SourceModule, Sym.Name, Id.Line, Id.Col);
   Result := Sym.TypeName;
 end;
 
 function TAetherTypeChecker.CheckMemberAccess(Acc: TASTMemberAccessExpr): string;
 var
-  TargetType: string;
+  TargetType, ModName: string;
   Sym: TSymbol;
   I, P1, P2: Integer;
   RecDecl: TASTRecordDecl;
@@ -453,15 +457,44 @@ var
   Field: TASTRecordField;
   InnerRecName, ResVal, ResErr: string;
 begin
-  // Se o alvo for um Identificador, pode ser um tipo (Enum) ou uma variavel
+  // Se o alvo for um Identificador ou Modulo.Enum, pode ser um Modulo/Alias, Enum ou uma variavel
+  if (Acc.Target is TASTMemberAccessExpr) and
+     (TASTMemberAccessExpr(Acc.Target).Target is TASTIdentifierExpr) and
+     IsModulePrefix(TASTIdentifierExpr(TASTMemberAccessExpr(Acc.Target).Target).Name, ModName) then
+  begin
+    Sym := FSymbols.Resolve(TASTMemberAccessExpr(Acc.Target).Member);
+    if Assigned(Sym) and (Sym.Kind = skType) and (Sym.Node is TASTEnumDecl) and
+       ((Sym.SourceModule = '') or MatchesModuleName(ModName, Sym.SourceModule)) then
+    begin
+      CheckVisibility(Sym.IsPublic, Sym.SourceModule, Sym.Name, Acc.Line, Acc.Col);
+      EnumDecl := TASTEnumDecl(Sym.Node);
+      for I := 0 to EnumDecl.Variants.Count - 1 do
+      begin
+        if SameText(TASTEnumVariant(EnumDecl.Variants[I]).Name, Acc.Member) then
+          Exit(EnumDecl.Name);
+      end;
+      Error('E0599', Format('Variante "%s" nao pertence ao enum "%s"', [Acc.Member, EnumDecl.Name]), Acc.Line, Acc.Col);
+    end;
+  end;
+
   if Acc.Target is TASTIdentifierExpr then
   begin
+    if IsModulePrefix(TASTIdentifierExpr(Acc.Target).Name, ModName) then
+    begin
+      Sym := FSymbols.Resolve(Acc.Member);
+      if (not Assigned(Sym)) or ((Sym.SourceModule <> '') and (not MatchesModuleName(ModName, Sym.SourceModule))) then
+        Error('E0425', Format('Simbolo "%s" nao encontrado no modulo "%s"', [Acc.Member, TASTIdentifierExpr(Acc.Target).Name]), Acc.Line, Acc.Col);
+      CheckVisibility(Sym.IsPublic, Sym.SourceModule, Sym.Name, Acc.Line, Acc.Col);
+      Exit(Sym.TypeName);
+    end;
+
     Sym := FSymbols.Resolve(TASTIdentifierExpr(Acc.Target).Name);
     if Assigned(Sym) then
     begin
       // Caso Enum.Variante (ex: MathError.DivisaoPorZero)
       if (Sym.Kind = skType) and (Sym.Node is TASTEnumDecl) then
       begin
+        CheckVisibility(Sym.IsPublic, Sym.SourceModule, Sym.Name, Acc.Line, Acc.Col);
         EnumDecl := TASTEnumDecl(Sym.Node);
         for I := 0 to EnumDecl.Variants.Count - 1 do
         begin
@@ -548,7 +581,10 @@ begin
     begin
       Field := TASTRecordField(RecDecl.Fields[I]);
       if SameText(Field.Name, Acc.Member) then
+      begin
+        CheckVisibility(Field.IsPublic, Field.SourceModule, RecDecl.Name + '.' + Field.Name, Acc.Line, Acc.Col);
         Exit(Field.TypeName);
+      end;
     end;
     Error('E0609', Format('Campo "%s" nao existe no record "%s"', [Acc.Member, TargetType]), Acc.Line, Acc.Col);
   end;
@@ -785,6 +821,70 @@ begin
   Result := 'Float64';
 end;
 
+procedure TAetherTypeChecker.CheckVisibility(AIsPublic: Boolean; const ASrcMod, ASymName: string; ALine, ACol: Integer);
+var
+  CurMod: string;
+begin
+  if AIsPublic or (ASrcMod = '') then Exit;
+  CurMod := '';
+  if Assigned(FCurrentFunction) and (FCurrentFunction.SourceModule <> '') then
+    CurMod := FCurrentFunction.SourceModule
+  else if Assigned(FModule) then
+    CurMod := FModule.Name;
+
+  if (CurMod <> '') and (not MatchesModuleName(CurMod, ASrcMod)) then
+    Error('E0603', Format('Simbolo privado "%s" do modulo "%s" nao e acessivel fora dele (marque com "pub")',
+      [ASymName, ASrcMod]), ALine, ACol);
+end;
+
+function TAetherTypeChecker.MatchesModuleName(const AImpName, ASrcMod: string): Boolean;
+var
+  LastSeg, CleanA, CleanB: string;
+begin
+  if SameText(AImpName, ASrcMod) then Exit(True);
+  LastSeg := AImpName;
+  if Pos('.', LastSeg) > 0 then
+    LastSeg := Copy(LastSeg, LastDelimiter('.', LastSeg) + 1, Length(LastSeg));
+  if SameText(LastSeg, ASrcMod) then Exit(True);
+  CleanA := StringReplace(LastSeg, '_', '', [rfReplaceAll]);
+  CleanB := StringReplace(ASrcMod, '_', '', [rfReplaceAll]);
+  Result := SameText(CleanA, CleanB);
+end;
+
+function TAetherTypeChecker.IsModulePrefix(const APrefix: string; out AModName: string): Boolean;
+var
+  I: Integer;
+  Imp, LastSeg: string;
+begin
+  AModName := '';
+  Result := False;
+  if Assigned(FSymbols) and Assigned(FSymbols.Resolve(APrefix)) then
+    Exit(False);
+
+  if Assigned(FModule) and Assigned(FModule.ImportAliases) then
+  begin
+    AModName := FModule.ImportAliases.Values[APrefix];
+    if AModName <> '' then
+      Exit(True);
+  end;
+
+  if Assigned(FModule) and Assigned(FModule.Imports) then
+  begin
+    for I := 0 to FModule.Imports.Count - 1 do
+    begin
+      Imp := FModule.Imports[I];
+      LastSeg := Imp;
+      if Pos('.', LastSeg) > 0 then
+        LastSeg := Copy(LastSeg, LastDelimiter('.', LastSeg) + 1, Length(LastSeg));
+      if SameText(APrefix, Imp) or SameText(APrefix, LastSeg) then
+      begin
+        AModName := Imp;
+        Exit(True);
+      end;
+    end;
+  end;
+end;
+
 function TAetherTypeChecker.CheckCall(Call: TASTCallExpr): string;
 var
   Sym, SymMono, TypeSym: TSymbol;
@@ -858,6 +958,75 @@ begin
     Exit('Box<' + ArgType + '>');
   end;
 
+  if (Call.Callee = '__JsonGetStr') or (Call.Callee = '__JsonGetInt') or
+     (Call.Callee = '__JsonGetFloat') or (Call.Callee = '__JsonGetBool') or
+     (Call.Callee = '__JsonGetChar') or (Call.Callee = '__JsonHasValue') or
+     (Call.Callee = '__JsonGetObj') then
+  begin
+    if Call.Args.Count <> 2 then
+      Error('E0061', Format('Funcao "%s" espera 2 argumentos (json, key)', [Call.Callee]), Call.Line, Call.Col);
+    CheckExpr(TASTCallArg(Call.Args[0]).Expr);
+    CheckExpr(TASTCallArg(Call.Args[1]).Expr);
+    if Call.Callee = '__JsonGetInt' then Exit('Int32')
+    else if Call.Callee = '__JsonGetFloat' then Exit('Float64')
+    else if (Call.Callee = '__JsonGetBool') or (Call.Callee = '__JsonHasValue') then Exit('Bool')
+    else if Call.Callee = '__JsonGetChar' then Exit('Char')
+    else Exit('String');
+  end;
+
+  // Resolucao qualificada via Alias/Modulo (ex: math.Sin(x), hmod.Tipo.New(x)) ou Metodo Associado (ex: Ponto.New(x, y))
+  if Call.IsQualified and (Call.Args.Count > 0) then
+  begin
+    if TASTCallArg(Call.Args[0]).Expr is TASTIdentifierExpr then
+    begin
+      T1 := TASTIdentifierExpr(TASTCallArg(Call.Args[0]).Expr).Name;
+      if IsModulePrefix(T1, T2) then
+      begin
+        Call.Args.Delete(0);
+        Sym := FSymbols.Resolve(Call.Callee);
+        if (not Assigned(Sym)) or ((Sym.SourceModule <> '') and (not MatchesModuleName(T2, Sym.SourceModule))) then
+          Error('E0425', Format('Funcao ou tipo "%s" nao encontrado no modulo "%s"', [Call.Callee, T1]), Call.Line, Call.Col);
+        CheckVisibility(Sym.IsPublic, Sym.SourceModule, Sym.Name, Call.Line, Call.Col);
+      end
+      else
+      begin
+        TypeSym := FSymbols.Resolve(T1);
+        if Assigned(TypeSym) and (TypeSym.Kind = skType) then
+        begin
+          CheckVisibility(TypeSym.IsPublic, TypeSym.SourceModule, TypeSym.Name, Call.Line, Call.Col);
+          Mangled := FindTraitMethod(T1, Call.Callee);
+          if Mangled <> '' then
+          begin
+            Call.Args.Delete(0);
+            Call.Callee := Mangled;
+          end
+          else
+            Error('E0425', Format('Metodo associado "%s" nao encontrado para o tipo "%s"', [Call.Callee, T1]), Call.Line, Call.Col);
+        end;
+      end;
+    end
+    else if (TASTCallArg(Call.Args[0]).Expr is TASTMemberAccessExpr) and
+            (TASTMemberAccessExpr(TASTCallArg(Call.Args[0]).Expr).Target is TASTIdentifierExpr) and
+            IsModulePrefix(TASTIdentifierExpr(TASTMemberAccessExpr(TASTCallArg(Call.Args[0]).Expr).Target).Name, T2) then
+    begin
+      T1 := TASTMemberAccessExpr(TASTCallArg(Call.Args[0]).Expr).Member;
+      TypeSym := FSymbols.Resolve(T1);
+      if (not Assigned(TypeSym)) or (TypeSym.Kind <> skType) or
+         ((TypeSym.SourceModule <> '') and (not MatchesModuleName(T2, TypeSym.SourceModule))) then
+        Error('E0425', Format('Tipo "%s" nao encontrado no modulo "%s"',
+          [T1, TASTIdentifierExpr(TASTMemberAccessExpr(TASTCallArg(Call.Args[0]).Expr).Target).Name]), Call.Line, Call.Col);
+      CheckVisibility(TypeSym.IsPublic, TypeSym.SourceModule, TypeSym.Name, Call.Line, Call.Col);
+      Mangled := FindTraitMethod(T1, Call.Callee);
+      if Mangled <> '' then
+      begin
+        Call.Args.Delete(0);
+        Call.Callee := Mangled;
+      end
+      else
+        Error('E0425', Format('Metodo associado "%s" nao encontrado para o tipo "%s"', [Call.Callee, T1]), Call.Line, Call.Col);
+    end;
+  end;
+
   Sym := FSymbols.Resolve(Call.Callee);
   if (not Assigned(Sym)) or (Sym.Kind = skVariable) or (Sym.Kind = skTrait) then
   begin
@@ -906,6 +1075,8 @@ begin
       Error('E0425', Format('Funcao ou tipo nao encontrado: "%s"', [Call.Callee]), Call.Line, Call.Col);
     end;
   end;
+
+  CheckVisibility(Sym.IsPublic, Sym.SourceModule, Sym.Name, Call.Line, Call.Col);
 
   // Construtor de Record: DataBuffer(id: 101, size: 2048) ou posicional
   if (Sym.Kind = skType) and (Sym.Node is TASTRecordDecl) then
@@ -973,6 +1144,9 @@ begin
       Arg := TASTCallArg(Call.Args[I]);
       ArgType := CheckExpr(Arg.Expr);
       ExpectedType := TASTRecordField(RecDecl.Fields[I]).TypeName;
+      if (Arg.Expr is TASTIdentifierExpr) and SameText(TASTIdentifierExpr(Arg.Expr).Name, 'None') and
+         IsValueOptionType(ExpectedType) then
+        TASTIdentifierExpr(Arg.Expr).Name := '__ValueNone';
       if not TypesAreCompatible(ExpectedType, ArgType) then
         Error('E0308', Format('Campo "%s" do record "%s" espera "%s", mas recebeu "%s"',
           [TASTRecordField(RecDecl.Fields[I]).Name, RecDecl.Name, ExpectedType, ArgType]), Arg.Line, Arg.Col);
@@ -1682,6 +1856,12 @@ begin
         IfExpr.Line, IfExpr.Col);
     T1 := ResolveAliasType(CheckExpr(IfExpr.ThenExpr));
     T2 := ResolveAliasType(CheckExpr(IfExpr.ElseExpr));
+    if (IfExpr.ThenExpr is TASTIdentifierExpr) and SameText(TASTIdentifierExpr(IfExpr.ThenExpr).Name, 'None') and
+       IsValueOptionType(T2) then
+      TASTIdentifierExpr(IfExpr.ThenExpr).Name := '__ValueNone';
+    if (IfExpr.ElseExpr is TASTIdentifierExpr) and SameText(TASTIdentifierExpr(IfExpr.ElseExpr).Name, 'None') and
+       IsValueOptionType(T1) then
+      TASTIdentifierExpr(IfExpr.ElseExpr).Name := '__ValueNone';
     if (not TypesAreCompatible(T1, T2)) and (not TypesAreCompatible(T2, T1)) then
       Error('E0308', Format('Ramos de "if..then..else" possuem tipos incompativeis: "%s" e "%s"', [T1, T2]),
         IfExpr.Line, IfExpr.Col);
@@ -2421,6 +2601,7 @@ var
   I: Integer;
   ConstDecl: TASTConstDecl;
   ValType: string;
+  Sym: TSymbol;
 begin
   for I := 0 to AModule.Constants.Count - 1 do
   begin
@@ -2440,7 +2621,10 @@ begin
       else ConstDecl.TypeName := ValType;
     end;
 
-    FSymbols.Define(TSymbol.Create(ConstDecl.Name, skConstant, ConstDecl.TypeName, ConstDecl.Line, ConstDecl.Col, False, owNone, ConstDecl));
+    Sym := TSymbol.Create(ConstDecl.Name, skConstant, ConstDecl.TypeName, ConstDecl.Line, ConstDecl.Col, False, owNone, ConstDecl);
+    Sym.IsPublic := ConstDecl.IsPublic;
+    Sym.SourceModule := ConstDecl.SourceModule;
+    FSymbols.Define(Sym);
   end;
 end;
 
@@ -2455,6 +2639,7 @@ var
   SubR: TASTSubrangeDecl;
   MapD: TASTMapDecl;
   VariantNode: TASTEnumVariant;
+  Sym: TSymbol;
 begin
   for I := 0 to AModule.Types.Count - 1 do
   begin
@@ -2462,12 +2647,18 @@ begin
     if Node is TASTRecordDecl then
     begin
       Rec := TASTRecordDecl(Node);
-      FSymbols.Define(TSymbol.Create(Rec.Name, skType, Rec.Name, Rec.Line, Rec.Col, True, owNone, Rec));
+      Sym := TSymbol.Create(Rec.Name, skType, Rec.Name, Rec.Line, Rec.Col, True, owNone, Rec);
+      Sym.IsPublic := Rec.IsPublic;
+      Sym.SourceModule := Rec.SourceModule;
+      FSymbols.Define(Sym);
     end
     else if Node is TASTEnumDecl then
     begin
       Enm := TASTEnumDecl(Node);
-      FSymbols.Define(TSymbol.Create(Enm.Name, skType, Enm.Name, Enm.Line, Enm.Col, True, owNone, Enm));
+      Sym := TSymbol.Create(Enm.Name, skType, Enm.Name, Enm.Line, Enm.Col, True, owNone, Enm);
+      Sym.IsPublic := Enm.IsPublic;
+      Sym.SourceModule := Enm.SourceModule;
+      FSymbols.Define(Sym);
       for J := 0 to Enm.Variants.Count - 1 do
       begin
         VariantNode := TASTEnumVariant(Enm.Variants[J]);
@@ -2477,12 +2668,18 @@ begin
     else if Node is TASTArrayDecl then
     begin
       Arr := TASTArrayDecl(Node);
-      FSymbols.Define(TSymbol.Create(Arr.Name, skType, Arr.Name, Arr.Line, Arr.Col, True, owNone, Arr));
+      Sym := TSymbol.Create(Arr.Name, skType, Arr.Name, Arr.Line, Arr.Col, True, owNone, Arr);
+      Sym.IsPublic := Arr.IsPublic;
+      Sym.SourceModule := Arr.SourceModule;
+      FSymbols.Define(Sym);
     end
     else if Node is TASTSetDecl then
     begin
       SetD := TASTSetDecl(Node);
-      FSymbols.Define(TSymbol.Create(SetD.Name, skType, SetD.Name, SetD.Line, SetD.Col, True, owNone, SetD));
+      Sym := TSymbol.Create(SetD.Name, skType, SetD.Name, SetD.Line, SetD.Col, True, owNone, SetD);
+      Sym.IsPublic := SetD.IsPublic;
+      Sym.SourceModule := SetD.SourceModule;
+      FSymbols.Define(Sym);
       for J := 0 to SetD.Variants.Count - 1 do
       begin
         VariantNode := TASTEnumVariant(SetD.Variants[J]);
@@ -2492,16 +2689,25 @@ begin
     else if Node is TASTSubrangeDecl then
     begin
       SubR := TASTSubrangeDecl(Node);
-      FSymbols.Define(TSymbol.Create(SubR.Name, skType, SubR.Name, SubR.Line, SubR.Col, True, owNone, SubR));
+      Sym := TSymbol.Create(SubR.Name, skType, SubR.Name, SubR.Line, SubR.Col, True, owNone, SubR);
+      Sym.IsPublic := SubR.IsPublic;
+      Sym.SourceModule := SubR.SourceModule;
+      FSymbols.Define(Sym);
     end
     else if Node is TASTMapDecl then
     begin
       MapD := TASTMapDecl(Node);
-      FSymbols.Define(TSymbol.Create(MapD.Name, skType, MapD.Name, MapD.Line, MapD.Col, True, owNone, MapD));
+      Sym := TSymbol.Create(MapD.Name, skType, MapD.Name, MapD.Line, MapD.Col, True, owNone, MapD);
+      Sym.IsPublic := MapD.IsPublic;
+      Sym.SourceModule := MapD.SourceModule;
+      FSymbols.Define(Sym);
     end
     else if Node is TASTTypeAliasDecl then
     begin
-      FSymbols.Define(TSymbol.Create(TASTTypeAliasDecl(Node).Name, skType, TASTTypeAliasDecl(Node).Name, Node.Line, Node.Col, True, owNone, Node));
+      Sym := TSymbol.Create(TASTTypeAliasDecl(Node).Name, skType, TASTTypeAliasDecl(Node).Name, Node.Line, Node.Col, True, owNone, Node);
+      Sym.IsPublic := Node.IsPublic;
+      Sym.SourceModule := Node.SourceModule;
+      FSymbols.Define(Sym);
     end;
   end;
 end;
@@ -2510,11 +2716,15 @@ procedure TAetherTypeChecker.RegisterFunctions(AModule: TASTModule);
 var
   I: Integer;
   Func: TASTFunction;
+  Sym: TSymbol;
 begin
   for I := 0 to AModule.Functions.Count - 1 do
   begin
     Func := TASTFunction(AModule.Functions[I]);
-    FSymbols.Define(TSymbol.Create(Func.Name, skFunction, Func.ReturnType, Func.Line, Func.Col, False, owNone, Func));
+    Sym := TSymbol.Create(Func.Name, skFunction, Func.ReturnType, Func.Line, Func.Col, False, owNone, Func);
+    Sym.IsPublic := Func.IsPublic;
+    Sym.SourceModule := Func.SourceModule;
+    FSymbols.Define(Sym);
   end;
 end;
 
@@ -2652,11 +2862,18 @@ procedure TAetherTypeChecker.RegisterTraits(AModule: TASTModule);
 var
   I: Integer;
   Trait: TASTTraitDecl;
+  Sym, ExistingSym: TSymbol;
 begin
   for I := 0 to AModule.Traits.Count - 1 do
   begin
     Trait := TASTTraitDecl(AModule.Traits[I]);
-    FSymbols.Define(TSymbol.Create(Trait.Name, skTrait, Trait.Name, Trait.Line, Trait.Col, False, owNone, Trait));
+    ExistingSym := FSymbols.Resolve(Trait.Name);
+    if Assigned(ExistingSym) and (ExistingSym.Kind = skTrait) then
+      Continue;
+    Sym := TSymbol.Create(Trait.Name, skTrait, Trait.Name, Trait.Line, Trait.Col, False, owNone, Trait);
+    Sym.IsPublic := Trait.IsPublic;
+    Sym.SourceModule := Trait.SourceModule;
+    FSymbols.Define(Sym);
   end;
 end;
 
@@ -2676,73 +2893,83 @@ begin
   begin
     Impl := TASTImplDecl(AModule.Impls[I]);
 
-    SymTrait := FSymbols.Resolve(Impl.TraitName);
-    if (not Assigned(SymTrait)) or (SymTrait.Kind <> skTrait) then
-      Error('E0425', Format('Trait "%s" nao encontrada', [Impl.TraitName]), Impl.Line, Impl.Col);
-
     SymType := FSymbols.Resolve(Impl.TargetTypeName);
     if (not Assigned(SymType)) or (SymType.Kind <> skType) then
       Error('E0425', Format('Tipo "%s" nao encontrado', [Impl.TargetTypeName]), Impl.Line, Impl.Col);
 
-    TraitDecl := TASTTraitDecl(SymTrait.Node);
-
-    // Validação de completude: todos os métodos da trait foram implementados?
-    for TM := 0 to TraitDecl.Methods.Count - 1 do
+    TraitDecl := nil;
+    if Impl.TraitName <> '' then
     begin
-      TraitMethod := TASTFunction(TraitDecl.Methods[TM]);
-      Found := False;
-      for IM := 0 to Impl.Methods.Count - 1 do
+      SymTrait := FSymbols.Resolve(Impl.TraitName);
+      if (not Assigned(SymTrait)) or (SymTrait.Kind <> skTrait) then
+        Error('E0425', Format('Trait "%s" nao encontrada', [Impl.TraitName]), Impl.Line, Impl.Col);
+
+      TraitDecl := TASTTraitDecl(SymTrait.Node);
+
+      // Validação de completude: todos os métodos da trait foram implementados?
+      for TM := 0 to TraitDecl.Methods.Count - 1 do
       begin
-        if SameText(TASTFunction(Impl.Methods[IM]).Name, TraitMethod.Name) then
+        TraitMethod := TASTFunction(TraitDecl.Methods[TM]);
+        Found := False;
+        for IM := 0 to Impl.Methods.Count - 1 do
         begin
-          Found := True;
-          Break;
+          if SameText(TASTFunction(Impl.Methods[IM]).Name, TraitMethod.Name) then
+          begin
+            Found := True;
+            Break;
+          end;
         end;
+        if not Found then
+          Error('E0046', Format('O tipo "%s" nao implementou o metodo obrigatorio "%s" da trait "%s"',
+            [Impl.TargetTypeName, TraitMethod.Name, Impl.TraitName]), Impl.Line, Impl.Col);
       end;
-      if not Found then
-        Error('E0046', Format('O tipo "%s" nao implementou o metodo obrigatorio "%s" da trait "%s"',
-          [Impl.TargetTypeName, TraitMethod.Name, Impl.TraitName]), Impl.Line, Impl.Col);
     end;
 
     // Validação das assinaturas e registro dos métodos
     for IM := 0 to Impl.Methods.Count - 1 do
     begin
       ImplMethod := TASTFunction(Impl.Methods[IM]);
-      TraitMethod := nil;
-      for TM := 0 to TraitDecl.Methods.Count - 1 do
+      if SameText(ImplMethod.ReturnType, 'Self') then
+        ImplMethod.ReturnType := Impl.TargetTypeName;
+
+      if Assigned(TraitDecl) then
       begin
-        if SameText(TASTFunction(TraitDecl.Methods[TM]).Name, ImplMethod.Name) then
+        TraitMethod := nil;
+        for TM := 0 to TraitDecl.Methods.Count - 1 do
         begin
-          TraitMethod := TASTFunction(TraitDecl.Methods[TM]);
-          Break;
+          if SameText(TASTFunction(TraitDecl.Methods[TM]).Name, ImplMethod.Name) then
+          begin
+            TraitMethod := TASTFunction(TraitDecl.Methods[TM]);
+            Break;
+          end;
         end;
-      end;
 
-      if Assigned(TraitMethod) then
-      begin
-        // Verifica parâmetros
-        if ImplMethod.Params.Count <> TraitMethod.Params.Count then
-          Error('E0053', Format('A assinatura do metodo "%s" em "%s" diverge da definicao da trait "%s" (quantidade de parametros incompativel: esperado %d, recebido %d)',
-            [ImplMethod.Name, Impl.TargetTypeName, Impl.TraitName, TraitMethod.Params.Count, ImplMethod.Params.Count]), ImplMethod.Line, ImplMethod.Col);
-
-        // Verifica tipo de retorno
-        ExpectedRetType := TraitMethod.ReturnType;
-        if SameText(ExpectedRetType, 'Self') then
-          ExpectedRetType := Impl.TargetTypeName;
-
-        if not SameText(ImplMethod.ReturnType, ExpectedRetType) then
-          Error('E0053', Format('A assinatura do metodo "%s" em "%s" diverge da definicao da trait "%s" (tipo de retorno incompativel: esperado "%s", recebido "%s")',
-            [ImplMethod.Name, Impl.TargetTypeName, Impl.TraitName, ExpectedRetType, ImplMethod.ReturnType]), ImplMethod.Line, ImplMethod.Col);
-
-        for P := 0 to TraitMethod.Params.Count - 1 do
+        if Assigned(TraitMethod) then
         begin
-          ExpectedParamType := TASTParam(TraitMethod.Params[P]).TypeName;
-          if SameText(ExpectedParamType, 'Self') then
-            ExpectedParamType := Impl.TargetTypeName;
+          // Verifica parâmetros
+          if ImplMethod.Params.Count <> TraitMethod.Params.Count then
+            Error('E0053', Format('A assinatura do metodo "%s" em "%s" diverge da definicao da trait "%s" (quantidade de parametros incompativel: esperado %d, recebido %d)',
+              [ImplMethod.Name, Impl.TargetTypeName, Impl.TraitName, TraitMethod.Params.Count, ImplMethod.Params.Count]), ImplMethod.Line, ImplMethod.Col);
 
-          if not SameText(ExpectedParamType, TASTParam(ImplMethod.Params[P]).TypeName) then
-            Error('E0053', Format('A assinatura do metodo "%s" em "%s" diverge da definicao da trait "%s" no parametro "%s" (esperado "%s", recebido "%s")',
-              [ImplMethod.Name, Impl.TargetTypeName, Impl.TraitName, TASTParam(ImplMethod.Params[P]).Name, ExpectedParamType, TASTParam(ImplMethod.Params[P]).TypeName]), ImplMethod.Line, ImplMethod.Col);
+          // Verifica tipo de retorno
+          ExpectedRetType := TraitMethod.ReturnType;
+          if SameText(ExpectedRetType, 'Self') then
+            ExpectedRetType := Impl.TargetTypeName;
+
+          if not SameText(ImplMethod.ReturnType, ExpectedRetType) then
+            Error('E0053', Format('A assinatura do metodo "%s" em "%s" diverge da definicao da trait "%s" (tipo de retorno incompativel: esperado "%s", recebido "%s")',
+              [ImplMethod.Name, Impl.TargetTypeName, Impl.TraitName, ExpectedRetType, ImplMethod.ReturnType]), ImplMethod.Line, ImplMethod.Col);
+
+          for P := 0 to TraitMethod.Params.Count - 1 do
+          begin
+            ExpectedParamType := TASTParam(TraitMethod.Params[P]).TypeName;
+            if SameText(ExpectedParamType, 'Self') then
+              ExpectedParamType := Impl.TargetTypeName;
+
+            if not SameText(ExpectedParamType, TASTParam(ImplMethod.Params[P]).TypeName) then
+              Error('E0053', Format('A assinatura do metodo "%s" em "%s" diverge da definicao da trait "%s" no parametro "%s" (esperado "%s", recebido "%s")',
+                [ImplMethod.Name, Impl.TargetTypeName, Impl.TraitName, TASTParam(ImplMethod.Params[P]).Name, ExpectedParamType, TASTParam(ImplMethod.Params[P]).TypeName]), ImplMethod.Line, ImplMethod.Col);
+          end;
         end;
       end;
 
@@ -2751,7 +2978,7 @@ begin
       ImplMethod.OriginalName := ImplMethod.Name;
       ImplMethod.Name := MangledName;
 
-      // Registra a implementação da trait para lookup
+      // Registra a implementação da trait (ou inherent impl) para lookup
       New(Info);
       Info^.TargetType := Impl.TargetTypeName;
       Info^.TraitName := Impl.TraitName;

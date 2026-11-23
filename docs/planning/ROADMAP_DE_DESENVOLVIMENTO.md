@@ -829,13 +829,13 @@ Mapeamento técnico completo dos recursos pendentes identificados no compilador 
 - [ ] **5.2 Primitivas Reais de Sincronização & Canais com Buffer em `std/sync.aeth`**:
   - Evoluir `AtomicInt32` (operações atômicas de hardware/`Interlocked`/`__atomic_*`), `Mutex` real (bloqueio nativo de thread) e `Channel<T>` com fila real em memória em vez de contadores simulados.
 
-### 📋 Fase 54: 6. Sistema de Módulos, Visibilidade, Traits e `#[derive]` - PLANEJADA
-- [ ] **6.1 Alias de Importação (`import X as Y;`), Visibilidade (`pub`) e Qualificação `Y.Simbolo`**:
-  - Armazenar o identificador após `tokAs` em `TASTModule`, resolver chamadas qualificadas (`Y.Func()`) e aplicar regras de visibilidade pública/privada entre módulos.
-- [ ] **6.2 Blocos `impl Tipo` Diretos (Inherent Methods sem Trait)**:
-  - Permitir métodos inerentes diretamente em tipos (`impl Ponto ... end;`) em `TAetherParser.ParseImplDecl`, `uAetherTypeChecker.pas` e ambos os emitters sem obrigatoriedade de uma `trait`.
-- [ ] **6.3 Expansão de `#[derive(Debug, JSON, Clone, Equals)]` & `FromJSON`**:
-  - Estender `uAetherDerives.pas` para suportar campos `Char`, `Enum`, `array`, `map`, `set`, `Option<T>` e `Result<T, E>`, além de geração automática de `FromJSON` para records derivados.
+### ✅ Fase 54: 6. Sistema de Módulos, Visibilidade, Traits e `#[derive]` - CONCLUÍDA
+- [x] **6.1 Alias de Importação (`import X as Y;`), Visibilidade (`pub` / `priv`) e Qualificação `Y.Simbolo`**:
+  - Armazenar o identificador de alias após `tokAs` em `TASTModule.ImportAliases`, permitir especificadores de visibilidade `pub`/`priv` em constantes, tipos, traits, funções, campos de `record` e métodos de `impl`, validar acesso entre módulos com erro semântico `[E0603]`, e resolver referências/tipos/chamadas qualificadas (`Y.Func()`, `Y.CONST`, `Y.Enum.Var`, `Y.Tipo`, `Y.Tipo.Metodo()`).
+- [x] **6.2 Blocos `impl Tipo` Diretos (Inherent Methods sem Trait)**:
+  - Tornar `for` opcional em `TAetherParser.ParseImplDecl` (`impl Ponto ... end;`), substituir `Self` em parâmetros e retornos (`Self`, `Option<Self>`), e suportar despacho tanto UFCS (`v.Add(other)`) quanto associado/estático (`Vetor2D.New(3, 4)`, `Vetor2D.Zero()`).
+- [x] **6.3 Expansão de `[derive(Debug, JSON, Clone, Equals)]` & `FromJSON`**:
+  - Estender `uAetherDerives.pas` para suportar campos `Char`, `Enum`, subfaixas, `array` fixo/dinâmico, `Option<T>` e `Result<T, E>`, além de geração automática de `Tipo.FromJSON(json)` para records e enums que derivam `JSON`, com helpers de runtime em Free Pascal e GCC C99. Validado com `tests/13_fase54_modules_pub_inherent_impl_derives_fromjson_test.aeth` (`13/13 PASS` nos dois backends).
 
 ### 📋 Fase 55: 7. Biblioteca Padrão (`std/*.aeth`) e Intrínsecos de Sistema - PLANEJADA
 - [ ] **7.1 Strings & Conversões Avançadas (`Split`, `Join`, `PadLeft`, `PadRight`, `RepeatStr`, `StrToFloat`, `TryStrToInt`, `TryStrToFloat`)**:

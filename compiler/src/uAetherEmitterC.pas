@@ -33,9 +33,12 @@ type
     procedure EmitStmtList(List: TASTNodeList; IsLoopBody: Boolean = False);
 
     function IsEnumName(const AName: string): Boolean;
+    function IsRecordName(const AName: string): Boolean;
+    function IsModulePrefixName(const AName: string): Boolean;
     function ResolveAliasType(const AType: string): string;
     function IsSetType(const AName: string): Boolean;
     function IsDynamicArrayType(const AName: string): Boolean;
+    function IsFixedArrayType(const AName: string): Boolean;
     function IsValueOptionType(const AType: string): Boolean;
     function SplitResultTypes(const AType: string; out ValType, ErrType: string): Boolean;
     function IsTypeIdentifier(const AName: string): Boolean;
@@ -142,6 +145,57 @@ begin
         Exit(True);
 end;
 
+function TAetherEmitterC.IsRecordName(const AName: string): Boolean;
+var
+  I: Integer;
+begin
+  Result := False;
+  if Assigned(FModule) then
+    for I := 0 to FModule.Types.Count - 1 do
+      if (TASTNode(FModule.Types[I]) is TASTRecordDecl) and
+         SameText(TASTRecordDecl(FModule.Types[I]).Name, AName) then
+        Exit(True);
+end;
+
+function TAetherEmitterC.IsModulePrefixName(const AName: string): Boolean;
+var
+  I: Integer;
+  Imp, LastSeg: string;
+begin
+  Result := False;
+  if Assigned(FCurrentFunc) then
+  begin
+    for I := 0 to FCurrentFunc.LocalVars.Count - 1 do
+      if SameText(TASTVarDecl(FCurrentFunc.LocalVars[I]).Name, AName) then Exit(False);
+    for I := 0 to FCurrentFunc.Params.Count - 1 do
+      if SameText(TASTParam(FCurrentFunc.Params[I]).Name, AName) then Exit(False);
+    if FindInlineVarType(FCurrentFunc.Body, AName) <> '' then Exit(False);
+  end;
+  if Assigned(FProgramBlock) then
+  begin
+    for I := 0 to FProgramBlock.LocalVars.Count - 1 do
+      if SameText(TASTVarDecl(FProgramBlock.LocalVars[I]).Name, AName) then Exit(False);
+    if FindInlineVarType(FProgramBlock.Body, AName) <> '' then Exit(False);
+  end;
+  if IsTypeIdentifier(AName) then Exit(False);
+
+  if Assigned(FModule) and Assigned(FModule.ImportAliases) and (FModule.ImportAliases.Values[AName] <> '') then
+    Exit(True);
+
+  if Assigned(FModule) and Assigned(FModule.Imports) then
+  begin
+    for I := 0 to FModule.Imports.Count - 1 do
+    begin
+      Imp := FModule.Imports[I];
+      LastSeg := Imp;
+      if Pos('.', LastSeg) > 0 then
+        LastSeg := Copy(LastSeg, LastDelimiter('.', LastSeg) + 1, Length(LastSeg));
+      if SameText(AName, Imp) or SameText(AName, LastSeg) then
+        Exit(True);
+    end;
+  end;
+end;
+
 function TAetherEmitterC.ResolveAliasType(const AType: string): string;
 var
   Cur: string;
@@ -197,6 +251,23 @@ begin
       if (TASTNode(FModule.Types[I]) is TASTArrayDecl) and
          SameText(TASTArrayDecl(FModule.Types[I]).Name, T) and
          (TASTArrayDecl(FModule.Types[I]).Dims.Count = 0) then
+        Exit(True);
+end;
+
+function TAetherEmitterC.IsFixedArrayType(const AName: string): Boolean;
+var
+  I: Integer;
+  T: string;
+begin
+  T := ResolveAliasType(AName);
+  if Pos('array[', LowerCase(T)) = 1 then
+    Exit(True);
+  Result := False;
+  if Assigned(FModule) then
+    for I := 0 to FModule.Types.Count - 1 do
+      if (TASTNode(FModule.Types[I]) is TASTArrayDecl) and
+         SameText(TASTArrayDecl(FModule.Types[I]).Name, T) and
+         (TASTArrayDecl(FModule.Types[I]).Dims.Count > 0) then
         Exit(True);
 end;
 
@@ -1208,9 +1279,13 @@ begin
       Exit(TASTIdentifierExpr(TASTCallArg(Call.Args[0]).Expr).Name);
     if (Call.Callee = 'ReadFile') or (Call.Callee = 'CharAt') or (Call.Callee = 'Substring') or (Call.Callee = 'ToString') or
        (Call.Callee = 'IntToStr') or (Call.Callee = 'FloatToStr') or (Call.Callee = 'BoolToStr') or (Call.Callee = 'CharToStr') or
-       (Call.Callee = '__InterpToStr') or (Call.Callee = 'SocketRecv') or (Call.Callee = 'ParamStr') or
+       (Call.Callee = '__InterpToStr') or (Call.Callee = '__JsonGetStr') or (Call.Callee = '__JsonGetObj') or
+       (Call.Callee = 'SocketRecv') or (Call.Callee = 'ParamStr') or
        SameText(Call.Callee, 'Trim') or SameText(Call.Callee, 'UpperCase') or SameText(Call.Callee, 'LowerCase') or SameText(Call.Callee, 'Replace') then Exit('String');
-    if SameText(Call.Callee, 'Chr') or SameText(Call.Callee, 'Char') then Exit('Char');
+    if (Call.Callee = '__JsonGetInt') then Exit('Int32');
+    if (Call.Callee = '__JsonGetFloat') then Exit('Float64');
+    if (Call.Callee = '__JsonGetBool') or (Call.Callee = '__JsonHasValue') then Exit('Bool');
+    if (Call.Callee = '__JsonGetChar') or SameText(Call.Callee, 'Chr') or SameText(Call.Callee, 'Char') then Exit('Char');
     if SameText(Call.Callee, 'Slice') and (Call.Args.Count >= 1) then
     begin
       TargetType := ResolveAliasType(GetExprTypeName(TASTCallArg(Call.Args[0]).Expr));
@@ -1426,10 +1501,14 @@ begin
   if Expr is TASTMemberAccessExpr then
   begin
     Acc := TASTMemberAccessExpr(Expr);
+    if (Acc.Target is TASTIdentifierExpr) and IsModulePrefixName(TASTIdentifierExpr(Acc.Target).Name) then
+      Exit(Acc.Member);
     TargetStr := EmitExpr(Acc.Target);
     TargetT := ResolveAliasType(GetExprTypeName(Acc.Target));
     if (Acc.Target is TASTIdentifierExpr) and IsEnumName(TASTIdentifierExpr(Acc.Target).Name) then
       Result := TASTIdentifierExpr(Acc.Target).Name + '_' + Acc.Member
+    else if (Acc.Target is TASTMemberAccessExpr) and IsEnumName(TargetStr) then
+      Result := TargetStr + '_' + Acc.Member
     else if Pos('Result', TargetT) = 1 then
     begin
       if Acc.Member = 'value' then
@@ -1904,9 +1983,51 @@ begin
       Exit;
     end;
 
-    if (Call.Args.Count = 1) and IsTypeIdentifier(Call.Callee) and not IsEnumName(Call.Callee) then
+    if (Call.Args.Count = 1) and IsTypeIdentifier(Call.Callee) and not IsEnumName(Call.Callee) and not IsRecordName(Call.Callee) then
     begin
       Result := Format('((%s)(%s))', [EmitTypeRef(Call.Callee), EmitExpr(TASTCallArg(Call.Args[0]).Expr)]);
+      Exit;
+    end;
+
+    if Call.Callee = '__JsonGetStr' then
+    begin
+      Result := 'AetherJsonGetStr(' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + ', ' + EmitExpr(TASTCallArg(Call.Args[1]).Expr) + ')';
+      Exit;
+    end;
+
+    if Call.Callee = '__JsonGetInt' then
+    begin
+      Result := 'AetherJsonGetInt(' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + ', ' + EmitExpr(TASTCallArg(Call.Args[1]).Expr) + ')';
+      Exit;
+    end;
+
+    if Call.Callee = '__JsonGetFloat' then
+    begin
+      Result := 'AetherJsonGetFloat(' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + ', ' + EmitExpr(TASTCallArg(Call.Args[1]).Expr) + ')';
+      Exit;
+    end;
+
+    if Call.Callee = '__JsonGetBool' then
+    begin
+      Result := 'AetherJsonGetBool(' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + ', ' + EmitExpr(TASTCallArg(Call.Args[1]).Expr) + ')';
+      Exit;
+    end;
+
+    if Call.Callee = '__JsonGetChar' then
+    begin
+      Result := 'AetherJsonGetChar(' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + ', ' + EmitExpr(TASTCallArg(Call.Args[1]).Expr) + ')';
+      Exit;
+    end;
+
+    if Call.Callee = '__JsonHasValue' then
+    begin
+      Result := 'AetherJsonHasValue(' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + ', ' + EmitExpr(TASTCallArg(Call.Args[1]).Expr) + ')';
+      Exit;
+    end;
+
+    if Call.Callee = '__JsonGetObj' then
+    begin
+      Result := 'AetherJsonGetObj(' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + ', ' + EmitExpr(TASTCallArg(Call.Args[1]).Expr) + ')';
       Exit;
     end;
 
@@ -1935,6 +2056,8 @@ begin
         Result := 'false'
       else if (TargetT = 'Pointer') or (Pos('^', TargetT) = 1) or IsDynamicArrayType(TargetT) then
         Result := Format('((%s)NULL)', [EmitTypeRef(TargetStr)])
+      else if (Pos('Result', TargetT) = 1) or (Pos('Option', TargetT) = 1) or IsFixedArrayType(TargetT) then
+        Result := Format('((%s){0})', [EmitTypeRef(TargetStr)])
       else if (TargetT = 'Int8') or (TargetT = 'Int16') or (TargetT = 'Int32') or (TargetT = 'Int64') or
               (TargetT = 'UInt8') or (TargetT = 'UInt16') or (TargetT = 'UInt32') or (TargetT = 'UInt64') or
               (TargetT = 'Float32') or (TargetT = 'Float64') or (TargetT = 'Char') then
@@ -2927,6 +3050,7 @@ var
   I: Integer;
   Field: TASTRecordField;
   CtorParams, CtorInit: string;
+  HasFixedArr: Boolean;
 begin
   Emit(Format('struct T%s {', [Rec.Name]));
   IncIndent;
@@ -2942,9 +3066,12 @@ begin
   // Construtor estilo DataBuffer(id, size)
   CtorParams := '';
   CtorInit := '';
+  HasFixedArr := False;
   for I := 0 to Rec.Fields.Count - 1 do
   begin
     Field := TASTRecordField(Rec.Fields[I]);
+    if IsFixedArrayType(Field.TypeName) then
+      HasFixedArr := True;
     CtorParams := CtorParams + Format('%s a_%s', [EmitTypeRef(Field.TypeName), Field.Name]);
     CtorInit := CtorInit + Format('.%s = a_%s', [Field.Name, Field.Name]);
     if I < Rec.Fields.Count - 1 then
@@ -2953,7 +3080,24 @@ begin
       CtorInit := CtorInit + ', ';
     end;
   end;
-  Emit(Format('static inline T%s %s(%s) { return (T%s){ %s }; }', [Rec.Name, Rec.Name, CtorParams, Rec.Name, CtorInit]));
+  if not HasFixedArr then
+    Emit(Format('static inline T%s %s(%s) { return (T%s){ %s }; }', [Rec.Name, Rec.Name, CtorParams, Rec.Name, CtorInit]))
+  else
+  begin
+    Emit(Format('static inline T%s %s(%s) {', [Rec.Name, Rec.Name, CtorParams]));
+    Emit(Format('    T%s _r;', [Rec.Name]));
+    Emit('    memset(&_r, 0, sizeof(_r));');
+    for I := 0 to Rec.Fields.Count - 1 do
+    begin
+      Field := TASTRecordField(Rec.Fields[I]);
+      if IsFixedArrayType(Field.TypeName) then
+        Emit(Format('    if (a_%s) memcpy(_r.%s, a_%s, sizeof(_r.%s));', [Field.Name, Field.Name, Field.Name, Field.Name]))
+      else
+        Emit(Format('    _r.%s = a_%s;', [Field.Name, Field.Name]));
+    end;
+    Emit('    return _r;');
+    Emit('}');
+  end;
   Emit('');
 end;
 
@@ -3750,6 +3894,101 @@ begin
   Emit('    if (!s) return 0;');
   Emit('    return (int32_t)atoi(s);');
   Emit('#endif');
+  Emit('}');
+  Emit('');
+  Emit('static inline char* AetherJsonExtractRaw(const char* json, const char* key) {');
+  Emit('    if (!json || !key) { char* e = (char*)malloc(1); e[0] = ''\0''; return e; }');
+  Emit('    size_t klen = strlen(key);');
+  Emit('    size_t jlen = strlen(json);');
+  Emit('    for (size_t i = 0; i + klen + 2 <= jlen; i++) {');
+  Emit('        if (json[i] == ''"'' && strncmp(json + i + 1, key, klen) == 0 && json[i + 1 + klen] == ''"'') {');
+  Emit('            size_t p = i + 2 + klen;');
+  Emit('            while (p < jlen && (json[p] == '' '' || json[p] == ''\t'' || json[p] == ''\n'' || json[p] == ''\r'')) p++;');
+  Emit('            if (p < jlen && json[p] == '':'') {');
+  Emit('                p++;');
+  Emit('                while (p < jlen && (json[p] == '' '' || json[p] == ''\t'' || json[p] == ''\n'' || json[p] == ''\r'')) p++;');
+  Emit('                size_t start = p;');
+  Emit('                if (p < jlen && json[p] == ''"'') {');
+  Emit('                    p++;');
+  Emit('                    while (p < jlen) {');
+  Emit('                        if (json[p] == ''"'' && json[p - 1] != ''\\'') { p++; break; }');
+  Emit('                        p++;');
+  Emit('                    }');
+  Emit('                } else if (p < jlen && json[p] == ''{'') {');
+  Emit('                    int depth = 0;');
+  Emit('                    bool in_str = false;');
+  Emit('                    while (p < jlen) {');
+  Emit('                        if (json[p] == ''"'' && (p == 0 || json[p - 1] != ''\\'')) in_str = !in_str;');
+  Emit('                        else if (!in_str) {');
+  Emit('                            if (json[p] == ''{'') depth++;');
+  Emit('                            else if (json[p] == ''}'') { depth--; if (depth == 0) { p++; break; } }');
+  Emit('                        }');
+  Emit('                        p++;');
+  Emit('                    }');
+  Emit('                } else {');
+  Emit('                    while (p < jlen && json[p] != '','' && json[p] != ''}'' && json[p] != '']'' &&');
+  Emit('                           json[p] != '' '' && json[p] != ''\t'' && json[p] != ''\n'' && json[p] != ''\r'') p++;');
+  Emit('                }');
+  Emit('                size_t rlen = p - start;');
+  Emit('                char* res = (char*)malloc(rlen + 1);');
+  Emit('                if (rlen > 0) memcpy(res, json + start, rlen);');
+  Emit('                res[rlen] = ''\0'';');
+  Emit('                return res;');
+  Emit('            }');
+  Emit('        }');
+  Emit('    }');
+  Emit('    char* empty = (char*)malloc(1);');
+  Emit('    empty[0] = ''\0'';');
+  Emit('    return empty;');
+  Emit('}');
+  Emit('');
+  Emit('static inline char* AetherJsonGetStr(const char* json, const char* key) {');
+  Emit('    char* raw = AetherJsonExtractRaw(json, key);');
+  Emit('    size_t len = strlen(raw);');
+  Emit('    if (len >= 2 && raw[0] == ''"'' && raw[len - 1] == ''"'') {');
+  Emit('        memmove(raw, raw + 1, len - 2);');
+  Emit('        raw[len - 2] = ''\0'';');
+  Emit('    }');
+  Emit('    return raw;');
+  Emit('}');
+  Emit('');
+  Emit('static inline int32_t AetherJsonGetInt(const char* json, const char* key) {');
+  Emit('    char* raw = AetherJsonExtractRaw(json, key);');
+  Emit('    int32_t val = raw[0] ? (int32_t)strtoll(raw, NULL, 10) : 0;');
+  Emit('    free(raw);');
+  Emit('    return val;');
+  Emit('}');
+  Emit('');
+  Emit('static inline double AetherJsonGetFloat(const char* json, const char* key) {');
+  Emit('    char* raw = AetherJsonExtractRaw(json, key);');
+  Emit('    double val = raw[0] ? strtod(raw, NULL) : 0.0;');
+  Emit('    free(raw);');
+  Emit('    return val;');
+  Emit('}');
+  Emit('');
+  Emit('static inline bool AetherJsonGetBool(const char* json, const char* key) {');
+  Emit('    char* raw = AetherJsonExtractRaw(json, key);');
+  Emit('    bool val = (strcmp(raw, "true") == 0);');
+  Emit('    free(raw);');
+  Emit('    return val;');
+  Emit('}');
+  Emit('');
+  Emit('static inline char AetherJsonGetChar(const char* json, const char* key) {');
+  Emit('    char* raw = AetherJsonGetStr(json, key);');
+  Emit('    char c = raw[0];');
+  Emit('    free(raw);');
+  Emit('    return c;');
+  Emit('}');
+  Emit('');
+  Emit('static inline bool AetherJsonHasValue(const char* json, const char* key) {');
+  Emit('    char* raw = AetherJsonExtractRaw(json, key);');
+  Emit('    bool ok = (raw[0] != ''\0'') && (strcmp(raw, "null") != 0);');
+  Emit('    free(raw);');
+  Emit('    return ok;');
+  Emit('}');
+  Emit('');
+  Emit('static inline char* AetherJsonGetObj(const char* json, const char* key) {');
+  Emit('    return AetherJsonExtractRaw(json, key);');
   Emit('}');
   Emit('');
   Emit('// Helpers de Linha de Comando');

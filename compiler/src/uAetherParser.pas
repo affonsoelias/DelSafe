@@ -17,6 +17,8 @@ type
     CfgCondition: string;
     InlineMode: string;
     IsCold: Boolean;
+    HasVis: Boolean;
+    IsPublic: Boolean;
   end;
 
 procedure InitAttributes(out Attrs: TParsedAttributes);
@@ -205,6 +207,8 @@ begin
   end;
 
   BaseType := Expect(tokIdentifier, 'Esperado identificador de tipo').Value;
+  while Match(tokDot) do
+    BaseType := Expect(tokIdentifier, 'Esperado identificador de tipo apos "."').Value;
   if Match(tokLess) then
   begin
     BaseType := BaseType + '<' + ParseTypeRef();
@@ -219,13 +223,14 @@ end;
 
 procedure TAetherParser.ParseImport(AModule: TASTModule);
 var
-  ImportName: string;
+  ImportName, AliasName: string;
   IsPascal, IsC, IsLink: Boolean;
 begin
   Expect(tokImport);
   IsPascal := False;
   IsC := False;
   IsLink := False;
+  AliasName := '';
 
   if Match(tokPascal) then
     IsPascal := True
@@ -252,7 +257,11 @@ begin
     ImportName := Expect(tokIdentifier, 'Esperado nome do modulo importado').Value;
     while Match(tokDot) do
       ImportName := ImportName + '.' + Expect(tokIdentifier, 'Esperado identificador apos "." no nome do modulo importado').Value;
-    Match(tokAs);
+    if Match(tokAs) then
+    begin
+      AliasName := Expect(tokIdentifier, 'Esperado alias apos "as"').Value;
+      AModule.ImportAliases.Values[AliasName] := ImportName;
+    end;
   end;
   Expect(tokSemicolon);
 
@@ -271,12 +280,26 @@ var
   FieldName, FieldType, FDoc: string;
   FLine, FCol: Integer;
   FieldNode: TASTRecordField;
+  FHasVis, FIsPub: Boolean;
 begin
   Expect(tokRecord);
   Result := TASTRecordDecl.Create(ALine, ACol, AName);
   try
     while not Check(tokEnd) and not Check(tokEOF) do
     begin
+      FHasVis := False;
+      FIsPub := True;
+      if Match(tokPub) then
+      begin
+        FHasVis := True;
+        FIsPub := True;
+      end
+      else if Match(tokPriv) then
+      begin
+        FHasVis := True;
+        FIsPub := False;
+      end;
+
       FLine := FCurTok.Line;
       FCol := FCurTok.Col;
       FDoc := FCurTok.DocComment;
@@ -286,6 +309,8 @@ begin
       Expect(tokSemicolon, 'Esperado ";" apos definicao do campo');
       FieldNode := TASTRecordField.Create(FLine, FCol, FieldName, FieldType);
       FieldNode.DocComment := FDoc;
+      FieldNode.HasExplicitVis := FHasVis;
+      FieldNode.IsPublic := FIsPub;
       Result.Fields.Add(FieldNode);
     end;
     Expect(tokEnd, 'Esperado "end" no fechamento do record');
@@ -345,6 +370,8 @@ begin
   Attrs.CfgCondition := '';
   Attrs.InlineMode := '';
   Attrs.IsCold := False;
+  Attrs.HasVis := False;
+  Attrs.IsPublic := True;
 end;
 
 procedure ClearAttributes(var Attrs: TParsedAttributes);
@@ -354,6 +381,8 @@ begin
   Attrs.CfgCondition := '';
   Attrs.InlineMode := '';
   Attrs.IsCold := False;
+  Attrs.HasVis := False;
+  Attrs.IsPublic := True;
 end;
 
 procedure FreeAttributes(var Attrs: TParsedAttributes);
@@ -375,6 +404,11 @@ begin
     Dst.InlineMode := Src.InlineMode;
   if Src.IsCold then
     Dst.IsCold := True;
+  if Src.HasVis then
+  begin
+    Dst.HasVis := True;
+    Dst.IsPublic := Src.IsPublic;
+  end;
 end;
 
 procedure TAetherParser.ParseAttribute(var Attrs: TParsedAttributes);
@@ -486,14 +520,35 @@ var
   ValExpr: TASTExpr;
   ConstNode: TASTConstDecl;
   CurrentAttrs: TParsedAttributes;
+  SecHasVis, SecIsPub, ItemHasVis, ItemIsPub: Boolean;
 begin
   Expect(tokConst);
+  SecHasVis := SectionAttrs.HasVis;
+  SecIsPub := SectionAttrs.IsPublic;
   InitAttributes(CurrentAttrs);
   try
     while not Check(tokEOF) do
     begin
       while Check(tokLBracket) or Check(tokAt) do
         ParseAttribute(CurrentAttrs);
+
+      ItemHasVis := SecHasVis;
+      ItemIsPub := SecIsPub;
+      if (Check(tokPub) or Check(tokPriv)) and (FPeekTok.Kind in [tokIdentifier, tokLBracket, tokAt]) then
+      begin
+        if Match(tokPub) then
+        begin
+          ItemHasVis := True;
+          ItemIsPub := True;
+          AModule.HasExplicitPub := True;
+        end
+        else if Match(tokPriv) then
+        begin
+          ItemHasVis := True;
+          ItemIsPub := False;
+          AModule.HasExplicitPub := True;
+        end;
+      end;
 
       if Check(tokIdentifier) then
       begin
@@ -515,12 +570,15 @@ begin
         ConstNode := TASTConstDecl.Create(CLine, CCol, ConstName, ConstType, ValExpr);
         ConstNode.DocComment := ConstDoc;
         ConstNode.CfgCondition := EffectiveCfg;
+        ConstNode.HasExplicitVis := ItemHasVis;
+        ConstNode.IsPublic := ItemIsPub;
         AModule.Constants.Add(ConstNode);
         ClearAttributes(SectionAttrs);
       end
       else
         Break;
     end;
+    ClearAttributes(SectionAttrs);
   finally
     FreeAttributes(CurrentAttrs);
   end;
@@ -551,8 +609,11 @@ var
   MapDecl: TASTMapDecl;
   AliasDecl: TASTTypeAliasDecl;
   CurrentAttrs: TParsedAttributes;
+  SecHasVis, SecIsPub, ItemHasVis, ItemIsPub: Boolean;
 begin
   Expect(tokType);
+  SecHasVis := SectionAttrs.HasVis;
+  SecIsPub := SectionAttrs.IsPublic;
   InitAttributes(CurrentAttrs);
   try
     while not Check(tokEOF) do
@@ -560,6 +621,24 @@ begin
       ClearAttributes(CurrentAttrs);
       while Check(tokLBracket) or Check(tokAt) do
         ParseAttribute(CurrentAttrs);
+
+      ItemHasVis := SecHasVis;
+      ItemIsPub := SecIsPub;
+      if (Check(tokPub) or Check(tokPriv)) and (FPeekTok.Kind in [tokIdentifier, tokLBracket, tokAt]) then
+      begin
+        if Match(tokPub) then
+        begin
+          ItemHasVis := True;
+          ItemIsPub := True;
+          AModule.HasExplicitPub := True;
+        end
+        else if Match(tokPriv) then
+        begin
+          ItemHasVis := True;
+          ItemIsPub := False;
+          AModule.HasExplicitPub := True;
+        end;
+      end;
 
       if Check(tokIdentifier) and (FPeekTok.Kind = tokEqual) then
       begin
@@ -580,6 +659,8 @@ begin
           RecDecl.Derives.AddStrings(CurrentAttrs.Derives);
           RecDecl.Derives.AddStrings(SectionAttrs.Derives);
           RecDecl.CfgCondition := EffectiveCfg;
+          RecDecl.HasExplicitVis := ItemHasVis;
+          RecDecl.IsPublic := ItemIsPub;
           AModule.Types.Add(RecDecl);
         end
         else if Check(tokEnum) then
@@ -589,12 +670,16 @@ begin
           EnumDecl.Derives.AddStrings(CurrentAttrs.Derives);
           EnumDecl.Derives.AddStrings(SectionAttrs.Derives);
           EnumDecl.CfgCondition := EffectiveCfg;
+          EnumDecl.HasExplicitVis := ItemHasVis;
+          EnumDecl.IsPublic := ItemIsPub;
           AModule.Types.Add(EnumDecl);
         end
         else if Check(tokTrait) then
         begin
           TraitDecl := ParseTraitDecl(TypeName, TLine, TCol);
           TraitDecl.DocComment := TypeDoc;
+          TraitDecl.HasExplicitVis := ItemHasVis;
+          TraitDecl.IsPublic := ItemIsPub;
           AModule.Traits.Add(TraitDecl);
         end
         else if Check(tokArray) then
@@ -605,6 +690,8 @@ begin
             ArrDecl := TASTArrayDecl.Create(TLine, TCol, TypeName, ParseTypeRef);
             ArrDecl.DocComment := TypeDoc;
             ArrDecl.CfgCondition := EffectiveCfg;
+            ArrDecl.HasExplicitVis := ItemHasVis;
+            ArrDecl.IsPublic := ItemIsPub;
             AModule.Types.Add(ArrDecl);
           end
           else
@@ -619,6 +706,8 @@ begin
             ArrDecl.ElemType := ParseTypeRef;
             ArrDecl.DocComment := TypeDoc;
             ArrDecl.CfgCondition := EffectiveCfg;
+            ArrDecl.HasExplicitVis := ItemHasVis;
+            ArrDecl.IsPublic := ItemIsPub;
             AModule.Types.Add(ArrDecl);
           end;
         end
@@ -640,6 +729,8 @@ begin
             SetDecl.ElemType := ParseTypeRef;
           SetDecl.DocComment := TypeDoc;
           SetDecl.CfgCondition := EffectiveCfg;
+          SetDecl.HasExplicitVis := ItemHasVis;
+          SetDecl.IsPublic := ItemIsPub;
           AModule.Types.Add(SetDecl);
         end
         else if Check(tokMap) then
@@ -652,6 +743,8 @@ begin
           MapDecl := TASTMapDecl.Create(TLine, TCol, TypeName, KeyType, ValType);
           MapDecl.DocComment := TypeDoc;
           MapDecl.CfgCondition := EffectiveCfg;
+          MapDecl.HasExplicitVis := ItemHasVis;
+          MapDecl.IsPublic := ItemIsPub;
           AModule.Types.Add(MapDecl);
         end
         else if (Check(tokIntLiteral) or Check(tokCharLiteral)) and (FPeekTok.Kind = tokDotDot) then
@@ -668,6 +761,8 @@ begin
           SubDecl := TASTSubrangeDecl.Create(TLine, TCol, TypeName, LowBound, HighBound, BaseType);
           SubDecl.DocComment := TypeDoc;
           SubDecl.CfgCondition := EffectiveCfg;
+          SubDecl.HasExplicitVis := ItemHasVis;
+          SubDecl.IsPublic := ItemIsPub;
           AModule.Types.Add(SubDecl);
         end
         else if Check(tokLParen) then
@@ -684,6 +779,8 @@ begin
           EnumDecl.Derives.AddStrings(CurrentAttrs.Derives);
           EnumDecl.Derives.AddStrings(SectionAttrs.Derives);
           EnumDecl.CfgCondition := EffectiveCfg;
+          EnumDecl.HasExplicitVis := ItemHasVis;
+          EnumDecl.IsPublic := ItemIsPub;
           AModule.Types.Add(EnumDecl);
         end
         else
@@ -692,6 +789,8 @@ begin
           AliasDecl := TASTTypeAliasDecl.Create(TLine, TCol, TypeName, AliasTarget);
           AliasDecl.DocComment := TypeDoc;
           AliasDecl.CfgCondition := EffectiveCfg;
+          AliasDecl.HasExplicitVis := ItemHasVis;
+          AliasDecl.IsPublic := ItemIsPub;
           AModule.Types.Add(AliasDecl);
         end;
 
@@ -700,6 +799,11 @@ begin
       end
       else
       begin
+        if ItemHasVis then
+        begin
+          SectionAttrs.HasVis := ItemHasVis;
+          SectionAttrs.IsPublic := ItemIsPub;
+        end;
         CopyAttributes(CurrentAttrs, SectionAttrs);
         Break;
       end;
@@ -753,33 +857,64 @@ end;
 
 function TAetherParser.ParseImplDecl: TASTImplDecl;
 var
-  TraitName, TargetName: string;
+  FirstName, TraitName, TargetName: string;
   ILine, ICol, J: Integer;
   FuncNode: TASTFunction;
+  MHasVis, MIsPub: Boolean;
 begin
   ILine := FCurTok.Line;
   ICol := FCurTok.Col;
   Expect(tokImpl);
-  TraitName := Expect(tokIdentifier, 'Esperado nome da trait apos "impl"').Value;
-  Expect(tokFor, 'Esperado "for" apos nome da trait');
-  TargetName := Expect(tokIdentifier, 'Esperado nome do tipo apos "for"').Value;
+  FirstName := Expect(tokIdentifier, 'Esperado nome da trait ou tipo apos "impl"').Value;
+  if Match(tokFor) then
+  begin
+    TraitName := FirstName;
+    TargetName := Expect(tokIdentifier, 'Esperado nome do tipo apos "for"').Value;
+  end
+  else
+  begin
+    TraitName := '';
+    TargetName := FirstName;
+  end;
 
   Result := TASTImplDecl.Create(ILine, ICol, TraitName, TargetName);
   try
     while not Check(tokEnd) and not Check(tokEOF) do
     begin
+      MHasVis := False;
+      MIsPub := True;
+      if Match(tokPub) then
+      begin
+        MHasVis := True;
+        MIsPub := True;
+      end
+      else if Match(tokPriv) then
+      begin
+        MHasVis := True;
+        MIsPub := False;
+      end;
+
       if Check(tokFunction) or Check(tokAsync) then
       begin
         FuncNode := ParseFunction(False);
+        if MHasVis then
+        begin
+          FuncNode.HasExplicitVis := True;
+          FuncNode.IsPublic := MIsPub;
+        end;
         for J := 0 to FuncNode.Params.Count - 1 do
         begin
           if SameText(TASTParam(FuncNode.Params[J]).TypeName, 'Self') then
             TASTParam(FuncNode.Params[J]).TypeName := TargetName;
         end;
+        if SameText(FuncNode.ReturnType, 'Self') then
+          FuncNode.ReturnType := TargetName
+        else if Pos('Self', FuncNode.ReturnType) > 0 then
+          FuncNode.ReturnType := StringReplace(FuncNode.ReturnType, '<Self>', '<' + TargetName + '>', [rfReplaceAll, rfIgnoreCase]);
         Result.Methods.Add(FuncNode);
       end
       else
-        raise EAetherParserError.Create('Esperado "function" na implementacao da trait', FCurTok.Line, FCurTok.Col);
+        raise EAetherParserError.Create('Esperado "function" no bloco impl', FCurTok.Line, FCurTok.Col);
     end;
     Expect(tokEnd, 'Esperado "end" no fechamento do bloco impl');
     Expect(tokSemicolon, 'Esperado ";" apos "end" do bloco impl');
@@ -845,6 +980,7 @@ var
   FLine, FCol: Integer;
   Ownership: TOwnershipKind;
   IsExt, IsAsyncFunc, IsExportFunc: Boolean;
+  FHasVis, FIsPub: Boolean;
   ExtLib, ExtAbi, ExportAbi: string;
 begin
   FLine := FCurTok.Line;
@@ -853,13 +989,29 @@ begin
   IsExt := False;
   IsAsyncFunc := False;
   IsExportFunc := False;
+  FHasVis := Attrs.HasVis;
+  FIsPub := Attrs.IsPublic;
   ExtLib := '';
   ExtAbi := 'c';
   ExportAbi := 'cdecl';
 
-  while Check(tokAsync) or Check(tokExtern) or Check(tokExport) do
+  while Check(tokAsync) or Check(tokExtern) or Check(tokExport) or Check(tokPub) or Check(tokPriv) do
   begin
-    if Match(tokAsync) then
+    if Match(tokPub) then
+    begin
+      FHasVis := True;
+      FIsPub := True;
+      if (FDoc = '') and (FCurTok.DocComment <> '') then
+        FDoc := FCurTok.DocComment;
+    end
+    else if Match(tokPriv) then
+    begin
+      FHasVis := True;
+      FIsPub := False;
+      if (FDoc = '') and (FCurTok.DocComment <> '') then
+        FDoc := FCurTok.DocComment;
+    end
+    else if Match(tokAsync) then
     begin
       IsAsyncFunc := True;
       if (FDoc = '') and (FCurTok.DocComment <> '') then
@@ -916,6 +1068,8 @@ begin
   Result.InlineMode := Attrs.InlineMode;
   Result.IsCold := Attrs.IsCold;
   Result.CfgCondition := Attrs.CfgCondition;
+  Result.HasExplicitVis := FHasVis;
+  Result.IsPublic := FIsPub;
   try
     // Parametro generico com bound opcional: function Imprimir<T: Printable>(...)
     if Match(tokLess) then
@@ -1931,6 +2085,7 @@ begin
       begin
         // UFCS: expr.Metodo(args...) e transformado transparentemente em Metodo(borrow expr, args...)
         CallExpr := TASTCallExpr.Create(Line, Col, Id);
+        CallExpr.IsQualified := True;
         CallExpr.Args.Add(TASTCallArg.Create(Line, Col, owBorrow, Result));
 
         if not Check(tokRParen) then
@@ -2096,8 +2251,23 @@ begin
     // Tipos, Traits, Impls, Funcoes e Programa Principal
     while not Check(tokEOF) do
     begin
-      while Check(tokLBracket) or Check(tokAt) do
-        ParseAttribute(PendingAttrs);
+      while Check(tokLBracket) or Check(tokAt) or Check(tokPub) or Check(tokPriv) do
+      begin
+        if Match(tokPub) then
+        begin
+          PendingAttrs.HasVis := True;
+          PendingAttrs.IsPublic := True;
+          Result.HasExplicitPub := True;
+        end
+        else if Match(tokPriv) then
+        begin
+          PendingAttrs.HasVis := True;
+          PendingAttrs.IsPublic := False;
+          Result.HasExplicitPub := True;
+        end
+        else
+          ParseAttribute(PendingAttrs);
+      end;
 
       if Check(tokConst) then
       begin
@@ -2110,6 +2280,11 @@ begin
       else if Check(tokTrait) then
       begin
         Result.Traits.Add(ParseTraitDecl('', FCurTok.Line, FCurTok.Col));
+        if PendingAttrs.HasVis then
+        begin
+          TASTNode(Result.Traits[Result.Traits.Count - 1]).HasExplicitVis := True;
+          TASTNode(Result.Traits[Result.Traits.Count - 1]).IsPublic := PendingAttrs.IsPublic;
+        end;
         ClearAttributes(PendingAttrs);
       end
       else if Check(tokImpl) then
