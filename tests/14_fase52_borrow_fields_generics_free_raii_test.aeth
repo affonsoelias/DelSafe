@@ -1,0 +1,241 @@
+module Fase52BorrowFieldsGenericsFreeRaiiTest;
+
+type
+    MeuInt = Int32;
+    Estado = enum
+        Inativo,
+        Ativo
+    end;
+    Digito = 0..9;
+    ConjuntoDigitos = set of Digito;
+
+    ParCampos = record
+        a: Int32;
+        b: Int32;
+    end;
+
+    CaixaMista = record
+        nome: String;
+        valor: Int32;
+    end;
+
+    Contador = record
+        drops: Int32;
+        ordem: Int32;
+    end;
+
+    PtrContador = ^Contador;
+
+    Recurso = record
+        id: Int32;
+        tracker: PtrContador;
+    end;
+
+impl Drop for Recurso
+    function Drop(mut borrow self): Void
+    begin
+        unsafe
+            self.tracker^.drops := self.tracker^.drops + 1;
+            self.tracker^.ordem := (self.tracker^.ordem * 10) + self.id;
+        end;
+    end;
+end;
+
+function DobrarAlias(x: MeuInt; e: Estado; d: Digito; s: ConjuntoDigitos): Int32
+begin
+    if (e = Estado.Ativo) and (d in s) then
+        return x * 2;
+    end;
+    return x;
+end;
+
+function LerGenerico<T>(borrow v: T): T
+begin
+    return v;
+end;
+
+function IncMut(mut borrow v: Int32): Void
+begin
+    v := v + 10;
+end;
+
+function IncERetornar(mut borrow v: Int32): Int32
+begin
+    v := v + 5;
+    return v;
+end;
+
+function TrocarCampos(mut borrow x: Int32; mut borrow y: Int32): Void
+var
+    tmp: Int32;
+begin
+    tmp := x;
+    x := y;
+    y := tmp;
+end;
+
+function ConsumirTexto(take s: String): Int32
+begin
+    return Length(s);
+end;
+
+function LerCaixa(borrow c: CaixaMista): Int32
+begin
+    return Length(c.nome) + c.valor;
+end;
+
+function TestarRaiiEscopos(tracker: PtrContador): Void
+var
+    r1: Recurso;
+    r2: Recurso;
+begin
+    r1 := Recurso(1, tracker);
+    r2 := Recurso(2, tracker);
+
+    if r1.id = 1 then
+        var r3: Recurso := Recurso(3, tracker);
+        Assert(r3.id = 3);
+    end;
+
+    unsafe
+        Assert(tracker^.drops = 1);
+        Assert(tracker^.ordem = 3);
+    end;
+end;
+
+function TestarRaiiEarlyReturn(tracker: PtrContador; early: Bool): Int32
+var
+    r4: Recurso;
+begin
+    r4 := Recurso(4, tracker);
+    if early then
+        return r4.id * 10;
+    end;
+    return 0;
+end;
+
+function TestarRaiiLoopBreak(tracker: PtrContador): Void
+var
+    k: Int32;
+begin
+    for k := 1 to 4 do
+        var rl: Recurso := Recurso(k, tracker);
+        if k = 2 then
+            break;
+        end;
+    end;
+end;
+
+function TestarRaiiBox(tracker: PtrContador): Void
+var
+    bx: Box<Recurso>;
+begin
+    bx := Box(Recurso(7, tracker));
+    Assert(bx.id = 7);
+end;
+
+program Main;
+var
+    idade: MeuInt;
+    st: Estado;
+    dig: Digito;
+    conj: ConjuntoDigitos;
+    soma: Int32;
+    par: ParCampos;
+    cx: CaixaMista;
+    b1: Box<ParCampos>;
+    b2: Box<ParCampos>;
+    dyn: array of Int32;
+    mapa: map[String]Int32;
+    pRaw: ^Int32;
+    pRaw2: ^Int32;
+    cnt: Contador;
+    pCnt: PtrContador;
+    earlyRes: Int32;
+    gNum: Int32;
+    gTxt: String;
+begin
+    // 4.1 Tipos Copy (Alias, Enum, Subrange, Set), inferencia e template generico
+    idade := 21;
+    st := Estado.Ativo;
+    dig := 5;
+    conj := [1, 5, 9];
+    soma := DobrarAlias(idade, st, dig, conj);
+    soma := soma + DobrarAlias(idade, st, dig, conj);
+    Assert(soma = 84);
+
+    gNum := LerGenerico(99);
+    gTxt := LerGenerico("Aether");
+    Assert(gNum = 99);
+    Assert(gTxt = "Aether");
+
+    // 4.2 Restauracao de mut borrow + borrow disjunto de campos + partial move + reinicializacao
+    var acc: Int32 := 0;
+    IncMut(mut borrow acc);
+    IncMut(mut borrow acc);
+    Assert(acc = 20);
+
+    var rSum: Int32 := IncERetornar(mut borrow acc) + IncERetornar(mut borrow acc);
+    Assert(acc = 30);
+    Assert(rSum = 55);
+
+    par := ParCampos(10, 25);
+    TrocarCampos(mut borrow par.a, mut borrow par.b);
+    Assert(par.a = 25);
+    Assert(par.b = 10);
+
+    cx := CaixaMista("Ola", 42);
+    Assert(ConsumirTexto(take cx.nome) = 3);
+    Assert(cx.valor = 42);
+    cx.nome := "Mundo";
+    Assert(LerCaixa(borrow cx) = 47);
+
+    // 4.3 Free/Dispose explicito em heap gerenciada e ponteiro bruto em unsafe
+    b1 := Box(ParCampos(7, 8));
+    b2 := Box(ParCampos(9, 10));
+    Assert(b1.a + b2.b = 17);
+    Free(b1);
+    Dispose(b2);
+
+    SetLength(dyn, 3);
+    dyn[0] := 11;
+    dyn[1] := 22;
+    dyn[2] := 33;
+    Assert(Length(dyn) = 3);
+    Free(dyn);
+
+    mapa["alfa"] := 100;
+    Assert(mapa["alfa"] = 100);
+    Dispose(mapa);
+
+    pRaw := nil;
+    pRaw2 := nil;
+    unsafe
+        Free(pRaw);
+        Dispose(pRaw2);
+    end;
+
+    // 4.3 RAII & Drop deterministico em ordem LIFO (escopo, if, return antecipado, loop break, Box)
+    cnt := Contador(0, 0);
+    unsafe
+        pCnt := @cnt;
+    end;
+    TestarRaiiEscopos(pCnt);
+    Assert(cnt.drops = 3);
+    Assert(cnt.ordem = 321);
+
+    earlyRes := TestarRaiiEarlyReturn(pCnt, true);
+    Assert(earlyRes = 40);
+    Assert(cnt.drops = 4);
+    Assert(cnt.ordem = 3214);
+
+    TestarRaiiLoopBreak(pCnt);
+    Assert(cnt.drops = 6);
+    Assert(cnt.ordem = 321412);
+
+    TestarRaiiBox(pCnt);
+    Assert(cnt.drops = 7);
+    Assert(cnt.ordem = 3214127);
+
+    PrintLn("=== FASE 52 TEST PASSOU (BORROW POS-INFERENCIA, GENERICS, CAMPOS DISJUNTOS, FREE/DISPOSE & RAII DROP) ===");
+end.

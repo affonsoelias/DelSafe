@@ -282,7 +282,9 @@ begin
   FGlobalScope.Define(TSymbol.Create('ParamStr', skFunction, 'String', 0, 0));
   FGlobalScope.Define(TSymbol.Create('Assert', skFunction, 'Void', 0, 0));
 
-  // Funcoes nativas de Sockets (SO / Rede)
+  // Funcoes nativas de Sockets (SO / Rede) e Liberacao de Memoria (Free / Dispose)
+  FGlobalScope.Define(TSymbol.Create('Free', skFunction, 'Void', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('Dispose', skFunction, 'Void', 0, 0));
   FGlobalScope.Define(TSymbol.Create('SocketCreate', skFunction, 'Int32', 0, 0));
   FGlobalScope.Define(TSymbol.Create('SocketListen', skFunction, 'Int32', 0, 0));
   FGlobalScope.Define(TSymbol.Create('SocketAccept', skFunction, 'Int32', 0, 0));

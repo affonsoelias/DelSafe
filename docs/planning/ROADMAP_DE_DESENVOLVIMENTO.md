@@ -853,12 +853,12 @@ Mapeamento técnico completo dos recursos pendentes identificados no compilador 
 - [x] **3.5 Literais de Mapa (`["a": 1, "b": 2]`, `[:]`) & Escapes Completos de `Char`/`String`**:
   - Inicialização e indexação direta de `map[K]V` via literal (`["alice": 100, "bob": 85]`, `[:]`) e suporte aos escapes `'\n'`, `'\t'`, `'\0'`, `'\r'`, `'\\'`, `'\"'` e `'\''` em `Char` e `String`. Validado em `tests/12_fase51_tryop_matchexpr_inlinevar_divcomp_maplit_test.aeth` (`12/12 PASS` nos dois backends).
 
-### 📋 Fase 52: 4. Borrow Checker & Ciclo de Vida de Memória - PLANEJADA
-- [ ] **4.1 Integração do Borrow Checker Pós-Inferência & Suporte a Templates Genéricos**:
+### ✅ Fase 52: 4. Borrow Checker & Ciclo de Vida de Memória - CONCLUÍDA
+- [x] **4.1 Integração do Borrow Checker Pós-Inferência & Suporte a Templates Genéricos**:
   - Executar ou sincronizar `uAetherBorrowChecker.pas` com tipos inferidos por `CheckVarDecl` e validar corretamente funções genéricas monomorfizadas.
-- [ ] **4.2 Restauração de `vsBorrowedMut` & Empréstimo Disjunto de Campos**:
+- [x] **4.2 Restauração de `vsBorrowedMut` & Empréstimo Disjunto de Campos**:
   - Restaurar `State := vsOwned` ao fim do escopo de empréstimo mutável temporário em `ReleaseTemporaryBorrows` e rastrear empréstimos/movimentos independentes por campo (`obj.a` vs `obj.b`).
-- [ ] **4.3 Gerenciamento Explícito e Automático de Heap no Backend C99 (`Free`/`Dispose` & RAII/`Drop`)**:
+- [x] **4.3 Gerenciamento Explícito e Automático de Heap no Backend C99 (`Free`/`Dispose` & RAII/`Drop`)**:
   - Introduzir liberação segura de `Box<T>`, buffers dinâmicos, mapas e strings temporárias no backend C99 e intrínsecos explícitos `Free`/`Dispose` em blocos controlados.
 
 ### 📋 Fase 53: 5. Concorrência (`async` / `await` / `spawn` / `yield`) & `std/sync.aeth` - PLANEJADA

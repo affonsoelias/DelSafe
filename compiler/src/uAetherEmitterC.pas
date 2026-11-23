@@ -18,6 +18,10 @@ type
     FProgramBlock: TASTProgramBlock;
     FActiveDefers: TFPList;
     FLoopDeferBase: Integer;
+    FRaiiNames: TStringList;
+    FRaiiTypes: TStringList;
+    FLoopRaiiBase: Integer;
+    FCurrentScopeList: TASTNodeList;
     FTryDepth: Integer;
     FLoopCounter: Integer;
     FGuardBindName: string;
@@ -31,6 +35,13 @@ type
     procedure DecIndent;
     function IndentStr: string;
     procedure EmitActiveDefers(DownToIndex: Integer = 0);
+    function FindDropFunc(const ATypeName: string): TASTFunction;
+    function RaiiExprUsesVar(Expr: TASTExpr; const AVarName: string): Boolean;
+    function IsNonBorrowArgCapture(Call: TASTCallExpr; ArgIdx: Integer): Boolean;
+    function IsVarEscapedInStmts(const AVarName: string; Stmts: TASTNodeList): Boolean;
+    procedure RegisterRaiiVar(const AVarName, ATypeName: string; ScopeStmts: TASTNodeList);
+    procedure EmitRaiiCleanupFor(const AVarName, ATypeName: string);
+    procedure EmitActiveRaii(DownToIndex: Integer = 0);
     procedure EmitStmtList(List: TASTNodeList; IsLoopBody: Boolean = False);
 
     function IsEnumName(const AName: string): Boolean;
@@ -99,12 +110,18 @@ begin
   FIndent := 0;
   FActiveDefers := TFPList.Create;
   FLoopDeferBase := 0;
+  FRaiiNames := TStringList.Create;
+  FRaiiTypes := TStringList.Create;
+  FLoopRaiiBase := 0;
+  FCurrentScopeList := nil;
   FTryDepth := 0;
   FLoopCounter := 0;
 end;
 
 destructor TAetherEmitterC.Destroy;
 begin
+  FRaiiNames.Free;
+  FRaiiTypes.Free;
   FActiveDefers.Free;
   FOutput.Free;
   inherited Destroy;
@@ -2222,6 +2239,49 @@ begin
       Exit;
     end;
 
+    if SameText(Call.Callee, 'Free') or SameText(Call.Callee, 'Dispose') then
+    begin
+      TargetStr := EmitExpr(TASTCallArg(Call.Args[0]).Expr);
+      TargetT := ResolveAliasType(GetExprTypeName(TASTCallArg(Call.Args[0]).Expr));
+      IsWild := (TASTCallArg(Call.Args[0]).Expr is TASTIdentifierExpr) or
+                (TASTCallArg(Call.Args[0]).Expr is TASTMemberAccessExpr);
+      if IsDynamicArrayType(TargetT) then
+      begin
+        if IsWild then
+          Result := Format('do { if (%s) { AetherDynFree(%s); %s = NULL; } } while (0)', [TargetStr, TargetStr, TargetStr])
+        else
+          Result := Format('AetherDynFree(%s)', [TargetStr]);
+      end
+      else if IsMapType(TargetT, KeyT, ValT) then
+      begin
+        if IsWild then
+          Result := Format('do { if ((%s).entries) { free((%s).entries); (%s).entries = NULL; } (%s).count = 0; (%s).capacity = 0; } while (0)',
+            [TargetStr, TargetStr, TargetStr, TargetStr, TargetStr])
+        else
+          Result := Format('free((%s).entries)', [TargetStr]);
+      end
+      else
+      begin
+        ArgsStr := '';
+        if Pos('Box<', TargetT) = 1 then
+        begin
+          ValF := Trim(Copy(TargetT, 5, Length(TargetT) - 5));
+          if FindDropFunc(ValF) <> nil then
+          begin
+            if (FindDropFunc(ValF).Params.Count > 0) and (TASTParam(FindDropFunc(ValF).Params[0]).Ownership = owMutBorrow) then
+              ArgsStr := Format('%s(%s); ', [FindDropFunc(ValF).Name, TargetStr])
+            else
+              ArgsStr := Format('%s(*(%s)); ', [FindDropFunc(ValF).Name, TargetStr]);
+          end;
+        end;
+        if IsWild then
+          Result := Format('do { if (%s) { %sfree((void*)(%s)); %s = NULL; } } while (0)', [TargetStr, ArgsStr, TargetStr, TargetStr])
+        else
+          Result := Format('free((void*)(%s))', [TargetStr]);
+      end;
+      Exit;
+    end;
+
     if Call.Callee = 'CharAt' then
     begin
       Result := 'AetherCharAt(' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + ', ' + EmitExpr(TASTCallArg(Call.Args[1]).Expr) + ')';
@@ -2480,23 +2540,352 @@ begin
     EmitStmt(TASTStmt(FActiveDefers[I]));
 end;
 
+function TAetherEmitterC.FindDropFunc(const ATypeName: string): TASTFunction;
+var
+  BaseT: string;
+  Fn: TASTFunction;
+begin
+  Result := nil;
+  BaseT := ResolveAliasType(ATypeName);
+  if BaseT = '' then Exit;
+  Fn := FindFunction(BaseT + '_Drop');
+  if Assigned(Fn) and (not Fn.IsExtern) and (Fn.GenericParam = '') and (Fn.Params.Count = 1) then
+    Result := Fn;
+end;
+
+function TAetherEmitterC.RaiiExprUsesVar(Expr: TASTExpr; const AVarName: string): Boolean;
+var
+  I: Integer;
+  C: TASTCallExpr;
+begin
+  Result := False;
+  if not Assigned(Expr) then Exit;
+  if Expr is TASTIdentifierExpr then
+    Exit(SameText(TASTIdentifierExpr(Expr).Name, AVarName));
+  if Expr is TASTUnaryExpr then
+    Exit(RaiiExprUsesVar(TASTUnaryExpr(Expr).Expr, AVarName));
+  if Expr is TASTBinaryExpr then
+    Exit(RaiiExprUsesVar(TASTBinaryExpr(Expr).Left, AVarName) or RaiiExprUsesVar(TASTBinaryExpr(Expr).Right, AVarName));
+  if Expr is TASTMemberAccessExpr then
+    Exit(RaiiExprUsesVar(TASTMemberAccessExpr(Expr).Target, AVarName));
+  if Expr is TASTIndexExpr then
+  begin
+    if RaiiExprUsesVar(TASTIndexExpr(Expr).Target, AVarName) then Exit(True);
+    for I := 0 to TASTIndexExpr(Expr).Indices.Count - 1 do
+      if RaiiExprUsesVar(TASTExpr(TASTIndexExpr(Expr).Indices[I]), AVarName) then Exit(True);
+  end;
+  if Expr is TASTAwaitExpr then
+    Exit(RaiiExprUsesVar(TASTAwaitExpr(Expr).Expr, AVarName));
+  if Expr is TASTSpawnExpr then
+    Exit(RaiiExprUsesVar(TASTSpawnExpr(Expr).CallExpr, AVarName));
+  if Expr is TASTCallExpr then
+  begin
+    C := TASTCallExpr(Expr);
+    for I := 0 to C.Args.Count - 1 do
+      if RaiiExprUsesVar(TASTCallArg(C.Args[I]).Expr, AVarName) then Exit(True);
+  end;
+  if Expr is TASTSetLiteralExpr then
+  begin
+    for I := 0 to TASTSetLiteralExpr(Expr).Elements.Count - 1 do
+      if RaiiExprUsesVar(TASTExpr(TASTSetLiteralExpr(Expr).Elements[I]), AVarName) then Exit(True);
+  end;
+  if Expr is TASTMapLiteralExpr then
+  begin
+    for I := 0 to TASTMapLiteralExpr(Expr).Keys.Count - 1 do
+      if RaiiExprUsesVar(TASTExpr(TASTMapLiteralExpr(Expr).Keys[I]), AVarName) or
+         RaiiExprUsesVar(TASTExpr(TASTMapLiteralExpr(Expr).Values[I]), AVarName) then Exit(True);
+  end;
+  if Expr is TASTIfExpr then
+    Exit(RaiiExprUsesVar(TASTIfExpr(Expr).Condition, AVarName) or
+         RaiiExprUsesVar(TASTIfExpr(Expr).ThenExpr, AVarName) or
+         RaiiExprUsesVar(TASTIfExpr(Expr).ElseExpr, AVarName));
+  if Expr is TASTMatchExpr then
+  begin
+    if RaiiExprUsesVar(TASTMatchExpr(Expr).Expr, AVarName) then Exit(True);
+    for I := 0 to TASTMatchExpr(Expr).Cases.Count - 1 do
+      if RaiiExprUsesVar(TASTMatchCase(TASTMatchExpr(Expr).Cases[I]).ValueExpr, AVarName) then Exit(True);
+  end;
+end;
+
+function TAetherEmitterC.IsNonBorrowArgCapture(Call: TASTCallExpr; ArgIdx: Integer): Boolean;
+var
+  Fn: TASTFunction;
+begin
+  if SameText(Call.Callee, 'PrintLn') or SameText(Call.Callee, 'WriteLn') or SameText(Call.Callee, 'Assert') or
+     SameText(Call.Callee, 'Length') or SameText(Call.Callee, 'Count') or SameText(Call.Callee, 'Contains') or
+     SameText(Call.Callee, 'High') or SameText(Call.Callee, 'Low') or SameText(Call.Callee, 'Pop') or
+     SameText(Call.Callee, 'Clear') or SameText(Call.Callee, 'Remove') or SameText(Call.Callee, 'Delete') or
+     SameText(Call.Callee, 'Slice') or SameText(Call.Callee, 'SetLength') or SameText(Call.Callee, 'Free') or
+     SameText(Call.Callee, 'Dispose') or SameText(Call.Callee, 'Addr') then
+    Exit(False);
+  if SameText(Call.Callee, 'Push') then
+    Exit(ArgIdx = 1);
+  if SameText(Call.Callee, 'Insert') then
+    Exit(ArgIdx = 2);
+  if SameText(Call.Callee, 'Some') or SameText(Call.Callee, 'Ok') or SameText(Call.Callee, 'Err') or
+     SameText(Call.Callee, 'Box') then
+    Exit(True);
+  Fn := FindFunction(Call.Callee);
+  if Assigned(Fn) and (ArgIdx < Fn.Params.Count) then
+    Exit(not (TASTParam(Fn.Params[ArgIdx]).Ownership in [owBorrow, owMutBorrow]));
+  Result := True;
+end;
+
+function TAetherEmitterC.IsVarEscapedInStmts(const AVarName: string; Stmts: TASTNodeList): Boolean;
+  function ExprCapturesDirectVar(Expr: TASTExpr): Boolean;
+  var
+    I: Integer;
+  begin
+    Result := False;
+    if not Assigned(Expr) then Exit;
+    if Expr is TASTIdentifierExpr then
+      Exit(SameText(TASTIdentifierExpr(Expr).Name, AVarName));
+    if Expr is TASTIfExpr then
+      Exit(ExprCapturesDirectVar(TASTIfExpr(Expr).ThenExpr) or
+           ExprCapturesDirectVar(TASTIfExpr(Expr).ElseExpr));
+    if Expr is TASTMatchExpr then
+      for I := 0 to TASTMatchExpr(Expr).Cases.Count - 1 do
+        if ExprCapturesDirectVar(TASTMatchCase(TASTMatchExpr(Expr).Cases[I]).ValueExpr) then Exit(True);
+  end;
+
+  function CheckExprEscape(Expr: TASTExpr): Boolean;
+  var
+    I: Integer;
+    C: TASTCallExpr;
+    U: TASTUnaryExpr;
+    Arg: TASTCallArg;
+  begin
+    Result := False;
+    if not Assigned(Expr) then Exit;
+    if Expr is TASTUnaryExpr then
+    begin
+      U := TASTUnaryExpr(Expr);
+      if (U.Op = '@') and RaiiExprUsesVar(U.Expr, AVarName) then Exit(True);
+      Exit(CheckExprEscape(U.Expr));
+    end;
+    if Expr is TASTBinaryExpr then
+      Exit(CheckExprEscape(TASTBinaryExpr(Expr).Left) or CheckExprEscape(TASTBinaryExpr(Expr).Right));
+    if Expr is TASTMemberAccessExpr then
+      Exit(CheckExprEscape(TASTMemberAccessExpr(Expr).Target));
+    if Expr is TASTIndexExpr then
+    begin
+      if CheckExprEscape(TASTIndexExpr(Expr).Target) then Exit(True);
+      for I := 0 to TASTIndexExpr(Expr).Indices.Count - 1 do
+        if CheckExprEscape(TASTExpr(TASTIndexExpr(Expr).Indices[I])) then Exit(True);
+    end;
+    if Expr is TASTCallExpr then
+    begin
+      C := TASTCallExpr(Expr);
+      for I := 0 to C.Args.Count - 1 do
+      begin
+        Arg := TASTCallArg(C.Args[I]);
+        if (Arg.Ownership = owTake) and ExprCapturesDirectVar(Arg.Expr) then Exit(True);
+        if (Arg.Expr is TASTIdentifierExpr) and SameText(TASTIdentifierExpr(Arg.Expr).Name, AVarName) then
+        begin
+          if IsNonBorrowArgCapture(C, I) then Exit(True);
+        end
+        else if CheckExprEscape(Arg.Expr) then
+          Exit(True);
+      end;
+    end;
+    if Expr is TASTSetLiteralExpr then
+    begin
+      for I := 0 to TASTSetLiteralExpr(Expr).Elements.Count - 1 do
+        if ExprCapturesDirectVar(TASTExpr(TASTSetLiteralExpr(Expr).Elements[I])) or
+           CheckExprEscape(TASTExpr(TASTSetLiteralExpr(Expr).Elements[I])) then Exit(True);
+    end;
+    if Expr is TASTMapLiteralExpr then
+    begin
+      for I := 0 to TASTMapLiteralExpr(Expr).Keys.Count - 1 do
+        if ExprCapturesDirectVar(TASTExpr(TASTMapLiteralExpr(Expr).Keys[I])) or
+           ExprCapturesDirectVar(TASTExpr(TASTMapLiteralExpr(Expr).Values[I])) or
+           CheckExprEscape(TASTExpr(TASTMapLiteralExpr(Expr).Keys[I])) or
+           CheckExprEscape(TASTExpr(TASTMapLiteralExpr(Expr).Values[I])) then Exit(True);
+    end;
+    if Expr is TASTIfExpr then
+      Exit(CheckExprEscape(TASTIfExpr(Expr).Condition) or
+           CheckExprEscape(TASTIfExpr(Expr).ThenExpr) or
+           CheckExprEscape(TASTIfExpr(Expr).ElseExpr));
+    if Expr is TASTMatchExpr then
+    begin
+      if CheckExprEscape(TASTMatchExpr(Expr).Expr) then Exit(True);
+      for I := 0 to TASTMatchExpr(Expr).Cases.Count - 1 do
+        if CheckExprEscape(TASTMatchCase(TASTMatchExpr(Expr).Cases[I]).ValueExpr) then Exit(True);
+    end;
+  end;
+var
+  I, J: Integer;
+  S: TASTStmt;
+  VD: TASTVarDecl;
+begin
+  Result := False;
+  if not Assigned(Stmts) then Exit;
+  for I := 0 to Stmts.Count - 1 do
+  begin
+    S := TASTStmt(Stmts[I]);
+    if S is TASTReturnStmt then
+    begin
+      if ExprCapturesDirectVar(TASTReturnStmt(S).Expr) or CheckExprEscape(TASTReturnStmt(S).Expr) then Exit(True);
+    end
+    else if S is TASTVarDeclStmt then
+    begin
+      for J := 0 to TASTVarDeclStmt(S).Decls.Count - 1 do
+      begin
+        VD := TASTVarDecl(TASTVarDeclStmt(S).Decls[J]);
+        if Assigned(VD.InitialExpr) and
+           (ExprCapturesDirectVar(VD.InitialExpr) or CheckExprEscape(VD.InitialExpr)) then Exit(True);
+      end;
+    end
+    else if S is TASTAssignStmt then
+    begin
+      if not ((TASTAssignStmt(S).Target is TASTIdentifierExpr) and
+              SameText(TASTIdentifierExpr(TASTAssignStmt(S).Target).Name, AVarName)) then
+      begin
+        if ExprCapturesDirectVar(TASTAssignStmt(S).Expr) or CheckExprEscape(TASTAssignStmt(S).Expr) then Exit(True);
+      end
+      else if CheckExprEscape(TASTAssignStmt(S).Expr) then
+        Exit(True);
+    end
+    else if S is TASTCallStmt then
+    begin
+      if CheckExprEscape(TASTCallStmt(S).CallExpr) then Exit(True);
+    end
+    else if S is TASTIfStmt then
+    begin
+      if CheckExprEscape(TASTIfStmt(S).Condition) or
+         IsVarEscapedInStmts(AVarName, TASTIfStmt(S).ThenBranch) or
+         IsVarEscapedInStmts(AVarName, TASTIfStmt(S).ElseBranch) then Exit(True);
+    end
+    else if S is TASTWhileStmt then
+    begin
+      if CheckExprEscape(TASTWhileStmt(S).Condition) or
+         IsVarEscapedInStmts(AVarName, TASTWhileStmt(S).Body) then Exit(True);
+    end
+    else if S is TASTForStmt then
+    begin
+      if CheckExprEscape(TASTForStmt(S).CollectionExpr) or
+         IsVarEscapedInStmts(AVarName, TASTForStmt(S).Body) then Exit(True);
+    end
+    else if S is TASTRepeatStmt then
+    begin
+      if IsVarEscapedInStmts(AVarName, TASTRepeatStmt(S).Body) or
+         CheckExprEscape(TASTRepeatStmt(S).Condition) then Exit(True);
+    end
+    else if S is TASTUnsafeStmt then
+    begin
+      if IsVarEscapedInStmts(AVarName, TASTUnsafeStmt(S).Body) then Exit(True);
+    end
+    else if S is TASTTryStmt then
+    begin
+      if IsVarEscapedInStmts(AVarName, TASTTryStmt(S).TryBody) or
+         IsVarEscapedInStmts(AVarName, TASTTryStmt(S).ExceptBody) then Exit(True);
+    end
+    else if S is TASTMatchStmt then
+    begin
+      if CheckExprEscape(TASTMatchStmt(S).Expr) then Exit(True);
+      for J := 0 to TASTMatchStmt(S).Cases.Count - 1 do
+        if IsVarEscapedInStmts(AVarName, TASTMatchCase(TASTMatchStmt(S).Cases[J]).Body) then Exit(True);
+    end;
+  end;
+end;
+
+procedure TAetherEmitterC.RegisterRaiiVar(const AVarName, ATypeName: string; ScopeStmts: TASTNodeList);
+var
+  BaseT, KeyT, ValT: string;
+begin
+  BaseT := ResolveAliasType(ATypeName);
+  if (FindDropFunc(BaseT) = nil) and (Pos('Box<', BaseT) <> 1) and
+     (not IsDynamicArrayType(BaseT)) and (not IsMapType(BaseT, KeyT, ValT)) then
+    Exit;
+  if IsVarEscapedInStmts(AVarName, ScopeStmts) then
+    Exit;
+  FRaiiNames.Add(AVarName);
+  FRaiiTypes.Add(BaseT);
+end;
+
+procedure TAetherEmitterC.EmitRaiiCleanupFor(const AVarName, ATypeName: string);
+var
+  BaseT, InnerT, KeyT, ValT, DropCall: string;
+  DropFn: TASTFunction;
+begin
+  BaseT := ResolveAliasType(ATypeName);
+  DropFn := FindDropFunc(BaseT);
+  if Assigned(DropFn) then
+  begin
+    if (DropFn.Params.Count > 0) and (TASTParam(DropFn.Params[0]).Ownership = owMutBorrow) then
+      Emit(Format('%s(&%s);', [DropFn.Name, AVarName]))
+    else
+      Emit(Format('%s(%s);', [DropFn.Name, AVarName]));
+    Exit;
+  end;
+  if Pos('Box<', BaseT) = 1 then
+  begin
+    InnerT := Trim(Copy(BaseT, 5, Length(BaseT) - 5));
+    DropFn := FindDropFunc(InnerT);
+    DropCall := '';
+    if Assigned(DropFn) then
+    begin
+      if (DropFn.Params.Count > 0) and (TASTParam(DropFn.Params[0]).Ownership = owMutBorrow) then
+        DropCall := Format('%s(%s); ', [DropFn.Name, AVarName])
+      else
+        DropCall := Format('%s(*%s); ', [DropFn.Name, AVarName]);
+    end;
+    Emit(Format('if (%s) { %sfree((void*)%s); %s = NULL; }', [AVarName, DropCall, AVarName, AVarName]));
+  end
+  else if IsDynamicArrayType(BaseT) then
+  begin
+    Emit(Format('if (%s) { AetherDynFree(%s); %s = NULL; }', [AVarName, AVarName, AVarName]));
+  end
+  else if IsMapType(BaseT, KeyT, ValT) then
+  begin
+    Emit(Format('if (%s.entries) { free(%s.entries); %s.entries = NULL; %s.count = 0; %s.capacity = 0; }',
+      [AVarName, AVarName, AVarName, AVarName, AVarName]));
+  end;
+end;
+
+procedure TAetherEmitterC.EmitActiveRaii(DownToIndex: Integer);
+var
+  I: Integer;
+begin
+  for I := FRaiiNames.Count - 1 downto DownToIndex do
+    EmitRaiiCleanupFor(FRaiiNames[I], FRaiiTypes[I]);
+end;
+
 procedure TAetherEmitterC.EmitStmtList(List: TASTNodeList; IsLoopBody: Boolean);
 var
-  I, SavedBase, OldLoopBase: Integer;
+  I, SavedBase, OldLoopBase, SavedRaiiBase, OldLoopRaiiBase: Integer;
+  OldScopeList: TASTNodeList;
 begin
   SavedBase := FActiveDefers.Count;
   OldLoopBase := FLoopDeferBase;
+  SavedRaiiBase := FRaiiNames.Count;
+  OldLoopRaiiBase := FLoopRaiiBase;
+  OldScopeList := FCurrentScopeList;
+  FCurrentScopeList := List;
   if IsLoopBody then
+  begin
     FLoopDeferBase := SavedBase;
+    FLoopRaiiBase := SavedRaiiBase;
+  end;
   try
     for I := 0 to List.Count - 1 do
       EmitStmt(TASTStmt(List[I]));
     if (List.Count = 0) or not (List[List.Count - 1] is TASTReturnStmt) then
+    begin
       EmitActiveDefers(SavedBase);
+      EmitActiveRaii(SavedRaiiBase);
+    end;
   finally
+    FCurrentScopeList := OldScopeList;
     FLoopDeferBase := OldLoopBase;
+    FLoopRaiiBase := OldLoopRaiiBase;
     while FActiveDefers.Count > SavedBase do
       FActiveDefers.Delete(FActiveDefers.Count - 1);
+    while FRaiiNames.Count > SavedRaiiBase do
+    begin
+      FRaiiNames.Delete(FRaiiNames.Count - 1);
+      FRaiiTypes.Delete(FRaiiTypes.Count - 1);
+    end;
   end;
 end;
 
@@ -2680,7 +3069,8 @@ begin
     VolQual := '';
     if Assigned(InTryBody) and IsVarModifiedInTry(VarDecl.Name, InTryBody) then
       VolQual := 'volatile ';
-    if (IsDynamicArrayType(VarDecl.TypeName) or (Pos('^', VarDecl.TypeName) = 1) or (VarDecl.TypeName = 'Pointer')) and
+    if (IsDynamicArrayType(VarDecl.TypeName) or (Pos('Box<', ResolveAliasType(VarDecl.TypeName)) = 1) or
+        (Pos('^', VarDecl.TypeName) = 1) or (VarDecl.TypeName = 'Pointer')) and
        ((not Assigned(VarDecl.InitialExpr)) or (VarDecl.InitialExpr is TASTSetLiteralExpr)) then
       Emit(Format('%s %s%s = NULL;', [EmitTypeRef(VarDecl.TypeName), VolQual, VarDecl.Name]))
     else
@@ -2726,6 +3116,7 @@ begin
         EmitLocalVarDecl(VD, FProgramBlock.Body)
       else
         EmitLocalVarDecl(VD, nil);
+      RegisterRaiiVar(VD.Name, VD.TypeName, FCurrentScopeList);
     end;
   end
   else if Stmt is TASTAssignStmt then
@@ -2867,12 +3258,16 @@ begin
   begin
     if FActiveDefers.Count > FLoopDeferBase then
       EmitActiveDefers(FLoopDeferBase);
+    if FRaiiNames.Count > FLoopRaiiBase then
+      EmitActiveRaii(FLoopRaiiBase);
     Emit('break;');
   end
   else if Stmt is TASTContinueStmt then
   begin
     if FActiveDefers.Count > FLoopDeferBase then
       EmitActiveDefers(FLoopDeferBase);
+    if FRaiiNames.Count > FLoopRaiiBase then
+      EmitActiveRaii(FLoopRaiiBase);
     Emit('continue;');
   end
   else if Stmt is TASTDeferStmt then
@@ -2912,7 +3307,7 @@ begin
   else if Stmt is TASTReturnStmt then
   begin
     Ret := TASTReturnStmt(Stmt);
-    if (FActiveDefers.Count > 0) or (Assigned(FCurrentFunc) and (FCurrentFunc.Ensures.Count > 0)) then
+    if (FActiveDefers.Count > 0) or (FRaiiNames.Count > 0) or (Assigned(FCurrentFunc) and (FCurrentFunc.Ensures.Count > 0)) then
     begin
       if Assigned(Ret.Expr) then
       begin
@@ -2930,6 +3325,8 @@ begin
           if Assigned(FCurrentFunc) then
             for J := 0 to FCurrentFunc.Ensures.Count - 1 do
               Emit(Format('assert(%s);', [EmitExpr(TASTExpr(FCurrentFunc.Ensures[J]))]));
+          if FRaiiNames.Count > 0 then
+            EmitActiveRaii(0);
           if FTryDepth > 0 then
             Emit(Format('g_aether_jmp_top -= %d;', [FTryDepth]));
           Emit('return __ret_task;');
@@ -2942,6 +3339,8 @@ begin
           if Assigned(FCurrentFunc) then
             for J := 0 to FCurrentFunc.Ensures.Count - 1 do
               Emit(Format('assert(%s);', [EmitExpr(TASTExpr(FCurrentFunc.Ensures[J]))]));
+          if FRaiiNames.Count > 0 then
+            EmitActiveRaii(0);
           if FTryDepth > 0 then
             Emit(Format('g_aether_jmp_top -= %d;', [FTryDepth]));
           Emit('return result;');
@@ -2954,6 +3353,8 @@ begin
         if Assigned(FCurrentFunc) then
           for J := 0 to FCurrentFunc.Ensures.Count - 1 do
             Emit(Format('assert(%s);', [EmitExpr(TASTExpr(FCurrentFunc.Ensures[J]))]));
+        if FRaiiNames.Count > 0 then
+          EmitActiveRaii(0);
         if FTryDepth > 0 then
           Emit(Format('g_aether_jmp_top -= %d;', [FTryDepth]));
         Emit('return;');
@@ -3335,15 +3736,26 @@ begin
   // Corpo
   FActiveDefers.Clear;
   FLoopDeferBase := 0;
+  FRaiiNames.Clear;
+  FRaiiTypes.Clear;
+  FLoopRaiiBase := 0;
+  FCurrentScopeList := Func.Body;
   FTryDepth := 0;
+  for I := 0 to Func.LocalVars.Count - 1 do
+    RegisterRaiiVar(TASTVarDecl(Func.LocalVars[I]).Name, TASTVarDecl(Func.LocalVars[I]).TypeName, Func.Body);
   EmitStmtList(Func.Body);
   FActiveDefers.Clear;
 
-  if (Func.Ensures.Count > 0) and ((Func.Body.Count = 0) or not (Func.Body[Func.Body.Count - 1] is TASTReturnStmt)) then
+  if (Func.Body.Count = 0) or not (Func.Body[Func.Body.Count - 1] is TASTReturnStmt) then
   begin
     for I := 0 to Func.Ensures.Count - 1 do
       Emit(Format('assert(%s);', [EmitExpr(TASTExpr(Func.Ensures[I]))]));
+    if FRaiiNames.Count > 0 then
+      EmitActiveRaii(0);
   end;
+  FRaiiNames.Clear;
+  FRaiiTypes.Clear;
+  FCurrentScopeList := nil;
 
   if (Func.ReturnType <> 'Void') and (Func.ReturnType <> '') and (not Func.IsAsync) then
   begin
@@ -3396,9 +3808,23 @@ begin
 
   FActiveDefers.Clear;
   FLoopDeferBase := 0;
+  FRaiiNames.Clear;
+  FRaiiTypes.Clear;
+  FLoopRaiiBase := 0;
+  FCurrentScopeList := Prog.Body;
   FTryDepth := 0;
+  for I := 0 to Prog.LocalVars.Count - 1 do
+    RegisterRaiiVar(TASTVarDecl(Prog.LocalVars[I]).Name, TASTVarDecl(Prog.LocalVars[I]).TypeName, Prog.Body);
   EmitStmtList(Prog.Body);
   FActiveDefers.Clear;
+  if (Prog.Body.Count = 0) or not (Prog.Body[Prog.Body.Count - 1] is TASTReturnStmt) then
+  begin
+    if FRaiiNames.Count > 0 then
+      EmitActiveRaii(0);
+  end;
+  FRaiiNames.Clear;
+  FRaiiTypes.Clear;
+  FCurrentScopeList := nil;
 
   Emit('return 0;');
   DecIndent;
@@ -4120,6 +4546,11 @@ begin
     Emit('    }');
     Emit('    hdr->len = new_len;');
     Emit('    return (void*)(hdr + 1);');
+    Emit('}');
+    Emit('');
+    Emit('static inline void AetherDynFree(void* arr) {');
+    Emit('    if (!arr) return;');
+    Emit('    free((AetherDynHeader*)arr - 1);');
     Emit('}');
     Emit('');
     if Pos('AetherDynDelete', ReachText) > 0 then

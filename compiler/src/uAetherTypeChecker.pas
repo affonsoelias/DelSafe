@@ -1791,6 +1791,25 @@ begin
       Exit('Void');
     end;
 
+    if SameText(Call.Callee, 'Free') or SameText(Call.Callee, 'Dispose') then
+    begin
+      if Call.Args.Count <> 1 then
+        Error('E0061', Format('Funcao "%s" espera 1 argumento', [Call.Callee]), Call.Line, Call.Col);
+      ArgType := ResolveAliasType(CheckExpr(TASTCallArg(Call.Args[0]).Expr));
+      if (Pos('^', ArgType) = 1) or SameText(ArgType, 'Pointer') then
+      begin
+        if FUnsafeDepth <= 0 then
+          Error('E0133', Format('Chamada a "%s" em ponteiro bruto ("%s") requer bloco unsafe', [Call.Callee, ArgType]), Call.Line, Call.Col);
+      end
+      else if (Pos('Box<', ArgType) = 1) or IsDynamicArrayType(ArgType, ElemType) or IsMapType(ArgType, KeyType, ValType) then
+      begin
+        // Gerenciamento seguro para Box<T>, array dinamico e map
+      end
+      else
+        Error('E0308', Format('"%s" espera Box<T>, array dinamico, mapa ou ponteiro bruto, recebeu "%s"', [Call.Callee, ArgType]), Call.Line, Call.Col);
+      Exit('Void');
+    end;
+
     if Assigned(Sym.Node) and (Sym.Node is TASTFunction) then
     begin
       FuncNode := TASTFunction(Sym.Node);
@@ -2906,26 +2925,49 @@ begin
     begin
       SymTrait := FSymbols.Resolve(Impl.TraitName);
       if (not Assigned(SymTrait)) or (SymTrait.Kind <> skTrait) then
-        Error('E0425', Format('Trait "%s" nao encontrada', [Impl.TraitName]), Impl.Line, Impl.Col);
-
-      TraitDecl := TASTTraitDecl(SymTrait.Node);
-
-      // Validação de completude: todos os métodos da trait foram implementados?
-      for TM := 0 to TraitDecl.Methods.Count - 1 do
       begin
-        TraitMethod := TASTFunction(TraitDecl.Methods[TM]);
-        Found := False;
-        for IM := 0 to Impl.Methods.Count - 1 do
+        if SameText(Impl.TraitName, 'Drop') then
         begin
-          if SameText(TASTFunction(Impl.Methods[IM]).Name, TraitMethod.Name) then
+          Found := False;
+          for IM := 0 to Impl.Methods.Count - 1 do
           begin
-            Found := True;
-            Break;
+            ImplMethod := TASTFunction(Impl.Methods[IM]);
+            if SameText(ImplMethod.Name, 'Drop') then
+            begin
+              Found := True;
+              if ImplMethod.Params.Count <> 1 then
+                Error('E0053', Format('Metodo "Drop" em "%s" deve receber exatamente 1 parametro (self)', [Impl.TargetTypeName]), ImplMethod.Line, ImplMethod.Col);
+              if (ImplMethod.ReturnType <> '') and (not SameText(ImplMethod.ReturnType, 'Void')) then
+                Error('E0053', Format('Metodo "Drop" em "%s" nao deve retornar valor', [Impl.TargetTypeName]), ImplMethod.Line, ImplMethod.Col);
+            end;
           end;
+          if not Found then
+            Error('E0046', Format('O tipo "%s" nao implementou o metodo obrigatorio "Drop" da trait "Drop"', [Impl.TargetTypeName]), Impl.Line, Impl.Col);
+        end
+        else
+          Error('E0425', Format('Trait "%s" nao encontrada', [Impl.TraitName]), Impl.Line, Impl.Col);
+      end
+      else
+      begin
+        TraitDecl := TASTTraitDecl(SymTrait.Node);
+
+        // Validação de completude: todos os métodos da trait foram implementados?
+        for TM := 0 to TraitDecl.Methods.Count - 1 do
+        begin
+          TraitMethod := TASTFunction(TraitDecl.Methods[TM]);
+          Found := False;
+          for IM := 0 to Impl.Methods.Count - 1 do
+          begin
+            if SameText(TASTFunction(Impl.Methods[IM]).Name, TraitMethod.Name) then
+            begin
+              Found := True;
+              Break;
+            end;
+          end;
+          if not Found then
+            Error('E0046', Format('O tipo "%s" nao implementou o metodo obrigatorio "%s" da trait "%s"',
+              [Impl.TargetTypeName, TraitMethod.Name, Impl.TraitName]), Impl.Line, Impl.Col);
         end;
-        if not Found then
-          Error('E0046', Format('O tipo "%s" nao implementou o metodo obrigatorio "%s" da trait "%s"',
-            [Impl.TargetTypeName, TraitMethod.Name, Impl.TraitName]), Impl.Line, Impl.Col);
       end;
     end;
 
