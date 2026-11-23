@@ -422,20 +422,10 @@ Este documento traça o status oficial de desenvolvimento do compilador e as pr�
   - Integração transparente com `aetherc add <pacote>` e `RestoreProjectDependencies` gravando integridade no `aether.lock`.
 
 ### ⏳ Fase 34: Integração de Primeira Classe com BlaiseVue (SFC `<script lang="aether">`, Wasm & Backend Nativo Zephyr em `vendor/zephyr`)
-- [ ] **Módulo Backend Nativo Zephyr Embutido em `vendor/zephyr`**:
-  - Implementação do servidor backend **Zephyr** escrito em Aether como módulo nativo do BlaiseVue dentro do diretório `vendor/zephyr`, eliminando a necessidade de repositório externo ou submódulos adicionais.
-  - **Simples como Express/FastAPI, Poderoso como mORMot**:
-    - Roteamento declarativo limpo (`server.Get("/api/endpoint", handler)`), tipagem estática e serialização instantânea via `[derive(JSON)]`.
-    - Performance de ponta equiparável ou superior ao mORMot via sockets de kernel (`std/net.aeth`), buffers zero-copy garantidos pelo Borrow Checker e corrotinas cooperativas assíncronas (`Task<T>`).
-  - **Alvo de Compilação Duplo (Binário C ou Pascal)**:
-    - **Binário C via GCC (Modo Padrão de Produção & Máxima Performance)**: O Aether compila o Zephyr para C99 e o GCC gera um binário executável nativo ultra-compacto com otimizações LTO (`-O3 -flto -s`), alcançando o mais alto throughput de requisições por segundo e baixíssimo footprint de RAM.
-    - **Binário Pascal via FPC (Modo Desenvolvimento & Debug)**: O Aether compila para Object Pascal puro e o Free Pascal gera o binário nativo com integração e stack traces familiares do ecossistema FPC.
-  - **Segurança Nativa e Blindagem de Produção (Security-First Engine)**:
-    - **Memory Safety Absoluta**: Imunidade matemática contra *buffer overflows*, vazamentos (*memory leaks*), *use-after-free* e corrupção de memória garantida em tempo de compilação pelo Borrow Checker do Aether, sem garbage collector.
-    - **Proteção contra Ataques DoS & Slowloris**: Timeouts estritos de conexões inativas (`ReadTimeout`, `WriteTimeout`, `IdleTimeout`) e limites rígidos de tamanho de requisição (`MaxHeaderBytes`, `MaxBodyBytes`).
-    - **Sanitização e Validação Tipada**: Desserialização estrita através de `[derive(JSON)]`, blindando os endpoints contra injeções (SQLi, NoSQLi, Command Injection) e payloads malformados.
-    - **Proteções HTTP e Rate Limiting**: Middlewares nativos para CORS configurável, Security Headers (HSTS, CSP, X-Frame-Options, X-Content-Type-Options) e controle de taxa de requisições (*Rate Limiting*) por IP/Token.
-    - **Transporte Seguro (TLS/HTTPS)**: Suporte nativo a conexões seguras criptografadas de ponta a ponta.
+
+> **Estratégia Incremental em 3 Subfases**: Para entregar valor rápido sem bloquear o frontend esperando servidor HTTP ou Wasm, a Fase 34 é dividida em **34.1** (Frontend SFC + Compartilhamento Isomórfico), **34.2** (Backend Zephyr) e **34.3** (WebAssembly).
+
+#### Subfase 34.1 — Frontend SFC `<script lang="aether">`, Emissão de Units & Contratos Full-Stack
 - [ ] **Arquitetura Modular Não-Invasiva & Uso no Core vs. Aplicações**:
   - Preservação do core do BlaiseVue (`core/*.pas` e `bin/bv.pas`) em Object Pascal puro para manter build rápido com um único compilador (`fpc`/`pas2js`), acesso direto às internals de RTTI/DOM e zero dependências circulares.
   - O Aether foca 100% na camada de desenvolvimento de aplicações (Frontend `.bv`, Backend API/Zephyr e regras de negócio), permitindo opcionalmente que módulos isolados e críticos de segurança do core (como parsers ou validadores) sejam escritos em Aether e pré-emitidos como `.pas` (`aetherc emit pascal --unit`) versionados no repositório.
@@ -443,12 +433,33 @@ Este documento traça o status oficial de desenvolvimento do compilador e as pr�
   - No contexto do BlaiseVue, o `aetherc` **não** invoca um `pas2js` externo por conta própria (`--target=js` fica restrito ao uso standalone fora do framework).
   - O Aether atua exclusivamente como **Verificador Estático e Gerador de Units**: executa Type Checker, Exhaustive Match, contratos (`require`/`ensure`), Borrow Checker e expansão de `[derive(JSON, Debug, Clone, Equals)]` + `FromJSON`, emitindo uma `unit <Nome>;` Object Pascal padrão (com diretivas de compatibilidade `{$IFDEF PAS2JS}`) via `aetherc emit pascal <arquivo.aeth> --unit --out-dir=.blaisevue/generated --silent`.
   - **Fonte Única de Verdade do Toolchain (`pas2js` / `fpc`) no BlaiseVue**: O próprio CLI do BlaiseVue (`bv`) assume as units `.pas` geradas em `.blaisevue/generated/` e as compila junto com o restante do projeto usando a versão do `pas2js` embutida ou selecionada/baixada pelo usuário no BlaiseVue (com seu próprio `rtl.js`, flags `-Jc`/`-Jirtl.js` e caminhos de units DOM/Web), eliminando qualquer risco de conflito de versões de `pas2js` ou incompatibilidade de `rtl.js`.
-- [ ] **Frontend Reativo com Aether em Componentes `.bv` (`<script lang="aether">`) & Compartilhamento Isomórfico Full-Stack**:
+- [ ] **Frontend Reativo em Componentes `.bv` (`<script lang="aether">`), Bindings & DX de Hot-Reload**:
   - Detecção no parser de SFC do `bv` de blocos `<script lang="aether">`.
-  - Pipeline de pré-processador: extração do script para arquivo `.aeth` temporário e invocação transparente de `aetherc emit pascal <arquivo.aeth> --unit --out-dir=.blaisevue/generated --silent`.
-  - Validação estática de posse (Borrow Checker), contratos (`require`/`ensure`), Exhaustive Match e checagem de tipos em tempo de compilação antes de entregar a unit Pascal gerada para o `pas2js` configurado no BlaiseVue.
-  - **Compartilhamento Isomórfico Full-Stack (Frontend + Backend)**: Um único arquivo `.aeth` de domínio (ex.: `shared/models/pedido.aeth` com structs, `[derive(JSON, Equals)]` e contratos `require`/`ensure`) é emitido como unit `.pas` pelo Aether e consumido simultaneamente pelo `pas2js` do BlaiseVue no Frontend e pelo `fpc` (ou backend C99 do Zephyr) no Backend.
+  - **Mapeamento Fiel de Linha e Arquivo Fonte**: Suporte a `--source-file=<Arquivo.bv> --line-offset=<N>` no `aetherc` (ou preenchimento equivalente de linhas pelo extrator), garantindo que erros de Borrow Checker, tipos ou contratos apontem a **linha real dentro do arquivo `.bv`** na IDE.
+  - **Cache Incremental por Hash em `.blaisevue/generated/`**: Persistência de hash do bloco `<script lang="aether">` para regenerar somente os componentes modificados durante `bv dev`, mantendo o Hot-Reload instantâneo.
+  - **Convenção de Atributos Reativos no Aether**: Uso dos atributos nativos `@[state]`, `@[prop]`, `@[computed]` e `@[action]` para que `aetherc emit pascal --unit` emita propriedades e handlers compatíveis com o motor reativo e os templates do BlaiseVue.
   - Compatibilidade retroativa total: blocos `<script>` sem atributo continuam rodando Object Pascal puro.
+- [ ] **Compartilhamento Isomórfico Full-Stack & Validação Dupla de Contratos (Frontend + Backend)**:
+  - Um único arquivo `.aeth` de domínio (ex.: `shared/models/pedido.aeth` com structs, `[derive(JSON, Equals)]` + `FromJSON` e contratos `require`/`ensure`) é emitido como unit `.pas` pelo Aether e consumido simultaneamente pelo `pas2js` do BlaiseVue no Frontend e pelo `fpc` (ou backend C99 do Zephyr) no Backend.
+  - **Validação Dupla Sem Duplicação**: As cláusulas `require` rodam no navegador com latência zero antes da requisição HTTP e executam novamente no Backend nativo após `FromJSON`, barrando payloads inválidos ou bypass via `curl`/API com a mesma especificação única.
+
+#### Subfase 34.2 — Backend Nativo Zephyr Embutido em `vendor/zephyr`
+- [ ] **Módulo Backend Nativo Zephyr Embutido em `vendor/zephyr`**:
+  - Implementação do servidor backend **Zephyr** escrito em Aether como módulo nativo do BlaiseVue dentro do diretório `vendor/zephyr`, eliminando a necessidade de repositório externo ou submódulos adicionais.
+  - **Simples como Express/FastAPI, Poderoso como mORMot**:
+    - Roteamento declarativo limpo (`server.Get("/api/endpoint", handler)`), tipagem estática e serialização instantânea via `[derive(JSON)]` + `FromJSON`.
+    - Performance de ponta equiparável ou superior ao mORMot via sockets de kernel (`std/net.aeth`), buffers zero-copy garantidos pelo Borrow Checker e corrotinas cooperativas assíncronas (`Task<T>`).
+  - **Alvo de Compilação Duplo (Binário C ou Pascal)**:
+    - **Binário C via GCC (Modo Padrão de Produção & Máxima Performance)**: O Aether compila o Zephyr para C99 e o GCC gera um binário executável nativo ultra-compacto com otimizações LTO (`-O3 -flto -s`), alcançando o mais alto throughput de requisições por segundo e baixíssimo footprint de RAM.
+    - **Binário Pascal via FPC (Modo Desenvolvimento & Debug)**: O Aether compila para Object Pascal puro e o Free Pascal gera o binário nativo com integração e stack traces familiares do ecossistema FPC.
+  - **Segurança Nativa e Blindagem de Produção (Security-First Engine)**:
+    - **Memory Safety Absoluta**: Imunidade matemática contra *buffer overflows*, vazamentos (*memory leaks*), *use-after-free* e corrupção de memória garantida em tempo de compilação pelo Borrow Checker do Aether, sem garbage collector.
+    - **Proteção contra Ataques DoS & Slowloris**: Timeouts estritos de conexões inativas (`ReadTimeout`, `WriteTimeout`, `IdleTimeout`) e limites rígidos de tamanho de requisição (`MaxHeaderBytes`, `MaxBodyBytes`).
+    - **Sanitização e Validação Tipada**: Desserialização estrita através de `[derive(JSON)]` / `FromJSON` e contratos `require`, blindando os endpoints contra injeções (SQLi, NoSQLi, Command Injection) e payloads malformados.
+    - **Proteções HTTP e Rate Limiting**: Middlewares nativos para CORS configurável, Security Headers (HSTS, CSP, X-Frame-Options, X-Content-Type-Options) e controle de taxa de requisições (*Rate Limiting*) por IP/Token.
+    - **Foco Pragmático em HTTP/1.1 Keep-Alive + WebSockets**: Núcleo focado em máxima vazão HTTP/WebSockets delegando terminação TLS/HTTPS e HTTP/2 para Reverse Proxy em produção (Caddy, Nginx, Traefik ou Cloudflare), deixando binding opcional via FFI (`OpenSSL`/`mbedTLS`) apenas para extensões futuras sem complexidade de stack criptográfico próprio na v1.
+
+#### Subfase 34.3 — WebAssembly de Alta Performance por Convenção 1:1 (`<script lang="aether" target="wasm">`)
 - [ ] **WebAssembly de Alta Performance por Convenção 1:1 (Abordagem A)**:
   - Suporte a `<script lang="aether" target="wasm">` em componentes de computação pesada (gráficos, física, IA local, processamento de dados).
   - O `bv` invoca `aetherc --target=wasm` gerando `dist/wasm/<NomeComponente>.wasm` via Clang wasm32.
