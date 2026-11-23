@@ -79,8 +79,9 @@ type
 
     function BuildFuncSig(Func: TASTFunction): string;
     function BuildRecordConstructorSig(Rec: TASTRecordDecl): string;
-    procedure EmitRuntimeHelpersInterface;
-    procedure EmitRuntimeHelpersImplementation;
+    procedure EmitRuntimeTypeDecls(const RefText: string; MapTags, MapKeys, MapVals: TStringList; AsUnit: Boolean);
+    procedure EmitRuntimeHelpersInterface(const RefText: string);
+    procedure EmitRuntimeHelpersImplementation(const RefText: string);
   public
     constructor Create;
     destructor Destroy; override;
@@ -3303,495 +3304,725 @@ begin
   Result := Format('function %s(%s): T%s;', [Rec.Name, CtorParams, Rec.Name]);
 end;
 
-procedure TAetherEmitterPascal.EmitRuntimeHelpersInterface;
+procedure TAetherEmitterPascal.EmitRuntimeTypeDecls(const RefText: string; MapTags, MapKeys, MapVals: TStringList; AsUnit: Boolean);
+var
+  I: Integer;
+  NeedFloat64, NeedFloat32, NeedPtr, NeedDyn, NeedResult, NeedTask, NeedOption, HasBuiltinMap, HasAnyType: Boolean;
 begin
-  Emit('function AetherOk(const V: Double): TResultDoubleError; overload;');
-  Emit('function AetherOk(const V: String): TResultDoubleError; overload;');
-  Emit('function AetherOk(const V: Boolean): TResultDoubleError; overload;');
-  Emit('function AetherErr(const E: Integer): TResultDoubleError; overload;');
-  Emit('function AetherErr(const E: String): TResultDoubleError; overload;');
-  Emit('function AetherSome(const V: Double): TAetherOption; overload;');
-  Emit('function AetherSome(const V: String): TAetherOption; overload;');
-  Emit('function AetherSome(const V: Boolean): TAetherOption; overload;');
-  Emit('function AetherNone(): TAetherOption;');
-  Emit('function AetherDynPop_Int8(var A: TAetherDyn_Int8): Int8;');
-  Emit('function AetherDynPop_Int16(var A: TAetherDyn_Int16): Int16;');
-  Emit('function AetherDynPop_Int32(var A: TAetherDyn_Int32): Int32;');
-  Emit('function AetherDynPop_Int64(var A: TAetherDyn_Int64): Int64;');
-  Emit('function AetherDynPop_UInt8(var A: TAetherDyn_UInt8): UInt8;');
-  Emit('function AetherDynPop_UInt16(var A: TAetherDyn_UInt16): UInt16;');
-  Emit('function AetherDynPop_UInt32(var A: TAetherDyn_UInt32): UInt32;');
-  Emit('function AetherDynPop_UInt64(var A: TAetherDyn_UInt64): UInt64;');
-  Emit('function AetherDynPop_Float32(var A: TAetherDyn_Float32): Single;');
-  Emit('function AetherDynPop_Float64(var A: TAetherDyn_Float64): Double;');
-  Emit('function AetherDynPop_Bool(var A: TAetherDyn_Bool): Boolean;');
-  Emit('function AetherDynPop_Char(var A: TAetherDyn_Char): Char;');
-  Emit('function AetherDynPop_String(var A: TAetherDyn_String): String;');
-  Emit('function AetherDynPop_Pointer(var A: TAetherDyn_Pointer): Pointer;');
-  Emit('function AetherCharAt(const S: string; Index: Cardinal): string;');
-  Emit('function AetherSubstring(const S: string; Start, Len: Cardinal): string;');
-  Emit('generic function AetherIfThen<T>(Cond: Boolean; const A, B: T): T;');
-  Emit('generic function AetherMin<T>(const A, B: T): T;');
-  Emit('generic function AetherMax<T>(const A, B: T): T;');
-  Emit('generic function AetherClamp<T>(const V, Lo, Hi: T): T;');
-  Emit('function AetherStrTrim(const S: string): string;');
-  Emit('function AetherUpperCase(const S: string): string;');
-  Emit('function AetherLowerCase(const S: string): string;');
-  Emit('function AetherStartsWith(const S, Prefix: string): Boolean;');
-  Emit('function AetherEndsWith(const S, Suffix: string): Boolean;');
-  Emit('function AetherStrContains(const S, Sub: string): Boolean;');
-  Emit('function AetherIndexOf(const S, Sub: string): Int32;');
-  Emit('function AetherStrReplace(const S, OldStr, NewStr: string): string;');
-  Emit('function AetherFileExists(const APath: string): Boolean;');
-  Emit('function AetherReadFile(const APath: string): string;');
-  Emit('function AetherWriteFile(const APath: string; const AContent: string): Boolean;');
-  Emit('function AetherCreateDir(const APath: string): Boolean;');
-  Emit('function AetherRemoveDir(const APath: string): Boolean;');
-  Emit('function AetherDeleteFile(const APath: string): Boolean;');
-  Emit('function AetherDirExists(const APath: string): Boolean;');
-  Emit('function AetherFileSize(const APath: string): {$IFDEF PAS2JS}NativeInt{$ELSE}Int64{$ENDIF};');
-  Emit('function AetherBoolToStr(B: Boolean): string;');
-  Emit('function AetherFloatToStr(AVal: Double): string;');
-  Emit('function AetherJsonExtractRaw(const Json, Key: string): string;');
-  Emit('function AetherJsonGetStr(const Json, Key: string): string;');
-  Emit('function AetherJsonGetInt(const Json, Key: string): Int32;');
-  Emit('function AetherJsonGetFloat(const Json, Key: string): Double;');
-  Emit('function AetherJsonGetBool(const Json, Key: string): Boolean;');
-  Emit('function AetherJsonGetChar(const Json, Key: string): Char;');
-  Emit('function AetherJsonHasValue(const Json, Key: string): Boolean;');
-  Emit('function AetherJsonGetObj(const Json, Key: string): string;');
-  Emit('function AetherGetNanoseconds: {$IFDEF PAS2JS}Double{$ELSE}QWord{$ENDIF};');
-  Emit('procedure AetherSleepMs(AMs: Cardinal);');
-  Emit('function AetherSocketCreate(): LongInt;');
-  Emit('function AetherSocketListen(Port: Word; Backlog: LongInt): LongInt;');
-  Emit('function AetherSocketAccept(ListenFd: LongInt): LongInt;');
-  Emit('function AetherSocketConnect(const Host: String; Port: Word): LongInt;');
-  Emit('function AetherSocketSend(Fd: LongInt; const Data: String): LongInt;');
-  Emit('function AetherSocketRecv(Fd: LongInt; MaxLen: LongInt): String;');
-  Emit('procedure AetherSocketClose(Fd: LongInt);');
-  Emit('');
+  NeedFloat64 := (Pos('Float64', RefText) > 0);
+  NeedFloat32 := (Pos('Float32', RefText) > 0);
+  NeedPtr := (Pos('PAetherPtr_', RefText) > 0);
+  NeedDyn := (Pos('TAetherDyn_', RefText) > 0) or (Pos('AetherDynPop_', RefText) > 0);
+  NeedResult := (Pos('TAetherResult', RefText) > 0) or (Pos('TResultDoubleError', RefText) > 0) or
+                (Pos('AetherOk(', RefText) > 0) or (Pos('AetherErr(', RefText) > 0);
+  NeedTask := (Pos('TAetherTask', RefText) > 0);
+  NeedOption := (Pos('TAetherOption', RefText) > 0) or (Pos('AetherSome(', RefText) > 0) or
+                (Pos('AetherNone(', RefText) > 0);
+  HasBuiltinMap := False;
+  for I := 0 to MapTags.Count - 1 do
+    if IsBuiltinMapSideType(MapKeys[I]) and IsBuiltinMapSideType(MapVals[I]) then
+    begin
+      HasBuiltinMap := True;
+      Break;
+    end;
+  HasAnyType := NeedFloat64 or NeedFloat32 or NeedPtr or NeedDyn or NeedResult or NeedTask or NeedOption or HasBuiltinMap;
+  if not HasAnyType then Exit;
+
+  if AsUnit then
+    Emit('// --- Aether Runtime Helpers & Monads ---')
+  else
+    Emit('// --- Aether Runtime Helpers ---');
+
+  if NeedFloat64 or NeedFloat32 or NeedPtr or NeedDyn or NeedResult then
+  begin
+    Emit('type');
+    if NeedFloat64 then Emit('  Float64 = Double;');
+    if NeedFloat32 then Emit('  Float32 = Single;');
+    if NeedPtr then
+    begin
+      Emit('  PAetherPtr_Int8 = ^Int8; PAetherPtr_Int16 = ^Int16; PAetherPtr_Int32 = ^Int32; PAetherPtr_Int64 = ^Int64;');
+      Emit('  PAetherPtr_UInt8 = ^UInt8; PAetherPtr_UInt16 = ^UInt16; PAetherPtr_UInt32 = ^UInt32; PAetherPtr_UInt64 = ^UInt64;');
+      Emit('  PAetherPtr_Float32 = ^Single; PAetherPtr_Float64 = ^Double; PAetherPtr_Bool = ^Boolean; PAetherPtr_Char = ^Char; PAetherPtr_String = ^String;');
+    end;
+    if NeedDyn then
+    begin
+      Emit('  TAetherDyn_Int8 = array of Int8; TAetherDyn_Int16 = array of Int16; TAetherDyn_Int32 = array of Int32; TAetherDyn_Int64 = array of Int64;');
+      Emit('  TAetherDyn_UInt8 = array of UInt8; TAetherDyn_UInt16 = array of UInt16; TAetherDyn_UInt32 = array of UInt32; TAetherDyn_UInt64 = array of UInt64;');
+      Emit('  TAetherDyn_Float32 = array of Single; TAetherDyn_Float64 = array of Double; TAetherDyn_Bool = array of Boolean; TAetherDyn_Char = array of Char;');
+      Emit('  TAetherDyn_String = array of String; TAetherDyn_Pointer = array of Pointer;');
+    end;
+    if NeedResult then
+    begin
+      Emit('  generic TAetherResult<TVal, TErr> = record');
+      Emit('    is_ok: Boolean;');
+      Emit('    is_err: Boolean;');
+      Emit('    value: TVal;');
+      Emit('    error: TErr;');
+      Emit('    str_val: String;');
+      Emit('    err_str: String;');
+      Emit('  end;');
+      Emit('  TResultDoubleError = specialize TAetherResult<Double, Integer>;');
+    end;
+    Emit('');
+  end;
+
+  if NeedTask then
+  begin
+    Emit('type');
+    Emit('  generic TAetherTask<TVal> = record');
+    Emit('    is_completed: Boolean;');
+    Emit('    value: TVal;');
+    Emit('  end;');
+    Emit('');
+  end;
+
+  if NeedOption then
+  begin
+    Emit('type');
+    Emit('  TAetherOption = record');
+    Emit('    is_some: Boolean;');
+    Emit('    is_none: Boolean;');
+    Emit('    num_val: Double;');
+    Emit('    str_val: String;');
+    Emit('  end;');
+    Emit('');
+  end;
+
+  if HasBuiltinMap then
+  begin
+    Emit('type');
+    EmitMapRuntimeDecls(MapTags, MapKeys, MapVals, True);
+    Emit('');
+  end;
 end;
 
-procedure TAetherEmitterPascal.EmitRuntimeHelpersImplementation;
+procedure TAetherEmitterPascal.EmitRuntimeHelpersInterface(const RefText: string);
+var
+  NeedResult, NeedOption, NeedFileIO, NeedJson, NeedSockets, EmittedAny: Boolean;
 begin
-  Emit('function AetherOk(const V: Double): TResultDoubleError; overload;');
-  Emit('begin Result := Default(TResultDoubleError); Result.is_ok := True; Result.is_err := False; Result.value := V; end;');
-  Emit('');
-  Emit('function AetherOk(const V: String): TResultDoubleError; overload;');
-  Emit('begin Result := Default(TResultDoubleError); Result.is_ok := True; Result.is_err := False; Result.str_val := V; end;');
-  Emit('');
-  Emit('function AetherOk(const V: Boolean): TResultDoubleError; overload;');
-  Emit('begin Result := Default(TResultDoubleError); Result.is_ok := True; Result.is_err := False; if V then Result.value := 1 else Result.value := 0; end;');
-  Emit('');
-  Emit('function AetherErr(const E: Integer): TResultDoubleError; overload;');
-  Emit('begin Result := Default(TResultDoubleError); Result.is_ok := False; Result.is_err := True; Result.error := E; end;');
-  Emit('');
-  Emit('function AetherErr(const E: String): TResultDoubleError; overload;');
-  Emit('begin Result := Default(TResultDoubleError); Result.is_ok := False; Result.is_err := True; Result.err_str := E; end;');
-  Emit('');
-  Emit('function AetherSome(const V: Double): TAetherOption; overload;');
-  Emit('begin Result.is_some := True; Result.is_none := False; Result.num_val := V; Result.str_val := ''''; end;');
-  Emit('');
-  Emit('function AetherSome(const V: String): TAetherOption; overload;');
-  Emit('begin Result.is_some := True; Result.is_none := False; Result.num_val := 0; Result.str_val := V; end;');
-  Emit('');
-  Emit('function AetherSome(const V: Boolean): TAetherOption; overload;');
-  Emit('begin Result.is_some := True; Result.is_none := False; if V then Result.num_val := 1 else Result.num_val := 0; Result.str_val := ''''; end;');
-  Emit('');
-  Emit('function AetherNone(): TAetherOption;');
-  Emit('begin Result.is_some := False; Result.is_none := True; Result.num_val := 0; Result.str_val := ''''; end;');
-  Emit('');
-  Emit('function AetherDynPop_Int8(var A: TAetherDyn_Int8): Int8; begin Result := A[High(A)]; SetLength(A, Length(A) - 1); end;');
-  Emit('function AetherDynPop_Int16(var A: TAetherDyn_Int16): Int16; begin Result := A[High(A)]; SetLength(A, Length(A) - 1); end;');
-  Emit('function AetherDynPop_Int32(var A: TAetherDyn_Int32): Int32; begin Result := A[High(A)]; SetLength(A, Length(A) - 1); end;');
-  Emit('function AetherDynPop_Int64(var A: TAetherDyn_Int64): Int64; begin Result := A[High(A)]; SetLength(A, Length(A) - 1); end;');
-  Emit('function AetherDynPop_UInt8(var A: TAetherDyn_UInt8): UInt8; begin Result := A[High(A)]; SetLength(A, Length(A) - 1); end;');
-  Emit('function AetherDynPop_UInt16(var A: TAetherDyn_UInt16): UInt16; begin Result := A[High(A)]; SetLength(A, Length(A) - 1); end;');
-  Emit('function AetherDynPop_UInt32(var A: TAetherDyn_UInt32): UInt32; begin Result := A[High(A)]; SetLength(A, Length(A) - 1); end;');
-  Emit('function AetherDynPop_UInt64(var A: TAetherDyn_UInt64): UInt64; begin Result := A[High(A)]; SetLength(A, Length(A) - 1); end;');
-  Emit('function AetherDynPop_Float32(var A: TAetherDyn_Float32): Single; begin Result := A[High(A)]; SetLength(A, Length(A) - 1); end;');
-  Emit('function AetherDynPop_Float64(var A: TAetherDyn_Float64): Double; begin Result := A[High(A)]; SetLength(A, Length(A) - 1); end;');
-  Emit('function AetherDynPop_Bool(var A: TAetherDyn_Bool): Boolean; begin Result := A[High(A)]; SetLength(A, Length(A) - 1); end;');
-  Emit('function AetherDynPop_Char(var A: TAetherDyn_Char): Char; begin Result := A[High(A)]; SetLength(A, Length(A) - 1); end;');
-  Emit('function AetherDynPop_String(var A: TAetherDyn_String): String; begin Result := A[High(A)]; SetLength(A, Length(A) - 1); end;');
-  Emit('function AetherDynPop_Pointer(var A: TAetherDyn_Pointer): Pointer; begin Result := A[High(A)]; SetLength(A, Length(A) - 1); end;');
-  Emit('');
-  Emit('generic function AetherIfThen<T>(Cond: Boolean; const A, B: T): T;');
-  Emit('begin');
-  Emit('  if Cond then Result := A else Result := B;');
-  Emit('end;');
-  Emit('');
-  Emit('generic function AetherMin<T>(const A, B: T): T;');
-  Emit('begin');
-  Emit('  if A < B then Result := A else Result := B;');
-  Emit('end;');
-  Emit('');
-  Emit('generic function AetherMax<T>(const A, B: T): T;');
-  Emit('begin');
-  Emit('  if A > B then Result := A else Result := B;');
-  Emit('end;');
-  Emit('');
-  Emit('generic function AetherClamp<T>(const V, Lo, Hi: T): T;');
-  Emit('begin');
-  Emit('  if V < Lo then Result := Lo else if V > Hi then Result := Hi else Result := V;');
-  Emit('end;');
-  Emit('');
-  Emit('function AetherStrTrim(const S: string): string;');
-  Emit('begin');
-  Emit('  Result := SysUtils.Trim(S);');
-  Emit('end;');
-  Emit('');
-  Emit('function AetherUpperCase(const S: string): string;');
-  Emit('begin');
-  Emit('  Result := SysUtils.UpperCase(S);');
-  Emit('end;');
-  Emit('');
-  Emit('function AetherLowerCase(const S: string): string;');
-  Emit('begin');
-  Emit('  Result := SysUtils.LowerCase(S);');
-  Emit('end;');
-  Emit('');
-  Emit('function AetherStartsWith(const S, Prefix: string): Boolean;');
-  Emit('begin');
-  Emit('  Result := (Length(Prefix) <= Length(S)) and (Copy(S, 1, Length(Prefix)) = Prefix);');
-  Emit('end;');
-  Emit('');
-  Emit('function AetherEndsWith(const S, Suffix: string): Boolean;');
-  Emit('begin');
-  Emit('  Result := (Length(Suffix) <= Length(S)) and (Copy(S, Length(S) - Length(Suffix) + 1, Length(Suffix)) = Suffix);');
-  Emit('end;');
-  Emit('');
-  Emit('function AetherStrContains(const S, Sub: string): Boolean;');
-  Emit('begin');
-  Emit('  if Sub = '''' then Exit(True);');
-  Emit('  Result := Pos(Sub, S) > 0;');
-  Emit('end;');
-  Emit('');
-  Emit('function AetherIndexOf(const S, Sub: string): Int32;');
-  Emit('begin');
-  Emit('  if Sub = '''' then Exit(0);');
-  Emit('  Result := Int32(Pos(Sub, S)) - 1;');
-  Emit('end;');
-  Emit('');
-  Emit('function AetherStrReplace(const S, OldStr, NewStr: string): string;');
-  Emit('begin');
-  Emit('  if OldStr = '''' then Exit(S);');
-  Emit('  Result := SysUtils.StringReplace(S, OldStr, NewStr, [rfReplaceAll]);');
-  Emit('end;');
-  Emit('');
-  Emit('function AetherCharAt(const S: string; Index: Cardinal): string;');
-  Emit('begin');
-  Emit('  if (Index + 1 <= Cardinal(Length(S))) then Result := S[Index + 1] else Result := '''';');
-  Emit('end;');
-  Emit('');
-  Emit('function AetherSubstring(const S: string; Start, Len: Cardinal): string;');
-  Emit('begin');
-  Emit('  Result := Copy(S, Start + 1, Len);');
-  Emit('end;');
-  Emit('');
-  Emit('{$IFNDEF PAS2JS}');
-  Emit('function AetherFileExists(const APath: string): Boolean;');
-  Emit('begin');
-  Emit('  Result := SysUtils.FileExists(APath);');
-  Emit('end;');
-  Emit('');
-  Emit('function AetherReadFile(const APath: string): string;');
-  Emit('var');
-  Emit('  F: TextFile;');
-  Emit('  Line, Content: string;');
-  Emit('begin');
-  Emit('  Content := '''';');
-  Emit('  if not SysUtils.FileExists(APath) then Exit('''');');
-  Emit('  AssignFile(F, APath);');
-  Emit('  {$I-} Reset(F); {$I+}');
-  Emit('  if IOResult <> 0 then Exit('''');');
-  Emit('  while not Eof(F) do begin ReadLn(F, Line); Content := Content + Line + LineEnding; end;');
-  Emit('  CloseFile(F);');
-  Emit('  Result := Content;');
-  Emit('end;');
-  Emit('');
-  Emit('function AetherWriteFile(const APath: string; const AContent: string): Boolean;');
-  Emit('var');
-  Emit('  F: TextFile;');
-  Emit('begin');
-  Emit('  AssignFile(F, APath);');
-  Emit('  {$I-} Rewrite(F); {$I+}');
-  Emit('  if IOResult <> 0 then Exit(False);');
-  Emit('  Write(F, AContent);');
-  Emit('  CloseFile(F);');
-  Emit('  Result := True;');
-  Emit('end;');
-  Emit('');
-  Emit('function AetherCreateDir(const APath: string): Boolean;');
-  Emit('begin Result := SysUtils.CreateDir(APath); end;');
-  Emit('');
-  Emit('function AetherRemoveDir(const APath: string): Boolean;');
-  Emit('begin Result := SysUtils.RemoveDir(APath); end;');
-  Emit('');
-  Emit('function AetherDeleteFile(const APath: string): Boolean;');
-  Emit('begin Result := SysUtils.DeleteFile(APath); end;');
-  Emit('');
-  Emit('function AetherDirExists(const APath: string): Boolean;');
-  Emit('begin Result := SysUtils.DirectoryExists(APath); end;');
-  Emit('');
-  Emit('function AetherFileSize(const APath: string): Int64;');
-  Emit('var H: THandle;');
-  Emit('begin');
-  Emit('  Result := -1;');
-  Emit('  H := FileOpen(APath, fmOpenRead or fmShareDenyNone);');
-  Emit('  if H <> feInvalidHandle then begin Result := FileSeek(H, Int64(0), 2); FileClose(H); end;');
-  Emit('end;');
-  Emit('{$ELSE}');
-  Emit('function AetherFileExists(const APath: string): Boolean; begin Result := False; end;');
-  Emit('function AetherReadFile(const APath: string): string; begin Result := ''''; end;');
-  Emit('function AetherWriteFile(const APath: string; const AContent: string): Boolean; begin Result := False; end;');
-  Emit('function AetherCreateDir(const APath: string): Boolean; begin Result := False; end;');
-  Emit('function AetherRemoveDir(const APath: string): Boolean; begin Result := False; end;');
-  Emit('function AetherDeleteFile(const APath: string): Boolean; begin Result := False; end;');
-  Emit('function AetherDirExists(const APath: string): Boolean; begin Result := False; end;');
-  Emit('function AetherFileSize(const APath: string): {$IFDEF PAS2JS}NativeInt{$ELSE}Int64{$ENDIF}; begin Result := -1; end;');
-  Emit('{$ENDIF}');
-  Emit('');
-  Emit('function AetherBoolToStr(B: Boolean): string;');
-  Emit('begin if B then Result := ''true'' else Result := ''false''; end;');
-  Emit('');
-  Emit('function AetherFloatToStr(AVal: Double): string;');
-  Emit('var FS: TFormatSettings;');
-  Emit('begin');
-  Emit('  FS := DefaultFormatSettings;');
-  Emit('  FS.DecimalSeparator := ''.'';');
-  Emit('  Result := FloatToStr(AVal, FS);');
-  Emit('end;');
-  Emit('');
-  Emit('function AetherJsonExtractRaw(const Json, Key: string): string;');
-  Emit('var');
-  Emit('  Pattern: string;');
-  Emit('  P, SearchPos, JLen, Depth, StartPos: Integer;');
-  Emit('  InStr: Boolean;');
-  Emit('begin');
-  Emit('  Pattern := ''"'' + Key + ''"'';');
-  Emit('  SearchPos := 1;');
-  Emit('  JLen := Length(Json);');
-  Emit('  while SearchPos <= JLen do');
-  Emit('  begin');
-  Emit('    P := Pos(Pattern, Copy(Json, SearchPos, JLen - SearchPos + 1));');
-  Emit('    if P = 0 then Exit('''');');
-  Emit('    P := SearchPos + P - 1 + Length(Pattern);');
-  Emit('    while (P <= JLen) and (Json[P] in ['' '', #9, #10, #13]) do Inc(P);');
-  Emit('    if (P <= JLen) and (Json[P] = '':'') then');
-  Emit('    begin');
-  Emit('      Inc(P);');
-  Emit('      while (P <= JLen) and (Json[P] in ['' '', #9, #10, #13]) do Inc(P);');
-  Emit('      if P > JLen then Exit('''');');
-  Emit('      if Json[P] = ''"'' then');
-  Emit('      begin');
-  Emit('        StartPos := P; Inc(P);');
-  Emit('        while P <= JLen do');
-  Emit('        begin');
-  Emit('          if (Json[P] = ''"'') and ((P = StartPos + 1) or (Json[P - 1] <> ''\'')) then');
-  Emit('            Exit(Copy(Json, StartPos, P - StartPos + 1));');
-  Emit('          Inc(P);');
-  Emit('        end;');
-  Emit('        Exit(Copy(Json, StartPos, JLen - StartPos + 1));');
-  Emit('      end');
-  Emit('      else if Json[P] = ''{'' then');
-  Emit('      begin');
-  Emit('        StartPos := P; Depth := 0; InStr := False;');
-  Emit('        while P <= JLen do');
-  Emit('        begin');
-  Emit('          if (Json[P] = ''"'') and ((P = 1) or (Json[P - 1] <> ''\'')) then InStr := not InStr');
-  Emit('          else if not InStr then');
-  Emit('          begin');
-  Emit('            if Json[P] = ''{'' then Inc(Depth)');
-  Emit('            else if Json[P] = ''}'' then begin Dec(Depth); if Depth = 0 then Exit(Copy(Json, StartPos, P - StartPos + 1)); end;');
-  Emit('          end;');
-  Emit('          Inc(P);');
-  Emit('        end;');
-  Emit('        Exit(Copy(Json, StartPos, JLen - StartPos + 1));');
-  Emit('      end');
-  Emit('      else');
-  Emit('      begin');
-  Emit('        StartPos := P;');
-  Emit('        while (P <= JLen) and not (Json[P] in ['','', ''}'', '']'', '' '', #9, #10, #13]) do Inc(P);');
-  Emit('        Exit(Copy(Json, StartPos, P - StartPos));');
-  Emit('      end;');
-  Emit('    end;');
-  Emit('    SearchPos := P;');
-  Emit('  end;');
-  Emit('  Result := '''';');
-  Emit('end;');
-  Emit('');
-  Emit('function AetherJsonGetStr(const Json, Key: string): string;');
-  Emit('begin');
-  Emit('  Result := AetherJsonExtractRaw(Json, Key);');
-  Emit('  if (Length(Result) >= 2) and (Result[1] = ''"'') and (Result[Length(Result)] = ''"'') then');
-  Emit('    Result := Copy(Result, 2, Length(Result) - 2);');
-  Emit('end;');
-  Emit('');
-  Emit('function AetherJsonGetInt(const Json, Key: string): Int32;');
-  Emit('begin');
-  Emit('  Result := StrToIntDef(AetherJsonExtractRaw(Json, Key), 0);');
-  Emit('end;');
-  Emit('');
-  Emit('function AetherJsonGetFloat(const Json, Key: string): Double;');
-  Emit('var FS: TFormatSettings;');
-  Emit('begin');
-  Emit('  FS := DefaultFormatSettings;');
-  Emit('  FS.DecimalSeparator := ''.'';');
-  Emit('  Result := StrToFloatDef(AetherJsonExtractRaw(Json, Key), 0.0, FS);');
-  Emit('end;');
-  Emit('');
-  Emit('function AetherJsonGetBool(const Json, Key: string): Boolean;');
-  Emit('begin');
-  Emit('  Result := SameText(AetherJsonExtractRaw(Json, Key), ''true'');');
-  Emit('end;');
-  Emit('');
-  Emit('function AetherJsonGetChar(const Json, Key: string): Char;');
-  Emit('var S: string;');
-  Emit('begin');
-  Emit('  S := AetherJsonGetStr(Json, Key);');
-  Emit('  if Length(S) > 0 then Result := S[1] else Result := #0;');
-  Emit('end;');
-  Emit('');
-  Emit('function AetherJsonHasValue(const Json, Key: string): Boolean;');
-  Emit('var Raw: string;');
-  Emit('begin');
-  Emit('  Raw := AetherJsonExtractRaw(Json, Key);');
-  Emit('  Result := (Raw <> '''') and (not SameText(Raw, ''null''));');
-  Emit('end;');
-  Emit('');
-  Emit('function AetherJsonGetObj(const Json, Key: string): string;');
-  Emit('begin');
-  Emit('  Result := AetherJsonExtractRaw(Json, Key);');
-  Emit('end;');
-  Emit('');
-  Emit('function AetherGetNanoseconds: {$IFDEF PAS2JS}Double{$ELSE}QWord{$ENDIF};');
-  Emit('{$IFDEF PAS2JS}');
-  Emit('begin Result := 0; end;');
-  Emit('{$ELSE}');
-  Emit('{$IFDEF WINDOWS}');
-  Emit('var Freq, Count: Int64;');
-  Emit('begin');
-  Emit('  Freq := 0; Count := 0;');
-  Emit('  Windows.QueryPerformanceFrequency(Freq);');
-  Emit('  Windows.QueryPerformanceCounter(Count);');
-  Emit('  if Freq > 0 then Result := QWord((Count * 1000000000) div Freq)');
-  Emit('  else Result := QWord(GetTickCount64 * 1000000);');
-  Emit('end;');
-  Emit('{$ELSE}');
-  Emit('begin Result := QWord(GetTickCount64 * 1000000); end;');
-  Emit('{$ENDIF}');
-  Emit('{$ENDIF}');
-  Emit('');
-  Emit('procedure AetherSleepMs(AMs: Cardinal);');
-  Emit('{$IFDEF PAS2JS}');
-  Emit('begin end;');
-  Emit('{$ELSE}');
-  Emit('begin SysUtils.Sleep(AMs); end;');
-  Emit('{$ENDIF}');
-  Emit('');
-  Emit('{$IFNDEF PAS2JS}');
-  Emit('// Sockets Nativos via Sockets FPC');
-  Emit('function AetherSocketCreate(): LongInt;');
-  Emit('begin');
-  Emit('  Result := Sockets.fpsocket(AF_INET, SOCK_STREAM, 0);');
-  Emit('end;');
-  Emit('');
-  Emit('function AetherSocketListen(Port: Word; Backlog: LongInt): LongInt;');
-  Emit('var');
-  Emit('  Addr: TInetSockAddr;');
-  Emit('  Opt: LongInt;');
-  Emit('begin');
-  Emit('  Result := Sockets.fpsocket(AF_INET, SOCK_STREAM, 0);');
-  Emit('  if Result < 0 then Exit(-1);');
-  Emit('  Opt := 1;');
-  Emit('  Sockets.fpsetsockopt(Result, SOL_SOCKET, SO_REUSEADDR, @Opt, SizeOf(Opt));');
-  Emit('  FillChar(Addr, SizeOf(Addr), 0);');
-  Emit('  Addr.sin_family := AF_INET;');
-  Emit('  Addr.sin_port := Sockets.htons(Port);');
-  Emit('  Addr.sin_addr.s_addr := 0; // INADDR_ANY');
-  Emit('  if Sockets.fpbind(Result, @Addr, SizeOf(Addr)) <> 0 then');
-  Emit('  begin');
-  Emit('    Sockets.CloseSocket(Result);');
-  Emit('    Exit(-1);');
-  Emit('  end;');
-  Emit('  if Sockets.fplisten(Result, Backlog) <> 0 then');
-  Emit('  begin');
-  Emit('    Sockets.CloseSocket(Result);');
-  Emit('    Exit(-1);');
-  Emit('  end;');
-  Emit('end;');
-  Emit('');
-  Emit('function AetherSocketAccept(ListenFd: LongInt): LongInt;');
-  Emit('var');
-  Emit('  Addr: TInetSockAddr;');
-  Emit('  AddrLen: LongInt;');
-  Emit('begin');
-  Emit('  AddrLen := SizeOf(Addr);');
-  Emit('  Result := Sockets.fpaccept(ListenFd, @Addr, @AddrLen);');
-  Emit('end;');
-  Emit('');
-  Emit('function AetherSocketConnect(const Host: String; Port: Word): LongInt;');
-  Emit('var');
-  Emit('  Addr: TInetSockAddr;');
-  Emit('begin');
-  Emit('  Result := Sockets.fpsocket(AF_INET, SOCK_STREAM, 0);');
-  Emit('  if Result < 0 then Exit(-1);');
-  Emit('  FillChar(Addr, SizeOf(Addr), 0);');
-  Emit('  Addr.sin_family := AF_INET;');
-  Emit('  Addr.sin_port := Sockets.htons(Port);');
-  Emit('  Addr.sin_addr := Sockets.StrToNetAddr(Host);');
-  Emit('  if Sockets.fpconnect(Result, @Addr, SizeOf(Addr)) <> 0 then');
-  Emit('  begin');
-  Emit('    Sockets.CloseSocket(Result);');
-  Emit('    Exit(-1);');
-  Emit('  end;');
-  Emit('end;');
-  Emit('');
-  Emit('function AetherSocketSend(Fd: LongInt; const Data: String): LongInt;');
-  Emit('begin');
-  Emit('  if Length(Data) = 0 then Exit(0);');
-  Emit('  Result := Sockets.fpsend(Fd, @Data[1], Length(Data), 0);');
-  Emit('end;');
-  Emit('');
-  Emit('function AetherSocketRecv(Fd: LongInt; MaxLen: LongInt): String;');
-  Emit('var');
-  Emit('  Buf: array of Char;');
-  Emit('  Bytes: LongInt;');
-  Emit('begin');
-  Emit('  SetLength(Buf, MaxLen);');
-  Emit('  Bytes := Sockets.fprecv(Fd, @Buf[0], MaxLen, 0);');
-  Emit('  if Bytes > 0 then');
-  Emit('    SetString(Result, PChar(@Buf[0]), Bytes)');
-  Emit('  else');
-  Emit('    Result := '''';');
-  Emit('end;');
-  Emit('');
-  Emit('procedure AetherSocketClose(Fd: LongInt);');
-  Emit('begin');
-  Emit('  if Fd >= 0 then Sockets.CloseSocket(Fd);');
-  Emit('end;');
-  Emit('{$ELSE}');
-  Emit('function AetherSocketCreate(): LongInt; begin Result := -1; end;');
-  Emit('function AetherSocketListen(Port: Word; Backlog: LongInt): LongInt; begin Result := -1; end;');
-  Emit('function AetherSocketAccept(ListenFd: LongInt): LongInt; begin Result := -1; end;');
-  Emit('function AetherSocketConnect(const Host: String; Port: Word): LongInt; begin Result := -1; end;');
-  Emit('function AetherSocketSend(Fd: LongInt; const Data: String): LongInt; begin Result := 0; end;');
-  Emit('function AetherSocketRecv(Fd: LongInt; MaxLen: LongInt): String; begin Result := ''''; end;');
-  Emit('procedure AetherSocketClose(Fd: LongInt); begin end;');
-  Emit('{$ENDIF}');
-  Emit('');
+  EmittedAny := False;
+  NeedResult := (Pos('AetherOk(', RefText) > 0) or (Pos('AetherErr(', RefText) > 0);
+  NeedOption := (Pos('AetherSome(', RefText) > 0) or (Pos('AetherNone(', RefText) > 0);
+  NeedFileIO := (Pos('AetherFileExists', RefText) > 0) or (Pos('AetherReadFile', RefText) > 0) or
+                (Pos('AetherWriteFile', RefText) > 0) or (Pos('AetherCreateDir', RefText) > 0) or
+                (Pos('AetherRemoveDir', RefText) > 0) or (Pos('AetherDeleteFile', RefText) > 0) or
+                (Pos('AetherDirExists', RefText) > 0) or (Pos('AetherFileSize', RefText) > 0);
+  NeedJson := (Pos('AetherJson', RefText) > 0);
+  NeedSockets := (Pos('AetherSocket', RefText) > 0);
+
+  if NeedResult then
+  begin
+    Emit('function AetherOk(const V: Double): TResultDoubleError; overload;');
+    Emit('function AetherOk(const V: String): TResultDoubleError; overload;');
+    Emit('function AetherOk(const V: Boolean): TResultDoubleError; overload;');
+    Emit('function AetherErr(const E: Integer): TResultDoubleError; overload;');
+    Emit('function AetherErr(const E: String): TResultDoubleError; overload;');
+    EmittedAny := True;
+  end;
+  if NeedOption then
+  begin
+    Emit('function AetherSome(const V: Double): TAetherOption; overload;');
+    Emit('function AetherSome(const V: String): TAetherOption; overload;');
+    Emit('function AetherSome(const V: Boolean): TAetherOption; overload;');
+    Emit('function AetherNone(): TAetherOption;');
+    EmittedAny := True;
+  end;
+  if Pos('AetherDynPop_Int8', RefText) > 0 then begin Emit('function AetherDynPop_Int8(var A: TAetherDyn_Int8): Int8;'); EmittedAny := True; end;
+  if Pos('AetherDynPop_Int16', RefText) > 0 then begin Emit('function AetherDynPop_Int16(var A: TAetherDyn_Int16): Int16;'); EmittedAny := True; end;
+  if Pos('AetherDynPop_Int32', RefText) > 0 then begin Emit('function AetherDynPop_Int32(var A: TAetherDyn_Int32): Int32;'); EmittedAny := True; end;
+  if Pos('AetherDynPop_Int64', RefText) > 0 then begin Emit('function AetherDynPop_Int64(var A: TAetherDyn_Int64): Int64;'); EmittedAny := True; end;
+  if Pos('AetherDynPop_UInt8', RefText) > 0 then begin Emit('function AetherDynPop_UInt8(var A: TAetherDyn_UInt8): UInt8;'); EmittedAny := True; end;
+  if Pos('AetherDynPop_UInt16', RefText) > 0 then begin Emit('function AetherDynPop_UInt16(var A: TAetherDyn_UInt16): UInt16;'); EmittedAny := True; end;
+  if Pos('AetherDynPop_UInt32', RefText) > 0 then begin Emit('function AetherDynPop_UInt32(var A: TAetherDyn_UInt32): UInt32;'); EmittedAny := True; end;
+  if Pos('AetherDynPop_UInt64', RefText) > 0 then begin Emit('function AetherDynPop_UInt64(var A: TAetherDyn_UInt64): UInt64;'); EmittedAny := True; end;
+  if Pos('AetherDynPop_Float32', RefText) > 0 then begin Emit('function AetherDynPop_Float32(var A: TAetherDyn_Float32): Single;'); EmittedAny := True; end;
+  if Pos('AetherDynPop_Float64', RefText) > 0 then begin Emit('function AetherDynPop_Float64(var A: TAetherDyn_Float64): Double;'); EmittedAny := True; end;
+  if Pos('AetherDynPop_Bool', RefText) > 0 then begin Emit('function AetherDynPop_Bool(var A: TAetherDyn_Bool): Boolean;'); EmittedAny := True; end;
+  if Pos('AetherDynPop_Char', RefText) > 0 then begin Emit('function AetherDynPop_Char(var A: TAetherDyn_Char): Char;'); EmittedAny := True; end;
+  if Pos('AetherDynPop_String', RefText) > 0 then begin Emit('function AetherDynPop_String(var A: TAetherDyn_String): String;'); EmittedAny := True; end;
+  if Pos('AetherDynPop_Pointer', RefText) > 0 then begin Emit('function AetherDynPop_Pointer(var A: TAetherDyn_Pointer): Pointer;'); EmittedAny := True; end;
+  if Pos('AetherCharAt', RefText) > 0 then begin Emit('function AetherCharAt(const S: string; Index: Cardinal): string;'); EmittedAny := True; end;
+  if Pos('AetherSubstring', RefText) > 0 then begin Emit('function AetherSubstring(const S: string; Start, Len: Cardinal): string;'); EmittedAny := True; end;
+  if Pos('AetherIfThen', RefText) > 0 then begin Emit('generic function AetherIfThen<T>(Cond: Boolean; const A, B: T): T;'); EmittedAny := True; end;
+  if Pos('AetherMin', RefText) > 0 then begin Emit('generic function AetherMin<T>(const A, B: T): T;'); EmittedAny := True; end;
+  if Pos('AetherMax', RefText) > 0 then begin Emit('generic function AetherMax<T>(const A, B: T): T;'); EmittedAny := True; end;
+  if Pos('AetherClamp', RefText) > 0 then begin Emit('generic function AetherClamp<T>(const V, Lo, Hi: T): T;'); EmittedAny := True; end;
+  if Pos('AetherStrTrim', RefText) > 0 then begin Emit('function AetherStrTrim(const S: string): string;'); EmittedAny := True; end;
+  if Pos('AetherUpperCase', RefText) > 0 then begin Emit('function AetherUpperCase(const S: string): string;'); EmittedAny := True; end;
+  if Pos('AetherLowerCase', RefText) > 0 then begin Emit('function AetherLowerCase(const S: string): string;'); EmittedAny := True; end;
+  if Pos('AetherStartsWith', RefText) > 0 then begin Emit('function AetherStartsWith(const S, Prefix: string): Boolean;'); EmittedAny := True; end;
+  if Pos('AetherEndsWith', RefText) > 0 then begin Emit('function AetherEndsWith(const S, Suffix: string): Boolean;'); EmittedAny := True; end;
+  if Pos('AetherStrContains', RefText) > 0 then begin Emit('function AetherStrContains(const S, Sub: string): Boolean;'); EmittedAny := True; end;
+  if Pos('AetherIndexOf', RefText) > 0 then begin Emit('function AetherIndexOf(const S, Sub: string): Int32;'); EmittedAny := True; end;
+  if Pos('AetherStrReplace', RefText) > 0 then begin Emit('function AetherStrReplace(const S, OldStr, NewStr: string): string;'); EmittedAny := True; end;
+  if NeedFileIO then
+  begin
+    Emit('function AetherFileExists(const APath: string): Boolean;');
+    Emit('function AetherReadFile(const APath: string): string;');
+    Emit('function AetherWriteFile(const APath: string; const AContent: string): Boolean;');
+    Emit('function AetherCreateDir(const APath: string): Boolean;');
+    Emit('function AetherRemoveDir(const APath: string): Boolean;');
+    Emit('function AetherDeleteFile(const APath: string): Boolean;');
+    Emit('function AetherDirExists(const APath: string): Boolean;');
+    Emit('function AetherFileSize(const APath: string): {$IFDEF PAS2JS}NativeInt{$ELSE}Int64{$ENDIF};');
+    EmittedAny := True;
+  end;
+  if Pos('AetherBoolToStr', RefText) > 0 then begin Emit('function AetherBoolToStr(B: Boolean): string;'); EmittedAny := True; end;
+  if Pos('AetherFloatToStr', RefText) > 0 then begin Emit('function AetherFloatToStr(AVal: Double): string;'); EmittedAny := True; end;
+  if NeedJson then
+  begin
+    Emit('function AetherJsonExtractRaw(const Json, Key: string): string;');
+    Emit('function AetherJsonGetStr(const Json, Key: string): string;');
+    Emit('function AetherJsonGetInt(const Json, Key: string): Int32;');
+    Emit('function AetherJsonGetFloat(const Json, Key: string): Double;');
+    Emit('function AetherJsonGetBool(const Json, Key: string): Boolean;');
+    Emit('function AetherJsonGetChar(const Json, Key: string): Char;');
+    Emit('function AetherJsonHasValue(const Json, Key: string): Boolean;');
+    Emit('function AetherJsonGetObj(const Json, Key: string): string;');
+    EmittedAny := True;
+  end;
+  if Pos('AetherGetNanoseconds', RefText) > 0 then begin Emit('function AetherGetNanoseconds: {$IFDEF PAS2JS}Double{$ELSE}QWord{$ENDIF};'); EmittedAny := True; end;
+  if Pos('AetherSleepMs', RefText) > 0 then begin Emit('procedure AetherSleepMs(AMs: Cardinal);'); EmittedAny := True; end;
+  if NeedSockets then
+  begin
+    Emit('function AetherSocketCreate(): LongInt;');
+    Emit('function AetherSocketListen(Port: Word; Backlog: LongInt): LongInt;');
+    Emit('function AetherSocketAccept(ListenFd: LongInt): LongInt;');
+    Emit('function AetherSocketConnect(const Host: String; Port: Word): LongInt;');
+    Emit('function AetherSocketSend(Fd: LongInt; const Data: String): LongInt;');
+    Emit('function AetherSocketRecv(Fd: LongInt; MaxLen: LongInt): String;');
+    Emit('procedure AetherSocketClose(Fd: LongInt);');
+    EmittedAny := True;
+  end;
+  if EmittedAny then Emit('');
+end;
+
+procedure TAetherEmitterPascal.EmitRuntimeHelpersImplementation(const RefText: string);
+var
+  NeedResult, NeedOption, NeedFileIO, NeedJson, NeedSockets, HadPop: Boolean;
+begin
+  NeedResult := (Pos('AetherOk(', RefText) > 0) or (Pos('AetherErr(', RefText) > 0);
+  NeedOption := (Pos('AetherSome(', RefText) > 0) or (Pos('AetherNone(', RefText) > 0);
+  NeedFileIO := (Pos('AetherFileExists', RefText) > 0) or (Pos('AetherReadFile', RefText) > 0) or
+                (Pos('AetherWriteFile', RefText) > 0) or (Pos('AetherCreateDir', RefText) > 0) or
+                (Pos('AetherRemoveDir', RefText) > 0) or (Pos('AetherDeleteFile', RefText) > 0) or
+                (Pos('AetherDirExists', RefText) > 0) or (Pos('AetherFileSize', RefText) > 0);
+  NeedJson := (Pos('AetherJson', RefText) > 0);
+  NeedSockets := (Pos('AetherSocket', RefText) > 0);
+
+  if NeedResult then
+  begin
+    Emit('function AetherOk(const V: Double): TResultDoubleError; overload;');
+    Emit('begin Result := Default(TResultDoubleError); Result.is_ok := True; Result.is_err := False; Result.value := V; end;');
+    Emit('');
+    Emit('function AetherOk(const V: String): TResultDoubleError; overload;');
+    Emit('begin Result := Default(TResultDoubleError); Result.is_ok := True; Result.is_err := False; Result.str_val := V; end;');
+    Emit('');
+    Emit('function AetherOk(const V: Boolean): TResultDoubleError; overload;');
+    Emit('begin Result := Default(TResultDoubleError); Result.is_ok := True; Result.is_err := False; if V then Result.value := 1 else Result.value := 0; end;');
+    Emit('');
+    Emit('function AetherErr(const E: Integer): TResultDoubleError; overload;');
+    Emit('begin Result := Default(TResultDoubleError); Result.is_ok := False; Result.is_err := True; Result.error := E; end;');
+    Emit('');
+    Emit('function AetherErr(const E: String): TResultDoubleError; overload;');
+    Emit('begin Result := Default(TResultDoubleError); Result.is_ok := False; Result.is_err := True; Result.err_str := E; end;');
+    Emit('');
+  end;
+
+  if NeedOption then
+  begin
+    Emit('function AetherSome(const V: Double): TAetherOption; overload;');
+    Emit('begin Result.is_some := True; Result.is_none := False; Result.num_val := V; Result.str_val := ''''; end;');
+    Emit('');
+    Emit('function AetherSome(const V: String): TAetherOption; overload;');
+    Emit('begin Result.is_some := True; Result.is_none := False; Result.num_val := 0; Result.str_val := V; end;');
+    Emit('');
+    Emit('function AetherSome(const V: Boolean): TAetherOption; overload;');
+    Emit('begin Result.is_some := True; Result.is_none := False; if V then Result.num_val := 1 else Result.num_val := 0; Result.str_val := ''''; end;');
+    Emit('');
+    Emit('function AetherNone(): TAetherOption;');
+    Emit('begin Result.is_some := False; Result.is_none := True; Result.num_val := 0; Result.str_val := ''''; end;');
+    Emit('');
+  end;
+
+  HadPop := False;
+  if Pos('AetherDynPop_Int8', RefText) > 0 then begin Emit('function AetherDynPop_Int8(var A: TAetherDyn_Int8): Int8; begin Result := A[High(A)]; SetLength(A, Length(A) - 1); end;'); HadPop := True; end;
+  if Pos('AetherDynPop_Int16', RefText) > 0 then begin Emit('function AetherDynPop_Int16(var A: TAetherDyn_Int16): Int16; begin Result := A[High(A)]; SetLength(A, Length(A) - 1); end;'); HadPop := True; end;
+  if Pos('AetherDynPop_Int32', RefText) > 0 then begin Emit('function AetherDynPop_Int32(var A: TAetherDyn_Int32): Int32; begin Result := A[High(A)]; SetLength(A, Length(A) - 1); end;'); HadPop := True; end;
+  if Pos('AetherDynPop_Int64', RefText) > 0 then begin Emit('function AetherDynPop_Int64(var A: TAetherDyn_Int64): Int64; begin Result := A[High(A)]; SetLength(A, Length(A) - 1); end;'); HadPop := True; end;
+  if Pos('AetherDynPop_UInt8', RefText) > 0 then begin Emit('function AetherDynPop_UInt8(var A: TAetherDyn_UInt8): UInt8; begin Result := A[High(A)]; SetLength(A, Length(A) - 1); end;'); HadPop := True; end;
+  if Pos('AetherDynPop_UInt16', RefText) > 0 then begin Emit('function AetherDynPop_UInt16(var A: TAetherDyn_UInt16): UInt16; begin Result := A[High(A)]; SetLength(A, Length(A) - 1); end;'); HadPop := True; end;
+  if Pos('AetherDynPop_UInt32', RefText) > 0 then begin Emit('function AetherDynPop_UInt32(var A: TAetherDyn_UInt32): UInt32; begin Result := A[High(A)]; SetLength(A, Length(A) - 1); end;'); HadPop := True; end;
+  if Pos('AetherDynPop_UInt64', RefText) > 0 then begin Emit('function AetherDynPop_UInt64(var A: TAetherDyn_UInt64): UInt64; begin Result := A[High(A)]; SetLength(A, Length(A) - 1); end;'); HadPop := True; end;
+  if Pos('AetherDynPop_Float32', RefText) > 0 then begin Emit('function AetherDynPop_Float32(var A: TAetherDyn_Float32): Single; begin Result := A[High(A)]; SetLength(A, Length(A) - 1); end;'); HadPop := True; end;
+  if Pos('AetherDynPop_Float64', RefText) > 0 then begin Emit('function AetherDynPop_Float64(var A: TAetherDyn_Float64): Double; begin Result := A[High(A)]; SetLength(A, Length(A) - 1); end;'); HadPop := True; end;
+  if Pos('AetherDynPop_Bool', RefText) > 0 then begin Emit('function AetherDynPop_Bool(var A: TAetherDyn_Bool): Boolean; begin Result := A[High(A)]; SetLength(A, Length(A) - 1); end;'); HadPop := True; end;
+  if Pos('AetherDynPop_Char', RefText) > 0 then begin Emit('function AetherDynPop_Char(var A: TAetherDyn_Char): Char; begin Result := A[High(A)]; SetLength(A, Length(A) - 1); end;'); HadPop := True; end;
+  if Pos('AetherDynPop_String', RefText) > 0 then begin Emit('function AetherDynPop_String(var A: TAetherDyn_String): String; begin Result := A[High(A)]; SetLength(A, Length(A) - 1); end;'); HadPop := True; end;
+  if Pos('AetherDynPop_Pointer', RefText) > 0 then begin Emit('function AetherDynPop_Pointer(var A: TAetherDyn_Pointer): Pointer; begin Result := A[High(A)]; SetLength(A, Length(A) - 1); end;'); HadPop := True; end;
+  if HadPop then Emit('');
+
+  if Pos('AetherIfThen', RefText) > 0 then
+  begin
+    Emit('generic function AetherIfThen<T>(Cond: Boolean; const A, B: T): T;');
+    Emit('begin');
+    Emit('  if Cond then Result := A else Result := B;');
+    Emit('end;');
+    Emit('');
+  end;
+
+  if Pos('AetherMin', RefText) > 0 then
+  begin
+    Emit('generic function AetherMin<T>(const A, B: T): T;');
+    Emit('begin');
+    Emit('  if A < B then Result := A else Result := B;');
+    Emit('end;');
+    Emit('');
+  end;
+
+  if Pos('AetherMax', RefText) > 0 then
+  begin
+    Emit('generic function AetherMax<T>(const A, B: T): T;');
+    Emit('begin');
+    Emit('  if A > B then Result := A else Result := B;');
+    Emit('end;');
+    Emit('');
+  end;
+
+  if Pos('AetherClamp', RefText) > 0 then
+  begin
+    Emit('generic function AetherClamp<T>(const V, Lo, Hi: T): T;');
+    Emit('begin');
+    Emit('  if V < Lo then Result := Lo else if V > Hi then Result := Hi else Result := V;');
+    Emit('end;');
+    Emit('');
+  end;
+
+  if Pos('AetherStrTrim', RefText) > 0 then
+  begin
+    Emit('function AetherStrTrim(const S: string): string;');
+    Emit('begin');
+    Emit('  Result := SysUtils.Trim(S);');
+    Emit('end;');
+    Emit('');
+  end;
+
+  if Pos('AetherUpperCase', RefText) > 0 then
+  begin
+    Emit('function AetherUpperCase(const S: string): string;');
+    Emit('begin');
+    Emit('  Result := SysUtils.UpperCase(S);');
+    Emit('end;');
+    Emit('');
+  end;
+
+  if Pos('AetherLowerCase', RefText) > 0 then
+  begin
+    Emit('function AetherLowerCase(const S: string): string;');
+    Emit('begin');
+    Emit('  Result := SysUtils.LowerCase(S);');
+    Emit('end;');
+    Emit('');
+  end;
+
+  if Pos('AetherStartsWith', RefText) > 0 then
+  begin
+    Emit('function AetherStartsWith(const S, Prefix: string): Boolean;');
+    Emit('begin');
+    Emit('  Result := (Length(Prefix) <= Length(S)) and (Copy(S, 1, Length(Prefix)) = Prefix);');
+    Emit('end;');
+    Emit('');
+  end;
+
+  if Pos('AetherEndsWith', RefText) > 0 then
+  begin
+    Emit('function AetherEndsWith(const S, Suffix: string): Boolean;');
+    Emit('begin');
+    Emit('  Result := (Length(Suffix) <= Length(S)) and (Copy(S, Length(S) - Length(Suffix) + 1, Length(Suffix)) = Suffix);');
+    Emit('end;');
+    Emit('');
+  end;
+
+  if Pos('AetherStrContains', RefText) > 0 then
+  begin
+    Emit('function AetherStrContains(const S, Sub: string): Boolean;');
+    Emit('begin');
+    Emit('  if Sub = '''' then Exit(True);');
+    Emit('  Result := Pos(Sub, S) > 0;');
+    Emit('end;');
+    Emit('');
+  end;
+
+  if Pos('AetherIndexOf', RefText) > 0 then
+  begin
+    Emit('function AetherIndexOf(const S, Sub: string): Int32;');
+    Emit('begin');
+    Emit('  if Sub = '''' then Exit(0);');
+    Emit('  Result := Int32(Pos(Sub, S)) - 1;');
+    Emit('end;');
+    Emit('');
+  end;
+
+  if Pos('AetherStrReplace', RefText) > 0 then
+  begin
+    Emit('function AetherStrReplace(const S, OldStr, NewStr: string): string;');
+    Emit('begin');
+    Emit('  if OldStr = '''' then Exit(S);');
+    Emit('  Result := SysUtils.StringReplace(S, OldStr, NewStr, [rfReplaceAll]);');
+    Emit('end;');
+    Emit('');
+  end;
+
+  if Pos('AetherCharAt', RefText) > 0 then
+  begin
+    Emit('function AetherCharAt(const S: string; Index: Cardinal): string;');
+    Emit('begin');
+    Emit('  if (Index + 1 <= Cardinal(Length(S))) then Result := S[Index + 1] else Result := '''';');
+    Emit('end;');
+    Emit('');
+  end;
+
+  if Pos('AetherSubstring', RefText) > 0 then
+  begin
+    Emit('function AetherSubstring(const S: string; Start, Len: Cardinal): string;');
+    Emit('begin');
+    Emit('  Result := Copy(S, Start + 1, Len);');
+    Emit('end;');
+    Emit('');
+  end;
+
+  if NeedFileIO then
+  begin
+    Emit('{$IFNDEF PAS2JS}');
+    Emit('function AetherFileExists(const APath: string): Boolean;');
+    Emit('begin');
+    Emit('  Result := SysUtils.FileExists(APath);');
+    Emit('end;');
+    Emit('');
+    Emit('function AetherReadFile(const APath: string): string;');
+    Emit('var');
+    Emit('  F: TextFile;');
+    Emit('  Line, Content: string;');
+    Emit('begin');
+    Emit('  Content := '''';');
+    Emit('  if not SysUtils.FileExists(APath) then Exit('''');');
+    Emit('  AssignFile(F, APath);');
+    Emit('  {$I-} Reset(F); {$I+}');
+    Emit('  if IOResult <> 0 then Exit('''');');
+    Emit('  while not Eof(F) do begin ReadLn(F, Line); Content := Content + Line + LineEnding; end;');
+    Emit('  CloseFile(F);');
+    Emit('  Result := Content;');
+    Emit('end;');
+    Emit('');
+    Emit('function AetherWriteFile(const APath: string; const AContent: string): Boolean;');
+    Emit('var');
+    Emit('  F: TextFile;');
+    Emit('begin');
+    Emit('  AssignFile(F, APath);');
+    Emit('  {$I-} Rewrite(F); {$I+}');
+    Emit('  if IOResult <> 0 then Exit(False);');
+    Emit('  Write(F, AContent);');
+    Emit('  CloseFile(F);');
+    Emit('  Result := True;');
+    Emit('end;');
+    Emit('');
+    Emit('function AetherCreateDir(const APath: string): Boolean;');
+    Emit('begin Result := SysUtils.CreateDir(APath); end;');
+    Emit('');
+    Emit('function AetherRemoveDir(const APath: string): Boolean;');
+    Emit('begin Result := SysUtils.RemoveDir(APath); end;');
+    Emit('');
+    Emit('function AetherDeleteFile(const APath: string): Boolean;');
+    Emit('begin Result := SysUtils.DeleteFile(APath); end;');
+    Emit('');
+    Emit('function AetherDirExists(const APath: string): Boolean;');
+    Emit('begin Result := SysUtils.DirectoryExists(APath); end;');
+    Emit('');
+    Emit('function AetherFileSize(const APath: string): Int64;');
+    Emit('var H: THandle;');
+    Emit('begin');
+    Emit('  Result := -1;');
+    Emit('  H := FileOpen(APath, fmOpenRead or fmShareDenyNone);');
+    Emit('  if H <> feInvalidHandle then begin Result := FileSeek(H, Int64(0), 2); FileClose(H); end;');
+    Emit('end;');
+    Emit('{$ELSE}');
+    Emit('function AetherFileExists(const APath: string): Boolean; begin Result := False; end;');
+    Emit('function AetherReadFile(const APath: string): string; begin Result := ''''; end;');
+    Emit('function AetherWriteFile(const APath: string; const AContent: string): Boolean; begin Result := False; end;');
+    Emit('function AetherCreateDir(const APath: string): Boolean; begin Result := False; end;');
+    Emit('function AetherRemoveDir(const APath: string): Boolean; begin Result := False; end;');
+    Emit('function AetherDeleteFile(const APath: string): Boolean; begin Result := False; end;');
+    Emit('function AetherDirExists(const APath: string): Boolean; begin Result := False; end;');
+    Emit('function AetherFileSize(const APath: string): {$IFDEF PAS2JS}NativeInt{$ELSE}Int64{$ENDIF}; begin Result := -1; end;');
+    Emit('{$ENDIF}');
+    Emit('');
+  end;
+
+  if Pos('AetherBoolToStr', RefText) > 0 then
+  begin
+    Emit('function AetherBoolToStr(B: Boolean): string;');
+    Emit('begin if B then Result := ''true'' else Result := ''false''; end;');
+    Emit('');
+  end;
+
+  if Pos('AetherFloatToStr', RefText) > 0 then
+  begin
+    Emit('function AetherFloatToStr(AVal: Double): string;');
+    Emit('var FS: TFormatSettings;');
+    Emit('begin');
+    Emit('  FS := DefaultFormatSettings;');
+    Emit('  FS.DecimalSeparator := ''.'';');
+    Emit('  Result := FloatToStr(AVal, FS);');
+    Emit('end;');
+    Emit('');
+  end;
+
+  if NeedJson then
+  begin
+    Emit('function AetherJsonExtractRaw(const Json, Key: string): string;');
+    Emit('var');
+    Emit('  Pattern: string;');
+    Emit('  P, SearchPos, JLen, Depth, StartPos: Integer;');
+    Emit('  InStr: Boolean;');
+    Emit('begin');
+    Emit('  Pattern := ''"'' + Key + ''"'';');
+    Emit('  SearchPos := 1;');
+    Emit('  JLen := Length(Json);');
+    Emit('  while SearchPos <= JLen do');
+    Emit('  begin');
+    Emit('    P := Pos(Pattern, Copy(Json, SearchPos, JLen - SearchPos + 1));');
+    Emit('    if P = 0 then Exit('''');');
+    Emit('    P := SearchPos + P - 1 + Length(Pattern);');
+    Emit('    while (P <= JLen) and (Json[P] in ['' '', #9, #10, #13]) do Inc(P);');
+    Emit('    if (P <= JLen) and (Json[P] = '':'') then');
+    Emit('    begin');
+    Emit('      Inc(P);');
+    Emit('      while (P <= JLen) and (Json[P] in ['' '', #9, #10, #13]) do Inc(P);');
+    Emit('      if P > JLen then Exit('''');');
+    Emit('      if Json[P] = ''"'' then');
+    Emit('      begin');
+    Emit('        StartPos := P; Inc(P);');
+    Emit('        while P <= JLen do');
+    Emit('        begin');
+    Emit('          if (Json[P] = ''"'') and ((P = StartPos + 1) or (Json[P - 1] <> ''\'')) then');
+    Emit('            Exit(Copy(Json, StartPos, P - StartPos + 1));');
+    Emit('          Inc(P);');
+    Emit('        end;');
+    Emit('        Exit(Copy(Json, StartPos, JLen - StartPos + 1));');
+    Emit('      end');
+    Emit('      else if Json[P] = ''{'' then');
+    Emit('      begin');
+    Emit('        StartPos := P; Depth := 0; InStr := False;');
+    Emit('        while P <= JLen do');
+    Emit('        begin');
+    Emit('          if (Json[P] = ''"'') and ((P = 1) or (Json[P - 1] <> ''\'')) then InStr := not InStr');
+    Emit('          else if not InStr then');
+    Emit('          begin');
+    Emit('            if Json[P] = ''{'' then Inc(Depth)');
+    Emit('            else if Json[P] = ''}'' then begin Dec(Depth); if Depth = 0 then Exit(Copy(Json, StartPos, P - StartPos + 1)); end;');
+    Emit('          end;');
+    Emit('          Inc(P);');
+    Emit('        end;');
+    Emit('        Exit(Copy(Json, StartPos, JLen - StartPos + 1));');
+    Emit('      end');
+    Emit('      else');
+    Emit('      begin');
+    Emit('        StartPos := P;');
+    Emit('        while (P <= JLen) and not (Json[P] in ['','', ''}'', '']'', '' '', #9, #10, #13]) do Inc(P);');
+    Emit('        Exit(Copy(Json, StartPos, P - StartPos));');
+    Emit('      end;');
+    Emit('    end;');
+    Emit('    SearchPos := P;');
+    Emit('  end;');
+    Emit('  Result := '''';');
+    Emit('end;');
+    Emit('');
+    Emit('function AetherJsonGetStr(const Json, Key: string): string;');
+    Emit('begin');
+    Emit('  Result := AetherJsonExtractRaw(Json, Key);');
+    Emit('  if (Length(Result) >= 2) and (Result[1] = ''"'') and (Result[Length(Result)] = ''"'') then');
+    Emit('    Result := Copy(Result, 2, Length(Result) - 2);');
+    Emit('end;');
+    Emit('');
+    Emit('function AetherJsonGetInt(const Json, Key: string): Int32;');
+    Emit('begin');
+    Emit('  Result := StrToIntDef(AetherJsonExtractRaw(Json, Key), 0);');
+    Emit('end;');
+    Emit('');
+    Emit('function AetherJsonGetFloat(const Json, Key: string): Double;');
+    Emit('var FS: TFormatSettings;');
+    Emit('begin');
+    Emit('  FS := DefaultFormatSettings;');
+    Emit('  FS.DecimalSeparator := ''.'';');
+    Emit('  Result := StrToFloatDef(AetherJsonExtractRaw(Json, Key), 0.0, FS);');
+    Emit('end;');
+    Emit('');
+    Emit('function AetherJsonGetBool(const Json, Key: string): Boolean;');
+    Emit('begin');
+    Emit('  Result := SameText(AetherJsonExtractRaw(Json, Key), ''true'');');
+    Emit('end;');
+    Emit('');
+    Emit('function AetherJsonGetChar(const Json, Key: string): Char;');
+    Emit('var S: string;');
+    Emit('begin');
+    Emit('  S := AetherJsonGetStr(Json, Key);');
+    Emit('  if Length(S) > 0 then Result := S[1] else Result := #0;');
+    Emit('end;');
+    Emit('');
+    Emit('function AetherJsonHasValue(const Json, Key: string): Boolean;');
+    Emit('var Raw: string;');
+    Emit('begin');
+    Emit('  Raw := AetherJsonExtractRaw(Json, Key);');
+    Emit('  Result := (Raw <> '''') and (not SameText(Raw, ''null''));');
+    Emit('end;');
+    Emit('');
+    Emit('function AetherJsonGetObj(const Json, Key: string): string;');
+    Emit('begin');
+    Emit('  Result := AetherJsonExtractRaw(Json, Key);');
+    Emit('end;');
+    Emit('');
+  end;
+
+  if Pos('AetherGetNanoseconds', RefText) > 0 then
+  begin
+    Emit('function AetherGetNanoseconds: {$IFDEF PAS2JS}Double{$ELSE}QWord{$ENDIF};');
+    Emit('{$IFDEF PAS2JS}');
+    Emit('begin Result := 0; end;');
+    Emit('{$ELSE}');
+    Emit('{$IFDEF WINDOWS}');
+    Emit('var Freq, Count: Int64;');
+    Emit('begin');
+    Emit('  Freq := 0; Count := 0;');
+    Emit('  Windows.QueryPerformanceFrequency(Freq);');
+    Emit('  Windows.QueryPerformanceCounter(Count);');
+    Emit('  if Freq > 0 then Result := QWord((Count * 1000000000) div Freq)');
+    Emit('  else Result := QWord(GetTickCount64 * 1000000);');
+    Emit('end;');
+    Emit('{$ELSE}');
+    Emit('begin Result := QWord(GetTickCount64 * 1000000); end;');
+    Emit('{$ENDIF}');
+    Emit('{$ENDIF}');
+    Emit('');
+  end;
+
+  if Pos('AetherSleepMs', RefText) > 0 then
+  begin
+    Emit('procedure AetherSleepMs(AMs: Cardinal);');
+    Emit('{$IFDEF PAS2JS}');
+    Emit('begin end;');
+    Emit('{$ELSE}');
+    Emit('begin SysUtils.Sleep(AMs); end;');
+    Emit('{$ENDIF}');
+    Emit('');
+  end;
+
+  if NeedSockets then
+  begin
+    Emit('{$IFNDEF PAS2JS}');
+    Emit('// Sockets Nativos via Sockets FPC');
+    Emit('function AetherSocketCreate(): LongInt;');
+    Emit('begin');
+    Emit('  Result := Sockets.fpsocket(AF_INET, SOCK_STREAM, 0);');
+    Emit('end;');
+    Emit('');
+    Emit('function AetherSocketListen(Port: Word; Backlog: LongInt): LongInt;');
+    Emit('var');
+    Emit('  Addr: TInetSockAddr;');
+    Emit('  Opt: LongInt;');
+    Emit('begin');
+    Emit('  Result := Sockets.fpsocket(AF_INET, SOCK_STREAM, 0);');
+    Emit('  if Result < 0 then Exit(-1);');
+    Emit('  Opt := 1;');
+    Emit('  Sockets.fpsetsockopt(Result, SOL_SOCKET, SO_REUSEADDR, @Opt, SizeOf(Opt));');
+    Emit('  FillChar(Addr, SizeOf(Addr), 0);');
+    Emit('  Addr.sin_family := AF_INET;');
+    Emit('  Addr.sin_port := Sockets.htons(Port);');
+    Emit('  Addr.sin_addr.s_addr := 0; // INADDR_ANY');
+    Emit('  if Sockets.fpbind(Result, @Addr, SizeOf(Addr)) <> 0 then');
+    Emit('  begin');
+    Emit('    Sockets.CloseSocket(Result);');
+    Emit('    Exit(-1);');
+    Emit('  end;');
+    Emit('  if Sockets.fplisten(Result, Backlog) <> 0 then');
+    Emit('  begin');
+    Emit('    Sockets.CloseSocket(Result);');
+    Emit('    Exit(-1);');
+    Emit('  end;');
+    Emit('end;');
+    Emit('');
+    Emit('function AetherSocketAccept(ListenFd: LongInt): LongInt;');
+    Emit('var');
+    Emit('  Addr: TInetSockAddr;');
+    Emit('  AddrLen: LongInt;');
+    Emit('begin');
+    Emit('  AddrLen := SizeOf(Addr);');
+    Emit('  Result := Sockets.fpaccept(ListenFd, @Addr, @AddrLen);');
+    Emit('end;');
+    Emit('');
+    Emit('function AetherSocketConnect(const Host: String; Port: Word): LongInt;');
+    Emit('var');
+    Emit('  Addr: TInetSockAddr;');
+    Emit('begin');
+    Emit('  Result := Sockets.fpsocket(AF_INET, SOCK_STREAM, 0);');
+    Emit('  if Result < 0 then Exit(-1);');
+    Emit('  FillChar(Addr, SizeOf(Addr), 0);');
+    Emit('  Addr.sin_family := AF_INET;');
+    Emit('  Addr.sin_port := Sockets.htons(Port);');
+    Emit('  Addr.sin_addr := Sockets.StrToNetAddr(Host);');
+    Emit('  if Sockets.fpconnect(Result, @Addr, SizeOf(Addr)) <> 0 then');
+    Emit('  begin');
+    Emit('    Sockets.CloseSocket(Result);');
+    Emit('    Exit(-1);');
+    Emit('  end;');
+    Emit('end;');
+    Emit('');
+    Emit('function AetherSocketSend(Fd: LongInt; const Data: String): LongInt;');
+    Emit('begin');
+    Emit('  if Length(Data) = 0 then Exit(0);');
+    Emit('  Result := Sockets.fpsend(Fd, @Data[1], Length(Data), 0);');
+    Emit('end;');
+    Emit('');
+    Emit('function AetherSocketRecv(Fd: LongInt; MaxLen: LongInt): String;');
+    Emit('var');
+    Emit('  Buf: array of Char;');
+    Emit('  Bytes: LongInt;');
+    Emit('begin');
+    Emit('  SetLength(Buf, MaxLen);');
+    Emit('  Bytes := Sockets.fprecv(Fd, @Buf[0], MaxLen, 0);');
+    Emit('  if Bytes > 0 then');
+    Emit('    SetString(Result, PChar(@Buf[0]), Bytes)');
+    Emit('  else');
+    Emit('    Result := '''';');
+    Emit('end;');
+    Emit('');
+    Emit('procedure AetherSocketClose(Fd: LongInt);');
+    Emit('begin');
+    Emit('  if Fd >= 0 then Sockets.CloseSocket(Fd);');
+    Emit('end;');
+    Emit('{$ELSE}');
+    Emit('function AetherSocketCreate(): LongInt; begin Result := -1; end;');
+    Emit('function AetherSocketListen(Port: Word; Backlog: LongInt): LongInt; begin Result := -1; end;');
+    Emit('function AetherSocketAccept(ListenFd: LongInt): LongInt; begin Result := -1; end;');
+    Emit('function AetherSocketConnect(const Host: String; Port: Word): LongInt; begin Result := -1; end;');
+    Emit('function AetherSocketSend(Fd: LongInt; const Data: String): LongInt; begin Result := 0; end;');
+    Emit('function AetherSocketRecv(Fd: LongInt; MaxLen: LongInt): String; begin Result := ''''; end;');
+    Emit('procedure AetherSocketClose(Fd: LongInt); begin end;');
+    Emit('{$ENDIF}');
+    Emit('');
+  end;
 end;
 
 function TAetherEmitterPascal.Generate(AModule: TASTModule; AsUnit: Boolean = False; AsLibrary: Boolean = False): string;
 var
-  I, ExportCount, CurExp: Integer;
-  UsesClause, Sig: string;
+  I, ExportCount, CurExp, UsedConstCount, UsedTypeCount: Integer;
+  UsesClause, Sig, ReachText, ProgText, MapText: string;
   Func: TASTFunction;
   Rec: TASTRecordDecl;
   ConstDecl: TASTConstDecl;
-  EffectiveLibrary: Boolean;
+  EffectiveLibrary, KeepAll, Changed, NeedBox, HasCustomMap: Boolean;
   MapTags, MapKeys, MapVals: TStringList;
+  ConstUsed, TypeUsed, FuncUsed: array of Boolean;
+  ConstBodies, TypeBodies, TypeNames, FuncBodies, FuncSigs: array of string;
 begin
   FModule := AModule;
   FOutput.Clear;
@@ -3815,7 +4046,176 @@ begin
     end;
   end;
 
-  UsesClause := '  SysUtils, Math{$IFNDEF PAS2JS}, Sockets{$IFDEF WINDOWS}, Windows{$ENDIF}{$ENDIF}';
+  KeepAll := AsUnit or EffectiveLibrary;
+
+  // 1. Pre-renderizar declaracoes para analise de alcancabilidade (Tree-Shaking)
+  SetLength(ConstUsed, AModule.Constants.Count);
+  SetLength(ConstBodies, AModule.Constants.Count);
+  for I := 0 to AModule.Constants.Count - 1 do
+  begin
+    ConstDecl := TASTConstDecl(AModule.Constants[I]);
+    if ConstDecl.DeclaredType <> '' then
+      ConstBodies[I] := Format('%s: %s = %s;', [ConstDecl.Name, EmitTypeRef(ConstDecl.DeclaredType), EmitExpr(ConstDecl.ValueExpr)])
+    else
+      ConstBodies[I] := Format('%s = %s;', [ConstDecl.Name, EmitExpr(ConstDecl.ValueExpr)]);
+    ConstUsed[I] := KeepAll or (ConstDecl.SourceModule = '');
+  end;
+
+  SetLength(TypeUsed, AModule.Types.Count);
+  SetLength(TypeBodies, AModule.Types.Count);
+  SetLength(TypeNames, AModule.Types.Count);
+  for I := 0 to AModule.Types.Count - 1 do
+  begin
+    FOutput.Clear;
+    FIndent := 0;
+    TypeNames[I] := '';
+    if AModule.Types[I] is TASTRecordDecl then
+    begin
+      Rec := TASTRecordDecl(AModule.Types[I]);
+      TypeNames[I] := Rec.Name;
+      EmitRecordType(Rec);
+      EmitRecordConstructor(Rec);
+    end
+    else if AModule.Types[I] is TASTEnumDecl then
+    begin
+      TypeNames[I] := TASTEnumDecl(AModule.Types[I]).Name;
+      EmitEnumDecl(TASTEnumDecl(AModule.Types[I]));
+    end
+    else if AModule.Types[I] is TASTArrayDecl then
+    begin
+      TypeNames[I] := TASTArrayDecl(AModule.Types[I]).Name;
+      EmitArrayDecl(TASTArrayDecl(AModule.Types[I]));
+    end
+    else if AModule.Types[I] is TASTSetDecl then
+    begin
+      TypeNames[I] := TASTSetDecl(AModule.Types[I]).Name;
+      EmitSetDecl(TASTSetDecl(AModule.Types[I]));
+    end
+    else if AModule.Types[I] is TASTSubrangeDecl then
+    begin
+      TypeNames[I] := TASTSubrangeDecl(AModule.Types[I]).Name;
+      EmitSubrangeDecl(TASTSubrangeDecl(AModule.Types[I]));
+    end
+    else if AModule.Types[I] is TASTTypeAliasDecl then
+    begin
+      TypeNames[I] := TASTTypeAliasDecl(AModule.Types[I]).Name;
+      EmitTypeAliasDecl(TASTTypeAliasDecl(AModule.Types[I]));
+    end
+    else if AModule.Types[I] is TASTMapDecl then
+    begin
+      TypeNames[I] := TASTMapDecl(AModule.Types[I]).Name;
+      EmitMapDecl(TASTMapDecl(AModule.Types[I]));
+    end;
+    TypeBodies[I] := FOutput.Text;
+    TypeUsed[I] := KeepAll or (TASTNode(AModule.Types[I]).SourceModule = '');
+  end;
+
+  SetLength(FuncUsed, AModule.Functions.Count);
+  SetLength(FuncBodies, AModule.Functions.Count);
+  SetLength(FuncSigs, AModule.Functions.Count);
+  for I := 0 to AModule.Functions.Count - 1 do
+  begin
+    Func := TASTFunction(AModule.Functions[I]);
+    FOutput.Clear;
+    FIndent := 0;
+    FuncSigs[I] := BuildFuncSig(Func);
+    EmitFunction(Func);
+    FuncBodies[I] := FOutput.Text;
+    FuncUsed[I] := KeepAll or (Func.SourceModule = '') or Func.IsExport;
+  end;
+
+  FOutput.Clear;
+  FIndent := 0;
+  EmitMapRuntimeDecls(MapTags, MapKeys, MapVals, False);
+  EmitMapRuntimeHelpers(MapTags, MapKeys, MapVals, False);
+  MapText := FOutput.Text;
+
+  FOutput.Clear;
+  FIndent := 0;
+  if Assigned(AModule.ProgramBlock) then
+  begin
+    if AsUnit then
+    begin
+      for I := 0 to AModule.ProgramBlock.Body.Count - 1 do
+        EmitStmt(TASTStmt(AModule.ProgramBlock.Body[I]));
+    end
+    else if not EffectiveLibrary then
+      EmitProgramBlock(AModule.ProgramBlock);
+  end;
+  ProgText := FOutput.Text;
+
+  ReachText := ProgText + #10 + MapText;
+  for I := 0 to AModule.Constants.Count - 1 do
+    if ConstUsed[I] then ReachText := ReachText + #10 + ConstBodies[I];
+  for I := 0 to AModule.Types.Count - 1 do
+    if TypeUsed[I] then ReachText := ReachText + #10 + TypeBodies[I];
+  for I := 0 to AModule.Functions.Count - 1 do
+    if FuncUsed[I] then ReachText := ReachText + #10 + FuncSigs[I] + #10 + FuncBodies[I];
+
+  if not KeepAll then
+  begin
+    repeat
+      Changed := False;
+      for I := 0 to AModule.Functions.Count - 1 do
+      begin
+        Func := TASTFunction(AModule.Functions[I]);
+        if (not FuncUsed[I]) and ((FuncBodies[I] <> '') or (FuncSigs[I] <> '')) and
+           (Pos(Func.Name, ReachText) > 0) then
+        begin
+          FuncUsed[I] := True;
+          ReachText := ReachText + #10 + FuncSigs[I] + #10 + FuncBodies[I];
+          Changed := True;
+        end;
+      end;
+      for I := 0 to AModule.Types.Count - 1 do
+      begin
+        if (not TypeUsed[I]) and (TypeNames[I] <> '') and
+           (Pos(TypeNames[I], ReachText) > 0) then
+        begin
+          TypeUsed[I] := True;
+          ReachText := ReachText + #10 + TypeBodies[I];
+          Changed := True;
+        end;
+      end;
+      for I := 0 to AModule.Constants.Count - 1 do
+      begin
+        ConstDecl := TASTConstDecl(AModule.Constants[I]);
+        if (not ConstUsed[I]) and (Pos(ConstDecl.Name, ReachText) > 0) then
+        begin
+          ConstUsed[I] := True;
+          ReachText := ReachText + #10 + ConstBodies[I];
+          Changed := True;
+        end;
+      end;
+    until not Changed;
+  end;
+
+  UsedConstCount := 0;
+  for I := 0 to AModule.Constants.Count - 1 do
+    if ConstUsed[I] then Inc(UsedConstCount);
+
+  UsedTypeCount := 0;
+  for I := 0 to AModule.Types.Count - 1 do
+    if TypeUsed[I] then Inc(UsedTypeCount);
+
+  HasCustomMap := False;
+  for I := 0 to MapTags.Count - 1 do
+    if not (IsBuiltinMapSideType(MapKeys[I]) and IsBuiltinMapSideType(MapVals[I])) then
+    begin
+      HasCustomMap := True;
+      Break;
+    end;
+
+  NeedBox := AsUnit or (Pos('AetherBox', ReachText) > 0);
+
+  FOutput.Clear;
+  FIndent := 0;
+
+  UsesClause := '  SysUtils, Math';
+  if Pos('AetherSocket', ReachText) > 0 then
+    UsesClause := UsesClause + '{$IFNDEF PAS2JS}, Sockets{$ENDIF}';
+  if Pos('AetherGetNanoseconds', ReachText) > 0 then
+    UsesClause := UsesClause + '{$IFNDEF PAS2JS}{$IFDEF WINDOWS}, Windows{$ENDIF}{$ENDIF}';
   for I := 0 to AModule.PascalImports.Count - 1 do
   begin
     if Pos(LowerCase(AModule.PascalImports[I]), LowerCase(UsesClause)) = 0 then
@@ -3837,66 +4237,25 @@ begin
     Emit(UsesClause);
     Emit('');
 
-    Emit('// --- Aether Runtime Helpers & Monads ---');
-    Emit('type');
-    Emit('  Float64 = Double;');
-    Emit('  Float32 = Single;');
-    Emit('  PAetherPtr_Int8 = ^Int8; PAetherPtr_Int16 = ^Int16; PAetherPtr_Int32 = ^Int32; PAetherPtr_Int64 = ^Int64;');
-    Emit('  PAetherPtr_UInt8 = ^UInt8; PAetherPtr_UInt16 = ^UInt16; PAetherPtr_UInt32 = ^UInt32; PAetherPtr_UInt64 = ^UInt64;');
-    Emit('  PAetherPtr_Float32 = ^Single; PAetherPtr_Float64 = ^Double; PAetherPtr_Bool = ^Boolean; PAetherPtr_Char = ^Char; PAetherPtr_String = ^String;');
-    Emit('  TAetherDyn_Int8 = array of Int8; TAetherDyn_Int16 = array of Int16; TAetherDyn_Int32 = array of Int32; TAetherDyn_Int64 = array of Int64;');
-    Emit('  TAetherDyn_UInt8 = array of UInt8; TAetherDyn_UInt16 = array of UInt16; TAetherDyn_UInt32 = array of UInt32; TAetherDyn_UInt64 = array of UInt64;');
-    Emit('  TAetherDyn_Float32 = array of Single; TAetherDyn_Float64 = array of Double; TAetherDyn_Bool = array of Boolean; TAetherDyn_Char = array of Char;');
-    Emit('  TAetherDyn_String = array of String; TAetherDyn_Pointer = array of Pointer;');
-    Emit('  generic TAetherResult<TVal, TErr> = record');
-    Emit('    is_ok: Boolean;');
-    Emit('    is_err: Boolean;');
-    Emit('    value: TVal;');
-    Emit('    error: TErr;');
-    Emit('    str_val: String;');
-    Emit('    err_str: String;');
-    Emit('  end;');
-    Emit('');
-    Emit('type');
-    Emit('  generic TAetherTask<TVal> = record');
-    Emit('    is_completed: Boolean;');
-    Emit('    value: TVal;');
-    Emit('  end;');
-    Emit('');
-    Emit('type');
-    Emit('  TResultDoubleError = specialize TAetherResult<Double, Integer>;');
-    Emit('  TAetherOption = record');
-    Emit('    is_some: Boolean;');
-    Emit('    is_none: Boolean;');
-    Emit('    num_val: Double;');
-    Emit('    str_val: String;');
-    Emit('  end;');
-    EmitMapRuntimeDecls(MapTags, MapKeys, MapVals, True);
-    Emit('');
+    EmitRuntimeTypeDecls(ReachText, MapTags, MapKeys, MapVals, True);
 
-    if AModule.Constants.Count > 0 then
+    if UsedConstCount > 0 then
     begin
       Emit('const');
       IncIndent;
       for I := 0 to AModule.Constants.Count - 1 do
-      begin
-        ConstDecl := TASTConstDecl(AModule.Constants[I]);
-        if ConstDecl.DeclaredType <> '' then
-          Emit(Format('%s: %s = %s;', [ConstDecl.Name, EmitTypeRef(ConstDecl.DeclaredType), EmitExpr(ConstDecl.ValueExpr)]))
-        else
-          Emit(Format('%s = %s;', [ConstDecl.Name, EmitExpr(ConstDecl.ValueExpr)]));
-      end;
+        if ConstUsed[I] then Emit(ConstBodies[I]);
       DecIndent;
       Emit('');
     end;
 
-    if AModule.Types.Count > 0 then
+    if (UsedTypeCount > 0) or HasCustomMap then
     begin
       Emit('type');
       IncIndent;
       for I := 0 to AModule.Types.Count - 1 do
       begin
-        if AModule.Types[I] is TASTRecordDecl then
+        if TypeUsed[I] and (AModule.Types[I] is TASTRecordDecl) then
         begin
           Emit(Format('P%s = ^T%s;', [TASTRecordDecl(AModule.Types[I]).Name, TASTRecordDecl(AModule.Types[I]).Name]));
           Emit(Format('PT%s = ^T%s;', [TASTRecordDecl(AModule.Types[I]).Name, TASTRecordDecl(AModule.Types[I]).Name]));
@@ -3905,6 +4264,7 @@ begin
 
       for I := 0 to AModule.Types.Count - 1 do
       begin
+        if not TypeUsed[I] then Continue;
         if AModule.Types[I] is TASTRecordDecl then
           EmitRecordType(TASTRecordDecl(AModule.Types[I]))
         else if AModule.Types[I] is TASTEnumDecl then
@@ -3920,32 +4280,34 @@ begin
       end;
       EmitMapRuntimeDecls(MapTags, MapKeys, MapVals, False);
       for I := 0 to AModule.Types.Count - 1 do
-        if AModule.Types[I] is TASTMapDecl then
+        if TypeUsed[I] and (AModule.Types[I] is TASTMapDecl) then
           EmitMapDecl(TASTMapDecl(AModule.Types[I]));
       DecIndent;
       Emit('');
 
       for I := 0 to AModule.Types.Count - 1 do
       begin
-        if AModule.Types[I] is TASTRecordDecl then
+        if TypeUsed[I] and (AModule.Types[I] is TASTRecordDecl) then
         begin
           Rec := TASTRecordDecl(AModule.Types[I]);
           Emit(BuildRecordConstructorSig(Rec));
-          Emit(Format('function AetherBox(const V: T%s): P%s;', [Rec.Name, Rec.Name]));
+          if NeedBox then
+            Emit(Format('function AetherBox(const V: T%s): P%s;', [Rec.Name, Rec.Name]));
         end;
       end;
       Emit('');
     end;
 
-    EmitRuntimeHelpersInterface;
+    EmitRuntimeHelpersInterface(ReachText);
     EmitMapRuntimeHelpers(MapTags, MapKeys, MapVals, True);
 
     for I := 0 to AModule.Functions.Count - 1 do
     begin
+      if not FuncUsed[I] then Continue;
       Func := TASTFunction(AModule.Functions[I]);
       if (not Func.IsExtern) and (Func.GenericParam = '') then
       begin
-        Sig := BuildFuncSig(Func);
+        Sig := FuncSigs[I];
         if Sig <> '' then
           Emit(Sig);
       end;
@@ -3955,28 +4317,32 @@ begin
     Emit('implementation');
     Emit('');
 
-    if AModule.Types.Count > 0 then
+    if UsedTypeCount > 0 then
     begin
       for I := 0 to AModule.Types.Count - 1 do
       begin
-        if AModule.Types[I] is TASTRecordDecl then
+        if TypeUsed[I] and (AModule.Types[I] is TASTRecordDecl) then
         begin
           EmitRecordConstructor(TASTRecordDecl(AModule.Types[I]));
-          Emit(Format('function AetherBox(const V: T%s): P%s;', [TASTRecordDecl(AModule.Types[I]).Name, TASTRecordDecl(AModule.Types[I]).Name]));
-          Emit('begin');
-          Emit('  New(Result);');
-          Emit('  Result^ := V;');
-          Emit('end;');
-          Emit('');
+          if NeedBox then
+          begin
+            Emit(Format('function AetherBox(const V: T%s): P%s;', [TASTRecordDecl(AModule.Types[I]).Name, TASTRecordDecl(AModule.Types[I]).Name]));
+            Emit('begin');
+            Emit('  New(Result);');
+            Emit('  Result^ := V;');
+            Emit('end;');
+            Emit('');
+          end;
         end;
       end;
     end;
 
-    EmitRuntimeHelpersImplementation;
+    EmitRuntimeHelpersImplementation(ReachText);
     EmitMapRuntimeHelpers(MapTags, MapKeys, MapVals, False);
 
     for I := 0 to AModule.Functions.Count - 1 do
-      EmitFunction(TASTFunction(AModule.Functions[I]));
+      if FuncUsed[I] then
+        EmitFunction(TASTFunction(AModule.Functions[I]));
 
     if Assigned(AModule.ProgramBlock) then
     begin
@@ -4005,66 +4371,25 @@ begin
     Emit(UsesClause);
     Emit('');
 
-    Emit('// --- Aether Runtime Helpers ---');
-    Emit('type');
-    Emit('  Float64 = Double;');
-    Emit('  Float32 = Single;');
-    Emit('  PAetherPtr_Int8 = ^Int8; PAetherPtr_Int16 = ^Int16; PAetherPtr_Int32 = ^Int32; PAetherPtr_Int64 = ^Int64;');
-    Emit('  PAetherPtr_UInt8 = ^UInt8; PAetherPtr_UInt16 = ^UInt16; PAetherPtr_UInt32 = ^UInt32; PAetherPtr_UInt64 = ^UInt64;');
-    Emit('  PAetherPtr_Float32 = ^Single; PAetherPtr_Float64 = ^Double; PAetherPtr_Bool = ^Boolean; PAetherPtr_Char = ^Char; PAetherPtr_String = ^String;');
-    Emit('  TAetherDyn_Int8 = array of Int8; TAetherDyn_Int16 = array of Int16; TAetherDyn_Int32 = array of Int32; TAetherDyn_Int64 = array of Int64;');
-    Emit('  TAetherDyn_UInt8 = array of UInt8; TAetherDyn_UInt16 = array of UInt16; TAetherDyn_UInt32 = array of UInt32; TAetherDyn_UInt64 = array of UInt64;');
-    Emit('  TAetherDyn_Float32 = array of Single; TAetherDyn_Float64 = array of Double; TAetherDyn_Bool = array of Boolean; TAetherDyn_Char = array of Char;');
-    Emit('  TAetherDyn_String = array of String; TAetherDyn_Pointer = array of Pointer;');
-    Emit('  generic TAetherResult<TVal, TErr> = record');
-    Emit('    is_ok: Boolean;');
-    Emit('    is_err: Boolean;');
-    Emit('    value: TVal;');
-    Emit('    error: TErr;');
-    Emit('    str_val: String;');
-    Emit('    err_str: String;');
-    Emit('  end;');
-    Emit('');
-    Emit('type');
-    Emit('  generic TAetherTask<TVal> = record');
-    Emit('    is_completed: Boolean;');
-    Emit('    value: TVal;');
-    Emit('  end;');
-    Emit('');
-    Emit('type');
-    Emit('  TResultDoubleError = specialize TAetherResult<Double, Integer>;');
-    Emit('  TAetherOption = record');
-    Emit('    is_some: Boolean;');
-    Emit('    is_none: Boolean;');
-    Emit('    num_val: Double;');
-    Emit('    str_val: String;');
-    Emit('  end;');
-    EmitMapRuntimeDecls(MapTags, MapKeys, MapVals, True);
-    Emit('');
+    EmitRuntimeTypeDecls(ReachText, MapTags, MapKeys, MapVals, False);
 
-    if AModule.Constants.Count > 0 then
+    if UsedConstCount > 0 then
     begin
       Emit('const');
       IncIndent;
       for I := 0 to AModule.Constants.Count - 1 do
-      begin
-        ConstDecl := TASTConstDecl(AModule.Constants[I]);
-        if ConstDecl.DeclaredType <> '' then
-          Emit(Format('%s: %s = %s;', [ConstDecl.Name, EmitTypeRef(ConstDecl.DeclaredType), EmitExpr(ConstDecl.ValueExpr)]))
-        else
-          Emit(Format('%s = %s;', [ConstDecl.Name, EmitExpr(ConstDecl.ValueExpr)]));
-      end;
+        if ConstUsed[I] then Emit(ConstBodies[I]);
       DecIndent;
       Emit('');
     end;
 
-    if AModule.Types.Count > 0 then
+    if (UsedTypeCount > 0) or HasCustomMap then
     begin
       Emit('type');
       IncIndent;
       for I := 0 to AModule.Types.Count - 1 do
       begin
-        if AModule.Types[I] is TASTRecordDecl then
+        if TypeUsed[I] and (AModule.Types[I] is TASTRecordDecl) then
         begin
           Emit(Format('P%s = ^T%s;', [TASTRecordDecl(AModule.Types[I]).Name, TASTRecordDecl(AModule.Types[I]).Name]));
           Emit(Format('PT%s = ^T%s;', [TASTRecordDecl(AModule.Types[I]).Name, TASTRecordDecl(AModule.Types[I]).Name]));
@@ -4073,6 +4398,7 @@ begin
 
       for I := 0 to AModule.Types.Count - 1 do
       begin
+        if not TypeUsed[I] then Continue;
         if AModule.Types[I] is TASTRecordDecl then
           EmitRecordType(TASTRecordDecl(AModule.Types[I]))
         else if AModule.Types[I] is TASTEnumDecl then
@@ -4088,35 +4414,39 @@ begin
       end;
       EmitMapRuntimeDecls(MapTags, MapKeys, MapVals, False);
       for I := 0 to AModule.Types.Count - 1 do
-        if AModule.Types[I] is TASTMapDecl then
+        if TypeUsed[I] and (AModule.Types[I] is TASTMapDecl) then
           EmitMapDecl(TASTMapDecl(AModule.Types[I]));
       DecIndent;
       Emit('');
 
       for I := 0 to AModule.Types.Count - 1 do
       begin
-        if AModule.Types[I] is TASTRecordDecl then
+        if TypeUsed[I] and (AModule.Types[I] is TASTRecordDecl) then
         begin
           EmitRecordConstructor(TASTRecordDecl(AModule.Types[I]));
-          Emit(Format('function AetherBox(const V: T%s): P%s; overload;', [TASTRecordDecl(AModule.Types[I]).Name, TASTRecordDecl(AModule.Types[I]).Name]));
-          Emit('begin');
-          Emit('  New(Result);');
-          Emit('  Result^ := V;');
-          Emit('end;');
-          Emit('');
+          if NeedBox then
+          begin
+            Emit(Format('function AetherBox(const V: T%s): P%s; overload;', [TASTRecordDecl(AModule.Types[I]).Name, TASTRecordDecl(AModule.Types[I]).Name]));
+            Emit('begin');
+            Emit('  New(Result);');
+            Emit('  Result^ := V;');
+            Emit('end;');
+            Emit('');
+          end;
         end;
       end;
     end;
 
-    EmitRuntimeHelpersImplementation;
+    EmitRuntimeHelpersImplementation(ReachText);
     EmitMapRuntimeHelpers(MapTags, MapKeys, MapVals, False);
 
     for I := 0 to AModule.Functions.Count - 1 do
     begin
+      if not FuncUsed[I] then Continue;
       Func := TASTFunction(AModule.Functions[I]);
       if (not Func.IsExtern) and (Func.GenericParam = '') and (Func.InlineMode <> 'always') then
       begin
-        Sig := BuildFuncSig(Func);
+        Sig := FuncSigs[I];
         if Sig <> '' then
           Emit(Copy(Sig, 1, Length(Sig) - 1) + ' forward;');
       end;
@@ -4124,13 +4454,14 @@ begin
     Emit('');
 
     for I := 0 to AModule.Functions.Count - 1 do
-      EmitFunction(TASTFunction(AModule.Functions[I]));
+      if FuncUsed[I] then
+        EmitFunction(TASTFunction(AModule.Functions[I]));
 
     if EffectiveLibrary then
     begin
       ExportCount := 0;
       for I := 0 to AModule.Functions.Count - 1 do
-        if TASTFunction(AModule.Functions[I]).IsExport then Inc(ExportCount);
+        if FuncUsed[I] and TASTFunction(AModule.Functions[I]).IsExport then Inc(ExportCount);
 
       if ExportCount > 0 then
       begin
@@ -4140,6 +4471,7 @@ begin
         CurExp := 0;
         for I := 0 to AModule.Functions.Count - 1 do
         begin
+          if not FuncUsed[I] then Continue;
           Func := TASTFunction(AModule.Functions[I]);
           if Func.IsExport then
           begin

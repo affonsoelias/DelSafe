@@ -885,11 +885,10 @@ Mapeamento técnico completo dos recursos pendentes identificados no compilador 
   - Completar I/O interativo, acesso a ambiente do SO e manipulação de arquivos/diretórios em `std/io.aeth` e `std/fs.aeth`.
 - [ ] **7.4 Parser JSON Estruturado em `std/json.aeth`**:
   - Substituir a busca por substring por um parser recursivo compatível com objetos aninhados, arrays `[...]`, `Float64` e escapes `\"`/`\\`/`\n`.
-- [ ] **7.5 Emissão Sob Demanda do Mini-Runtime Embutido (*On-Demand Runtime / Tree-Shaking no Emissor Pascal e C99*)**:
-  - Refatorar `uAetherEmitterPascal.pas` e `uAetherEmitterC.pas` para emitir no cabeçalho `Aether Runtime Helpers` somente os grupos de runtime efetivamente referenciados pelo módulo compilado (ex.: omitir `AetherSocket*` sem uso de `std/net`, omitir `AetherFile*` sem I/O de arquivos, omitir `AetherJson*` sem `[derive(JSON)]`/`FromJSON`, omitir `AetherDynPop_*` sem `.Pop()`), reduzindo arquivos simples de ~380 linhas para ~25 linhas sem perder a autossuficiência single-file.
-- [ ] **7.6 Padronização Agnóstica de Diretórios de Build em `aetherc new` / `init` (`uAetherProject.pas`)**:
-  - Substituir o diretório padrão `"pascal_src_dir": ".blaisevue/generated"` gerado em `HandleProjectInit` (`compiler/src/uAetherProject.pas`, linha 852) por `"build/pascal"` (alinhado com `"c_src_dir": "build/c"` e `"pascal_unit_dir": "build/units"`), evitando criar a pasta `.blaisevue/` em projetos Aether de propósito geral.
-  - Atualizar o `.gitignore` gerado por padrão para incluir `build/` e `.aether/`, e remover referências fixas a `BlaiseVue` nas mensagens do `HandleProjectAudit` (linhas 1281 e 1367), mantendo `aetherc` totalmente agnóstico de framework.
+- [x] **7.5 Emissão Sob Demanda do Mini-Runtime Embutido (*On-Demand Runtime / Tree-Shaking no Emissor Pascal e C99*)**:
+  - Refatorado `uAetherEmitterPascal.pas` e `uAetherEmitterC.pas` com análise de alcançabilidade (eliminando símbolos importados não utilizados de `std/*.aeth`) e emissão sob demanda dos helpers do runtime (`AetherSocket*`, `AetherFile*`, `AetherJson*`, `AetherDynPop_*`, `AetherResult`, `AetherOption`, `AetherTask`, etc.). Projetos simples como o template de `aetherc new` caíram para ~32 linhas em Pascal e ~64 linhas em C99.
+- [x] **7.6 Padronização Agnóstica de Diretórios de Build em `aetherc new` / `init` (`uAetherProject.pas`)**:
+  - Substituído `"pascal_src_dir": ".blaisevue/generated"` em `HandleProjectInit` (`compiler/src/uAetherProject.pas`) por `"build/pascal"` (alinhado com `"c_src_dir": "build/c"` e `"pascal_unit_dir": "build/units"`), adicionado `build/` e `.aether/` ao `.gitignore` padrão e removidas referências fixas a `BlaiseVue` em `HandleProjectAudit`, mantendo `aetherc` totalmente agnóstico de framework.
 
 ### ✅ Fase 56: 8. Ferramental do Compilador (`fmt`, `emit-header`, `lexer`) - CONCLUÍDA
 - [x] **8.1 Correção do Formatador Canônico (`aetherc fmt` — `uAetherFormatter.pas`)**:

@@ -24,6 +24,7 @@ type
     FGuardBindExpr: string;
     FMatchBindName: string;
     FMatchBindType: string;
+    FNeedCliArgs: Boolean;
 
     procedure Emit(const Line: string = '');
     procedure IncIndent;
@@ -3366,8 +3367,15 @@ begin
   FProgramBlock := Prog;
   Emit('int main(int argc, char* argv[]) {');
   IncIndent;
-  Emit('g_aether_argc = argc;');
-  Emit('g_aether_argv = argv;');
+  if FNeedCliArgs then
+  begin
+    Emit('g_aether_argc = argc;');
+    Emit('g_aether_argv = argv;');
+  end
+  else
+  begin
+    Emit('(void)argc; (void)argv;');
+  end;
   for I := 0 to Prog.LocalVars.Count - 1 do
     EmitLocalVarDecl(TASTVarDecl(Prog.LocalVars[I]), Prog.Body);
 
@@ -3399,18 +3407,22 @@ end;
 
 function TAetherEmitterC.Generate(AModule: TASTModule): string;
 var
-  I, J: Integer;
+  I, J, UsedConstCount, UsedTypeCount: Integer;
   Func: TASTFunction;
   Param: TASTParam;
   ConstDecl: TASTConstDecl;
-  ParamListStr, ModStr, ExportPrefix: string;
-  HasExports: Boolean;
+  ParamListStr, ModStr, ExportPrefix, ReachText, ProgText, MapText: string;
+  HasExports, KeepAll, Changed: Boolean;
+  NeedSockets, NeedFileIO, NeedJson, NeedDyn, NeedRaise, NeedTime, NeedResult, NeedOption, NeedTask: Boolean;
   MapTags, MapKeys, MapVals: TStringList;
+  ConstUsed, TypeUsed, FuncUsed: array of Boolean;
+  ConstBodies, TypeBodies, TypeNames, FuncBodies, FuncProtos: array of string;
 begin
   FModule := AModule;
   FOutput.Clear;
   FIndent := 0;
   FLoopCounter := 0;
+  FNeedCliArgs := False;
   MapTags := TStringList.Create;
   MapKeys := TStringList.Create;
   MapVals := TStringList.Create;
@@ -3424,6 +3436,191 @@ begin
       HasExports := True;
       Break;
     end;
+
+  KeepAll := HasExports;
+
+  // 1. Pre-renderizar declaracoes para analise de alcancabilidade (Tree-Shaking)
+  SetLength(ConstUsed, AModule.Constants.Count);
+  SetLength(ConstBodies, AModule.Constants.Count);
+  for I := 0 to AModule.Constants.Count - 1 do
+  begin
+    ConstDecl := TASTConstDecl(AModule.Constants[I]);
+    if (ConstDecl.TypeName = 'String') or (GetExprTypeName(ConstDecl.ValueExpr) = 'String') then
+      ConstBodies[I] := Format('static const char* const %s = %s;', [ConstDecl.Name, EmitExpr(ConstDecl.ValueExpr)])
+    else
+      ConstBodies[I] := Format('static const %s %s = %s;', [EmitTypeRef(ConstDecl.TypeName), ConstDecl.Name, EmitExpr(ConstDecl.ValueExpr)]);
+    ConstUsed[I] := KeepAll or (ConstDecl.SourceModule = '');
+  end;
+
+  SetLength(TypeUsed, AModule.Types.Count);
+  SetLength(TypeBodies, AModule.Types.Count);
+  SetLength(TypeNames, AModule.Types.Count);
+  for I := 0 to AModule.Types.Count - 1 do
+  begin
+    FOutput.Clear;
+    FIndent := 0;
+    TypeNames[I] := '';
+    if AModule.Types[I] is TASTRecordDecl then
+    begin
+      TypeNames[I] := TASTRecordDecl(AModule.Types[I]).Name;
+      EmitRecordDecl(TASTRecordDecl(AModule.Types[I]));
+    end
+    else if AModule.Types[I] is TASTEnumDecl then
+    begin
+      TypeNames[I] := TASTEnumDecl(AModule.Types[I]).Name;
+      EmitEnumDecl(TASTEnumDecl(AModule.Types[I]));
+    end
+    else if AModule.Types[I] is TASTArrayDecl then
+    begin
+      TypeNames[I] := TASTArrayDecl(AModule.Types[I]).Name;
+      EmitArrayDecl(TASTArrayDecl(AModule.Types[I]));
+    end
+    else if AModule.Types[I] is TASTSetDecl then
+    begin
+      TypeNames[I] := TASTSetDecl(AModule.Types[I]).Name;
+      EmitSetDecl(TASTSetDecl(AModule.Types[I]));
+    end
+    else if AModule.Types[I] is TASTSubrangeDecl then
+    begin
+      TypeNames[I] := TASTSubrangeDecl(AModule.Types[I]).Name;
+      EmitSubrangeDecl(TASTSubrangeDecl(AModule.Types[I]));
+    end
+    else if AModule.Types[I] is TASTTypeAliasDecl then
+    begin
+      TypeNames[I] := TASTTypeAliasDecl(AModule.Types[I]).Name;
+      EmitTypeAliasDecl(TASTTypeAliasDecl(AModule.Types[I]));
+    end
+    else if AModule.Types[I] is TASTMapDecl then
+    begin
+      TypeNames[I] := TASTMapDecl(AModule.Types[I]).Name;
+      EmitMapDecl(TASTMapDecl(AModule.Types[I]));
+    end;
+    TypeBodies[I] := FOutput.Text;
+    TypeUsed[I] := KeepAll or (TASTNode(AModule.Types[I]).SourceModule = '');
+  end;
+
+  SetLength(FuncUsed, AModule.Functions.Count);
+  SetLength(FuncBodies, AModule.Functions.Count);
+  SetLength(FuncProtos, AModule.Functions.Count);
+  for I := 0 to AModule.Functions.Count - 1 do
+  begin
+    Func := TASTFunction(AModule.Functions[I]);
+    FuncProtos[I] := '';
+    if not (SameText(Func.Name, 'Abs') or SameText(Func.Name, 'Min') or SameText(Func.Name, 'Max') or SameText(Func.Name, 'Clamp')) and
+       (not Func.IsExtern) and (Func.GenericParam = '') then
+    begin
+      ParamListStr := '';
+      for J := 0 to Func.Params.Count - 1 do
+      begin
+        Param := TASTParam(Func.Params[J]);
+        ModStr := '';
+        if Param.Ownership = owMutBorrow then ModStr := '*';
+        ParamListStr := ParamListStr + Format('%s %s%s', [EmitTypeRef(Param.TypeName), ModStr, Param.Name]);
+        if J < Func.Params.Count - 1 then ParamListStr := ParamListStr + ', ';
+      end;
+      ExportPrefix := '';
+      if Func.InlineMode = 'always' then ExportPrefix := 'static inline __attribute__((always_inline)) '
+      else if Func.InlineMode = 'never' then ExportPrefix := '__attribute__((noinline)) ';
+      if Func.IsCold then ExportPrefix := ExportPrefix + '__attribute__((cold)) ';
+      if Func.IsExport then ExportPrefix := ExportPrefix + 'AETHER_EXPORT ';
+      if Func.IsAsync then
+        FuncProtos[I] := Format('%sAetherTask %s(%s);', [ExportPrefix, Func.Name, ParamListStr])
+      else if (Func.ReturnType = 'Void') or (Func.ReturnType = '') then
+        FuncProtos[I] := Format('%svoid %s(%s);', [ExportPrefix, Func.Name, ParamListStr])
+      else
+        FuncProtos[I] := Format('%s%s %s(%s);', [ExportPrefix, EmitTypeRef(Func.ReturnType), Func.Name, ParamListStr]);
+    end;
+    FOutput.Clear;
+    FIndent := 0;
+    EmitFunction(Func);
+    FuncBodies[I] := FOutput.Text;
+    FuncUsed[I] := KeepAll or (Func.SourceModule = '') or Func.IsExport;
+  end;
+
+  FOutput.Clear;
+  FIndent := 0;
+  EmitMapRuntimeDecls(MapTags, MapKeys, MapVals, False);
+  EmitMapRuntimeHelpers(MapTags, MapKeys, MapVals);
+  MapText := FOutput.Text;
+
+  FOutput.Clear;
+  FIndent := 0;
+  if Assigned(AModule.ProgramBlock) then
+    EmitProgramBlock(AModule.ProgramBlock);
+  ProgText := FOutput.Text;
+
+  ReachText := ProgText + #10 + MapText;
+  for I := 0 to AModule.Constants.Count - 1 do
+    if ConstUsed[I] then ReachText := ReachText + #10 + ConstBodies[I];
+  for I := 0 to AModule.Types.Count - 1 do
+    if TypeUsed[I] then ReachText := ReachText + #10 + TypeBodies[I];
+  for I := 0 to AModule.Functions.Count - 1 do
+    if FuncUsed[I] then ReachText := ReachText + #10 + FuncProtos[I] + #10 + FuncBodies[I];
+
+  if not KeepAll then
+  begin
+    repeat
+      Changed := False;
+      for I := 0 to AModule.Functions.Count - 1 do
+      begin
+        Func := TASTFunction(AModule.Functions[I]);
+        if (not FuncUsed[I]) and ((FuncBodies[I] <> '') or (FuncProtos[I] <> '')) and
+           (Pos(Func.Name, ReachText) > 0) then
+        begin
+          FuncUsed[I] := True;
+          ReachText := ReachText + #10 + FuncProtos[I] + #10 + FuncBodies[I];
+          Changed := True;
+        end;
+      end;
+      for I := 0 to AModule.Types.Count - 1 do
+      begin
+        if (not TypeUsed[I]) and (TypeNames[I] <> '') and
+           (Pos(TypeNames[I], ReachText) > 0) then
+        begin
+          TypeUsed[I] := True;
+          ReachText := ReachText + #10 + TypeBodies[I];
+          Changed := True;
+        end;
+      end;
+      for I := 0 to AModule.Constants.Count - 1 do
+      begin
+        ConstDecl := TASTConstDecl(AModule.Constants[I]);
+        if (not ConstUsed[I]) and (Pos(ConstDecl.Name, ReachText) > 0) then
+        begin
+          ConstUsed[I] := True;
+          ReachText := ReachText + #10 + ConstBodies[I];
+          Changed := True;
+        end;
+      end;
+    until not Changed;
+  end;
+
+  UsedConstCount := 0;
+  for I := 0 to AModule.Constants.Count - 1 do
+    if ConstUsed[I] then Inc(UsedConstCount);
+
+  UsedTypeCount := 0;
+  for I := 0 to AModule.Types.Count - 1 do
+    if TypeUsed[I] then Inc(UsedTypeCount);
+
+  NeedSockets := (Pos('AetherSocket', ReachText) > 0);
+  NeedFileIO := (Pos('AetherFileExists', ReachText) > 0) or (Pos('AetherReadFile', ReachText) > 0) or
+                (Pos('AetherWriteFile', ReachText) > 0) or (Pos('AetherCreateDir', ReachText) > 0) or
+                (Pos('AetherRemoveDir', ReachText) > 0) or (Pos('AetherDeleteFile', ReachText) > 0) or
+                (Pos('AetherDirExists', ReachText) > 0) or (Pos('AetherFileSize', ReachText) > 0);
+  NeedJson := (Pos('AetherJson', ReachText) > 0);
+  NeedDyn := (Pos('AetherDyn', ReachText) > 0);
+  NeedRaise := (Pos('AetherRaise', ReachText) > 0) or (Pos('g_aether_jmp_', ReachText) > 0);
+  NeedTime := (Pos('AetherGetNanoseconds', ReachText) > 0) or (Pos('AetherSleepMs', ReachText) > 0) or
+              (Pos('AetherPascalNow', ReachText) > 0) or (Pos('AetherPascalGetTickCount64', ReachText) > 0);
+  NeedResult := (Pos('AetherResult', ReachText) > 0);
+  NeedOption := (Pos('AetherOption', ReachText) > 0);
+  NeedTask := (Pos('AetherTask', ReachText) > 0);
+  FNeedCliArgs := (Pos('AetherParamCount', ReachText) > 0) or (Pos('AetherParamStr', ReachText) > 0);
+
+  FOutput.Clear;
+  FIndent := 0;
+  FLoopCounter := 0;
 
   Emit('// Codigo gerado automaticamente pelo Compilador Aether (aetherc)');
   Emit('// Alvo: C99 / GCC (MSYS2)');
@@ -3468,42 +3665,62 @@ begin
   Emit('#include <string.h>');
   Emit('#include <assert.h>');
   Emit('#include <math.h>');
-  Emit('#include <time.h>');
-  Emit('#include <sys/stat.h>');
-  Emit('#include <setjmp.h>');
-  Emit('#ifdef _WIN32');
-  Emit('#define WIN32_LEAN_AND_MEAN');
-  Emit('#define NOGDI');
-  Emit('#include <winsock2.h>');
-  Emit('#include <ws2tcpip.h>');
-  Emit('#include <windows.h>');
-  Emit('#include <direct.h>');
-  Emit('#include <io.h>');
-  Emit('#undef Rectangle');
-  Emit('typedef int socklen_t;');
-  Emit('#else');
-  Emit('#include <sys/socket.h>');
-  Emit('#include <netinet/in.h>');
-  Emit('#include <arpa/inet.h>');
-  Emit('#include <unistd.h>');
-  Emit('#endif');
-  Emit('#endif');
-  Emit('');
-  Emit('// Runtime de Concorrencia e Tarefas Assincronas (AetherTask)');
-  Emit('typedef struct {');
-  Emit('    bool is_completed;');
-  Emit('    int64_t int_val;');
-  Emit('    double float_val;');
-  Emit('    const char* str_val;');
-  Emit('    void* ptr_val;');
-  Emit('} AetherTask;');
-  Emit('');
-  Emit('#if defined(_WIN32) || defined(__CYGWIN__)');
-  Emit('  #define AETHER_EXPORT __declspec(dllexport)');
-  Emit('#else');
-  Emit('  #define AETHER_EXPORT __attribute__((visibility("default")))');
+  if NeedTime then Emit('#include <time.h>');
+  if NeedFileIO then Emit('#include <sys/stat.h>');
+  if NeedRaise then Emit('#include <setjmp.h>');
+  if NeedSockets or NeedFileIO or NeedTime then
+  begin
+    Emit('#ifdef _WIN32');
+    Emit('#define WIN32_LEAN_AND_MEAN');
+    Emit('#define NOGDI');
+    if NeedSockets then
+    begin
+      Emit('#include <winsock2.h>');
+      Emit('#include <ws2tcpip.h>');
+    end;
+    Emit('#include <windows.h>');
+    if NeedFileIO then
+    begin
+      Emit('#include <direct.h>');
+      Emit('#include <io.h>');
+    end;
+    Emit('#undef Rectangle');
+    if NeedSockets then Emit('typedef int socklen_t;');
+    Emit('#else');
+    if NeedSockets then
+    begin
+      Emit('#include <sys/socket.h>');
+      Emit('#include <netinet/in.h>');
+      Emit('#include <arpa/inet.h>');
+    end;
+    Emit('#include <unistd.h>');
+    Emit('#endif');
+  end;
   Emit('#endif');
   Emit('');
+
+  if NeedTask then
+  begin
+    Emit('// Runtime de Concorrencia e Tarefas Assincronas (AetherTask)');
+    Emit('typedef struct {');
+    Emit('    bool is_completed;');
+    Emit('    int64_t int_val;');
+    Emit('    double float_val;');
+    Emit('    const char* str_val;');
+    Emit('    void* ptr_val;');
+    Emit('} AetherTask;');
+    Emit('');
+  end;
+
+  if HasExports or (Pos('AETHER_EXPORT', ReachText) > 0) then
+  begin
+    Emit('#if defined(_WIN32) || defined(__CYGWIN__)');
+    Emit('  #define AETHER_EXPORT __declspec(dllexport)');
+    Emit('#else');
+    Emit('  #define AETHER_EXPORT __attribute__((visibility("default")))');
+    Emit('#endif');
+    Emit('');
+  end;
 
   // Headers adicionais de C (import c)
   if Assigned(AModule.CImports) then
@@ -3519,665 +3736,779 @@ begin
       Emit('');
   end;
 
-  // Helpers de compatibilidade Pascal no backend C
-  Emit('static inline double AetherPascalNow(void) {');
-  Emit('#if defined(__wasm__)');
-  Emit('    return 0.0;');
-  Emit('#else');
-  Emit('    return (double)time(NULL);');
-  Emit('#endif');
-  Emit('}');
-  Emit('static inline uint64_t AetherPascalGetTickCount64(void) {');
-  Emit('#if defined(__wasm__)');
-  Emit('    return 0;');
-  Emit('#elif defined(_WIN32)');
-  Emit('    return (uint64_t)GetTickCount64();');
-  Emit('#else');
-  Emit('    struct timespec ts;');
-  Emit('    clock_gettime(CLOCK_MONOTONIC, &ts);');
-  Emit('    return (uint64_t)(ts.tv_sec * 1000 + ts.tv_nsec / 1000000);');
-  Emit('#endif');
-  Emit('}');
-  Emit('');
+  // Helpers de compatibilidade Pascal no backend C (sob demanda)
+  if Pos('AetherPascalNow', ReachText) > 0 then
+  begin
+    Emit('static inline double AetherPascalNow(void) {');
+    Emit('#if defined(__wasm__)');
+    Emit('    return 0.0;');
+    Emit('#else');
+    Emit('    return (double)time(NULL);');
+    Emit('#endif');
+    Emit('}');
+    Emit('');
+  end;
+  if Pos('AetherPascalGetTickCount64', ReachText) > 0 then
+  begin
+    Emit('static inline uint64_t AetherPascalGetTickCount64(void) {');
+    Emit('#if defined(__wasm__)');
+    Emit('    return 0;');
+    Emit('#elif defined(_WIN32)');
+    Emit('    return (uint64_t)GetTickCount64();');
+    Emit('#else');
+    Emit('    struct timespec ts;');
+    Emit('    clock_gettime(CLOCK_MONOTONIC, &ts);');
+    Emit('    return (uint64_t)(ts.tv_sec * 1000 + ts.tv_nsec / 1000000);');
+    Emit('#endif');
+    Emit('}');
+    Emit('');
+  end;
 
-  // Helpers de Runtime do Aether
-  Emit('static inline char* AetherStringConcat(const char* a, const char* b) {');
-  Emit('    size_t la = a ? strlen(a) : 0;');
-  Emit('    size_t lb = b ? strlen(b) : 0;');
-  Emit('    char* res = (char*)malloc(la + lb + 1);');
-  Emit('    if (la) memcpy(res, a, la);');
-  Emit('    if (lb) memcpy(res + la, b, lb);');
-  Emit('    res[la + lb] = ''\0'';');
-  Emit('    return res;');
-  Emit('}');
-  Emit('');
-  Emit('static inline char* AetherCharAt(const char* s, uint32_t index) {');
-  Emit('    uint32_t slen = s ? (uint32_t)strlen(s) : 0;');
-  Emit('    char* res = (char*)malloc(2);');
-  Emit('    if (index < slen) { res[0] = s[index]; res[1] = ''\0''; }');
-  Emit('    else { res[0] = ''\0''; }');
-  Emit('    return res;');
-  Emit('}');
-  Emit('');
-  Emit('static inline char* AetherSubstring(const char* s, uint32_t start, uint32_t len) {');
-  Emit('    uint32_t slen = s ? (uint32_t)strlen(s) : 0;');
-  Emit('    if (start >= slen) {');
-  Emit('        char* empty = (char*)malloc(1);');
-  Emit('        empty[0] = ''\0'';');
-  Emit('        return empty;');
-  Emit('    }');
-  Emit('    if (start + len > slen) len = slen - start;');
-  Emit('    char* res = (char*)malloc(len + 1);');
-  Emit('    memcpy(res, s + start, len);');
-  Emit('    res[len] = ''\0'';');
-  Emit('    return res;');
-  Emit('}');
-  Emit('');
-  Emit('static inline char* AetherStrTrim(const char* s) {');
-  Emit('    if (!s) { char* e = (char*)malloc(1); e[0] = ''\0''; return e; }');
-  Emit('    size_t start = 0; size_t len = strlen(s);');
-  Emit('    while (start < len && (s[start] == '' '' || s[start] == ''\t'' || s[start] == ''\n'' || s[start] == ''\r'')) start++;');
-  Emit('    while (len > start && (s[len - 1] == '' '' || s[len - 1] == ''\t'' || s[len - 1] == ''\n'' || s[len - 1] == ''\r'')) len--;');
-  Emit('    size_t out_len = len - start;');
-  Emit('    char* res = (char*)malloc(out_len + 1);');
-  Emit('    if (out_len > 0) memcpy(res, s + start, out_len);');
-  Emit('    res[out_len] = ''\0'';');
-  Emit('    return res;');
-  Emit('}');
-  Emit('');
-  Emit('static inline char* AetherUpperCase(const char* s) {');
-  Emit('    if (!s) { char* e = (char*)malloc(1); e[0] = ''\0''; return e; }');
-  Emit('    size_t len = strlen(s);');
-  Emit('    char* res = (char*)malloc(len + 1);');
-  Emit('    for (size_t i = 0; i < len; i++) {');
-  Emit('        char c = s[i];');
-  Emit('        res[i] = (c >= ''a'' && c <= ''z'') ? (char)(c - 32) : c;');
-  Emit('    }');
-  Emit('    res[len] = ''\0'';');
-  Emit('    return res;');
-  Emit('}');
-  Emit('');
-  Emit('static inline char* AetherLowerCase(const char* s) {');
-  Emit('    if (!s) { char* e = (char*)malloc(1); e[0] = ''\0''; return e; }');
-  Emit('    size_t len = strlen(s);');
-  Emit('    char* res = (char*)malloc(len + 1);');
-  Emit('    for (size_t i = 0; i < len; i++) {');
-  Emit('        char c = s[i];');
-  Emit('        res[i] = (c >= ''A'' && c <= ''Z'') ? (char)(c + 32) : c;');
-  Emit('    }');
-  Emit('    res[len] = ''\0'';');
-  Emit('    return res;');
-  Emit('}');
-  Emit('');
-  Emit('static inline bool AetherStartsWith(const char* s, const char* prefix) {');
-  Emit('    if (!s || !prefix) return false;');
-  Emit('    size_t sl = strlen(s), pl = strlen(prefix);');
-  Emit('    if (pl > sl) return false;');
-  Emit('    for (size_t i = 0; i < pl; i++) if (s[i] != prefix[i]) return false;');
-  Emit('    return true;');
-  Emit('}');
-  Emit('');
-  Emit('static inline bool AetherEndsWith(const char* s, const char* suffix) {');
-  Emit('    if (!s || !suffix) return false;');
-  Emit('    size_t sl = strlen(s), sufl = strlen(suffix);');
-  Emit('    if (sufl > sl) return false;');
-  Emit('    for (size_t i = 0; i < sufl; i++) if (s[sl - sufl + i] != suffix[i]) return false;');
-  Emit('    return true;');
-  Emit('}');
-  Emit('');
-  Emit('static inline int32_t AetherStrIndexOf(const char* s, const char* sub) {');
-  Emit('    if (!s || !sub) return -1;');
-  Emit('    size_t sl = strlen(s), subl = strlen(sub);');
-  Emit('    if (subl == 0) return 0;');
-  Emit('    if (subl > sl) return -1;');
-  Emit('    for (size_t i = 0; i <= sl - subl; i++) {');
-  Emit('        bool ok = true;');
-  Emit('        for (size_t j = 0; j < subl; j++) {');
-  Emit('            if (s[i + j] != sub[j]) { ok = false; break; }');
-  Emit('        }');
-  Emit('        if (ok) return (int32_t)i;');
-  Emit('    }');
-  Emit('    return -1;');
-  Emit('}');
-  Emit('');
-  Emit('static inline bool AetherStrContains(const char* s, const char* sub) {');
-  Emit('    return AetherStrIndexOf(s, sub) >= 0;');
-  Emit('}');
-  Emit('');
-  Emit('static inline char* AetherStrReplace(const char* s, const char* old_s, const char* new_s) {');
-  Emit('    if (!s) { char* e = (char*)malloc(1); e[0] = ''\0''; return e; }');
-  Emit('    size_t sl = strlen(s);');
-  Emit('    if (!old_s || old_s[0] == ''\0'') {');
-  Emit('        char* cp = (char*)malloc(sl + 1); memcpy(cp, s, sl + 1); return cp;');
-  Emit('    }');
-  Emit('    const char* rep = new_s ? new_s : "";');
-  Emit('    size_t oldl = strlen(old_s), repl = strlen(rep), count = 0;');
-  Emit('    for (size_t i = 0; i + oldl <= sl; ) {');
-  Emit('        bool m = true;');
-  Emit('        for (size_t j = 0; j < oldl; j++) if (s[i + j] != old_s[j]) { m = false; break; }');
-  Emit('        if (m) { count++; i += oldl; } else i++;');
-  Emit('    }');
-  Emit('    size_t out_len = sl + count * repl - count * oldl;');
-  Emit('    char* res = (char*)malloc(out_len + 1);');
-  Emit('    size_t pos = 0;');
-  Emit('    for (size_t i = 0; i < sl; ) {');
-  Emit('        bool m = (i + oldl <= sl);');
-  Emit('        if (m) for (size_t j = 0; j < oldl; j++) if (s[i + j] != old_s[j]) { m = false; break; }');
-  Emit('        if (m) { if (repl > 0) { memcpy(res + pos, rep, repl); pos += repl; } i += oldl; }');
-  Emit('        else { res[pos++] = s[i++]; }');
-  Emit('    }');
-  Emit('    res[pos] = ''\0'';');
-  Emit('    return res;');
-  Emit('}');
-  Emit('');
-  Emit('#if defined(__wasm__)');
-  Emit('static inline bool AetherFileExists(const char* path) { (void)path; return false; }');
-  Emit('static inline char* AetherReadFile(const char* path) { (void)path; char* empty = (char*)malloc(1); if (empty) empty[0] = ''\0''; return empty; }');
-  Emit('static inline bool AetherWriteFile(const char* path, const char* content) { (void)path; (void)content; return false; }');
-  Emit('static inline bool AetherCreateDir(const char* path) { (void)path; return false; }');
-  Emit('static inline bool AetherRemoveDir(const char* path) { (void)path; return false; }');
-  Emit('static inline bool AetherDeleteFile(const char* path) { (void)path; return false; }');
-  Emit('static inline bool AetherDirExists(const char* path) { (void)path; return false; }');
-  Emit('static inline int64_t AetherFileSize(const char* path) { (void)path; return -1; }');
-  Emit('#else');
-  Emit('static inline bool AetherFileExists(const char* path) {');
-  Emit('    FILE* f = fopen(path, "rb");');
-  Emit('    if (f) { fclose(f); return true; }');
-  Emit('    return false;');
-  Emit('}');
-  Emit('');
-  Emit('static inline char* AetherReadFile(const char* path) {');
-  Emit('    FILE* f = fopen(path, "rb");');
-  Emit('    if (!f) { char* empty = (char*)malloc(1); empty[0] = ''\0''; return empty; }');
-  Emit('    fseek(f, 0, SEEK_END);');
-  Emit('    long sz = ftell(f);');
-  Emit('    fseek(f, 0, SEEK_SET);');
-  Emit('    char* buf = (char*)malloc(sz + 1);');
-  Emit('    size_t read_bytes = fread(buf, 1, sz, f);');
-  Emit('    buf[read_bytes] = ''\0'';');
-  Emit('    fclose(f);');
-  Emit('    return buf;');
-  Emit('}');
-  Emit('');
-  Emit('static inline bool AetherWriteFile(const char* path, const char* content) {');
-  Emit('    FILE* f = fopen(path, "wb");');
-  Emit('    if (!f) return false;');
-  Emit('    if (content) fputs(content, f);');
-  Emit('    fclose(f);');
-  Emit('    return true;');
-  Emit('}');
-  Emit('');
-  Emit('static inline bool AetherCreateDir(const char* path) {');
-  Emit('#ifdef _WIN32');
-  Emit('    return _mkdir(path) == 0;');
-  Emit('#else');
-  Emit('    return mkdir(path, 0755) == 0;');
-  Emit('#endif');
-  Emit('}');
-  Emit('');
-  Emit('static inline bool AetherRemoveDir(const char* path) {');
-  Emit('#ifdef _WIN32');
-  Emit('    return _rmdir(path) == 0;');
-  Emit('#else');
-  Emit('    return rmdir(path) == 0;');
-  Emit('#endif');
-  Emit('}');
-  Emit('');
-  Emit('static inline bool AetherDeleteFile(const char* path) {');
-  Emit('    return remove(path) == 0;');
-  Emit('}');
-  Emit('');
-  Emit('static inline bool AetherDirExists(const char* path) {');
-  Emit('#ifdef _WIN32');
-  Emit('    DWORD attr = GetFileAttributesA(path);');
-  Emit('    return (attr != INVALID_FILE_ATTRIBUTES) && ((attr & FILE_ATTRIBUTE_DIRECTORY) != 0);');
-  Emit('#else');
-  Emit('    struct stat st;');
-  Emit('    if (stat(path, &st) == 0 && S_ISDIR(st.st_mode)) return true;');
-  Emit('    return false;');
-  Emit('#endif');
-  Emit('}');
-  Emit('');
-  Emit('static inline int64_t AetherFileSize(const char* path) {');
-  Emit('#ifdef _WIN32');
-  Emit('    struct _stat64 st;');
-  Emit('    if (_stat64(path, &st) == 0) return (int64_t)st.st_size;');
-  Emit('    return -1;');
-  Emit('#else');
-  Emit('    struct stat st;');
-  Emit('    if (stat(path, &st) == 0) return (int64_t)st.st_size;');
-  Emit('    return -1;');
-  Emit('#endif');
-  Emit('}');
-  Emit('#endif');
-  Emit('');
-  Emit('static inline uint64_t AetherGetNanoseconds(void) {');
-  Emit('#if defined(__wasm__)');
-  Emit('    return 0;');
-  Emit('#elif defined(_WIN32)');
-  Emit('    LARGE_INTEGER freq, count;');
-  Emit('    QueryPerformanceFrequency(&freq);');
-  Emit('    QueryPerformanceCounter(&count);');
-  Emit('    if (freq.QuadPart > 0) {');
-  Emit('        return (uint64_t)((count.QuadPart * 1000000000ULL) / freq.QuadPart);');
-  Emit('    }');
-  Emit('    return (uint64_t)GetTickCount64() * 1000000ULL;');
-  Emit('#else');
-  Emit('    struct timespec ts;');
-  Emit('    clock_gettime(CLOCK_MONOTONIC, &ts);');
-  Emit('    return (uint64_t)ts.tv_sec * 1000000000ULL + (uint64_t)ts.tv_nsec;');
-  Emit('#endif');
-  Emit('}');
-  Emit('');
-  Emit('static inline void AetherSleepMs(uint32_t ms) {');
-  Emit('#if defined(__wasm__)');
-  Emit('    (void)ms;');
-  Emit('#elif defined(_WIN32)');
-  Emit('    Sleep(ms);');
-  Emit('#else');
-  Emit('    usleep((useconds_t)ms * 1000);');
-  Emit('#endif');
-  Emit('}');
-  Emit('');
-  Emit('static inline char* AetherIntToStr(int64_t val) {');
-  Emit('#if defined(__wasm__)');
-  Emit('    char* buf = (char*)malloc(32);');
-  Emit('    if (!buf) return (char*)"";');
-  Emit('    int idx = 0;');
-  Emit('    uint64_t uval;');
-  Emit('    if (val < 0) { buf[idx++] = ''-''; uval = (uint64_t)(-val); } else uval = (uint64_t)val;');
-  Emit('    char tmp[32]; int t = 0;');
-  Emit('    do { tmp[t++] = ''0'' + (uval % 10); uval /= 10; } while (uval > 0);');
-  Emit('    while (t > 0) buf[idx++] = tmp[--t];');
-  Emit('    buf[idx] = ''\0'';');
-  Emit('    return buf;');
-  Emit('#else');
-  Emit('    char* buf = (char*)malloc(32);');
-  Emit('    snprintf(buf, 32, "%lld", (long long)val);');
-  Emit('    return buf;');
-  Emit('#endif');
-  Emit('}');
-  Emit('');
-  Emit('static inline char* AetherCharToStr(char c) {');
-  Emit('    char* buf = (char*)malloc(2);');
-  Emit('    buf[0] = c; buf[1] = ''\0'';');
-  Emit('    return buf;');
-  Emit('}');
-  Emit('');
-  Emit('typedef struct {');
-  Emit('    size_t len;');
-  Emit('    size_t cap;');
-  Emit('} AetherDynHeader;');
-  Emit('');
-  Emit('static inline size_t AetherDynLen(const void* arr) {');
-  Emit('    if (!arr) return 0;');
-  Emit('    return ((const AetherDynHeader*)arr - 1)->len;');
-  Emit('}');
-  Emit('');
-  Emit('static inline void* AetherDynSetLength(void* arr, size_t elem_size, size_t new_len) {');
-  Emit('    AetherDynHeader* hdr = arr ? ((AetherDynHeader*)arr - 1) : NULL;');
-  Emit('    size_t old_cap = hdr ? hdr->cap : 0;');
-  Emit('    size_t old_len = hdr ? hdr->len : 0;');
-  Emit('    if (new_len > old_cap || !hdr) {');
-  Emit('        size_t new_cap = old_cap == 0 ? 8 : old_cap;');
-  Emit('        while (new_cap < new_len) new_cap *= 2;');
-  Emit('        AetherDynHeader* new_hdr = (AetherDynHeader*)realloc(hdr, sizeof(AetherDynHeader) + new_cap * elem_size);');
-  Emit('        new_hdr->cap = new_cap;');
-  Emit('        hdr = new_hdr;');
-  Emit('    }');
-  Emit('    if (new_len > old_len) {');
-  Emit('        memset((char*)(hdr + 1) + old_len * elem_size, 0, (new_len - old_len) * elem_size);');
-  Emit('    }');
-  Emit('    hdr->len = new_len;');
-  Emit('    return (void*)(hdr + 1);');
-  Emit('}');
-  Emit('');
-  Emit('static inline void* AetherDynDelete(void* arr, size_t elem_size, int64_t idx) {');
-  Emit('    size_t n = AetherDynLen(arr);');
-  Emit('    if (!arr || idx < 0 || (size_t)idx >= n) return arr;');
-  Emit('    char* p = (char*)arr;');
-  Emit('    size_t tail = (n - 1 - (size_t)idx) * elem_size;');
-  Emit('    char* dst = p + (size_t)idx * elem_size;');
-  Emit('    char* src = dst + elem_size;');
-  Emit('    for (size_t i = 0; i < tail; i++) dst[i] = src[i];');
-  Emit('    return AetherDynSetLength(arr, elem_size, n - 1);');
-  Emit('}');
-  Emit('');
-  Emit('static inline void* AetherDynSlice(const void* arr, size_t elem_size, int64_t start, int64_t count) {');
-  Emit('    size_t n = AetherDynLen(arr);');
-  Emit('    if (!arr || count <= 0 || start >= (int64_t)n) {');
-  Emit('        return AetherDynSetLength(NULL, elem_size, 0);');
-  Emit('    }');
-  Emit('    if (start < 0) { count += start; start = 0; }');
-  Emit('    if (count <= 0) return AetherDynSetLength(NULL, elem_size, 0);');
-  Emit('    size_t actual = (size_t)count;');
-  Emit('    if ((size_t)start + actual > n) actual = n - (size_t)start;');
-  Emit('    void* res = AetherDynSetLength(NULL, elem_size, actual);');
-  Emit('    memcpy(res, (const char*)arr + (size_t)start * elem_size, actual * elem_size);');
-  Emit('    return res;');
-  Emit('}');
-  Emit('');
-  Emit('#if defined(__wasm__)');
-  Emit('static inline void AetherRaise(const char* msg) { (void)msg; }');
-  Emit('#else');
-  Emit('static jmp_buf g_aether_jmp_stack[32];');
-  Emit('static int g_aether_jmp_top = 0;');
-  Emit('static const char* g_aether_last_exception = "";');
-  Emit('static __attribute__((noinline, noreturn)) void AetherRaise(const char* msg) {');
-  Emit('    g_aether_last_exception = msg ? msg : "Exception";');
-  Emit('    if (g_aether_jmp_top > 0) {');
-  Emit('        longjmp(g_aether_jmp_stack[--g_aether_jmp_top], 1);');
-  Emit('    } else {');
-  Emit('        fprintf(stderr, "Unhandled Exception: %s\n", g_aether_last_exception);');
-  Emit('        exit(1);');
-  Emit('    }');
-  Emit('}');
-  Emit('#endif');
-  Emit('');
-  Emit('static inline char* AetherFloatToStr(double val) {');
-  Emit('    char* buf = (char*)malloc(32);');
-  Emit('    snprintf(buf, 32, "%g", val);');
-  Emit('    return buf;');
-  Emit('}');
-  Emit('');
-  Emit('static inline char* AetherBoolToStr(bool val) {');
-  Emit('    return val ? (char*)"true" : (char*)"false";');
-  Emit('}');
-  Emit('');
-  Emit('static inline int32_t AetherStrToInt(const char* s) {');
-  Emit('#if defined(__wasm__)');
-  Emit('    if (!s) return 0;');
-  Emit('    int32_t res = 0; int sign = 1; size_t i = 0;');
-  Emit('    if (s[0] == ''-'') { sign = -1; i = 1; }');
-  Emit('    for (; s[i] >= ''0'' && s[i] <= ''9''; i++) { res = res * 10 + (s[i] - ''0''); }');
-  Emit('    return res * sign;');
-  Emit('#else');
-  Emit('    if (!s) return 0;');
-  Emit('    return (int32_t)atoi(s);');
-  Emit('#endif');
-  Emit('}');
-  Emit('');
-  Emit('static inline char* AetherJsonExtractRaw(const char* json, const char* key) {');
-  Emit('    if (!json || !key) { char* e = (char*)malloc(1); e[0] = ''\0''; return e; }');
-  Emit('    size_t klen = strlen(key);');
-  Emit('    size_t jlen = strlen(json);');
-  Emit('    for (size_t i = 0; i + klen + 2 <= jlen; i++) {');
-  Emit('        if (json[i] == ''"'' && strncmp(json + i + 1, key, klen) == 0 && json[i + 1 + klen] == ''"'') {');
-  Emit('            size_t p = i + 2 + klen;');
-  Emit('            while (p < jlen && (json[p] == '' '' || json[p] == ''\t'' || json[p] == ''\n'' || json[p] == ''\r'')) p++;');
-  Emit('            if (p < jlen && json[p] == '':'') {');
-  Emit('                p++;');
-  Emit('                while (p < jlen && (json[p] == '' '' || json[p] == ''\t'' || json[p] == ''\n'' || json[p] == ''\r'')) p++;');
-  Emit('                size_t start = p;');
-  Emit('                if (p < jlen && json[p] == ''"'') {');
-  Emit('                    p++;');
-  Emit('                    while (p < jlen) {');
-  Emit('                        if (json[p] == ''"'' && json[p - 1] != ''\\'') { p++; break; }');
-  Emit('                        p++;');
-  Emit('                    }');
-  Emit('                } else if (p < jlen && json[p] == ''{'') {');
-  Emit('                    int depth = 0;');
-  Emit('                    bool in_str = false;');
-  Emit('                    while (p < jlen) {');
-  Emit('                        if (json[p] == ''"'' && (p == 0 || json[p - 1] != ''\\'')) in_str = !in_str;');
-  Emit('                        else if (!in_str) {');
-  Emit('                            if (json[p] == ''{'') depth++;');
-  Emit('                            else if (json[p] == ''}'') { depth--; if (depth == 0) { p++; break; } }');
-  Emit('                        }');
-  Emit('                        p++;');
-  Emit('                    }');
-  Emit('                } else {');
-  Emit('                    while (p < jlen && json[p] != '','' && json[p] != ''}'' && json[p] != '']'' &&');
-  Emit('                           json[p] != '' '' && json[p] != ''\t'' && json[p] != ''\n'' && json[p] != ''\r'') p++;');
-  Emit('                }');
-  Emit('                size_t rlen = p - start;');
-  Emit('                char* res = (char*)malloc(rlen + 1);');
-  Emit('                if (rlen > 0) memcpy(res, json + start, rlen);');
-  Emit('                res[rlen] = ''\0'';');
-  Emit('                return res;');
-  Emit('            }');
-  Emit('        }');
-  Emit('    }');
-  Emit('    char* empty = (char*)malloc(1);');
-  Emit('    empty[0] = ''\0'';');
-  Emit('    return empty;');
-  Emit('}');
-  Emit('');
-  Emit('static inline char* AetherJsonGetStr(const char* json, const char* key) {');
-  Emit('    char* raw = AetherJsonExtractRaw(json, key);');
-  Emit('    size_t len = strlen(raw);');
-  Emit('    if (len >= 2 && raw[0] == ''"'' && raw[len - 1] == ''"'') {');
-  Emit('        memmove(raw, raw + 1, len - 2);');
-  Emit('        raw[len - 2] = ''\0'';');
-  Emit('    }');
-  Emit('    return raw;');
-  Emit('}');
-  Emit('');
-  Emit('static inline int32_t AetherJsonGetInt(const char* json, const char* key) {');
-  Emit('    char* raw = AetherJsonExtractRaw(json, key);');
-  Emit('    int32_t val = raw[0] ? (int32_t)strtoll(raw, NULL, 10) : 0;');
-  Emit('    free(raw);');
-  Emit('    return val;');
-  Emit('}');
-  Emit('');
-  Emit('static inline double AetherJsonGetFloat(const char* json, const char* key) {');
-  Emit('    char* raw = AetherJsonExtractRaw(json, key);');
-  Emit('    double val = raw[0] ? strtod(raw, NULL) : 0.0;');
-  Emit('    free(raw);');
-  Emit('    return val;');
-  Emit('}');
-  Emit('');
-  Emit('static inline bool AetherJsonGetBool(const char* json, const char* key) {');
-  Emit('    char* raw = AetherJsonExtractRaw(json, key);');
-  Emit('    bool val = (strcmp(raw, "true") == 0);');
-  Emit('    free(raw);');
-  Emit('    return val;');
-  Emit('}');
-  Emit('');
-  Emit('static inline char AetherJsonGetChar(const char* json, const char* key) {');
-  Emit('    char* raw = AetherJsonGetStr(json, key);');
-  Emit('    char c = raw[0];');
-  Emit('    free(raw);');
-  Emit('    return c;');
-  Emit('}');
-  Emit('');
-  Emit('static inline bool AetherJsonHasValue(const char* json, const char* key) {');
-  Emit('    char* raw = AetherJsonExtractRaw(json, key);');
-  Emit('    bool ok = (raw[0] != ''\0'') && (strcmp(raw, "null") != 0);');
-  Emit('    free(raw);');
-  Emit('    return ok;');
-  Emit('}');
-  Emit('');
-  Emit('static inline char* AetherJsonGetObj(const char* json, const char* key) {');
-  Emit('    return AetherJsonExtractRaw(json, key);');
-  Emit('}');
-  Emit('');
-  Emit('// Helpers de Linha de Comando');
-  Emit('static int g_aether_argc = 0;');
-  Emit('static char** g_aether_argv = NULL;');
-  Emit('');
-  Emit('static inline int32_t AetherParamCount(void) {');
-  Emit('    return g_aether_argc > 0 ? (int32_t)(g_aether_argc - 1) : 0;');
-  Emit('}');
-  Emit('');
-  Emit('static inline char* AetherParamStr(int32_t idx) {');
-  Emit('    if (idx < 0 || idx >= g_aether_argc || !g_aether_argv) {');
-  Emit('        char* empty = (char*)malloc(1);');
-  Emit('        empty[0] = ''\0'';');
-  Emit('        return empty;');
-  Emit('    }');
-  Emit('    size_t len = strlen(g_aether_argv[idx]);');
-  Emit('    char* copy = (char*)malloc(len + 1);');
-  Emit('    memcpy(copy, g_aether_argv[idx], len);');
-  Emit('    copy[len] = ''\0'';');
-  Emit('    return copy;');
-  Emit('}');
-  Emit('');
-  Emit('// Helpers de Sockets Aether');
-  Emit('#if defined(__wasm__)');
-  Emit('static inline int32_t AetherSocketCreate(void) { return -1; }');
-  Emit('static inline int32_t AetherSocketListen(uint16_t port, int32_t backlog) { (void)port; (void)backlog; return -1; }');
-  Emit('static inline int32_t AetherSocketAccept(int32_t listen_fd) { (void)listen_fd; return -1; }');
-  Emit('static inline int32_t AetherSocketConnect(const char* host, uint16_t port) { (void)host; (void)port; return -1; }');
-  Emit('static inline int32_t AetherSocketSend(int32_t fd, const char* data) { (void)fd; (void)data; return 0; }');
-  Emit('static inline char* AetherSocketRecv(int32_t fd, int32_t max_len) { (void)fd; (void)max_len; char* b = (char*)malloc(1); if (b) b[0] = ''\0''; return b; }');
-  Emit('static inline void AetherSocketClose(int32_t fd) { (void)fd; }');
-  Emit('#else');
-  Emit('#ifdef _WIN32');
-  Emit('static inline void AetherSocketInit(void) {');
-  Emit('    static int wsa_init = 0;');
-  Emit('    if (!wsa_init) {');
-  Emit('        WSADATA wsa;');
-  Emit('        WSAStartup(MAKEWORD(2, 2), &wsa);');
-  Emit('        wsa_init = 1;');
-  Emit('    }');
-  Emit('}');
-  Emit('#endif');
-  Emit('');
-  Emit('static inline int32_t AetherSocketCreate(void) {');
-  Emit('#ifdef _WIN32');
-  Emit('    AetherSocketInit();');
-  Emit('#endif');
-  Emit('    return (int32_t)socket(AF_INET, SOCK_STREAM, 0);');
-  Emit('}');
-  Emit('');
-  Emit('static inline int32_t AetherSocketListen(uint16_t port, int32_t backlog) {');
-  Emit('#ifdef _WIN32');
-  Emit('    AetherSocketInit();');
-  Emit('#endif');
-  Emit('    int fd = socket(AF_INET, SOCK_STREAM, 0);');
-  Emit('    if (fd < 0) return -1;');
-  Emit('    int opt = 1;');
-  Emit('    setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, (const char*)&opt, sizeof(opt));');
-  Emit('    struct sockaddr_in addr;');
-  Emit('    memset(&addr, 0, sizeof(addr));');
-  Emit('    addr.sin_family = AF_INET;');
-  Emit('    addr.sin_port = htons(port);');
-  Emit('    addr.sin_addr.s_addr = INADDR_ANY;');
-  Emit('    if (bind(fd, (struct sockaddr*)&addr, sizeof(addr)) != 0) {');
-  Emit('#ifdef _WIN32');
-  Emit('        closesocket(fd);');
-  Emit('#else');
-  Emit('        close(fd);');
-  Emit('#endif');
-  Emit('        return -1;');
-  Emit('    }');
-  Emit('    if (listen(fd, backlog) != 0) {');
-  Emit('#ifdef _WIN32');
-  Emit('        closesocket(fd);');
-  Emit('#else');
-  Emit('        close(fd);');
-  Emit('#endif');
-  Emit('        return -1;');
-  Emit('    }');
-  Emit('    return (int32_t)fd;');
-  Emit('}');
-  Emit('');
-  Emit('static inline int32_t AetherSocketAccept(int32_t listen_fd) {');
-  Emit('    struct sockaddr_in addr;');
-  Emit('    socklen_t len = sizeof(addr);');
-  Emit('    int client_fd = accept(listen_fd, (struct sockaddr*)&addr, &len);');
-  Emit('    return (int32_t)client_fd;');
-  Emit('}');
-  Emit('');
-  Emit('static inline int32_t AetherSocketConnect(const char* host, uint16_t port) {');
-  Emit('#ifdef _WIN32');
-  Emit('    AetherSocketInit();');
-  Emit('#endif');
-  Emit('    int fd = socket(AF_INET, SOCK_STREAM, 0);');
-  Emit('    if (fd < 0) return -1;');
-  Emit('    struct sockaddr_in addr;');
-  Emit('    memset(&addr, 0, sizeof(addr));');
-  Emit('    addr.sin_family = AF_INET;');
-  Emit('    addr.sin_port = htons(port);');
-  Emit('    addr.sin_addr.s_addr = inet_addr(host ? host : "127.0.0.1");');
-  Emit('    if (connect(fd, (struct sockaddr*)&addr, sizeof(addr)) != 0) {');
-  Emit('#ifdef _WIN32');
-  Emit('        closesocket(fd);');
-  Emit('#else');
-  Emit('        close(fd);');
-  Emit('#endif');
-  Emit('        return -1;');
-  Emit('    }');
-  Emit('    return (int32_t)fd;');
-  Emit('}');
-  Emit('');
-  Emit('static inline int32_t AetherSocketSend(int32_t fd, const char* data) {');
-  Emit('    if (!data) return 0;');
-  Emit('    size_t len = strlen(data);');
-  Emit('    if (len == 0) return 0;');
-  Emit('    return (int32_t)send(fd, data, (int)len, 0);');
-  Emit('}');
-  Emit('');
-  Emit('static inline char* AetherSocketRecv(int32_t fd, int32_t max_len) {');
-  Emit('    if (max_len <= 0) max_len = 4096;');
-  Emit('    char* buf = (char*)malloc(max_len + 1);');
-  Emit('    int bytes = recv(fd, buf, max_len, 0);');
-  Emit('    if (bytes > 0) {');
-  Emit('        buf[bytes] = ''\0'';');
-  Emit('        return buf;');
-  Emit('    } else {');
-  Emit('        buf[0] = ''\0'';');
-  Emit('        return buf;');
-  Emit('    }');
-  Emit('}');
-  Emit('');
-  Emit('static inline void AetherSocketClose(int32_t fd) {');
-  Emit('    if (fd >= 0) {');
-  Emit('#ifdef _WIN32');
-  Emit('        closesocket(fd);');
-  Emit('#else');
-  Emit('        close(fd);');
-  Emit('#endif');
-  Emit('    }');
-  Emit('}');
-  Emit('#endif // !__wasm__');
-  Emit('');
+  // Helpers de Runtime do Aether (sob demanda)
+  if Pos('AetherStringConcat', ReachText) > 0 then
+  begin
+    Emit('static inline char* AetherStringConcat(const char* a, const char* b) {');
+    Emit('    size_t la = a ? strlen(a) : 0;');
+    Emit('    size_t lb = b ? strlen(b) : 0;');
+    Emit('    char* res = (char*)malloc(la + lb + 1);');
+    Emit('    if (la) memcpy(res, a, la);');
+    Emit('    if (lb) memcpy(res + la, b, lb);');
+    Emit('    res[la + lb] = ''\0'';');
+    Emit('    return res;');
+    Emit('}');
+    Emit('');
+  end;
 
-  // Estrutura Result e Option por Valor para C
-  Emit('typedef struct {');
-  Emit('    bool is_ok;');
-  Emit('    bool is_err;');
-  Emit('    double value;');
-  Emit('    int error;');
-  Emit('    const char* str_val;');
-  Emit('    const char* err_str;');
-  Emit('} AetherResult;');
-  Emit('');
-  Emit('typedef struct {');
-  Emit('    bool is_some;');
-  Emit('    bool is_none;');
-  Emit('    double num_val;');
-  Emit('    const char* str_val;');
-  Emit('} AetherOption;');
-  Emit('');
+  if Pos('AetherCharAt', ReachText) > 0 then
+  begin
+    Emit('static inline char* AetherCharAt(const char* s, uint32_t index) {');
+    Emit('    uint32_t slen = s ? (uint32_t)strlen(s) : 0;');
+    Emit('    char* res = (char*)malloc(2);');
+    Emit('    if (index < slen) { res[0] = s[index]; res[1] = ''\0''; }');
+    Emit('    else { res[0] = ''\0''; }');
+    Emit('    return res;');
+    Emit('}');
+    Emit('');
+  end;
+
+  if Pos('AetherSubstring', ReachText) > 0 then
+  begin
+    Emit('static inline char* AetherSubstring(const char* s, uint32_t start, uint32_t len) {');
+    Emit('    uint32_t slen = s ? (uint32_t)strlen(s) : 0;');
+    Emit('    if (start >= slen) {');
+    Emit('        char* empty = (char*)malloc(1);');
+    Emit('        empty[0] = ''\0'';');
+    Emit('        return empty;');
+    Emit('    }');
+    Emit('    if (start + len > slen) len = slen - start;');
+    Emit('    char* res = (char*)malloc(len + 1);');
+    Emit('    memcpy(res, s + start, len);');
+    Emit('    res[len] = ''\0'';');
+    Emit('    return res;');
+    Emit('}');
+    Emit('');
+  end;
+
+  if Pos('AetherStrTrim', ReachText) > 0 then
+  begin
+    Emit('static inline char* AetherStrTrim(const char* s) {');
+    Emit('    if (!s) { char* e = (char*)malloc(1); e[0] = ''\0''; return e; }');
+    Emit('    size_t start = 0; size_t len = strlen(s);');
+    Emit('    while (start < len && (s[start] == '' '' || s[start] == ''\t'' || s[start] == ''\n'' || s[start] == ''\r'')) start++;');
+    Emit('    while (len > start && (s[len - 1] == '' '' || s[len - 1] == ''\t'' || s[len - 1] == ''\n'' || s[len - 1] == ''\r'')) len--;');
+    Emit('    size_t out_len = len - start;');
+    Emit('    char* res = (char*)malloc(out_len + 1);');
+    Emit('    if (out_len > 0) memcpy(res, s + start, out_len);');
+    Emit('    res[out_len] = ''\0'';');
+    Emit('    return res;');
+    Emit('}');
+    Emit('');
+  end;
+
+  if Pos('AetherUpperCase', ReachText) > 0 then
+  begin
+    Emit('static inline char* AetherUpperCase(const char* s) {');
+    Emit('    if (!s) { char* e = (char*)malloc(1); e[0] = ''\0''; return e; }');
+    Emit('    size_t len = strlen(s);');
+    Emit('    char* res = (char*)malloc(len + 1);');
+    Emit('    for (size_t i = 0; i < len; i++) {');
+    Emit('        char c = s[i];');
+    Emit('        res[i] = (c >= ''a'' && c <= ''z'') ? (char)(c - 32) : c;');
+    Emit('    }');
+    Emit('    res[len] = ''\0'';');
+    Emit('    return res;');
+    Emit('}');
+    Emit('');
+  end;
+
+  if Pos('AetherLowerCase', ReachText) > 0 then
+  begin
+    Emit('static inline char* AetherLowerCase(const char* s) {');
+    Emit('    if (!s) { char* e = (char*)malloc(1); e[0] = ''\0''; return e; }');
+    Emit('    size_t len = strlen(s);');
+    Emit('    char* res = (char*)malloc(len + 1);');
+    Emit('    for (size_t i = 0; i < len; i++) {');
+    Emit('        char c = s[i];');
+    Emit('        res[i] = (c >= ''A'' && c <= ''Z'') ? (char)(c + 32) : c;');
+    Emit('    }');
+    Emit('    res[len] = ''\0'';');
+    Emit('    return res;');
+    Emit('}');
+    Emit('');
+  end;
+
+  if Pos('AetherStartsWith', ReachText) > 0 then
+  begin
+    Emit('static inline bool AetherStartsWith(const char* s, const char* prefix) {');
+    Emit('    if (!s || !prefix) return false;');
+    Emit('    size_t sl = strlen(s), pl = strlen(prefix);');
+    Emit('    if (pl > sl) return false;');
+    Emit('    for (size_t i = 0; i < pl; i++) if (s[i] != prefix[i]) return false;');
+    Emit('    return true;');
+    Emit('}');
+    Emit('');
+  end;
+
+  if Pos('AetherEndsWith', ReachText) > 0 then
+  begin
+    Emit('static inline bool AetherEndsWith(const char* s, const char* suffix) {');
+    Emit('    if (!s || !suffix) return false;');
+    Emit('    size_t sl = strlen(s), sufl = strlen(suffix);');
+    Emit('    if (sufl > sl) return false;');
+    Emit('    for (size_t i = 0; i < sufl; i++) if (s[sl - sufl + i] != suffix[i]) return false;');
+    Emit('    return true;');
+    Emit('}');
+    Emit('');
+  end;
+
+  if (Pos('AetherStrIndexOf', ReachText) > 0) or (Pos('AetherStrContains', ReachText) > 0) then
+  begin
+    Emit('static inline int32_t AetherStrIndexOf(const char* s, const char* sub) {');
+    Emit('    if (!s || !sub) return -1;');
+    Emit('    size_t sl = strlen(s), subl = strlen(sub);');
+    Emit('    if (subl == 0) return 0;');
+    Emit('    if (subl > sl) return -1;');
+    Emit('    for (size_t i = 0; i <= sl - subl; i++) {');
+    Emit('        bool ok = true;');
+    Emit('        for (size_t j = 0; j < subl; j++) {');
+    Emit('            if (s[i + j] != sub[j]) { ok = false; break; }');
+    Emit('        }');
+    Emit('        if (ok) return (int32_t)i;');
+    Emit('    }');
+    Emit('    return -1;');
+    Emit('}');
+    Emit('');
+  end;
+
+  if Pos('AetherStrContains', ReachText) > 0 then
+  begin
+    Emit('static inline bool AetherStrContains(const char* s, const char* sub) {');
+    Emit('    return AetherStrIndexOf(s, sub) >= 0;');
+    Emit('}');
+    Emit('');
+  end;
+
+  if Pos('AetherStrReplace', ReachText) > 0 then
+  begin
+    Emit('static inline char* AetherStrReplace(const char* s, const char* old_s, const char* new_s) {');
+    Emit('    if (!s) { char* e = (char*)malloc(1); e[0] = ''\0''; return e; }');
+    Emit('    size_t sl = strlen(s);');
+    Emit('    if (!old_s || old_s[0] == ''\0'') {');
+    Emit('        char* cp = (char*)malloc(sl + 1); memcpy(cp, s, sl + 1); return cp;');
+    Emit('    }');
+    Emit('    const char* rep = new_s ? new_s : "";');
+    Emit('    size_t oldl = strlen(old_s), repl = strlen(rep), count = 0;');
+    Emit('    for (size_t i = 0; i + oldl <= sl; ) {');
+    Emit('        bool m = true;');
+    Emit('        for (size_t j = 0; j < oldl; j++) if (s[i + j] != old_s[j]) { m = false; break; }');
+    Emit('        if (m) { count++; i += oldl; } else i++;');
+    Emit('    }');
+    Emit('    size_t out_len = sl + count * repl - count * oldl;');
+    Emit('    char* res = (char*)malloc(out_len + 1);');
+    Emit('    size_t pos = 0;');
+    Emit('    for (size_t i = 0; i < sl; ) {');
+    Emit('        bool m = (i + oldl <= sl);');
+    Emit('        if (m) for (size_t j = 0; j < oldl; j++) if (s[i + j] != old_s[j]) { m = false; break; }');
+    Emit('        if (m) { if (repl > 0) { memcpy(res + pos, rep, repl); pos += repl; } i += oldl; }');
+    Emit('        else { res[pos++] = s[i++]; }');
+    Emit('    }');
+    Emit('    res[pos] = ''\0'';');
+    Emit('    return res;');
+    Emit('}');
+    Emit('');
+  end;
+
+  if NeedFileIO then
+  begin
+    Emit('#if defined(__wasm__)');
+    Emit('static inline bool AetherFileExists(const char* path) { (void)path; return false; }');
+    Emit('static inline char* AetherReadFile(const char* path) { (void)path; char* empty = (char*)malloc(1); if (empty) empty[0] = ''\0''; return empty; }');
+    Emit('static inline bool AetherWriteFile(const char* path, const char* content) { (void)path; (void)content; return false; }');
+    Emit('static inline bool AetherCreateDir(const char* path) { (void)path; return false; }');
+    Emit('static inline bool AetherRemoveDir(const char* path) { (void)path; return false; }');
+    Emit('static inline bool AetherDeleteFile(const char* path) { (void)path; return false; }');
+    Emit('static inline bool AetherDirExists(const char* path) { (void)path; return false; }');
+    Emit('static inline int64_t AetherFileSize(const char* path) { (void)path; return -1; }');
+    Emit('#else');
+    Emit('static inline bool AetherFileExists(const char* path) {');
+    Emit('    FILE* f = fopen(path, "rb");');
+    Emit('    if (f) { fclose(f); return true; }');
+    Emit('    return false;');
+    Emit('}');
+    Emit('');
+    Emit('static inline char* AetherReadFile(const char* path) {');
+    Emit('    FILE* f = fopen(path, "rb");');
+    Emit('    if (!f) { char* empty = (char*)malloc(1); empty[0] = ''\0''; return empty; }');
+    Emit('    fseek(f, 0, SEEK_END);');
+    Emit('    long sz = ftell(f);');
+    Emit('    fseek(f, 0, SEEK_SET);');
+    Emit('    char* buf = (char*)malloc(sz + 1);');
+    Emit('    size_t read_bytes = fread(buf, 1, sz, f);');
+    Emit('    buf[read_bytes] = ''\0'';');
+    Emit('    fclose(f);');
+    Emit('    return buf;');
+    Emit('}');
+    Emit('');
+    Emit('static inline bool AetherWriteFile(const char* path, const char* content) {');
+    Emit('    FILE* f = fopen(path, "wb");');
+    Emit('    if (!f) return false;');
+    Emit('    if (content) fputs(content, f);');
+    Emit('    fclose(f);');
+    Emit('    return true;');
+    Emit('}');
+    Emit('');
+    Emit('static inline bool AetherCreateDir(const char* path) {');
+    Emit('#ifdef _WIN32');
+    Emit('    return _mkdir(path) == 0;');
+    Emit('#else');
+    Emit('    return mkdir(path, 0755) == 0;');
+    Emit('#endif');
+    Emit('}');
+    Emit('');
+    Emit('static inline bool AetherRemoveDir(const char* path) {');
+    Emit('#ifdef _WIN32');
+    Emit('    return _rmdir(path) == 0;');
+    Emit('#else');
+    Emit('    return rmdir(path) == 0;');
+    Emit('#endif');
+    Emit('}');
+    Emit('');
+    Emit('static inline bool AetherDeleteFile(const char* path) {');
+    Emit('    return remove(path) == 0;');
+    Emit('}');
+    Emit('');
+    Emit('static inline bool AetherDirExists(const char* path) {');
+    Emit('#ifdef _WIN32');
+    Emit('    DWORD attr = GetFileAttributesA(path);');
+    Emit('    return (attr != INVALID_FILE_ATTRIBUTES) && ((attr & FILE_ATTRIBUTE_DIRECTORY) != 0);');
+    Emit('#else');
+    Emit('    struct stat st;');
+    Emit('    if (stat(path, &st) == 0 && S_ISDIR(st.st_mode)) return true;');
+    Emit('    return false;');
+    Emit('#endif');
+    Emit('}');
+    Emit('');
+    Emit('static inline int64_t AetherFileSize(const char* path) {');
+    Emit('#ifdef _WIN32');
+    Emit('    struct _stat64 st;');
+    Emit('    if (_stat64(path, &st) == 0) return (int64_t)st.st_size;');
+    Emit('    return -1;');
+    Emit('#else');
+    Emit('    struct stat st;');
+    Emit('    if (stat(path, &st) == 0) return (int64_t)st.st_size;');
+    Emit('    return -1;');
+    Emit('#endif');
+    Emit('}');
+    Emit('#endif');
+    Emit('');
+  end;
+
+  if Pos('AetherGetNanoseconds', ReachText) > 0 then
+  begin
+    Emit('static inline uint64_t AetherGetNanoseconds(void) {');
+    Emit('#if defined(__wasm__)');
+    Emit('    return 0;');
+    Emit('#elif defined(_WIN32)');
+    Emit('    LARGE_INTEGER freq, count;');
+    Emit('    QueryPerformanceFrequency(&freq);');
+    Emit('    QueryPerformanceCounter(&count);');
+    Emit('    if (freq.QuadPart > 0) {');
+    Emit('        return (uint64_t)((count.QuadPart * 1000000000ULL) / freq.QuadPart);');
+    Emit('    }');
+    Emit('    return (uint64_t)GetTickCount64() * 1000000ULL;');
+    Emit('#else');
+    Emit('    struct timespec ts;');
+    Emit('    clock_gettime(CLOCK_MONOTONIC, &ts);');
+    Emit('    return (uint64_t)ts.tv_sec * 1000000000ULL + (uint64_t)ts.tv_nsec;');
+    Emit('#endif');
+    Emit('}');
+    Emit('');
+  end;
+
+  if Pos('AetherSleepMs', ReachText) > 0 then
+  begin
+    Emit('static inline void AetherSleepMs(uint32_t ms) {');
+    Emit('#if defined(__wasm__)');
+    Emit('    (void)ms;');
+    Emit('#elif defined(_WIN32)');
+    Emit('    Sleep(ms);');
+    Emit('#else');
+    Emit('    usleep((useconds_t)ms * 1000);');
+    Emit('#endif');
+    Emit('}');
+    Emit('');
+  end;
+
+  if Pos('AetherIntToStr', ReachText) > 0 then
+  begin
+    Emit('static inline char* AetherIntToStr(int64_t val) {');
+    Emit('#if defined(__wasm__)');
+    Emit('    char* buf = (char*)malloc(32);');
+    Emit('    if (!buf) return (char*)"";');
+    Emit('    int idx = 0;');
+    Emit('    uint64_t uval;');
+    Emit('    if (val < 0) { buf[idx++] = ''-''; uval = (uint64_t)(-val); } else uval = (uint64_t)val;');
+    Emit('    char tmp[32]; int t = 0;');
+    Emit('    do { tmp[t++] = ''0'' + (uval % 10); uval /= 10; } while (uval > 0);');
+    Emit('    while (t > 0) buf[idx++] = tmp[--t];');
+    Emit('    buf[idx] = ''\0'';');
+    Emit('    return buf;');
+    Emit('#else');
+    Emit('    char* buf = (char*)malloc(32);');
+    Emit('    snprintf(buf, 32, "%lld", (long long)val);');
+    Emit('    return buf;');
+    Emit('#endif');
+    Emit('}');
+    Emit('');
+  end;
+
+  if Pos('AetherCharToStr', ReachText) > 0 then
+  begin
+    Emit('static inline char* AetherCharToStr(char c) {');
+    Emit('    char* buf = (char*)malloc(2);');
+    Emit('    buf[0] = c; buf[1] = ''\0'';');
+    Emit('    return buf;');
+    Emit('}');
+    Emit('');
+  end;
+
+  if NeedDyn then
+  begin
+    Emit('typedef struct {');
+    Emit('    size_t len;');
+    Emit('    size_t cap;');
+    Emit('} AetherDynHeader;');
+    Emit('');
+    Emit('static inline size_t AetherDynLen(const void* arr) {');
+    Emit('    if (!arr) return 0;');
+    Emit('    return ((const AetherDynHeader*)arr - 1)->len;');
+    Emit('}');
+    Emit('');
+    Emit('static inline void* AetherDynSetLength(void* arr, size_t elem_size, size_t new_len) {');
+    Emit('    AetherDynHeader* hdr = arr ? ((AetherDynHeader*)arr - 1) : NULL;');
+    Emit('    size_t old_cap = hdr ? hdr->cap : 0;');
+    Emit('    size_t old_len = hdr ? hdr->len : 0;');
+    Emit('    if (new_len > old_cap || !hdr) {');
+    Emit('        size_t new_cap = old_cap == 0 ? 8 : old_cap;');
+    Emit('        while (new_cap < new_len) new_cap *= 2;');
+    Emit('        AetherDynHeader* new_hdr = (AetherDynHeader*)realloc(hdr, sizeof(AetherDynHeader) + new_cap * elem_size);');
+    Emit('        new_hdr->cap = new_cap;');
+    Emit('        hdr = new_hdr;');
+    Emit('    }');
+    Emit('    if (new_len > old_len) {');
+    Emit('        memset((char*)(hdr + 1) + old_len * elem_size, 0, (new_len - old_len) * elem_size);');
+    Emit('    }');
+    Emit('    hdr->len = new_len;');
+    Emit('    return (void*)(hdr + 1);');
+    Emit('}');
+    Emit('');
+    if Pos('AetherDynDelete', ReachText) > 0 then
+    begin
+      Emit('static inline void* AetherDynDelete(void* arr, size_t elem_size, int64_t idx) {');
+      Emit('    size_t n = AetherDynLen(arr);');
+      Emit('    if (!arr || idx < 0 || (size_t)idx >= n) return arr;');
+      Emit('    char* p = (char*)arr;');
+      Emit('    size_t tail = (n - 1 - (size_t)idx) * elem_size;');
+      Emit('    char* dst = p + (size_t)idx * elem_size;');
+      Emit('    char* src = dst + elem_size;');
+      Emit('    for (size_t i = 0; i < tail; i++) dst[i] = src[i];');
+      Emit('    return AetherDynSetLength(arr, elem_size, n - 1);');
+      Emit('}');
+      Emit('');
+    end;
+    if Pos('AetherDynSlice', ReachText) > 0 then
+    begin
+      Emit('static inline void* AetherDynSlice(const void* arr, size_t elem_size, int64_t start, int64_t count) {');
+      Emit('    size_t n = AetherDynLen(arr);');
+      Emit('    if (!arr || count <= 0 || start >= (int64_t)n) {');
+      Emit('        return AetherDynSetLength(NULL, elem_size, 0);');
+      Emit('    }');
+      Emit('    if (start < 0) { count += start; start = 0; }');
+      Emit('    if (count <= 0) return AetherDynSetLength(NULL, elem_size, 0);');
+      Emit('    size_t actual = (size_t)count;');
+      Emit('    if ((size_t)start + actual > n) actual = n - (size_t)start;');
+      Emit('    void* res = AetherDynSetLength(NULL, elem_size, actual);');
+      Emit('    memcpy(res, (const char*)arr + (size_t)start * elem_size, actual * elem_size);');
+      Emit('    return res;');
+      Emit('}');
+      Emit('');
+    end;
+  end;
+
+  if NeedRaise then
+  begin
+    Emit('#if defined(__wasm__)');
+    Emit('static inline void AetherRaise(const char* msg) { (void)msg; }');
+    Emit('#else');
+    Emit('static jmp_buf g_aether_jmp_stack[32];');
+    Emit('static int g_aether_jmp_top = 0;');
+    Emit('static const char* g_aether_last_exception = "";');
+    Emit('static __attribute__((noinline, noreturn)) void AetherRaise(const char* msg) {');
+    Emit('    g_aether_last_exception = msg ? msg : "Exception";');
+    Emit('    if (g_aether_jmp_top > 0) {');
+    Emit('        longjmp(g_aether_jmp_stack[--g_aether_jmp_top], 1);');
+    Emit('    } else {');
+    Emit('        fprintf(stderr, "Unhandled Exception: %s\n", g_aether_last_exception);');
+    Emit('        exit(1);');
+    Emit('    }');
+    Emit('}');
+    Emit('#endif');
+    Emit('');
+  end;
+
+  if Pos('AetherFloatToStr', ReachText) > 0 then
+  begin
+    Emit('static inline char* AetherFloatToStr(double val) {');
+    Emit('    char* buf = (char*)malloc(32);');
+    Emit('    snprintf(buf, 32, "%g", val);');
+    Emit('    return buf;');
+    Emit('}');
+    Emit('');
+  end;
+
+  if Pos('AetherBoolToStr', ReachText) > 0 then
+  begin
+    Emit('static inline char* AetherBoolToStr(bool val) {');
+    Emit('    return val ? (char*)"true" : (char*)"false";');
+    Emit('}');
+    Emit('');
+  end;
+
+  if Pos('AetherStrToInt', ReachText) > 0 then
+  begin
+    Emit('static inline int32_t AetherStrToInt(const char* s) {');
+    Emit('#if defined(__wasm__)');
+    Emit('    if (!s) return 0;');
+    Emit('    int32_t res = 0; int sign = 1; size_t i = 0;');
+    Emit('    if (s[0] == ''-'') { sign = -1; i = 1; }');
+    Emit('    for (; s[i] >= ''0'' && s[i] <= ''9''; i++) { res = res * 10 + (s[i] - ''0''); }');
+    Emit('    return res * sign;');
+    Emit('#else');
+    Emit('    if (!s) return 0;');
+    Emit('    return (int32_t)atoi(s);');
+    Emit('#endif');
+    Emit('}');
+    Emit('');
+  end;
+
+  if NeedJson then
+  begin
+    Emit('static inline char* AetherJsonExtractRaw(const char* json, const char* key) {');
+    Emit('    if (!json || !key) { char* e = (char*)malloc(1); e[0] = ''\0''; return e; }');
+    Emit('    size_t klen = strlen(key);');
+    Emit('    size_t jlen = strlen(json);');
+    Emit('    for (size_t i = 0; i + klen + 2 <= jlen; i++) {');
+    Emit('        if (json[i] == ''"'' && strncmp(json + i + 1, key, klen) == 0 && json[i + 1 + klen] == ''"'') {');
+    Emit('            size_t p = i + 2 + klen;');
+    Emit('            while (p < jlen && (json[p] == '' '' || json[p] == ''\t'' || json[p] == ''\n'' || json[p] == ''\r'')) p++;');
+    Emit('            if (p < jlen && json[p] == '':'') {');
+    Emit('                p++;');
+    Emit('                while (p < jlen && (json[p] == '' '' || json[p] == ''\t'' || json[p] == ''\n'' || json[p] == ''\r'')) p++;');
+    Emit('                size_t start = p;');
+    Emit('                if (p < jlen && json[p] == ''"'') {');
+    Emit('                    p++;');
+    Emit('                    while (p < jlen) {');
+    Emit('                        if (json[p] == ''"'' && json[p - 1] != ''\\'') { p++; break; }');
+    Emit('                        p++;');
+    Emit('                    }');
+    Emit('                } else if (p < jlen && json[p] == ''{'') {');
+    Emit('                    int depth = 0;');
+    Emit('                    bool in_str = false;');
+    Emit('                    while (p < jlen) {');
+    Emit('                        if (json[p] == ''"'' && (p == 0 || json[p - 1] != ''\\'')) in_str = !in_str;');
+    Emit('                        else if (!in_str) {');
+    Emit('                            if (json[p] == ''{'') depth++;');
+    Emit('                            else if (json[p] == ''}'') { depth--; if (depth == 0) { p++; break; } }');
+    Emit('                        }');
+    Emit('                        p++;');
+    Emit('                    }');
+    Emit('                } else {');
+    Emit('                    while (p < jlen && json[p] != '','' && json[p] != ''}'' && json[p] != '']'' &&');
+    Emit('                           json[p] != '' '' && json[p] != ''\t'' && json[p] != ''\n'' && json[p] != ''\r'') p++;');
+    Emit('                }');
+    Emit('                size_t rlen = p - start;');
+    Emit('                char* res = (char*)malloc(rlen + 1);');
+    Emit('                if (rlen > 0) memcpy(res, json + start, rlen);');
+    Emit('                res[rlen] = ''\0'';');
+    Emit('                return res;');
+    Emit('            }');
+    Emit('        }');
+    Emit('    }');
+    Emit('    char* empty = (char*)malloc(1);');
+    Emit('    empty[0] = ''\0'';');
+    Emit('    return empty;');
+    Emit('}');
+    Emit('');
+    Emit('static inline char* AetherJsonGetStr(const char* json, const char* key) {');
+    Emit('    char* raw = AetherJsonExtractRaw(json, key);');
+    Emit('    size_t len = strlen(raw);');
+    Emit('    if (len >= 2 && raw[0] == ''"'' && raw[len - 1] == ''"'') {');
+    Emit('        memmove(raw, raw + 1, len - 2);');
+    Emit('        raw[len - 2] = ''\0'';');
+    Emit('    }');
+    Emit('    return raw;');
+    Emit('}');
+    Emit('');
+    Emit('static inline int32_t AetherJsonGetInt(const char* json, const char* key) {');
+    Emit('    char* raw = AetherJsonExtractRaw(json, key);');
+    Emit('    int32_t val = raw[0] ? (int32_t)strtoll(raw, NULL, 10) : 0;');
+    Emit('    free(raw);');
+    Emit('    return val;');
+    Emit('}');
+    Emit('');
+    Emit('static inline double AetherJsonGetFloat(const char* json, const char* key) {');
+    Emit('    char* raw = AetherJsonExtractRaw(json, key);');
+    Emit('    double val = raw[0] ? strtod(raw, NULL) : 0.0;');
+    Emit('    free(raw);');
+    Emit('    return val;');
+    Emit('}');
+    Emit('');
+    Emit('static inline bool AetherJsonGetBool(const char* json, const char* key) {');
+    Emit('    char* raw = AetherJsonExtractRaw(json, key);');
+    Emit('    bool val = (strcmp(raw, "true") == 0);');
+    Emit('    free(raw);');
+    Emit('    return val;');
+    Emit('}');
+    Emit('');
+    Emit('static inline char AetherJsonGetChar(const char* json, const char* key) {');
+    Emit('    char* raw = AetherJsonGetStr(json, key);');
+    Emit('    char c = raw[0];');
+    Emit('    free(raw);');
+    Emit('    return c;');
+    Emit('}');
+    Emit('');
+    Emit('static inline bool AetherJsonHasValue(const char* json, const char* key) {');
+    Emit('    char* raw = AetherJsonExtractRaw(json, key);');
+    Emit('    bool ok = (raw[0] != ''\0'') && (strcmp(raw, "null") != 0);');
+    Emit('    free(raw);');
+    Emit('    return ok;');
+    Emit('}');
+    Emit('');
+    Emit('static inline char* AetherJsonGetObj(const char* json, const char* key) {');
+    Emit('    return AetherJsonExtractRaw(json, key);');
+    Emit('}');
+    Emit('');
+  end;
+
+  if FNeedCliArgs then
+  begin
+    Emit('// Helpers de Linha de Comando');
+    Emit('static int g_aether_argc = 0;');
+    Emit('static char** g_aether_argv = NULL;');
+    Emit('');
+    Emit('static inline int32_t AetherParamCount(void) {');
+    Emit('    return g_aether_argc > 0 ? (int32_t)(g_aether_argc - 1) : 0;');
+    Emit('}');
+    Emit('');
+    Emit('static inline char* AetherParamStr(int32_t idx) {');
+    Emit('    if (idx < 0 || idx >= g_aether_argc || !g_aether_argv) {');
+    Emit('        char* empty = (char*)malloc(1);');
+    Emit('        empty[0] = ''\0'';');
+    Emit('        return empty;');
+    Emit('    }');
+    Emit('    size_t len = strlen(g_aether_argv[idx]);');
+    Emit('    char* copy = (char*)malloc(len + 1);');
+    Emit('    memcpy(copy, g_aether_argv[idx], len);');
+    Emit('    copy[len] = ''\0'';');
+    Emit('    return copy;');
+    Emit('}');
+    Emit('');
+  end;
+
+  if NeedSockets then
+  begin
+    Emit('// Helpers de Sockets Aether');
+    Emit('#if defined(__wasm__)');
+    Emit('static inline int32_t AetherSocketCreate(void) { return -1; }');
+    Emit('static inline int32_t AetherSocketListen(uint16_t port, int32_t backlog) { (void)port; (void)backlog; return -1; }');
+    Emit('static inline int32_t AetherSocketAccept(int32_t listen_fd) { (void)listen_fd; return -1; }');
+    Emit('static inline int32_t AetherSocketConnect(const char* host, uint16_t port) { (void)host; (void)port; return -1; }');
+    Emit('static inline int32_t AetherSocketSend(int32_t fd, const char* data) { (void)fd; (void)data; return 0; }');
+    Emit('static inline char* AetherSocketRecv(int32_t fd, int32_t max_len) { (void)fd; (void)max_len; char* b = (char*)malloc(1); if (b) b[0] = ''\0''; return b; }');
+    Emit('static inline void AetherSocketClose(int32_t fd) { (void)fd; }');
+    Emit('#else');
+    Emit('#ifdef _WIN32');
+    Emit('static inline void AetherSocketInit(void) {');
+    Emit('    static int wsa_init = 0;');
+    Emit('    if (!wsa_init) {');
+    Emit('        WSADATA wsa;');
+    Emit('        WSAStartup(MAKEWORD(2, 2), &wsa);');
+    Emit('        wsa_init = 1;');
+    Emit('    }');
+    Emit('}');
+    Emit('#endif');
+    Emit('');
+    Emit('static inline int32_t AetherSocketCreate(void) {');
+    Emit('#ifdef _WIN32');
+    Emit('    AetherSocketInit();');
+    Emit('#endif');
+    Emit('    return (int32_t)socket(AF_INET, SOCK_STREAM, 0);');
+    Emit('}');
+    Emit('');
+    Emit('static inline int32_t AetherSocketListen(uint16_t port, int32_t backlog) {');
+    Emit('#ifdef _WIN32');
+    Emit('    AetherSocketInit();');
+    Emit('#endif');
+    Emit('    int fd = socket(AF_INET, SOCK_STREAM, 0);');
+    Emit('    if (fd < 0) return -1;');
+    Emit('    int opt = 1;');
+    Emit('    setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, (const char*)&opt, sizeof(opt));');
+    Emit('    struct sockaddr_in addr;');
+    Emit('    memset(&addr, 0, sizeof(addr));');
+    Emit('    addr.sin_family = AF_INET;');
+    Emit('    addr.sin_port = htons(port);');
+    Emit('    addr.sin_addr.s_addr = INADDR_ANY;');
+    Emit('    if (bind(fd, (struct sockaddr*)&addr, sizeof(addr)) != 0) {');
+    Emit('#ifdef _WIN32');
+    Emit('        closesocket(fd);');
+    Emit('#else');
+    Emit('        close(fd);');
+    Emit('#endif');
+    Emit('        return -1;');
+    Emit('    }');
+    Emit('    if (listen(fd, backlog) != 0) {');
+    Emit('#ifdef _WIN32');
+    Emit('        closesocket(fd);');
+    Emit('#else');
+    Emit('        close(fd);');
+    Emit('#endif');
+    Emit('        return -1;');
+    Emit('    }');
+    Emit('    return (int32_t)fd;');
+    Emit('}');
+    Emit('');
+    Emit('static inline int32_t AetherSocketAccept(int32_t listen_fd) {');
+    Emit('    struct sockaddr_in addr;');
+    Emit('    socklen_t len = sizeof(addr);');
+    Emit('    int client_fd = accept(listen_fd, (struct sockaddr*)&addr, &len);');
+    Emit('    return (int32_t)client_fd;');
+    Emit('}');
+    Emit('');
+    Emit('static inline int32_t AetherSocketConnect(const char* host, uint16_t port) {');
+    Emit('#ifdef _WIN32');
+    Emit('    AetherSocketInit();');
+    Emit('#endif');
+    Emit('    int fd = socket(AF_INET, SOCK_STREAM, 0);');
+    Emit('    if (fd < 0) return -1;');
+    Emit('    struct sockaddr_in addr;');
+    Emit('    memset(&addr, 0, sizeof(addr));');
+    Emit('    addr.sin_family = AF_INET;');
+    Emit('    addr.sin_port = htons(port);');
+    Emit('    addr.sin_addr.s_addr = inet_addr(host ? host : "127.0.0.1");');
+    Emit('    if (connect(fd, (struct sockaddr*)&addr, sizeof(addr)) != 0) {');
+    Emit('#ifdef _WIN32');
+    Emit('        closesocket(fd);');
+    Emit('#else');
+    Emit('        close(fd);');
+    Emit('#endif');
+    Emit('        return -1;');
+    Emit('    }');
+    Emit('    return (int32_t)fd;');
+    Emit('}');
+    Emit('');
+    Emit('static inline int32_t AetherSocketSend(int32_t fd, const char* data) {');
+    Emit('    if (!data) return 0;');
+    Emit('    size_t len = strlen(data);');
+    Emit('    if (len == 0) return 0;');
+    Emit('    return (int32_t)send(fd, data, (int)len, 0);');
+    Emit('}');
+    Emit('');
+    Emit('static inline char* AetherSocketRecv(int32_t fd, int32_t max_len) {');
+    Emit('    if (max_len <= 0) max_len = 4096;');
+    Emit('    char* buf = (char*)malloc(max_len + 1);');
+    Emit('    int bytes = recv(fd, buf, max_len, 0);');
+    Emit('    if (bytes > 0) {');
+    Emit('        buf[bytes] = ''\0'';');
+    Emit('        return buf;');
+    Emit('    } else {');
+    Emit('        buf[0] = ''\0'';');
+    Emit('        return buf;');
+    Emit('    }');
+    Emit('}');
+    Emit('');
+    Emit('static inline void AetherSocketClose(int32_t fd) {');
+    Emit('    if (fd >= 0) {');
+    Emit('#ifdef _WIN32');
+    Emit('        closesocket(fd);');
+    Emit('#else');
+    Emit('        close(fd);');
+    Emit('#endif');
+    Emit('    }');
+    Emit('}');
+    Emit('#endif // !__wasm__');
+    Emit('');
+  end;
+
+  if NeedResult then
+  begin
+    Emit('typedef struct {');
+    Emit('    bool is_ok;');
+    Emit('    bool is_err;');
+    Emit('    double value;');
+    Emit('    int error;');
+    Emit('    const char* str_val;');
+    Emit('    const char* err_str;');
+    Emit('} AetherResult;');
+    Emit('');
+  end;
+
+  if NeedOption then
+  begin
+    Emit('typedef struct {');
+    Emit('    bool is_some;');
+    Emit('    bool is_none;');
+    Emit('    double num_val;');
+    Emit('    const char* str_val;');
+    Emit('} AetherOption;');
+    Emit('');
+  end;
+
   EmitMapRuntimeDecls(MapTags, MapKeys, MapVals, True);
 
   // Constantes
   for I := 0 to AModule.Constants.Count - 1 do
-  begin
-    ConstDecl := TASTConstDecl(AModule.Constants[I]);
-    if (ConstDecl.TypeName = 'String') or (GetExprTypeName(ConstDecl.ValueExpr) = 'String') then
-      Emit(Format('static const char* const %s = %s;', [ConstDecl.Name, EmitExpr(ConstDecl.ValueExpr)]))
-    else
-      Emit(Format('static const %s %s = %s;', [EmitTypeRef(ConstDecl.TypeName), ConstDecl.Name, EmitExpr(ConstDecl.ValueExpr)]));
-  end;
-  if AModule.Constants.Count > 0 then Emit('');
+    if ConstUsed[I] then
+      Emit(ConstBodies[I]);
+  if UsedConstCount > 0 then Emit('');
 
   // Typedefs antecipados para permitir records recursivos
-  for I := 0 to AModule.Types.Count - 1 do
+  if UsedTypeCount > 0 then
   begin
-    if AModule.Types[I] is TASTRecordDecl then
+    for I := 0 to AModule.Types.Count - 1 do
     begin
-      Emit(Format('typedef struct T%s T%s;', [TASTRecordDecl(AModule.Types[I]).Name, TASTRecordDecl(AModule.Types[I]).Name]));
-      Emit(Format('typedef T%s* PT%s;', [TASTRecordDecl(AModule.Types[I]).Name, TASTRecordDecl(AModule.Types[I]).Name]));
+      if TypeUsed[I] and (AModule.Types[I] is TASTRecordDecl) then
+      begin
+        Emit(Format('typedef struct T%s T%s;', [TASTRecordDecl(AModule.Types[I]).Name, TASTRecordDecl(AModule.Types[I]).Name]));
+        Emit(Format('typedef T%s* PT%s;', [TASTRecordDecl(AModule.Types[I]).Name, TASTRecordDecl(AModule.Types[I]).Name]));
+      end;
     end;
+    Emit('');
   end;
-  Emit('');
 
   // Tipos
   for I := 0 to AModule.Types.Count - 1 do
   begin
+    if not TypeUsed[I] then Continue;
     if AModule.Types[I] is TASTRecordDecl then
       EmitRecordDecl(TASTRecordDecl(AModule.Types[I]))
     else if AModule.Types[I] is TASTEnumDecl then
@@ -4193,14 +4524,15 @@ begin
   end;
   EmitMapRuntimeDecls(MapTags, MapKeys, MapVals, False);
   for I := 0 to AModule.Types.Count - 1 do
-    if AModule.Types[I] is TASTMapDecl then
+    if TypeUsed[I] and (AModule.Types[I] is TASTMapDecl) then
       EmitMapDecl(TASTMapDecl(AModule.Types[I]));
-  Emit('');
+  if (UsedTypeCount > 0) or (MapTags.Count > 0) then Emit('');
 
-  // Construtores AetherBox para Records
+  // Construtores AetherBox para Records (sob demanda)
   for I := 0 to AModule.Types.Count - 1 do
   begin
-    if AModule.Types[I] is TASTRecordDecl then
+    if TypeUsed[I] and (AModule.Types[I] is TASTRecordDecl) and
+       (Pos('AetherBox_T' + TASTRecordDecl(AModule.Types[I]).Name, ReachText) > 0) then
     begin
       Emit(Format('static inline PT%s AetherBox_T%s(T%s V) {', [TASTRecordDecl(AModule.Types[I]).Name, TASTRecordDecl(AModule.Types[I]).Name, TASTRecordDecl(AModule.Types[I]).Name]));
       Emit(Format('    PT%s p = (PT%s)malloc(sizeof(T%s));', [TASTRecordDecl(AModule.Types[I]).Name, TASTRecordDecl(AModule.Types[I]).Name, TASTRecordDecl(AModule.Types[I]).Name]));
@@ -4213,48 +4545,16 @@ begin
 
   EmitMapRuntimeHelpers(MapTags, MapKeys, MapVals);
 
-  // Prototipos antecipados de todas as funcoes
+  // Prototipos antecipados de todas as funcoes usadas
   for I := 0 to AModule.Functions.Count - 1 do
-  begin
-    Func := TASTFunction(AModule.Functions[I]);
-    if SameText(Func.Name, 'Abs') or SameText(Func.Name, 'Min') or SameText(Func.Name, 'Max') or SameText(Func.Name, 'Clamp') then
-      Continue;
-    if (not Func.IsExtern) and (Func.GenericParam = '') then
-    begin
-      ParamListStr := '';
-      for J := 0 to Func.Params.Count - 1 do
-      begin
-        Param := TASTParam(Func.Params[J]);
-        ModStr := '';
-        if Param.Ownership = owMutBorrow then
-          ModStr := '*'
-        else if Param.Ownership = owBorrow then
-          ModStr := '';
-        ParamListStr := ParamListStr + Format('%s %s%s', [EmitTypeRef(Param.TypeName), ModStr, Param.Name]);
-        if J < Func.Params.Count - 1 then
-          ParamListStr := ParamListStr + ', ';
-      end;
-      ExportPrefix := '';
-      if Func.InlineMode = 'always' then
-        ExportPrefix := 'static inline __attribute__((always_inline)) '
-      else if Func.InlineMode = 'never' then
-        ExportPrefix := '__attribute__((noinline)) ';
-      if Func.IsCold then
-        ExportPrefix := ExportPrefix + '__attribute__((cold)) ';
-      if Func.IsExport then ExportPrefix := ExportPrefix + 'AETHER_EXPORT ';
-      if Func.IsAsync then
-        Emit(Format('%sAetherTask %s(%s);', [ExportPrefix, Func.Name, ParamListStr]))
-      else if (Func.ReturnType = 'Void') or (Func.ReturnType = '') then
-        Emit(Format('%svoid %s(%s);', [ExportPrefix, Func.Name, ParamListStr]))
-      else
-        Emit(Format('%s%s %s(%s);', [ExportPrefix, EmitTypeRef(Func.ReturnType), Func.Name, ParamListStr]));
-    end;
-  end;
+    if FuncUsed[I] and (FuncProtos[I] <> '') then
+      Emit(FuncProtos[I]);
   Emit('');
 
   // Funções
   for I := 0 to AModule.Functions.Count - 1 do
-    EmitFunction(TASTFunction(AModule.Functions[I]));
+    if FuncUsed[I] then
+      EmitFunction(TASTFunction(AModule.Functions[I]));
 
   // Bloco do Programa
   if Assigned(AModule.ProgramBlock) then

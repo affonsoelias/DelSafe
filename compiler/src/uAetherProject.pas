@@ -846,10 +846,10 @@ begin
     PathsObj.Add('shared_libs', TJSONArray.Create);
     ConfigObj.Add('paths', PathsObj);
 
-    // Seção 'outputs' para configuração de diretórios de saída e BlaiseVue
+    // Seção 'outputs' para configuração de diretórios de saída do projeto
     OutputsObj := TJSONObject.Create;
     OutputsObj.Add('bin_dir', 'bin');
-    OutputsObj.Add('pascal_src_dir', '.blaisevue/generated');
+    OutputsObj.Add('pascal_src_dir', 'build/pascal');
     OutputsObj.Add('pascal_unit_dir', 'build/units');
     OutputsObj.Add('c_src_dir', 'build/c');
     OutputsObj.Add('as_unit', false);
@@ -866,7 +866,6 @@ begin
     'module Main;' + LineEnding +
     '' + LineEnding +
     'import Math;' + LineEnding +
-    'import IO;' + LineEnding +
     '' + LineEnding +
     'program Main;' + LineEnding +
     'var' + LineEnding +
@@ -912,7 +911,9 @@ begin
   GitignoreFile := TargetDir + PathDelim + '.gitignore';
   WriteStringToFile(GitignoreFile,
     'bin/' + LineEnding +
+    'build/' + LineEnding +
     'generated/' + LineEnding +
+    '.aether/' + LineEnding +
     '*.exe' + LineEnding +
     '*.o' + LineEnding +
     '*.ppu' + LineEnding +
@@ -1278,7 +1279,7 @@ begin
 
   WriteLn('========================================================');
   WriteLn('  Aether Security Audit (aetherc audit)                 ');
-  WriteLn('  Protecao de Integridade e Supply Chain (BlaiseVue)    ');
+  WriteLn('  Protecao de Integridade e Supply Chain (Aether Guard) ');
   WriteLn('========================================================');
 
   LockObj := LoadLockfile(Config.RootDir);
@@ -1364,7 +1365,7 @@ begin
     WriteLn(Format(' Resultados: %d pacotes auditados | %d adulteracoes | %d alertas', [Length(Config.Dependencies), TamperCount, WarningsCount]));
     if (TamperCount = 0) and (WarningsCount = 0) then
     begin
-      WriteLn(' Status: AMBIENTE SEGURO (BlaiseVue Verified)');
+      WriteLn(' Status: AMBIENTE SEGURO (Aether Verified)');
     end
     else if TamperCount > 0 then
     begin
