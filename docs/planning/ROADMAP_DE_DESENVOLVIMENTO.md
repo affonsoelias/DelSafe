@@ -912,3 +912,34 @@ Mapeamento técnico completo dos recursos pendentes identificados no compilador 
   - Emitir declarações de `enum`, `type alias`, `subrange` e `array` fixo nos arquivos `.h` gerados além de `record`s e funções exportadas.
 - [x] **8.3 Desambiguação UFCS & Indexação Direta em Literais (`uAetherParser.pas` / `uAetherTypeChecker.pas`)**:
   - Permitir postfixos (`.Method()`, `.Field`, `[i]`, `^`) diretamente sobre literais numéricos/string/array e expressões parentizadas (`55.Clamp(0, 40)`, `(-42).Abs()`, `"  aether  ".Trim()`, `"Aether"[0]`, `[10, 20, 30][1]`). Validado em `tests/11_fase50_56_contracts_ensure_ufcs_lit_fmt_header_test.aeth` (`11/11 PASS` nos dois backends).
+
+---
+
+### 📋 Fase 57: Evolução Sintática Ada + Object Pascal (`procedure`, `return T is`, `end Nome;`, Units `interface`/`implementation` — Corte Limpo Exclusivo) - PLANEJADA
+
+> **Decisões de Design Fechadas (Sem Retrocompatibilidade)**:
+> - **Parâmetros com Posse Estilo Rust Mantidos**: Mantêm-se integralmente os modificadores de posse declarados pelo programador (`borrow`, `mut borrow`, `take` e futuros modificadores), com suporte a agrupamento de parâmetros do mesmo tipo e posse (ex.: `function Distancia(borrow a, b: Ponto) return Float64;`).
+> - **Sintaxe Exclusiva (Hard Cutover)**: O compilador passará a aceitar **exclusivamente a nova sintaxe** Ada + Object Pascal; a sintaxe legada (`function ...: Tipo`, `function ...: Void`, fechamento `end;` anônimo em funções/módulos e units sem `interface`/`implementation`) será removida e rejeitada com erro de sintaxe claro.
+
+- [ ] **57.1 Tokens, AST e Parser Estrito (`procedure`, `return T is`, `end Nome;` e `end Modulo.`)**:
+  - Adicionar em `uAetherTokens.pas` e `uAetherLexer.pas` os tokens: `tokProcedure` (`procedure`), `tokIs` (`is`), `tokInterface` (`interface`), `tokImplementation` (`implementation`), `tokInitialization` (`initialization`) e `tokFinalization` (`finalization`).
+  - Em `uAetherAST.pas`, adicionar `IsProcedure: Boolean` em `TASTFunction`.
+  - Em `uAetherParser.pas`:
+    - **`procedure`**: `procedure Nome[(params)] is [contract/var/let] begin ... end Nome;` (sem retorno; parênteses opcionais quando não há parâmetros).
+    - **`function`**: `function Nome(params) return Tipo is [contract/var/let] begin ... end Nome;` (exigindo `return Tipo is` e proibindo `Void` como tipo de retorno de `function`).
+    - **Agrupamento de Parâmetros com Posse Explícita**: aceitar `[borrow | mut borrow | take] a, b: Tipo` no mesmo grupo.
+    - **Fechamento Nomeado Obrigatório**: validar que toda `function` e `procedure` encerre exatamente com `end <Nome>;` e que todo programa (`module X; ... program Main; ... begin ... end X.`) e toda unit (`module X; interface ... implementation ... end X.`) encerre com `end <NomeDoModulo>.`, emitindo erro sintático imediato em caso de omissão ou divergência de nome.
+- [ ] **57.2 Estrutura de Unit Object Pascal (`interface`, `implementation`, `initialization`, `finalization`) & Semântica**:
+  - Em `uAetherAST.pas` e `uAetherParser.pas`: todo módulo sem `program Main;` torna-se uma **Unit estruturada** obrigatória contendo:
+    - `interface`: declarações públicas (`const`, `type`, `trait`, assinaturas de `function`/`procedure` terminadas em `;` com seus `contract require/ensure` declarados apenas na `interface`, sem duplicação no corpo). Tudo na `interface` recebe `IsPublic := True` automaticamente.
+    - `implementation`: declarações auxiliares privadas (visíveis apenas dentro da unit) e implementações `is ... begin ... end Nome;` das rotinas expostas na `interface`, reconciliando assinatura e contratos.
+    - Seções opcionais `initialization` e `finalization` antes de `end <NomeDoModulo>.`.
+  - Em `uAetherTypeChecker.pas`: proibir `return <expr>;` dentro de `procedure` (permitir apenas `return;` vazio), exigir tipo de retorno não-`Void` em `function` com `return` compatível em todos os caminhos, e validar fidelidade exata entre cabeçalhos da `interface` e corpos da `implementation`.
+  - Em `uAetherEmitterPascal.pas` e `uAetherEmitterC.pas`: emitir `initialization`/`finalization` nativamente no Object Pascal e via funções de inicialização/limpeza (`_aether_init_<Mod>()` / `_aether_fini_<Mod>()`) invocadas ordenadamente no início e fim do `main` / `atexit` no backend GCC C99.
+- [ ] **57.3 Atualização do Ferramental (`fmt`, `lint`, `doc`, `derives`, `aetherc new`)**:
+  - Atualizar `uAetherFormatter.pas` (`aetherc fmt`), `uAetherLinter.pas` (`aetherc lint`), `uAetherDoc.pas` (`aetherc doc`) e `uAetherDerives.pas` (geração de métodos `[derive(Debug, JSON, Clone, Equals)]` e `FromJSON` emitindo `procedure` / `function ... return ... is ... end Nome;`).
+  - Integrar com o item **7.7** em `uAetherProject.pas` (`aetherc new safira` → `src/safira.aeth` com `module Safira;`, `program Main;`, `end Safira.`).
+- [ ] **57.4 Migração Integral do Repositório (Hard Cutover) & Suíte de Testes**:
+  - Migrar toda a biblioteca padrão (`std/*.aeth`) para Units estruturadas (`interface`/`implementation` + `procedure`/`function ... return ... is ... end Nome;`).
+  - Migrar todos os testes existentes em `tests/*.aeth` e os materiais do curso em `docs/course/*.md`.
+  - Criar teste dedicado `tests/14_fase57_ada_syntax_units_test.aeth` validando `procedure`, `function ... return ... is`, `end Nome;`, `end Modulo.`, `interface`/`implementation`, `initialization`/`finalization`, agrupamento `borrow a, b: Tipo` e rejeição da sintaxe antiga em **Free Pascal e GCC C99**.
