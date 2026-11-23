@@ -2716,11 +2716,15 @@ procedure TAetherTypeChecker.RegisterFunctions(AModule: TASTModule);
 var
   I: Integer;
   Func: TASTFunction;
-  Sym: TSymbol;
+  Sym, ExistingSym: TSymbol;
 begin
   for I := 0 to AModule.Functions.Count - 1 do
   begin
     Func := TASTFunction(AModule.Functions[I]);
+    ExistingSym := FSymbols.Resolve(Func.Name);
+    // Preserva intrinsecos polimorficos embutidos na SymbolTable (Line = 0, Node = nil)
+    if Assigned(ExistingSym) and (ExistingSym.Kind = skFunction) and (ExistingSym.Line = 0) and (ExistingSym.Node = nil) then
+      Continue;
     Sym := TSymbol.Create(Func.Name, skFunction, Func.ReturnType, Func.Line, Func.Col, False, owNone, Func);
     Sym.IsPublic := Func.IsPublic;
     Sym.SourceModule := Func.SourceModule;

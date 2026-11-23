@@ -2995,6 +2995,7 @@ var
   SkipNames, AutoNames, AutoTypes: TStringList;
 begin
   if Func.GenericParam <> '' then Exit; // Molde generico nao emite codigo diretamente
+  if SameText(Func.Name, 'Abs') or SameText(Func.Name, 'Min') or SameText(Func.Name, 'Max') or SameText(Func.Name, 'Clamp') then Exit;
   FCurrentFunc := Func;
   if Func.IsExtern then
   begin
@@ -3218,6 +3219,8 @@ var
   Param: TASTParam;
   ParamListStr, ModStr, LibClause, ParamType, ExportClause: string;
 begin
+  if SameText(Func.Name, 'Abs') or SameText(Func.Name, 'Min') or SameText(Func.Name, 'Max') or SameText(Func.Name, 'Clamp') then
+    Exit('');
   if Func.IsExtern then
   begin
     if (Func.ExternAbi = 'pascal') or (Func.ExternLib = 'pascal') or (LowerCase(Func.ExternLib) = 'unit') then

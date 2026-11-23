@@ -1438,8 +1438,30 @@ Begin
   HasConfig := LoadProjectConfig(ProjConfig);
   If HasConfig Then
   Begin
+    InitGlobalPaths;
     RestoreProjectDependencies(ProjConfig);
     BaseDir := ProjConfig.RootDir;
+    For I := 0 To High(ProjConfig.PathsAether) Do
+      If ProjConfig.PathsAether[I] <> '' Then
+        GlobalIncludePaths.Add(ExpandFileName(ProjConfig.RootDir + PathDelim + ProjConfig.PathsAether[I]));
+    For I := 0 To High(ProjConfig.PathsCIncludes) Do
+      If ProjConfig.PathsCIncludes[I] <> '' Then
+        GlobalIncludePaths.Add(ExpandFileName(ProjConfig.RootDir + PathDelim + ProjConfig.PathsCIncludes[I]));
+    For I := 0 To High(ProjConfig.PathsCSources) Do
+      If ProjConfig.PathsCSources[I] <> '' Then
+        GlobalCSources.Add(ExpandFileName(ProjConfig.RootDir + PathDelim + ProjConfig.PathsCSources[I]));
+    For I := 0 To High(ProjConfig.PathsPascalUnits) Do
+      If ProjConfig.PathsPascalUnits[I] <> '' Then
+        GlobalPascalUnitPaths.Add(ExpandFileName(ProjConfig.RootDir + PathDelim + ProjConfig.PathsPascalUnits[I]));
+    For I := 0 To High(ProjConfig.PathsLibDirs) Do
+      If ProjConfig.PathsLibDirs[I] <> '' Then
+        GlobalLibDirs.Add(ExpandFileName(ProjConfig.RootDir + PathDelim + ProjConfig.PathsLibDirs[I]));
+    For I := 0 To High(ProjConfig.PathsLibs) Do
+      If ProjConfig.PathsLibs[I] <> '' Then
+        GlobalLibs.Add(ProjConfig.PathsLibs[I]);
+    For I := 0 To High(ProjConfig.PathsSharedLibs) Do
+      If ProjConfig.PathsSharedLibs[I] <> '' Then
+        GlobalSharedLibs.Add(ExpandFileName(ProjConfig.RootDir + PathDelim + ProjConfig.PathsSharedLibs[I]));
   End
   Else
     BaseDir := GetCurrentDir;
@@ -2567,8 +2589,13 @@ If (ParamCount >= 1) And ((LowerCase(ParamStr(1)) = 'build') Or (LowerCase(
                  , '/', PathDelim, [rfReplaceAll]);
     OutputExe := ProjConfig.RootDir + PathDelim + StringReplace(ProjConfig.
                  Output, '/', PathDelim, [rfReplaceAll]);
-    OptionTargetPascal := ProjConfig.Backend <> 'c';
+    If ProjConfig.Backend <> '' Then
+      GlobalTargetKind := LowerCase(ProjConfig.Backend)
+    Else
+      GlobalTargetKind := 'pascal';
+    OptionTargetPascal := GlobalTargetKind <> 'c';
     OptionIncremental := True; // Habilitado por padrão para projetos aether.json
+    InitGlobalPaths;
     RestoreProjectDependencies(ProjConfig);
 
     // Carrega caminhos declarados na secao 'paths' do aether.json

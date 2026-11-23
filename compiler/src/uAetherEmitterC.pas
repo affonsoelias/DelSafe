@@ -3213,6 +3213,7 @@ var
   SkipNames, AutoNames, AutoTypes: TStringList;
 begin
   if Func.GenericParam <> '' then Exit; // Molde generico nao emite codigo diretamente
+  if SameText(Func.Name, 'Abs') or SameText(Func.Name, 'Min') or SameText(Func.Name, 'Max') or SameText(Func.Name, 'Clamp') then Exit;
   if Func.IsExtern then
   begin
     if Func.ExternAbi = 'pascal' then
@@ -4216,6 +4217,8 @@ begin
   for I := 0 to AModule.Functions.Count - 1 do
   begin
     Func := TASTFunction(AModule.Functions[I]);
+    if SameText(Func.Name, 'Abs') or SameText(Func.Name, 'Min') or SameText(Func.Name, 'Max') or SameText(Func.Name, 'Clamp') then
+      Continue;
     if (not Func.IsExtern) and (Func.GenericParam = '') then
     begin
       ParamListStr := '';
