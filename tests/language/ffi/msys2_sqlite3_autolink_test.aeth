@@ -1,0 +1,35 @@
+module msys2_sqlite3_autolink_test;
+
+import Strings;
+
+extern c "sqlite3" function sqlite3_libversion() return String;
+extern c "sqlite3" function sqlite3_libversion_number() return Int32;
+extern c "sqlite3" function sqlite3_open(borrow filename: String; mut borrow ppDb: Pointer) return Int32;
+extern c "sqlite3" function sqlite3_exec(db: Pointer; borrow sql: String; cb, arg, errmsg: Pointer) return Int32;
+extern c "sqlite3" function sqlite3_close(db: Pointer) return Int32;
+
+program Main;
+var
+    ver: String;
+    ver_num, rc: Int32;
+    db: Pointer;
+begin
+    ver := sqlite3_libversion();
+    ver_num := sqlite3_libversion_number();
+    Assert(StrLen(borrow ver) >= 3);
+    Assert(StartsWith(borrow ver, borrow "3."));
+    Assert(ver_num >= 3000000);
+
+    db := nil;
+    rc := sqlite3_open(borrow ":memory:", mut borrow db);
+    Assert(rc = 0);
+    Assert(db <> nil);
+
+    rc := sqlite3_exec(db, borrow "CREATE TABLE items(id INT, name TEXT); INSERT INTO items VALUES(1, 'aether');", nil, nil, nil);
+    Assert(rc = 0);
+
+    rc := sqlite3_close(db);
+    Assert(rc = 0);
+
+    PrintLn("=== PHASE 59 TEST PASSED (MSYS2/PKG-CONFIG/AUTO-LINK SQLITE3 %s) ===", ver);
+end msys2_sqlite3_autolink_test.

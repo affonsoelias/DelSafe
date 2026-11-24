@@ -958,20 +958,34 @@ Mapeamento técnico completo dos recursos pendentes identificados no compilador 
 
 ---
 
-### 📋 Fase 59: Integração de Ecossistemas Nativos — MSYS2 / `pkg-config`, Auto-Bundle de DLLs e `fppkg`/Lazarus OPM - PLANEJADA
+### ✅ Fase 59: Integração de Ecossistemas Nativos — MSYS2 / `pkg-config`, Auto-Bundle de DLLs e `fppkg`/Lazarus OPM - CONCLUÍDA
 
 > **Objetivo**: Aproveitar diretamente pacotes C/C++ nativos (via **MSYS2/`pacman` + `pkg-config`** no Windows e gerenciadores nativos + `pkg-config` no Linux/macOS) e pacotes Pascal instalados via **`fppkg` / Lazarus OPM**, com resolução automática de flags, linkagem e empacotamento de DLLs sem exigir configuração manual por biblioteca.
 
-- [ ] **59.1 Resolução Universal de Bibliotecas C via `pkg-config` (`uAetherProject.pas`, `uAetherToolchain.pas`, `aetherc.lpr`)**:
-  - Adicionar suporte ao campo `"system_libs": ["sqlite3", ...]` no `aether.json`.
-  - Executar `pkg-config --cflags --libs <lib>` usando `MSYS2BinDir` no Windows (ou o ambiente nativo no Linux/macOS), injetando automaticamente as flags `-I`, `-D`, `-L` e `-l` no GCC/Clang e caminhos de biblioteca no Free Pascal.
-  - Exibir diagnóstico claro com o comando exato de instalação (ex.: `pacman -S mingw-w64-ucrt-x86_64-<pkg>`) caso a biblioteca não esteja instalada.
-- [ ] **59.2 Integração MSYS2 (`pacman`) & Auto-Bundle de DLLs no Windows (`uAetherProject.pas`, `uAetherToolchain.pas`)**:
-  - Adicionar subcomando de CLI `aetherc pkg add-sys <lib>` detectando o subsistema MSYS2 ativo (`ucrt64` / `mingw64` / `clang64`), instalando o pacote correspondente via `pacman -S --needed` e registrando-o em `system_libs` no `aether.json`.
-  - Implementar cópia automática de DLLs transitivas (`--bundle-dlls` / padrão em builds no Windows) via `ldd` ou `objdump -p` do MSYS2, copiando apenas as DLLs originárias do diretório `bin` do MSYS2 (ignorando DLLs de sistema do Windows) para a pasta do executável gerado.
-- [ ] **59.3 Descoberta e Integração de Pacotes Free Pascal (`fppkg` & Lazarus OPM)**:
-  - Estender `DetectToolchain` em `uAetherToolchain.pas` para detectar `fppkg` e os diretórios de units compiladas do `fppkg` e do Lazarus Online Package Manager (OPM).
-  - Suportar `"pascal_packages": [...]` no `aether.json`, resolvendo automaticamente os caminhos `-Fu` para `CompileWithFPC`, além do subcomando auxiliar `aetherc pkg add-fpc <pacote>`.
-- [ ] **59.4 Auto-Link de `extern c "<lib>"` & Pacotes Wrapper em Aether**:
-  - Propagar automaticamente declarações `extern c "<lib>"` encontradas nos módulos compilados para `-l<lib>` (ou consulta a `pkg-config` quando disponível) no backend GCC/Clang, dispensando repetição manual de flags de linker.
-  - Permitir que pacotes Wrapper Aether instalados via `aetherc pkg add` declarem `"system_libs"` e `"pascal_packages"` transitivos no próprio `aether.json` e expor testes de ponta a ponta (ex.: integração real com `sqlite3` do MSYS2).
+- [x] **59.1 Resolução Universal de Bibliotecas C via `pkg-config` (`uAetherProject.pas`, `uAetherToolchain.pas`, `aetherc.lpr`)**:
+  - Adicionado suporte ao campo `"system_libs": ["sqlite3", ...]` no `aether.json` e à flag `--sys-lib=<lib>` na CLI.
+  - Implementada execução de `pkg-config --cflags --libs <lib>` em `ResolvePkgConfigLib` usando `MSYS2BinDir` no Windows (ou o ambiente nativo no Linux/macOS), injetando automaticamente flags `-I`, `-D`/extras, `-L` e `-l` no GCC/Clang e caminhos `-Fl` no Free Pascal.
+  - Exibido diagnóstico claro com o comando exato de instalação (ex.: `pacman -S mingw-w64-ucrt-x86_64-<pkg>` e `aetherc pkg add-sys <lib>`) caso a biblioteca não esteja instalada.
+- [x] **59.2 Integração MSYS2 (`pacman`) & Auto-Bundle de DLLs no Windows (`uAetherProject.pas`, `uAetherToolchain.pas`)**:
+  - Adicionado subcomando `aetherc pkg add-sys <lib>` detectando o subsistema MSYS2 ativo (`ucrt64` / `mingw64` / `clang64`), instalando o pacote correspondente via `pacman -S --needed` e registrando-o em `system_libs` no `aether.json`.
+  - Implementado empacotamento transitivo automático de DLLs em `BundleMSYS2Dlls` (`--bundle-dlls` ativo por padrão no Windows / `--no-bundle-dlls`) via `objdump -p` e `dlltool -I` do MSYS2, copiando apenas as DLLs originárias do `MSYS2BinDir` (ignorando DLLs de sistema do Windows) para a pasta do executável gerado em ambos os backends.
+- [x] **59.3 Descoberta e Integração de Pacotes Free Pascal (`fppkg` & Lazarus OPM)**:
+  - Estendido `DetectToolchain` em `uAetherToolchain.pas` para detectar `fppkg`, diretório de units do FPC (`FpcUnitsDir`), repositório local do `fppkg` (`FppkgUnitsDir`) e pacotes do Lazarus Online Package Manager (`LazarusOpmDir`), com diagnóstico exibido em `aetherc --doctor`.
+  - Adicionado suporte a `"pascal_packages": [...]` no `aether.json`, `--fpc-pkg=<pkg>` e `aetherc pkg add-fpc <pacote>`, resolvendo automaticamente caminhos `-Fu` para `CompileWithFPC`.
+- [x] **59.4 Auto-Link de `extern c "<lib>"` & Pacotes Wrapper em Aether**:
+  - Propagação automática de declarações `extern c "<lib>"` e diretivas `import link` para resolução via `pkg-config` / `-l<lib>` + marshaling `PChar`/`String` e resolução automática de nomes de DLLs do MSYS2 no backend Free Pascal (`ResolveSystemLibDllName`).
+  - Propagação transitiva de `"system_libs"`, `"pascal_packages"` e `"paths"` a partir de dependências locais/cache em `CollectTransitiveNativeDeps`, validada ponta a ponta com `tests/language/ffi/msys2_sqlite3_autolink_test.aeth` (`FPC 28/28 | C99 28/28 PASS`) e fluxos de CLI `pkg add-sys` / `pkg add-fpc` / pacote wrapper `sqlite3`.
+
+---
+
+### ✅ Fase 60: Sistema Completo de Autoatualização (`aetherc upgrade`), Releases Multiplataforma & Instalador Oficial - CONCLUÍDA
+
+- [x] **60.1 Endurecimento do `aetherc upgrade` & Atualização Integral (`uAetherUpgrade.pas`, `aetherc.lpr`)**:
+  - Atualização atômica completa do executável (`bin/aetherc`) **e** da biblioteca padrão (`std/*.aeth`) com backup sincronizado (`.bak` e `std.bak`) e `--rollback` integral em ambos.
+  - Resolução do lock do executável no Windows durante `aetherc upgrade --from-source` (backup preventivo de `bin\aetherc.exe` antes do rebuild e restauração automática em caso de falha) + validação via `aetherc test --target=all`.
+  - Suporte real a canal `nightly` (`--nightly` / `--channel=nightly`), verificação criptográfica SHA-256 obrigatória por padrão (`--allow-unsigned` como escape explícito), suporte offline `--url=file:///...`, limpeza de temporários, `chmod +x` no POSIX, cache local `~/.aether/update_check.json` e CLI `-V` / `--version` unificada com `AETHER_COMPILER_VERSION`.
+- [x] **60.2 Empacotamento de Releases Multiplataforma & CI/CD (`scripts/package_release.*`, `.github/workflows/release.yml`)**:
+  - Criados `scripts/package_release.ps1` e `scripts/package_release.sh` para empacotar `bin/` + `std/` + `README.md`/`LICENSE` com geração de `.sha256` e `SHA256SUMS.txt`.
+  - Criado workflow `.github/workflows/release.yml` para build, testes e publicação automática de GitHub Releases (`windows-latest`, `ubuntu-latest`, `macos-latest`) em tags `v*.*.*`, agendamento semanal *nightly* e `workflow_dispatch`.
+- [x] **60.3 Instaladores Oficiais Multiplataforma (`scripts/install.ps1`, `scripts/install.sh`)**:
+  - Criados instaladores para Windows e Linux/macOS instalando em `~/.aether/bin` + `~/.aether/std` com validação SHA-256, seleção `--nightly`/`--version` e configuração de `PATH`, validados com testes automatizados offline de empacotamento, `--check`, `--nightly`, SHA-256 inválido (`E9991`), ausência de checksum (`E9992`), upgrade completo e `--rollback`.

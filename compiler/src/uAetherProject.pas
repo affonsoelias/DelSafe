@@ -55,12 +55,20 @@ type
     PathsLibDirs: TStringArray;
     PathsLibs: TStringArray;
     PathsSharedLibs: TStringArray;
+    SystemLibs: TStringArray;
+    PascalPackages: TStringArray;
+    BundleDlls: Boolean;
     Outputs: TAetherProjectOutputs;
     Targets: TAetherTargetArray;
   end;
 
 function FindProjectRoot(out RootDir, ConfigFile: string): Boolean;
 function LoadProjectConfig(out Config: TAetherProjectConfig): Boolean;
+function LoadProjectConfigFromFile(const ConfigFilePath: string; out Config: TAetherProjectConfig): Boolean;
+procedure CollectTransitiveNativeDeps(const Config: TAetherProjectConfig;
+                                      OutSysLibs, OutPasPkgs, OutAetherPaths, OutCIncludes,
+                                      OutCSources, OutPasUnits, OutLibDirs, OutLibs,
+                                      OutSharedLibs: TStrings);
 procedure CopySharedLibraries(const RootDir, OutExe: string; const SharedLibs: TStringArray);
 procedure CopySharedLibraries(const RootDir, OutExe: string; SharedLibsList: TStrings);
 function GetAetherCacheDir: string;
@@ -69,6 +77,8 @@ function SyncGitPackage(const PkgName, GitUrl, Version: string; out CacheDir: st
 procedure RestoreProjectDependencies(const Config: TAetherProjectConfig);
 procedure HandleProjectInit(const ProjectName: string);
 procedure HandleProjectAdd(const PkgName: string; const OptPath, OptGit, OptVer: string);
+procedure HandleProjectAddSys(const LibName: string; SkipInstall: Boolean = False);
+procedure HandleProjectAddFpc(const PkgName: string; SkipInstall: Boolean = False);
 procedure HandleProjectRemove(const PkgName: string);
 procedure HandleProjectUpdate(const PkgName: string);
 procedure HandleProjectAudit();
@@ -77,6 +87,9 @@ procedure HandleProjectCleanCache();
 procedure HandleProjectClean();
 
 implementation
+
+uses
+  uAetherToolchain;
 
 function RunGitProcess(const Params: string; var OutputLog: string): Integer;
 var
@@ -441,7 +454,7 @@ begin
       WriteLn(Format('   Checking nested dependencies in "%s/aether.json"...', [PkgName]));
       try
         // Load subpackage manifest
-        if LoadProjectConfig(SubConfig) then
+        if LoadProjectConfigFromFile(SubConfigFile, SubConfig) then
         begin
           for I := 0 to High(SubConfig.Dependencies) do
           begin
@@ -636,9 +649,9 @@ begin
   CopySharedLibraries(RootDir, OutExe, Arr);
 end;
 
-function LoadProjectConfig(out Config: TAetherProjectConfig): Boolean;
+function LoadProjectConfigFromFile(const ConfigFilePath: string; out Config: TAetherProjectConfig): Boolean;
 var
-  RootDir, ConfigFile, JsonStr: string;
+  RootDir, JsonStr: string;
   FileStream: TFileStream;
   StringStream: TStringStream;
   JSON, DepsData, ItemData, PathsData, OutputsData, TargetsData: TJSONData;
@@ -655,6 +668,9 @@ begin
   SetLength(Config.PathsLibDirs, 0);
   SetLength(Config.PathsLibs, 0);
   SetLength(Config.PathsSharedLibs, 0);
+  SetLength(Config.SystemLibs, 0);
+  SetLength(Config.PascalPackages, 0);
+  Config.BundleDlls := True;
   SetLength(Config.Targets, 0);
   Config.CCompiler := 'gcc';
   Config.Outputs.BinDir := '';
@@ -662,13 +678,15 @@ begin
   Config.Outputs.PascalUnitDir := '';
   Config.Outputs.CSrcDir := '';
   Config.Outputs.AsUnit := False;
-  if not FindProjectRoot(RootDir, ConfigFile) then
+  if not FileExists(ConfigFilePath) then
     Exit(False);
 
+  Config.ConfigFile := ExpandFileName(ConfigFilePath);
+  RootDir := ExtractFileDir(Config.ConfigFile);
+  if RootDir = '' then RootDir := GetCurrentDir;
   Config.RootDir := RootDir;
-  Config.ConfigFile := ConfigFile;
 
-  FileStream := TFileStream.Create(ConfigFile, fmOpenRead or fmShareDenyWrite);
+  FileStream := TFileStream.Create(Config.ConfigFile, fmOpenRead or fmShareDenyWrite);
   StringStream := TStringStream.Create('');
   try
     StringStream.CopyFrom(FileStream, FileStream.Size);
@@ -701,6 +719,10 @@ begin
         end
         else
           Config.Output := Obj.Get('output', 'bin' + PathDelim + Config.Name + '.exe');
+
+        ReadJsonStringArray(Obj, 'system_libs', Config.SystemLibs);
+        ReadJsonStringArray(Obj, 'pascal_packages', Config.PascalPackages);
+        Config.BundleDlls := Obj.Get('bundle_dlls', True);
 
         DepsData := Obj.Find('dependencies');
         if Assigned(DepsData) and (DepsData is TJSONObject) then
@@ -782,6 +804,132 @@ begin
   except
     on E: Exception do
       raise Exception.CreateFmt('Error reading manifest "aether.json": %s', [E.Message]);
+  end;
+end;
+
+function LoadProjectConfig(out Config: TAetherProjectConfig): Boolean;
+var
+  RootDir, ConfigFile: string;
+begin
+  if not FindProjectRoot(RootDir, ConfigFile) then
+  begin
+    SetLength(Config.Dependencies, 0);
+    SetLength(Config.SystemLibs, 0);
+    SetLength(Config.PascalPackages, 0);
+    Exit(False);
+  end;
+  Result := LoadProjectConfigFromFile(ConfigFile, Config);
+end;
+
+procedure AddUniqueProjStr(List: TStrings; const Val: string);
+var
+  T: string;
+  I: Integer;
+begin
+  if not Assigned(List) then Exit;
+  T := Trim(Val);
+  if T = '' then Exit;
+  for I := 0 to List.Count - 1 do
+    if SameText(List[I], T) then Exit;
+  List.Add(T);
+end;
+
+procedure CollectTransitiveNativeDepsRec(const Config: TAetherProjectConfig; Visited: TStrings;
+                                         OutSysLibs, OutPasPkgs, OutAetherPaths, OutCIncludes,
+                                         OutCSources, OutPasUnits, OutLibDirs, OutLibs,
+                                         OutSharedLibs: TStrings);
+var
+  I, J: Integer;
+  DepDir, SubManifest, RelP, FullP: string;
+  SubConfig: TAetherProjectConfig;
+begin
+  for I := 0 to High(Config.Dependencies) do
+  begin
+    if Visited.IndexOf(LowerCase(Config.Dependencies[I].Name)) >= 0 then Continue;
+    Visited.Add(LowerCase(Config.Dependencies[I].Name));
+
+    if Config.Dependencies[I].Path <> '' then
+      DepDir := ExpandFileName(Config.RootDir + PathDelim +
+                  StringReplace(Config.Dependencies[I].Path, '/', PathDelim, [rfReplaceAll]))
+    else
+    begin
+      DepDir := ExpandFileName(Config.RootDir + PathDelim + '.aether' + PathDelim + 'deps' +
+                  PathDelim + Config.Dependencies[I].Name);
+      if not DirectoryExists(DepDir) then
+        DepDir := GetAetherCacheDir + PathDelim + Config.Dependencies[I].Name;
+    end;
+
+    SubManifest := DepDir + PathDelim + 'aether.json';
+    if not FileExists(SubManifest) then Continue;
+
+    if LoadProjectConfigFromFile(SubManifest, SubConfig) then
+    begin
+      for J := 0 to High(SubConfig.SystemLibs) do
+        AddUniqueProjStr(OutSysLibs, SubConfig.SystemLibs[J]);
+      for J := 0 to High(SubConfig.PascalPackages) do
+        AddUniqueProjStr(OutPasPkgs, SubConfig.PascalPackages[J]);
+      for J := 0 to High(SubConfig.PathsAether) do
+      begin
+        RelP := Trim(SubConfig.PathsAether[J]);
+        if RelP <> '' then
+        begin
+          FullP := ExpandFileName(DepDir + PathDelim + StringReplace(RelP, '/', PathDelim, [rfReplaceAll]));
+          AddUniqueProjStr(OutAetherPaths, FullP);
+        end;
+      end;
+      for J := 0 to High(SubConfig.PathsCIncludes) do
+      begin
+        RelP := Trim(SubConfig.PathsCIncludes[J]);
+        if RelP <> '' then
+          AddUniqueProjStr(OutCIncludes, ExpandFileName(DepDir + PathDelim + StringReplace(RelP, '/', PathDelim, [rfReplaceAll])));
+      end;
+      for J := 0 to High(SubConfig.PathsCSources) do
+      begin
+        RelP := Trim(SubConfig.PathsCSources[J]);
+        if RelP <> '' then
+          AddUniqueProjStr(OutCSources, ExpandFileName(DepDir + PathDelim + StringReplace(RelP, '/', PathDelim, [rfReplaceAll])));
+      end;
+      for J := 0 to High(SubConfig.PathsPascalUnits) do
+      begin
+        RelP := Trim(SubConfig.PathsPascalUnits[J]);
+        if RelP <> '' then
+          AddUniqueProjStr(OutPasUnits, ExpandFileName(DepDir + PathDelim + StringReplace(RelP, '/', PathDelim, [rfReplaceAll])));
+      end;
+      for J := 0 to High(SubConfig.PathsLibDirs) do
+      begin
+        RelP := Trim(SubConfig.PathsLibDirs[J]);
+        if RelP <> '' then
+          AddUniqueProjStr(OutLibDirs, ExpandFileName(DepDir + PathDelim + StringReplace(RelP, '/', PathDelim, [rfReplaceAll])));
+      end;
+      for J := 0 to High(SubConfig.PathsLibs) do
+        AddUniqueProjStr(OutLibs, SubConfig.PathsLibs[J]);
+      for J := 0 to High(SubConfig.PathsSharedLibs) do
+      begin
+        RelP := Trim(SubConfig.PathsSharedLibs[J]);
+        if RelP <> '' then
+          AddUniqueProjStr(OutSharedLibs, ExpandFileName(DepDir + PathDelim + StringReplace(RelP, '/', PathDelim, [rfReplaceAll])));
+      end;
+
+      CollectTransitiveNativeDepsRec(SubConfig, Visited, OutSysLibs, OutPasPkgs, OutAetherPaths,
+                                     OutCIncludes, OutCSources, OutPasUnits, OutLibDirs, OutLibs, OutSharedLibs);
+    end;
+  end;
+end;
+
+procedure CollectTransitiveNativeDeps(const Config: TAetherProjectConfig;
+                                      OutSysLibs, OutPasPkgs, OutAetherPaths, OutCIncludes,
+                                      OutCSources, OutPasUnits, OutLibDirs, OutLibs,
+                                      OutSharedLibs: TStrings);
+var
+  Visited: TStringList;
+begin
+  Visited := TStringList.Create;
+  try
+    Visited.Add(LowerCase(Config.Name));
+    CollectTransitiveNativeDepsRec(Config, Visited, OutSysLibs, OutPasPkgs, OutAetherPaths,
+                                   OutCIncludes, OutCSources, OutPasUnits, OutLibDirs, OutLibs, OutSharedLibs);
+  finally
+    Visited.Free;
   end;
 end;
 
@@ -881,6 +1029,8 @@ begin
     PathsObj.Add('libs', TJSONArray.Create);
     PathsObj.Add('shared_libs', TJSONArray.Create);
     ConfigObj.Add('paths', PathsObj);
+    ConfigObj.Add('system_libs', TJSONArray.Create);
+    ConfigObj.Add('pascal_packages', TJSONArray.Create);
 
     // 'outputs' section for project output directories configuration
     OutputsObj := TJSONObject.Create;
@@ -1169,6 +1319,172 @@ begin
   WriteLn('--------------------------------------------------------');
 end;
 
+function AddUniqueStringToJsonArray(Obj: TJSONObject; const ArrayProp, ItemVal: string): Boolean;
+var
+  Data: TJSONData;
+  Arr: TJSONArray;
+  I: Integer;
+begin
+  Result := False;
+  Data := Obj.Find(ArrayProp);
+  if Assigned(Data) and (Data is TJSONArray) then
+    Arr := TJSONArray(Data)
+  else
+  begin
+    Arr := TJSONArray.Create;
+    if Assigned(Data) then Obj.Delete(Obj.IndexOfName(ArrayProp));
+    Obj.Add(ArrayProp, Arr);
+  end;
+  for I := 0 to Arr.Count - 1 do
+    if SameText(Arr.Strings[I], ItemVal) then Exit(False);
+  Arr.Add(ItemVal);
+  Result := True;
+end;
+
+procedure HandleProjectAddSys(const LibName: string; SkipInstall: Boolean = False);
+var
+  RootDir, ConfigFile, JsonStr, ErrMsg, InstallHint, InstalledPkg, OutLog: string;
+  FileStream: TFileStream;
+  StringStream: TStringStream;
+  JSON: TJSONData;
+  Obj: TJSONObject;
+  Info: TToolchainInfo;
+  IncDirs, ExtraFlags, LibDirs, Libs: TStringList;
+  Found: Boolean;
+begin
+  if Trim(LibName) = '' then
+    raise Exception.Create('System library name not provided. Usage: aetherc pkg add-sys <lib_name>');
+
+  if not FindProjectRoot(RootDir, ConfigFile) then
+    raise Exception.Create('No Aether project ("aether.json") found in the current directory. Run "aetherc new" first.');
+
+  Info := DetectToolchain;
+  IncDirs := TStringList.Create;
+  ExtraFlags := TStringList.Create;
+  LibDirs := TStringList.Create;
+  Libs := TStringList.Create;
+  try
+    Found := ResolvePkgConfigLib(LibName, Info, IncDirs, ExtraFlags, LibDirs, Libs, ErrMsg, InstallHint);
+    if (not Found) and (not SkipInstall) then
+    begin
+      {$IFDEF MSWINDOWS}
+      if Info.PacmanFound then
+      begin
+        WriteLn(Format('-> Installing MSYS2 package "%s" via pacman...', [MapLibToMSYS2Package(LibName, Info.MSYS2Subsystem)]));
+        if not InstallMSYS2SystemLib(LibName, Info, InstalledPkg, OutLog) then
+          raise Exception.CreateFmt('Failed to install MSYS2 package "%s": %s%s%s', [InstalledPkg, OutLog, LineEnding, InstallHint]);
+        WriteLn(Format('   [OK] Installed MSYS2 package "%s".', [InstalledPkg]));
+        Found := ResolvePkgConfigLib(LibName, Info, IncDirs, ExtraFlags, LibDirs, Libs, ErrMsg, InstallHint);
+      end;
+      {$ENDIF}
+      if not Found then
+        raise Exception.Create(ErrMsg + LineEnding + InstallHint);
+    end
+    else if (not Found) and SkipInstall then
+      WriteLn(Format('   [WARNING] "%s" not currently resolved by pkg-config (%s); adding to manifest anyway.', [LibName, ErrMsg]));
+  finally
+    Libs.Free;
+    LibDirs.Free;
+    ExtraFlags.Free;
+    IncDirs.Free;
+  end;
+
+  FileStream := TFileStream.Create(ConfigFile, fmOpenRead or fmShareDenyWrite);
+  StringStream := TStringStream.Create('');
+  try
+    StringStream.CopyFrom(FileStream, FileStream.Size);
+    JsonStr := StringStream.DataString;
+  finally
+    StringStream.Free;
+    FileStream.Free;
+  end;
+
+  JSON := GetJSON(JsonStr);
+  try
+    if not (JSON is TJSONObject) then
+      raise Exception.Create('Invalid "aether.json" manifest.');
+    Obj := TJSONObject(JSON);
+    AddUniqueStringToJsonArray(Obj, 'system_libs', Trim(LibName));
+    WriteStringToFile(ConfigFile, Obj.FormatJSON);
+  finally
+    JSON.Free;
+  end;
+
+  WriteLn('--------------------------------------------------------');
+  WriteLn(Format(' System library "%s" registered in "aether.json"!', [Trim(LibName)]));
+  WriteLn(' pkg-config flags and MSYS2 DLLs will be resolved automatically on build.');
+  WriteLn('--------------------------------------------------------');
+end;
+
+procedure HandleProjectAddFpc(const PkgName: string; SkipInstall: Boolean = False);
+var
+  RootDir, ConfigFile, JsonStr, ErrMsg, OutLog: string;
+  FileStream: TFileStream;
+  StringStream: TStringStream;
+  JSON: TJSONData;
+  Obj: TJSONObject;
+  Info: TToolchainInfo;
+  UnitDirs: TStringList;
+  Found: Boolean;
+begin
+  if Trim(PkgName) = '' then
+    raise Exception.Create('Free Pascal package name not provided. Usage: aetherc pkg add-fpc <package_name>');
+
+  if not FindProjectRoot(RootDir, ConfigFile) then
+    raise Exception.Create('No Aether project ("aether.json") found in the current directory. Run "aetherc new" first.');
+
+  Info := DetectToolchain;
+  UnitDirs := TStringList.Create;
+  try
+    Found := ResolvePascalPackagePaths(PkgName, Info, UnitDirs, ErrMsg);
+    if (not Found) and (not SkipInstall) then
+    begin
+      if Info.FppkgFound then
+      begin
+        WriteLn(Format('-> Installing Free Pascal package "%s" via fppkg...', [PkgName]));
+        if InstallFpcPackage(PkgName, Info, OutLog) then
+        begin
+          WriteLn(Format('   [OK] Installed fppkg package "%s".', [PkgName]));
+          Found := ResolvePascalPackagePaths(PkgName, Info, UnitDirs, ErrMsg);
+        end
+        else
+          WriteLn(Format('   [WARNING] fppkg install returned: %s', [OutLog]));
+      end;
+      if not Found then
+        raise Exception.Create(ErrMsg);
+    end
+    else if (not Found) and SkipInstall then
+      WriteLn(Format('   [WARNING] "%s" not found locally; adding to manifest anyway.', [PkgName]));
+  finally
+    UnitDirs.Free;
+  end;
+
+  FileStream := TFileStream.Create(ConfigFile, fmOpenRead or fmShareDenyWrite);
+  StringStream := TStringStream.Create('');
+  try
+    StringStream.CopyFrom(FileStream, FileStream.Size);
+    JsonStr := StringStream.DataString;
+  finally
+    StringStream.Free;
+    FileStream.Free;
+  end;
+
+  JSON := GetJSON(JsonStr);
+  try
+    if not (JSON is TJSONObject) then
+      raise Exception.Create('Invalid "aether.json" manifest.');
+    Obj := TJSONObject(JSON);
+    AddUniqueStringToJsonArray(Obj, 'pascal_packages', Trim(PkgName));
+    WriteStringToFile(ConfigFile, Obj.FormatJSON);
+  finally
+    JSON.Free;
+  end;
+
+  WriteLn('--------------------------------------------------------');
+  WriteLn(Format(' Free Pascal package "%s" registered in "aether.json"!', [Trim(PkgName)]));
+  WriteLn('--------------------------------------------------------');
+end;
+
 procedure HandleProjectRemove(const PkgName: string);
 var
   RootDir, ConfigFile, JsonStr: string;
@@ -1449,6 +1765,20 @@ begin
 
       WriteLn(Format('  • %-18s -> %s', [Dep.Name, Origem]));
     end;
+  end;
+  if Length(Config.SystemLibs) > 0 then
+  begin
+    WriteLn('');
+    WriteLn('System C Libraries (pkg-config / MSYS2):');
+    for I := 0 to High(Config.SystemLibs) do
+      WriteLn('  • ', Config.SystemLibs[I]);
+  end;
+  if Length(Config.PascalPackages) > 0 then
+  begin
+    WriteLn('');
+    WriteLn('Free Pascal Packages (fppkg / Lazarus OPM):');
+    for I := 0 to High(Config.PascalPackages) do
+      WriteLn('  • ', Config.PascalPackages[I]);
   end;
   WriteLn('========================================================');
 end;

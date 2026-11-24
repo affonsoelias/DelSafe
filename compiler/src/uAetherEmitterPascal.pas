@@ -6,7 +6,7 @@ interface
 
 uses
   SysUtils, Classes,
-  uAetherAST;
+  uAetherAST, uAetherToolchain;
 
 type
   TAetherEmitterPascal = class
@@ -40,6 +40,10 @@ type
     FSpawns: TFPList;
     FSpawnRefNames: TStringList;
     FSpawnRefTargets: TStringList;
+    FToolchain: TToolchainInfo;
+    FToolchainLoaded: Boolean;
+
+    function ResolvePascalExternLib(const LibName: string): string;
 
     procedure Emit(const Line: string = '');
     procedure IncIndent;
@@ -180,6 +184,17 @@ begin
   FSpawns := TFPList.Create;
   FSpawnRefNames := TStringList.Create;
   FSpawnRefTargets := TStringList.Create;
+  FToolchainLoaded := False;
+end;
+
+function TAetherEmitterPascal.ResolvePascalExternLib(const LibName: string): string;
+begin
+  if not FToolchainLoaded then
+  begin
+    FToolchain := DetectToolchain;
+    FToolchainLoaded := True;
+  end;
+  Result := ResolveSystemLibDllName(LibName, FToolchain);
 end;
 
 destructor TAetherEmitterPascal.Destroy;
@@ -2753,6 +2768,8 @@ var
   Enm: TASTEnumDecl;
   VarN: TASTEnumVariant;
   MC: TASTMatchCase;
+  TargetFn: TASTFunction;
+  ArgItemStr: string;
 begin
   if not Assigned(Expr) then Exit('');
 
@@ -3940,10 +3957,19 @@ begin
     end;
 
     // Normal call, enum variant constructor, or record constructor
+    TargetFn := FindFunction(Call.Callee);
     ArgsStr := '';
     for I := 0 to Call.Args.Count - 1 do
     begin
-      ArgsStr := ArgsStr + EmitExpr(TASTCallArg(Call.Args[I]).Expr);
+      ArgItemStr := EmitExpr(TASTCallArg(Call.Args[I]).Expr);
+      if Assigned(TargetFn) and TargetFn.IsExtern and (TargetFn.ExternAbi = 'c') and
+         (I < TargetFn.Params.Count) and
+         SameText(TASTParam(TargetFn.Params[I]).TypeName, 'String') and
+         (TASTParam(TargetFn.Params[I]).Ownership <> owMutBorrow) and
+         (not ((TASTCallArg(Call.Args[I]).Expr is TASTLiteralExpr) and
+               (TASTLiteralExpr(TASTCallArg(Call.Args[I]).Expr).Kind = lkNil))) then
+        ArgItemStr := Format('PChar(String(%s))', [ArgItemStr]);
+      ArgsStr := ArgsStr + ArgItemStr;
       if I < Call.Args.Count - 1 then
         ArgsStr := ArgsStr + ', ';
     end;
@@ -3953,7 +3979,11 @@ begin
       if IsEnumName(ValF) then
         Exit(StringReplace(Call.Callee, '.', '_', [rfReplaceAll]) + '(' + ArgsStr + ')');
     end;
-    Result := Call.Callee + '(' + ArgsStr + ')';
+    if Assigned(TargetFn) and TargetFn.IsExtern and (TargetFn.ExternAbi = 'c') and
+       SameText(TargetFn.ReturnType, 'String') then
+      Result := Format('String(%s(%s))', [Call.Callee, ArgsStr])
+    else
+      Result := Call.Callee + '(' + ArgsStr + ')';
     Exit;
   end
   else if Expr is TASTIfExpr then
@@ -5181,7 +5211,7 @@ begin
     end;
 
     if Func.ExternLib <> '' then
-      LibClause := Format(' external ''%s'';', [Func.ExternLib])
+      LibClause := Format(' external ''%s'';', [ResolvePascalExternLib(Func.ExternLib)])
     else
       LibClause := ' external ''msvcrt'';'; // Standard C runtime on Windows/FPC
 
@@ -5196,7 +5226,7 @@ begin
         ModStr := 'const ';
       end;
       ParamType := EmitTypeRef(Param.TypeName);
-      if Param.TypeName = 'String' then ParamType := 'PChar';
+      if SameText(Param.TypeName, 'String') then ParamType := 'PChar';
       ParamListStr := ParamListStr + Format('%s%s: %s', [ModStr, Param.Name, ParamType]);
       if I < Func.Params.Count - 1 then
         ParamListStr := ParamListStr + '; ';
@@ -5205,7 +5235,11 @@ begin
     if (Func.ReturnType = 'Void') or (Func.ReturnType = '') then
       Emit(Format('procedure %s(%s); cdecl;%s', [Func.Name, ParamListStr, LibClause]))
     else
-      Emit(Format('function %s(%s): %s; cdecl;%s', [Func.Name, ParamListStr, EmitTypeRef(Func.ReturnType), LibClause]));
+    begin
+      ParamType := EmitTypeRef(Func.ReturnType);
+      if SameText(Func.ReturnType, 'String') then ParamType := 'PChar';
+      Emit(Format('function %s(%s): %s; cdecl;%s', [Func.Name, ParamListStr, ParamType, LibClause]));
+    end;
     Emit('');
     Exit;
   end;
@@ -5476,7 +5510,7 @@ begin
       Exit('');
 
     if Func.ExternLib <> '' then
-      LibClause := Format(' external ''%s'';', [Func.ExternLib])
+      LibClause := Format(' external ''%s'';', [ResolvePascalExternLib(Func.ExternLib)])
     else
       LibClause := ' external ''msvcrt'';';
 
@@ -5491,7 +5525,7 @@ begin
         ModStr := 'const ';
       end;
       ParamType := EmitTypeRef(Param.TypeName);
-      if Param.TypeName = 'String' then ParamType := 'PChar';
+      if SameText(Param.TypeName, 'String') then ParamType := 'PChar';
       ParamListStr := ParamListStr + Format('%s%s: %s', [ModStr, Param.Name, ParamType]);
       if J < Func.Params.Count - 1 then
         ParamListStr := ParamListStr + '; ';
@@ -5500,7 +5534,11 @@ begin
     if (Func.ReturnType = 'Void') or (Func.ReturnType = '') then
       Result := Format('procedure %s(%s); cdecl;%s', [Func.Name, ParamListStr, LibClause])
     else
-      Result := Format('function %s(%s): %s; cdecl;%s', [Func.Name, ParamListStr, EmitTypeRef(Func.ReturnType), LibClause]);
+    begin
+      ParamType := EmitTypeRef(Func.ReturnType);
+      if SameText(Func.ReturnType, 'String') then ParamType := 'PChar';
+      Result := Format('function %s(%s): %s; cdecl;%s', [Func.Name, ParamListStr, ParamType, LibClause]);
+    end;
     Exit;
   end;
 

@@ -36,9 +36,17 @@ uAetherUpgrade;
 Procedure PrintBanner;
 Begin
   WriteLn('========================================================');
-  WriteLn('  AetherLang Compiler (aetherc) - Version 0.5.0 (Alpha) ');
+  WriteLn(Format('  AetherLang Compiler (aetherc) - Version %s (Alpha) ', [AETHER_COMPILER_VERSION]));
   WriteLn('  Pascal Structure + Pascal Safety + AI-Native Design   ');
   WriteLn('========================================================');
+End;
+
+Procedure PrintVersionInfo;
+Var
+  OSName, ArchName: string;
+Begin
+  TAetherUpgrade.DetectPlatform(OSName, ArchName);
+  WriteLn(Format('aetherc %s (%s-%s)', [AETHER_COMPILER_VERSION, OSName, ArchName]));
 End;
 
 Procedure PrintUsage;
@@ -55,7 +63,7 @@ Begin
   WriteLn('  fmt [path]        Format Aether code according to canonical rules (--check for CI/CD)');
   WriteLn('  doc [path]        Generate canonical project documentation (HTML, Markdown, and Doctests)');
   WriteLn('  emit-header <file> Generate ANSI C/C++-compatible C header (.h)');
-  WriteLn('  upgrade           Upgrade the Aether compiler toolchain (--check, --from-source, --binary, --rollback)');
+  WriteLn('  upgrade           Upgrade the Aether compiler toolchain (--check, --binary, --from-source, --rollback)');
   WriteLn('  clean             Clean project build artifacts (bin/ and generated/)');
   WriteLn('  bootstrap         Run full self-hosting cycle (Stage 1, 2, and 3)');
   WriteLn('');
@@ -91,6 +99,8 @@ Begin
   WriteLn('');
   WriteLn('Subcommands of "aetherc pkg":');
   WriteLn('  pkg add <package>    Add a dependency to the project (Git, Local, or Registry)');
+  WriteLn('  pkg add-sys <lib>    Install via MSYS2 pacman / verify via pkg-config & register');
+  WriteLn('  pkg add-fpc <pkg>    Install via fppkg / locate FPC/OPM units & register');
   WriteLn('  pkg remove <package> Remove a dependency from aether.json and clean caches (rm)');
   WriteLn('  pkg update [package] Update Git dependencies and synchronize the lockfile (upgrade)');
   WriteLn('  pkg audit            Inspect cryptographic integrity and TLS security');
@@ -133,6 +143,11 @@ Begin
   WriteLn('  -l <lib>          Link with a C/system library (e.g., -lraylib, -lsqlite3)');
   WriteLn('  --c-source <.c>   Compile an additional C file into the final executable');
   WriteLn('  --shared-lib <.dll> Copy shared library (.dll/.so) to the executable directory');
+  WriteLn('  --sys-lib=<lib>   Resolve native C library via pkg-config and bundle MSYS2 DLLs');
+  WriteLn('  --fpc-pkg=<pkg>   Include Free Pascal package units (fppkg / Lazarus OPM)');
+  WriteLn('  --bundle-dlls     Auto-copy transitive MSYS2 DLLs next to exe (default on Windows)');
+  WriteLn('  --no-bundle-dlls  Disable automatic MSYS2 DLL bundling');
+  WriteLn('  -V, --version     Display compiler version and host platform');
   WriteLn('  -h, --help        Display this help message');
 End;
 
@@ -215,6 +230,10 @@ Var
   GlobalLibDirs: TStringList = nil;
   GlobalLibs: TStringList = nil;
   GlobalSharedLibs: TStringList = nil;
+  GlobalExtraCFlags: TStringList = nil;
+  GlobalSystemLibs: TStringList = nil;
+  GlobalPascalPackages: TStringList = nil;
+  GlobalBundleDlls: Boolean = True;
   GlobalOutBinDir: string = '';
   GlobalOutPascalSrcDir: string = '';
   GlobalOutPascalUnitDir: string = '';
@@ -235,6 +254,9 @@ Begin
   If GlobalLibDirs = nil Then GlobalLibDirs := TStringList.Create;
   If GlobalLibs = nil Then GlobalLibs := TStringList.Create;
   If GlobalSharedLibs = nil Then GlobalSharedLibs := TStringList.Create;
+  If GlobalExtraCFlags = nil Then GlobalExtraCFlags := TStringList.Create;
+  If GlobalSystemLibs = nil Then GlobalSystemLibs := TStringList.Create;
+  If GlobalPascalPackages = nil Then GlobalPascalPackages := TStringList.Create;
 End;
 
 Procedure FreeGlobalPaths;
@@ -245,6 +267,9 @@ Begin
   FreeAndNil(GlobalLibDirs);
   FreeAndNil(GlobalLibs);
   FreeAndNil(GlobalSharedLibs);
+  FreeAndNil(GlobalExtraCFlags);
+  FreeAndNil(GlobalSystemLibs);
+  FreeAndNil(GlobalPascalPackages);
 End;
 
 Function ParsePathFlag(Const Arg: String; Var I: Integer): Boolean;
@@ -390,6 +415,32 @@ Begin
   Else If Arg = '--target=pascal' Then
   Begin
     GlobalTargetKind := 'pascal';
+  End
+  Else If (Arg = '--sys-lib') Then
+  Begin
+    Inc(I);
+    If I <= ParamCount Then GlobalSystemLibs.Add(ParamStr(I));
+  End
+  Else If Pos('--sys-lib=', Arg) = 1 Then
+  Begin
+    GlobalSystemLibs.Add(Copy(Arg, 11, Length(Arg)));
+  End
+  Else If (Arg = '--fpc-pkg') Then
+  Begin
+    Inc(I);
+    If I <= ParamCount Then GlobalPascalPackages.Add(ParamStr(I));
+  End
+  Else If Pos('--fpc-pkg=', Arg) = 1 Then
+  Begin
+    GlobalPascalPackages.Add(Copy(Arg, 11, Length(Arg)));
+  End
+  Else If (Arg = '--bundle-dlls') Then
+  Begin
+    GlobalBundleDlls := True;
+  End
+  Else If (Arg = '--no-bundle-dlls') Then
+  Begin
+    GlobalBundleDlls := False;
   End
   Else
     Result := False;
@@ -755,6 +806,62 @@ Begin
 End;
 End;
 
+Procedure AddUniqueLprStr(List: TStrings; Const Val: String);
+Var
+  T: string;
+  I: Integer;
+Begin
+  If Not Assigned(List) Then Exit;
+  T := Trim(Val);
+  If T = '' Then Exit;
+  For I := 0 To List.Count - 1 Do
+    If SameText(List[I], T) Then Exit;
+  List.Add(T);
+End;
+
+Function NormalizeExternLibName(Const RawLib: String): String;
+Var
+  Base, LowBase: string;
+  P, K: Integer;
+Begin
+  Base := ExtractFileName(Trim(RawLib));
+  LowBase := LowerCase(Base);
+  For P := 1 To 4 Do
+  Begin
+    If (Length(LowBase) > 4) And (Copy(LowBase, Length(LowBase) - 3, 4) = '.dll') Then
+      Base := Copy(Base, 1, Length(Base) - 4)
+    Else If (Length(LowBase) > 3) And (Copy(LowBase, Length(LowBase) - 2, 3) = '.so') Then
+      Base := Copy(Base, 1, Length(Base) - 3)
+    Else If (Length(LowBase) > 6) And (Copy(LowBase, Length(LowBase) - 5, 6) = '.dylib') Then
+      Base := Copy(Base, 1, Length(Base) - 6)
+    Else If (Length(LowBase) > 2) And (Copy(LowBase, Length(LowBase) - 1, 2) = '.a') Then
+      Base := Copy(Base, 1, Length(Base) - 2)
+    Else
+      Break;
+    LowBase := LowerCase(Base);
+  End;
+  If (Length(Base) > 3) And (Pos('lib', LowerCase(Base)) = 1) And (LowerCase(Trim(RawLib)) <> LowerCase(Base)) Then
+  Begin
+    // Only strip "lib" prefix when an archive/shared extension was stripped (e.g. libsqlite3-0.dll -> sqlite3)
+    Delete(Base, 1, 3);
+    K := Pos('-', Base);
+    If (K > 1) And (K < Length(Base)) And (Base[K + 1] In ['0'..'9']) Then
+      Base := Copy(Base, 1, K - 1);
+  End;
+  Result := Trim(Base);
+End;
+
+Function IsBuiltinCrtOrOsLib(Const NormLib: String): Boolean;
+Var
+  LowLib: string;
+Begin
+  LowLib := LowerCase(Trim(NormLib));
+  Result := (LowLib = '') Or (LowLib = 'msvcrt') Or (LowLib = 'c') Or (LowLib = 'libc') Or
+            (LowLib = 'm') Or (LowLib = 'ws2_32') Or (LowLib = 'kernel32') Or
+            (LowLib = 'user32') Or (LowLib = 'gdi32') Or (LowLib = 'advapi32') Or
+            (LowLib = 'shell32') Or (LowLib = 'ole32') Or (LowLib = 'pthread');
+End;
+
 Procedure CompileFile(Const SourceFile: String; Const TargetMode: String; CheckOnly
                       , DumpASTOnly: Boolean; Const OutputExeName: String;
                       SilentBanner: Boolean; Incremental: Boolean = False;
@@ -787,9 +894,21 @@ Var
   CacheUpToDate: Boolean;
   CacheItem: PFileCacheItem;
   EffectiveTarget, EffectiveCComp, EffectiveBackend: string;
+  EffIncludes, EffExtraCFlags, EffLibDirs, EffLibs, EffPasUnits, EffDllNames, AutoSysLibs: TStringList;
+  TCInfo: TToolchainInfo;
+  HasTCInfo: Boolean;
+  SysLibName, NormLib, ResolveErr, ResolveHint, MsysLibDir: string;
 Begin
   ModuleNode := nil;
   DependencyFiles := nil;
+  EffIncludes := nil;
+  EffExtraCFlags := nil;
+  EffLibDirs := nil;
+  EffLibs := nil;
+  EffPasUnits := nil;
+  EffDllNames := nil;
+  AutoSysLibs := nil;
+  HasTCInfo := False;
 
   If TargetMode <> '' Then
     EffectiveTarget := LowerCase(TargetMode)
@@ -874,6 +993,8 @@ Begin
           If CacheUpToDate And FileExists(FinalExe) And (SHA256File(FinalExe) = BuildCache.OutputExeHash) Then
           Begin
             CopySharedLibraries(BaseProjDir, FinalExe, GlobalSharedLibs);
+            If GlobalBundleDlls Then
+              BundleMSYS2Dlls(FinalExe, DetectToolchain, SilentBanner, nil);
             If Not SilentBanner Then
             Begin
               WriteLn(Format('[INCREMENTAL] No changes detected in "%s" or its %d dependencies.', [ExtractFileName(SourceFile), BuildCache.Files.Count - 1]));
@@ -979,7 +1100,97 @@ Begin
   End;
 End;
 
-// 4. Code Emission and Executable / Binary Generation
+// 4. Native Dependency Resolution (pkg-config, MSYS2 DLLs, fppkg/OPM, extern c auto-link)
+EffIncludes := TStringList.Create;
+EffExtraCFlags := TStringList.Create;
+EffLibDirs := TStringList.Create;
+EffLibs := TStringList.Create;
+EffPasUnits := TStringList.Create;
+EffDllNames := TStringList.Create;
+AutoSysLibs := TStringList.Create;
+
+If Assigned(GlobalIncludePaths) Then
+  For I := 0 To GlobalIncludePaths.Count - 1 Do AddUniqueLprStr(EffIncludes, GlobalIncludePaths[I]);
+If Assigned(GlobalExtraCFlags) Then
+  For I := 0 To GlobalExtraCFlags.Count - 1 Do AddUniqueLprStr(EffExtraCFlags, GlobalExtraCFlags[I]);
+If Assigned(GlobalLibDirs) Then
+  For I := 0 To GlobalLibDirs.Count - 1 Do AddUniqueLprStr(EffLibDirs, GlobalLibDirs[I]);
+If Assigned(GlobalLibs) Then
+  For I := 0 To GlobalLibs.Count - 1 Do AddUniqueLprStr(EffLibs, GlobalLibs[I]);
+If Assigned(GlobalPascalUnitPaths) Then
+  For I := 0 To GlobalPascalUnitPaths.Count - 1 Do AddUniqueLprStr(EffPasUnits, GlobalPascalUnitPaths[I]);
+
+For I := 0 To ModuleNode.Functions.Count - 1 Do
+Begin
+  If TASTFunction(ModuleNode.Functions[I]).IsExtern And
+     (TASTFunction(ModuleNode.Functions[I]).ExternAbi = 'c') And
+     (TASTFunction(ModuleNode.Functions[I]).ExternLib <> '') Then
+  Begin
+    NormLib := NormalizeExternLibName(TASTFunction(ModuleNode.Functions[I]).ExternLib);
+    If Not IsBuiltinCrtOrOsLib(NormLib) Then
+      AddUniqueLprStr(AutoSysLibs, NormLib);
+  End;
+End;
+For I := 0 To ModuleNode.LinkDirectives.Count - 1 Do
+Begin
+  NormLib := NormalizeExternLibName(ModuleNode.LinkDirectives[I]);
+  If Not IsBuiltinCrtOrOsLib(NormLib) Then
+    AddUniqueLprStr(AutoSysLibs, NormLib);
+End;
+
+If ((Assigned(GlobalSystemLibs) And (GlobalSystemLibs.Count > 0)) Or
+    (Assigned(GlobalPascalPackages) And (GlobalPascalPackages.Count > 0)) Or
+    (AutoSysLibs.Count > 0) Or GlobalBundleDlls) Then
+Begin
+  TCInfo := DetectToolchain;
+  HasTCInfo := True;
+End;
+
+// Explicit system_libs / --sys-lib (strict pkg-config resolution)
+If Assigned(GlobalSystemLibs) Then
+Begin
+  For I := 0 To GlobalSystemLibs.Count - 1 Do
+  Begin
+    SysLibName := Trim(GlobalSystemLibs[I]);
+    If SysLibName = '' Then Continue;
+    If Not ResolvePkgConfigLib(SysLibName, TCInfo, EffIncludes, EffExtraCFlags, EffLibDirs, EffLibs, ResolveErr, ResolveHint) Then
+      raise Exception.Create(ResolveErr + LineEnding + ResolveHint);
+    AddUniqueLprStr(EffDllNames, ResolveSystemLibDllName(SysLibName, TCInfo));
+  End;
+End;
+
+// Auto-link from extern c "<lib>" and import link "<lib>"
+For I := 0 To AutoSysLibs.Count - 1 Do
+Begin
+  SysLibName := AutoSysLibs[I];
+  AddUniqueLprStr(EffDllNames, ResolveSystemLibDllName(SysLibName, TCInfo));
+  If Not ResolvePkgConfigLib(SysLibName, TCInfo, EffIncludes, EffExtraCFlags, EffLibDirs, EffLibs, ResolveErr, ResolveHint) Then
+  Begin
+    AddUniqueLprStr(EffLibs, SysLibName);
+    {$IFDEF MSWINDOWS}
+    If TCInfo.MSYS2BinDir <> '' Then
+    Begin
+      MsysLibDir := ExtractFileDir(ExcludeTrailingPathDelimiter(TCInfo.MSYS2BinDir)) + PathDelim + 'lib';
+      If DirectoryExists(MsysLibDir) Then
+        AddUniqueLprStr(EffLibDirs, MsysLibDir);
+    End;
+    {$ENDIF}
+  End;
+End;
+
+// Free Pascal packages (fppkg / Lazarus OPM / FPC units)
+If (EffectiveTarget = 'pascal') And Assigned(GlobalPascalPackages) And (GlobalPascalPackages.Count > 0) Then
+Begin
+  For I := 0 To GlobalPascalPackages.Count - 1 Do
+  Begin
+    SysLibName := Trim(GlobalPascalPackages[I]);
+    If SysLibName = '' Then Continue;
+    If Not ResolvePascalPackagePaths(SysLibName, TCInfo, EffPasUnits, ResolveErr) Then
+      raise Exception.Create(ResolveErr);
+  End;
+End;
+
+// 5. Code Emission and Executable / Binary Generation
 If Not FindProjectRoot(BaseProjDir, Dummy) Then
   BaseProjDir := GetCurrentDir;
 BaseProjDir := ExcludeTrailingPathDelimiter(BaseProjDir);
@@ -1084,7 +1295,7 @@ Begin
   End;
 
   CompileLog := '';
-  Success := CompileWithPas2JS(IntermediateFile, FinalExe, CompileLog, ReleaseMode, GlobalPascalUnitPaths);
+  Success := CompileWithPas2JS(IntermediateFile, FinalExe, CompileLog, ReleaseMode, EffPasUnits);
   If Success Then
   Begin
     If Incremental Then
@@ -1148,13 +1359,15 @@ Begin
 
   CompileLog := '';
   If EffectiveCComp = 'clang' Then
-    Success := CompileWithClang(IntermediateFile, FinalExe, CompileLog, ReleaseMode, GlobalIncludePaths, GlobalCSources, GlobalLibDirs, GlobalLibs)
+    Success := CompileWithClang(IntermediateFile, FinalExe, CompileLog, ReleaseMode, EffIncludes, GlobalCSources, EffLibDirs, EffLibs, EffExtraCFlags)
   Else
-    Success := CompileWithGCC(IntermediateFile, FinalExe, CompileLog, ReleaseMode, GlobalIncludePaths, GlobalCSources, GlobalLibDirs, GlobalLibs);
+    Success := CompileWithGCC(IntermediateFile, FinalExe, CompileLog, ReleaseMode, EffIncludes, GlobalCSources, EffLibDirs, EffLibs, EffExtraCFlags);
 
   If Success Then
   Begin
     CopySharedLibraries(BaseProjDir, FinalExe, GlobalSharedLibs);
+    If GlobalBundleDlls And HasTCInfo And (Not AsLibrary) And (Not GlobalOptionSharedLib) Then
+      BundleMSYS2Dlls(FinalExe, TCInfo, SilentBanner, EffDllNames);
     If Incremental Then
       SaveBuildCache(BaseProjDir, SourceFile, TargetBackendStr, FinalExe, DependencyFiles);
     If EmitHeader Or GlobalEmitHeader Or AsLibrary Or GlobalOptionSharedLib Then
@@ -1219,7 +1432,7 @@ Begin
   End;
 
   CompileLog := '';
-  Success := CompileWithFPC(IntermediateFile, FinalExe, CompileLog, ReleaseMode, GlobalPascalUnitPaths, GlobalLibDirs, GlobalOutPascalUnitDir, GlobalAsUnit);
+  Success := CompileWithFPC(IntermediateFile, FinalExe, CompileLog, ReleaseMode, EffPasUnits, EffLibDirs, GlobalOutPascalUnitDir, GlobalAsUnit);
   If Success Then
   Begin
     If GlobalAsUnit Then
@@ -1237,6 +1450,8 @@ Begin
     Else
     Begin
       CopySharedLibraries(BaseProjDir, FinalExe, GlobalSharedLibs);
+      If GlobalBundleDlls And HasTCInfo And (Not AsLibrary) And (Not GlobalOptionSharedLib) Then
+        BundleMSYS2Dlls(FinalExe, TCInfo, SilentBanner, EffDllNames);
       If Incremental Then
         SaveBuildCache(BaseProjDir, SourceFile, TargetBackendStr, FinalExe, DependencyFiles);
       If EmitHeader Or GlobalEmitHeader Or AsLibrary Or GlobalOptionSharedLib Then
@@ -1265,6 +1480,13 @@ Begin
 End;
 
 Finally
+  If Assigned(AutoSysLibs) Then AutoSysLibs.Free;
+  If Assigned(EffDllNames) Then EffDllNames.Free;
+  If Assigned(EffPasUnits) Then EffPasUnits.Free;
+  If Assigned(EffLibs) Then EffLibs.Free;
+  If Assigned(EffLibDirs) Then EffLibDirs.Free;
+  If Assigned(EffExtraCFlags) Then EffExtraCFlags.Free;
+  If Assigned(EffIncludes) Then EffIncludes.Free;
   If Assigned(DependencyFiles) Then DependencyFiles.Free;
   If Assigned(ModuleNode) Then ModuleNode.Free;
   Parser.Free;
@@ -1636,10 +1858,19 @@ Begin
         GlobalLibDirs.Add(ExpandFileName(ProjConfig.RootDir + PathDelim + ProjConfig.PathsLibDirs[I]));
     For I := 0 To High(ProjConfig.PathsLibs) Do
       If ProjConfig.PathsLibs[I] <> '' Then
-        GlobalLibs.Add(ProjConfig.PathsLibs[I]);
+        AddUniqueLprStr(GlobalLibs, ProjConfig.PathsLibs[I]);
     For I := 0 To High(ProjConfig.PathsSharedLibs) Do
       If ProjConfig.PathsSharedLibs[I] <> '' Then
-        GlobalSharedLibs.Add(ExpandFileName(ProjConfig.RootDir + PathDelim + ProjConfig.PathsSharedLibs[I]));
+        AddUniqueLprStr(GlobalSharedLibs, ExpandFileName(ProjConfig.RootDir + PathDelim + ProjConfig.PathsSharedLibs[I]));
+    For I := 0 To High(ProjConfig.SystemLibs) Do
+      AddUniqueLprStr(GlobalSystemLibs, ProjConfig.SystemLibs[I]);
+    For I := 0 To High(ProjConfig.PascalPackages) Do
+      AddUniqueLprStr(GlobalPascalPackages, ProjConfig.PascalPackages[I]);
+    If Not ProjConfig.BundleDlls Then
+      GlobalBundleDlls := False;
+    CollectTransitiveNativeDeps(ProjConfig, GlobalSystemLibs, GlobalPascalPackages,
+                                GlobalIncludePaths, GlobalIncludePaths, GlobalCSources,
+                                GlobalPascalUnitPaths, GlobalLibDirs, GlobalLibs, GlobalSharedLibs);
   End
   Else
     BaseDir := GetCurrentDir;
@@ -2052,6 +2283,13 @@ Begin
   OptionEmitHeader := False;
   IsRunCommand := False;
 
+  // Check --version / -V / version
+  If (ParamCount >= 1) And ((LowerCase(ParamStr(1)) = '--version') Or (ParamStr(1) = '-V') Or (LowerCase(ParamStr(1)) = 'version')) Then
+    Begin
+      PrintVersionInfo;
+      Halt(0);
+    End;
+
   // Check lint command: lint [path] [--fix] [--json]
   If (ParamCount >= 1) And (LowerCase(ParamStr(1)) = 'lint') Then
     Begin
@@ -2344,6 +2582,52 @@ If (ParamCount >= 1) And (LowerCase(ParamStr(1)) = 'pkg') Then
         End;
       End;
     End
+    Else If (SubCmd = 'add-sys') Then
+    Begin
+      PkgName := '';
+      IsDryRun := False;
+      I := 3;
+      While I <= ParamCount Do
+      Begin
+        Arg := ParamStr(I);
+        If (Arg = '--no-install') Or (Arg = '--manifest-only') Then IsDryRun := True
+        Else If (PkgName = '') And (Length(Arg) > 0) And (Arg[1] <> '-') Then PkgName := Arg;
+        Inc(I);
+      End;
+      Try
+        HandleProjectAddSys(PkgName, IsDryRun);
+        Halt(0);
+      Except
+        on E: Exception Do
+        Begin
+          WriteLn(ErrOutput, 'Error adding system library: ', E.Message);
+          Halt(1);
+        End;
+      End;
+    End
+    Else If (SubCmd = 'add-fpc') Then
+    Begin
+      PkgName := '';
+      IsDryRun := False;
+      I := 3;
+      While I <= ParamCount Do
+      Begin
+        Arg := ParamStr(I);
+        If (Arg = '--no-install') Or (Arg = '--manifest-only') Then IsDryRun := True
+        Else If (PkgName = '') And (Length(Arg) > 0) And (Arg[1] <> '-') Then PkgName := Arg;
+        Inc(I);
+      End;
+      Try
+        HandleProjectAddFpc(PkgName, IsDryRun);
+        Halt(0);
+      Except
+        on E: Exception Do
+        Begin
+          WriteLn(ErrOutput, 'Error adding Free Pascal package: ', E.Message);
+          Halt(1);
+        End;
+      End;
+    End
     Else If (SubCmd = 'remove') Or (SubCmd = 'rm') Then
     Begin
       PkgName := '';
@@ -2465,6 +2749,8 @@ If (ParamCount >= 1) And (LowerCase(ParamStr(1)) = 'pkg') Then
       WriteLn('');
       WriteLn('Available Subcommands:');
       WriteLn('  add <package>    Add a dependency to the project (Git, Local, or Registry)');
+      WriteLn('  add-sys <lib>    Install MSYS2 package / verify pkg-config & add to system_libs');
+      WriteLn('  add-fpc <pkg>    Install via fppkg / locate FPC/OPM units & add to pascal_packages');
       WriteLn('  remove <package> Remove a dependency from aether.json and clean caches (rm)');
       WriteLn('  update [package] Update Git dependencies and synchronize the lockfile (upgrade)');
       WriteLn('  publish          Publish the current package to the official Aether Registry (--dry-run)');
@@ -2562,6 +2848,9 @@ If (ParamCount >= 1) And (LowerCase(ParamStr(1)) = 'upgrade') Then
     UpgradeOpts.Rollback := False;
     UpgradeOpts.DryRun := False;
     UpgradeOpts.Nightly := False;
+    UpgradeOpts.AllowUnsigned := False;
+    UpgradeOpts.NoStdUpdate := False;
+    UpgradeOpts.Channel := 'stable';
     UpgradeOpts.TargetVersion := '';
     UpgradeOpts.CustomUrl := '';
 
@@ -2580,11 +2869,39 @@ If (ParamCount >= 1) And (LowerCase(ParamStr(1)) = 'upgrade') Then
         Else If (Arg = '--dry-run') Or (Arg = '--dry') Or (Arg = '-d') Then
           UpgradeOpts.DryRun := True
         Else If Arg = '--nightly' Then
-          UpgradeOpts.Nightly := True
+        Begin
+          UpgradeOpts.Nightly := True;
+          UpgradeOpts.Channel := 'nightly';
+        End
+        Else If Arg = '--allow-unsigned' Then
+          UpgradeOpts.AllowUnsigned := True
+        Else If Arg = '--no-std' Then
+          UpgradeOpts.NoStdUpdate := True
+        Else If (Arg = '--channel') And (I + 1 <= ParamCount) Then
+        Begin
+          Inc(I);
+          UpgradeOpts.Channel := LowerCase(ParamStr(I));
+          If UpgradeOpts.Channel = 'nightly' Then UpgradeOpts.Nightly := True;
+        End
+        Else If Pos('--channel=', Arg) = 1 Then
+        Begin
+          UpgradeOpts.Channel := LowerCase(Copy(Arg, 11, Length(Arg)));
+          If UpgradeOpts.Channel = 'nightly' Then UpgradeOpts.Nightly := True;
+        End
+        Else If (Arg = '--version') And (I + 1 <= ParamCount) Then
+        Begin
+          Inc(I);
+          UpgradeOpts.TargetVersion := ParamStr(I);
+        End
         Else If Pos('--version=', Arg) = 1 Then
           UpgradeOpts.TargetVersion := Copy(Arg, 11, Length(Arg))
         Else If Pos('-v=', Arg) = 1 Then
           UpgradeOpts.TargetVersion := Copy(Arg, 4, Length(Arg))
+        Else If (Arg = '--url') And (I + 1 <= ParamCount) Then
+        Begin
+          Inc(I);
+          UpgradeOpts.CustomUrl := ParamStr(I);
+        End
         Else If Pos('--url=', Arg) = 1 Then
           UpgradeOpts.CustomUrl := Copy(Arg, 7, Length(Arg))
         Else If (Arg = '-h') Or (Arg = '--help') Then
@@ -2592,13 +2909,17 @@ If (ParamCount >= 1) And (LowerCase(ParamStr(1)) = 'upgrade') Then
             WriteLn('Usage: aetherc upgrade [options]');
             WriteLn('');
             WriteLn('Toolchain Upgrade Options:');
-            WriteLn('  --check, -c         Only check if newer versions are available');
-            WriteLn('  --from-source, -s   Upgrade by compiling from the local Git repository');
-            WriteLn('  --binary, -b        Force download and installation of the official pre-built binary');
-            WriteLn('  --rollback, -r      Restore backup of the previous executable version (.bak)');
-            WriteLn('  --dry-run, -d       Simulate all steps of the process without modifying files');
-            WriteLn('  --version=<tag>     Install a specific version or tag (e.g., --version=v0.6.0)');
-            WriteLn('  --nightly           Fetch the latest nightly development build');
+            WriteLn('  --check, -c           Only check if newer versions are available');
+            WriteLn('  --from-source, -s     Upgrade by compiling from the local Git repository');
+            WriteLn('  --binary, -b          Download and install the pre-built release (bin + std)');
+            WriteLn('  --rollback, -r        Restore previous executable and stdlib backup (.bak)');
+            WriteLn('  --dry-run, -d         Simulate all steps without modifying files');
+            WriteLn('  --version=<tag>       Install a specific version or tag (e.g., --version=v0.6.0)');
+            WriteLn('  --channel=<name>      Select release channel: stable (default) or nightly');
+            WriteLn('  --nightly             Shortcut for --channel=nightly');
+            WriteLn('  --url=<url>           Custom release metadata JSON URL (supports file:/// for tests)');
+            WriteLn('  --allow-unsigned      Allow binary install when no SHA-256 checksum asset exists');
+            WriteLn('  --no-std              Update compiler binary only, keeping existing std/ intact');
             Halt(0);
           End
         Else If (Length(Arg) > 0) And (Arg[1] <> '-') And (UpgradeOpts.TargetVersion = '') Then
@@ -2864,10 +3185,19 @@ If (ParamCount >= 1) And ((LowerCase(ParamStr(1)) = 'build') Or (LowerCase(
         GlobalLibDirs.Add(ExpandFileName(ProjConfig.RootDir + PathDelim + ProjConfig.PathsLibDirs[J]));
     For J := 0 To High(ProjConfig.PathsLibs) Do
       If ProjConfig.PathsLibs[J] <> '' Then
-        GlobalLibs.Add(ProjConfig.PathsLibs[J]);
+        AddUniqueLprStr(GlobalLibs, ProjConfig.PathsLibs[J]);
     For J := 0 To High(ProjConfig.PathsSharedLibs) Do
       If ProjConfig.PathsSharedLibs[J] <> '' Then
-        GlobalSharedLibs.Add(ExpandFileName(ProjConfig.RootDir + PathDelim + ProjConfig.PathsSharedLibs[J]));
+        AddUniqueLprStr(GlobalSharedLibs, ExpandFileName(ProjConfig.RootDir + PathDelim + ProjConfig.PathsSharedLibs[J]));
+    For J := 0 To High(ProjConfig.SystemLibs) Do
+      AddUniqueLprStr(GlobalSystemLibs, ProjConfig.SystemLibs[J]);
+    For J := 0 To High(ProjConfig.PascalPackages) Do
+      AddUniqueLprStr(GlobalPascalPackages, ProjConfig.PascalPackages[J]);
+    If Not ProjConfig.BundleDlls Then
+      GlobalBundleDlls := False;
+    CollectTransitiveNativeDeps(ProjConfig, GlobalSystemLibs, GlobalPascalPackages,
+                                GlobalIncludePaths, GlobalIncludePaths, GlobalCSources,
+                                GlobalPascalUnitPaths, GlobalLibDirs, GlobalLibs, GlobalSharedLibs);
 
     // Load output settings declared in the 'outputs' section of aether.json
     If (GlobalOutBinDir = '') And (ProjConfig.Outputs.BinDir <> '') Then
