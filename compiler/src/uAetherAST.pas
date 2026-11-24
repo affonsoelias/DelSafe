@@ -57,6 +57,9 @@ type
   TASTIdentifierExpr = class(TASTExpr)
   public
     Name: string;
+    ResolvedMonadType: string;
+    IsFnValueRef: Boolean;
+    ResolvedFnType: string;
     constructor Create(ALine, ACol: Integer; const AName: string);
     function Dump(Indent: Integer = 0): string; override;
   end;
@@ -118,7 +121,12 @@ type
   TASTCallExpr = class(TASTExpr)
   public
     Callee: string;
+    CalleeExpr: TASTExpr;
+    IsIndirectCall: Boolean;
+    IndirectFnType: string;
     IsQualified: Boolean;
+    GenericArgs: TStringList;
+    ResolvedMonadType: string;
     Args: TASTNodeList; // list of TASTCallArg
     constructor Create(ALine, ACol: Integer; const ACallee: string);
     destructor Destroy; override;
@@ -166,6 +174,30 @@ type
     Expr: TASTExpr;
     Cases: TASTNodeList; // TASTMatchCase
     constructor Create(ALine, ACol: Integer; AExpr: TASTExpr);
+    destructor Destroy; override;
+    function Dump(Indent: Integer = 0): string; override;
+  end;
+
+  TASTTupleLiteralExpr = class(TASTExpr)
+  public
+    Elements: TASTNodeList; // TASTExpr
+    ResolvedType: string;
+    constructor Create(ALine, ACol: Integer);
+    destructor Destroy; override;
+    function Dump(Indent: Integer = 0): string; override;
+  end;
+
+  TASTLambdaExpr = class(TASTExpr)
+  public
+    LambdaId: Integer;
+    Params: TASTNodeList;      // TASTParam
+    ReturnType: string;
+    BodyExpr: TASTExpr;
+    BodyStmts: TASTNodeList;   // TASTStmt
+    CaptureNames: TStringList;
+    CaptureTypes: TStringList;
+    ResolvedFnType: string;
+    constructor Create(ALine, ACol: Integer);
     destructor Destroy; override;
     function Dump(Indent: Integer = 0): string; override;
   end;
@@ -248,6 +280,7 @@ type
     SubPattern: string;
     IsLet: Boolean;
     Items: TStringList;
+    Bindings: TStringList; // Multi-field payload destructuring bindings (e.g. w, h)
     constructor Create(ALine, ACol: Integer; const AValue: string; const ASub: string = ''; AIsLet: Boolean = False);
     destructor Destroy; override;
     function Dump(Indent: Integer = 0): string; override;
@@ -349,6 +382,7 @@ type
     TypeName: string;
     InitialExpr: TASTExpr;
     IsMutable: Boolean;
+    ExpectedTupleArity: Integer;
     constructor Create(ALine, ACol: Integer; const AName, ATypeName: string; AInit: TASTExpr = nil; AMut: Boolean = True);
     destructor Destroy; override;
     function Dump(Indent: Integer = 0): string; override;
@@ -369,6 +403,9 @@ type
     DocComment: string;
     Fields: TASTNodeList; // TASTRecordField
     Derives: TStringList;
+    GenericParams: TStringList;
+    TemplateName: string;
+    ConcreteGenericArgs: TStringList;
     CfgCondition: string;
     constructor Create(ALine, ACol: Integer; const AName: string);
     destructor Destroy; override;
@@ -396,6 +433,7 @@ type
     constructor Create(ALine, ACol: Integer; const AName: string);
     destructor Destroy; override;
     function HasDerive(const ADerive: string): Boolean;
+    function HasPayload: Boolean;
     function Dump(Indent: Integer = 0): string; override;
   end;
 
@@ -470,6 +508,8 @@ type
     Name: string;
     GenericParam: string;      // Generic parameter (e.g., 'T')
     TraitBound: string;        // Trait bound (e.g., 'Printable')
+    GenericParams: TStringList;
+    TraitBounds: TStringList;
     OriginalName: string;      // Original method name (e.g., 'ToString')
     IsProcedure: Boolean;      // True for procedure (no return), False for function
     IsInterfaceDecl: Boolean;  // True for header declared in the interface section
@@ -687,6 +727,9 @@ constructor TASTIdentifierExpr.Create(ALine, ACol: Integer; const AName: string)
 begin
   inherited Create(ALine, ACol);
   Name := AName;
+  ResolvedMonadType := '';
+  IsFnValueRef := False;
+  ResolvedFnType := '';
 end;
 
 function TASTIdentifierExpr.Dump(Indent: Integer): string;
@@ -830,11 +873,18 @@ constructor TASTCallExpr.Create(ALine, ACol: Integer; const ACallee: string);
 begin
   inherited Create(ALine, ACol);
   Callee := ACallee;
+  CalleeExpr := nil;
+  IsIndirectCall := False;
+  IndirectFnType := '';
+  GenericArgs := TStringList.Create;
+  ResolvedMonadType := '';
   Args := TASTNodeList.Create;
 end;
 
 destructor TASTCallExpr.Destroy;
 begin
+  CalleeExpr.Free;
+  GenericArgs.Free;
   Args.Free;
   inherited Destroy;
 end;
@@ -988,6 +1038,71 @@ begin
   Result := MakeIndent(Indent) + 'Match Expression:' + LineEnding + Expr.Dump(Indent + 1);
   for I := 0 to Cases.Count - 1 do
     Result := Result + LineEnding + Cases[I].Dump(Indent + 1);
+end;
+
+{ TASTTupleLiteralExpr }
+
+constructor TASTTupleLiteralExpr.Create(ALine, ACol: Integer);
+begin
+  inherited Create(ALine, ACol);
+  Elements := TASTNodeList.Create;
+  ResolvedType := '';
+end;
+
+destructor TASTTupleLiteralExpr.Destroy;
+begin
+  Elements.Free;
+  inherited Destroy;
+end;
+
+function TASTTupleLiteralExpr.Dump(Indent: Integer): string;
+var
+  I: Integer;
+begin
+  Result := MakeIndent(Indent) + 'Tuple Literal: (';
+  for I := 0 to Elements.Count - 1 do
+  begin
+    if I > 0 then Result := Result + ', ';
+    Result := Result + Elements[I].Dump(0);
+  end;
+  Result := Result + ')';
+end;
+
+{ TASTLambdaExpr }
+
+constructor TASTLambdaExpr.Create(ALine, ACol: Integer);
+begin
+  inherited Create(ALine, ACol);
+  LambdaId := 0;
+  Params := TASTNodeList.Create;
+  ReturnType := '';
+  BodyExpr := nil;
+  BodyStmts := TASTNodeList.Create;
+  CaptureNames := TStringList.Create;
+  CaptureTypes := TStringList.Create;
+  ResolvedFnType := '';
+end;
+
+destructor TASTLambdaExpr.Destroy;
+begin
+  Params.Free;
+  BodyExpr.Free;
+  BodyStmts.Free;
+  CaptureNames.Free;
+  CaptureTypes.Free;
+  inherited Destroy;
+end;
+
+function TASTLambdaExpr.Dump(Indent: Integer): string;
+var
+  I: Integer;
+begin
+  Result := MakeIndent(Indent) + Format('Lambda (%d params):', [Params.Count]);
+  if Assigned(BodyExpr) then
+    Result := Result + LineEnding + BodyExpr.Dump(Indent + 1)
+  else
+    for I := 0 to BodyStmts.Count - 1 do
+      Result := Result + LineEnding + BodyStmts[I].Dump(Indent + 1);
 end;
 
 { TASTAssignStmt }
@@ -1198,13 +1313,17 @@ begin
   SubPattern := ASub;
   IsLet := AIsLet;
   Items := TStringList.Create;
+  Bindings := TStringList.Create;
   if AValue <> '' then
     Items.Add(AValue);
+  if ASub <> '' then
+    Bindings.Add(ASub);
 end;
 
 destructor TASTPattern.Destroy;
 begin
   Items.Free;
+  Bindings.Free;
   inherited Destroy;
 end;
 
@@ -1469,6 +1588,7 @@ begin
   TypeName := ATypeName;
   InitialExpr := AInit;
   IsMutable := AMut;
+  ExpectedTupleArity := 0;
 end;
 
 destructor TASTVarDecl.Destroy;
@@ -1509,12 +1629,17 @@ begin
   Name := AName;
   Fields := TASTNodeList.Create;
   Derives := TStringList.Create;
+  GenericParams := TStringList.Create;
+  TemplateName := '';
+  ConcreteGenericArgs := TStringList.Create;
   CfgCondition := '';
 end;
 
 destructor TASTRecordDecl.Destroy;
 begin
   Derives.Free;
+  GenericParams.Free;
+  ConcreteGenericArgs.Free;
   Fields.Free;
   inherited Destroy;
 end;
@@ -1590,6 +1715,16 @@ begin
   Result := False;
   for I := 0 to Derives.Count - 1 do
     if SameText(Derives[I], ADerive) then
+      Exit(True);
+end;
+
+function TASTEnumDecl.HasPayload: Boolean;
+var
+  I: Integer;
+begin
+  Result := False;
+  for I := 0 to Variants.Count - 1 do
+    if TASTEnumVariant(Variants[I]).Fields.Count > 0 then
       Exit(True);
 end;
 
@@ -1729,6 +1864,8 @@ begin
   ReturnType := AReturnType;
   GenericParam := '';
   TraitBound := '';
+  GenericParams := TStringList.Create;
+  TraitBounds := TStringList.Create;
   OriginalName := '';
   Params := TASTNodeList.Create;
   Requires := TASTNodeList.Create;
@@ -1750,6 +1887,8 @@ end;
 
 destructor TASTFunction.Destroy;
 begin
+  GenericParams.Free;
+  TraitBounds.Free;
   Params.Free;
   Requires.Free;
   Ensures.Free;
@@ -2024,7 +2163,13 @@ begin
   if Node is TASTLiteralExpr then
     Exit(TASTLiteralExpr.Create(Node.Line, Node.Col, TASTLiteralExpr(Node).Kind, TASTLiteralExpr(Node).Value))
   else if Node is TASTIdentifierExpr then
-    Exit(TASTIdentifierExpr.Create(Node.Line, Node.Col, TASTIdentifierExpr(Node).Name))
+  begin
+    Result := TASTIdentifierExpr.Create(Node.Line, Node.Col, TASTIdentifierExpr(Node).Name);
+    TASTIdentifierExpr(Result).ResolvedMonadType := TASTIdentifierExpr(Node).ResolvedMonadType;
+    TASTIdentifierExpr(Result).IsFnValueRef := TASTIdentifierExpr(Node).IsFnValueRef;
+    TASTIdentifierExpr(Result).ResolvedFnType := TASTIdentifierExpr(Node).ResolvedFnType;
+    Exit;
+  end
   else if Node is TASTMemberAccessExpr then
     Exit(TASTMemberAccessExpr.Create(Node.Line, Node.Col, TASTExpr(CloneASTNode(TASTMemberAccessExpr(Node).Target)), TASTMemberAccessExpr(Node).Member))
   else if Node is TASTBinaryExpr then
@@ -2044,7 +2189,13 @@ begin
   else if Node is TASTCallExpr then
   begin
     Result := TASTCallExpr.Create(Node.Line, Node.Col, TASTCallExpr(Node).Callee);
+    if Assigned(TASTCallExpr(Node).CalleeExpr) then
+      TASTCallExpr(Result).CalleeExpr := TASTExpr(CloneASTNode(TASTCallExpr(Node).CalleeExpr));
+    TASTCallExpr(Result).IsIndirectCall := TASTCallExpr(Node).IsIndirectCall;
+    TASTCallExpr(Result).IndirectFnType := TASTCallExpr(Node).IndirectFnType;
     TASTCallExpr(Result).IsQualified := TASTCallExpr(Node).IsQualified;
+    TASTCallExpr(Result).ResolvedMonadType := TASTCallExpr(Node).ResolvedMonadType;
+    TASTCallExpr(Result).GenericArgs.AddStrings(TASTCallExpr(Node).GenericArgs);
     for I := 0 to TASTCallExpr(Node).Args.Count - 1 do
       TASTCallExpr(Result).Args.Add(CloneASTNode(TASTCallExpr(Node).Args[I]));
     Exit;
@@ -2083,6 +2234,30 @@ begin
     Result := TASTMatchExpr.Create(Node.Line, Node.Col, TASTExpr(CloneASTNode(TASTMatchExpr(Node).Expr)));
     for I := 0 to TASTMatchExpr(Node).Cases.Count - 1 do
       TASTMatchExpr(Result).Cases.Add(CloneASTNode(TASTMatchExpr(Node).Cases[I]));
+    Exit;
+  end
+  else if Node is TASTTupleLiteralExpr then
+  begin
+    Result := TASTTupleLiteralExpr.Create(Node.Line, Node.Col);
+    TASTTupleLiteralExpr(Result).ResolvedType := TASTTupleLiteralExpr(Node).ResolvedType;
+    for I := 0 to TASTTupleLiteralExpr(Node).Elements.Count - 1 do
+      TASTTupleLiteralExpr(Result).Elements.Add(CloneASTNode(TASTTupleLiteralExpr(Node).Elements[I]));
+    Exit;
+  end
+  else if Node is TASTLambdaExpr then
+  begin
+    Result := TASTLambdaExpr.Create(Node.Line, Node.Col);
+    TASTLambdaExpr(Result).LambdaId := TASTLambdaExpr(Node).LambdaId;
+    TASTLambdaExpr(Result).ReturnType := TASTLambdaExpr(Node).ReturnType;
+    TASTLambdaExpr(Result).ResolvedFnType := TASTLambdaExpr(Node).ResolvedFnType;
+    TASTLambdaExpr(Result).CaptureNames.AddStrings(TASTLambdaExpr(Node).CaptureNames);
+    TASTLambdaExpr(Result).CaptureTypes.AddStrings(TASTLambdaExpr(Node).CaptureTypes);
+    for I := 0 to TASTLambdaExpr(Node).Params.Count - 1 do
+      TASTLambdaExpr(Result).Params.Add(CloneASTNode(TASTLambdaExpr(Node).Params[I]));
+    if Assigned(TASTLambdaExpr(Node).BodyExpr) then
+      TASTLambdaExpr(Result).BodyExpr := TASTExpr(CloneASTNode(TASTLambdaExpr(Node).BodyExpr));
+    for I := 0 to TASTLambdaExpr(Node).BodyStmts.Count - 1 do
+      TASTLambdaExpr(Result).BodyStmts.Add(CloneASTNode(TASTLambdaExpr(Node).BodyStmts[I]));
     Exit;
   end
 
@@ -2139,6 +2314,12 @@ begin
       TASTPattern(Result).Items.Clear;
       for I := 0 to TASTPattern(Node).Items.Count - 1 do
         TASTPattern(Result).Items.Add(TASTPattern(Node).Items[I]);
+    end;
+    if Assigned(TASTPattern(Node).Bindings) then
+    begin
+      TASTPattern(Result).Bindings.Clear;
+      for I := 0 to TASTPattern(Node).Bindings.Count - 1 do
+        TASTPattern(Result).Bindings.Add(TASTPattern(Node).Bindings[I]);
     end;
     Exit;
   end
@@ -2214,7 +2395,9 @@ begin
     InitNode := nil;
     if Assigned(TASTVarDecl(Node).InitialExpr) then
       InitNode := TASTExpr(CloneASTNode(TASTVarDecl(Node).InitialExpr));
-    Exit(TASTVarDecl.Create(Node.Line, Node.Col, TASTVarDecl(Node).Name, TASTVarDecl(Node).TypeName, InitNode, TASTVarDecl(Node).IsMutable));
+    Result := TASTVarDecl.Create(Node.Line, Node.Col, TASTVarDecl(Node).Name, TASTVarDecl(Node).TypeName, InitNode, TASTVarDecl(Node).IsMutable);
+    TASTVarDecl(Result).ExpectedTupleArity := TASTVarDecl(Node).ExpectedTupleArity;
+    Exit;
   end;
 
   Result := nil;

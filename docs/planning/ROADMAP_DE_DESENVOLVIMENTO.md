@@ -821,19 +821,19 @@ Este documento traça o status oficial de desenvolvimento do compilador e as pr�
 
 Mapeamento técnico completo dos recursos pendentes identificados no compilador (`compiler/src/*.pas`), nos dois backends (Free Pascal e GCC C99), na biblioteca padrão (`std/*.aeth`) e nas ferramentas de CLI, organizado nos 8 domínios estruturais da linguagem.
 
-### 📋 Fase 49: 1. Sistema de Tipos, Genéricos e Tipos Algébricos (ADTs) - PLANEJADA
-- [ ] **1.1 Enums com Payload (Tagged Unions / ADTs Reais)**:
-  - Emitir variant records (`record case tag of ...`) no `uAetherEmitterPascal.pas` e tagged unions (`struct { enum tag; union { ... }; }`) no `uAetherEmitterC.pas` para `TASTEnumVariant.Fields`.
-  - Suportar construtores de variante com payload (`Forma.Circulo(raio: 5.0)` / `Circulo(5.0)`) e desestruturação de múltiplos campos no `match` (`case Forma.Circulo(let r) =>`).
-- [ ] **1.2 `Record<T, U>` Genéricos, Múltiplos Parâmetros Genéricos & Monomorfização Composta**:
-  - Estender `TASTRecordDecl` e `TASTFunction` para múltiplos parâmetros genéricos (`<T, U>` / `<K, V>`).
-  - Generalizar `MonomorphizeFunction` no `uAetherTypeChecker.pas` para substituir parâmetros genéricos dentro de tipos compostos (`array of T`, `Option<T>`, `Result<T, E>`, `^T`, `Box<T>`).
-- [ ] **1.3 `Option<T>` e `Result<T, E>` para `Record`s por Valor**:
-  - Permitir `Option<Ponto>` e `Result<Usuario, Erro>` armazenando registros compostos diretamente por valor sem exigir `Box<T>`.
-- [ ] **1.4 Tuplas Anônimas (`(Int32, String)`) e Desestruturação (`let (a, b) := ...`)**:
-  - Sintaxe de tipo tupla, literal de tupla `(10, "ok")`, acesso posicional e desestruturação em declarações `let`/`var`.
-- [ ] **1.5 Tipos de Função (Callbacks) & Closures/Lambdas**:
-  - Declaração de tipos de função (`type Predicate = function(Int32): Bool;`) e expressões lambda (`fn(x: Int32): Int32 => x * 2`) nos backends Pascal e C99.
+### ✅ Fase 49: 1. Sistema de Tipos, Genéricos e Tipos Algébricos (ADTs) - CONCLUÍDA
+- [x] **1.1 Enums com Payload (Tagged Unions / ADTs Reais)**:
+  - Emitir registros com tag (`T<Name>_Tag` + campos por variante) no `uAetherEmitterPascal.pas` e tagged unions (`struct { enum tag; union { ... }; }`) no `uAetherEmitterC.pas` para `TASTEnumVariant.Fields`.
+  - Suportar construtores de variante com payload (`Shape.Circle(radius: 5.0)` / `Circle(2.0)` / nomeados fora de ordem) e desestruturação de múltiplos campos no `match` (`case Shape.Rect(let w, let h) =>`).
+- [x] **1.2 `Record<T, U>` Genéricos, Múltiplos Parâmetros Genéricos & Monomorfização Composta**:
+  - Estender `TASTRecordDecl` e `TASTFunction` para múltiplos parâmetros genéricos (`<T, U>` / `<K, V>`), construtores explícitos e inferidos, e chamadas genéricas explícitas (`Identity<Int32>(...)`).
+  - Generalizar `MonomorphizeFunction` no `uAetherTypeChecker.pas` para substituir parâmetros genéricos dentro de tipos compostos (`array of T`, `Option<T>`, `Result<T, E>`, `^T`, `Box<T>`, `Pair<A, B>`).
+- [x] **1.3 `Option<T>` e `Result<T, E>` para `Record`s e ADTs por Valor**:
+  - Permitir `Option<Point>`, `Option<Shape>`, `Option<Pair<...>>` e `Result<User, String>` / `Result<Point, AppError>` armazenando registros e enums compostos diretamente por valor sem exigir `Box<T>` (incluindo `?` e `match`). Validado em `tests/language/types/adt_generics_monads_test.aeth` (`25/25 PASS` nos backends Free Pascal e GCC C99).
+- [x] **1.4 Tuplas Anônimas (`(Int32, String)`) e Desestruturação (`let (a, b) := ...`)**:
+  - Sintaxe de tipo tupla (`(T0, T1, ...)`), aliases e tuplas aninhadas, literal de tupla `(10, "ok")`, acesso posicional `.0`/`.0.1`, uso em `Option`/`Result`/arrays/genéricos e desestruturação em declarações `let`/`var` com wildcards `_` e verificação estática de aridade (`E0308`).
+- [x] **1.5 Tipos de Função (Callbacks) & Closures/Lambdas**:
+  - Declaração de tipos de função (`function(Int32) return Int32`, `function(Int32): Bool`, `procedure(Int32)`), passagem de funções nomeadas por valor via thunks, campos callback em records, expressões lambda (`fn(x: Int32) => ...`, inferência de tipos de parâmetro/retorno e blocos `begin ... end fn`), captura de variáveis externas em closures alocadas em heap, e chamadas encadeadas (`MakeAdder(50)(7)`) nos backends Free Pascal e GCC C99. Validado em `tests/language/types/tuples_and_closures_test.aeth`, `tests/compile_fail/tuple_arity_mismatch_fail.aeth` e `tests/compile_fail/callback_type_mismatch_fail.aeth` (`FPC 25/25 | C99 25/25 PASS`, `lint` e `fmt --check` limpos).
 
 ### ✅ Fase 50: 2. Contratos (`contract` / `require` / `ensure`) - CONCLUÍDA
 - [x] **2.1 Emissão Real de Pós-Condições (`ensure`) nos Dois Backends**:
@@ -955,3 +955,23 @@ Mapeamento técnico completo dos recursos pendentes identificados no compilador 
 - [x] **58.4 Suíte de Testes & Validação Dual-Backend**:
   - Criado teste dedicado `tests/17_fase58_typed_end_and_elseif_test.aeth` cobrindo `if / else if / else / end if;`, `if / else if / end if;`, `if` aninhado em `else`, `end while;`, `end for;` (`to`/`downto`/`in`), `repeat ... until`, `end match;` (instrução e expressão), `end try;`, `end unsafe;`, `end record;`, `end enum;`, `end trait;` e `end impl;`.
   - Validados 100% dos testes (`17/17 PASS`) nos backends **Free Pascal** e **GCC C99**, validação negativa de `end;` / `end else;` / fechamento divergente e `aetherc fmt --check`.
+
+---
+
+### 📋 Fase 59: Integração de Ecossistemas Nativos — MSYS2 / `pkg-config`, Auto-Bundle de DLLs e `fppkg`/Lazarus OPM - PLANEJADA
+
+> **Objetivo**: Aproveitar diretamente pacotes C/C++ nativos (via **MSYS2/`pacman` + `pkg-config`** no Windows e gerenciadores nativos + `pkg-config` no Linux/macOS) e pacotes Pascal instalados via **`fppkg` / Lazarus OPM**, com resolução automática de flags, linkagem e empacotamento de DLLs sem exigir configuração manual por biblioteca.
+
+- [ ] **59.1 Resolução Universal de Bibliotecas C via `pkg-config` (`uAetherProject.pas`, `uAetherToolchain.pas`, `aetherc.lpr`)**:
+  - Adicionar suporte ao campo `"system_libs": ["sqlite3", ...]` no `aether.json`.
+  - Executar `pkg-config --cflags --libs <lib>` usando `MSYS2BinDir` no Windows (ou o ambiente nativo no Linux/macOS), injetando automaticamente as flags `-I`, `-D`, `-L` e `-l` no GCC/Clang e caminhos de biblioteca no Free Pascal.
+  - Exibir diagnóstico claro com o comando exato de instalação (ex.: `pacman -S mingw-w64-ucrt-x86_64-<pkg>`) caso a biblioteca não esteja instalada.
+- [ ] **59.2 Integração MSYS2 (`pacman`) & Auto-Bundle de DLLs no Windows (`uAetherProject.pas`, `uAetherToolchain.pas`)**:
+  - Adicionar subcomando de CLI `aetherc pkg add-sys <lib>` detectando o subsistema MSYS2 ativo (`ucrt64` / `mingw64` / `clang64`), instalando o pacote correspondente via `pacman -S --needed` e registrando-o em `system_libs` no `aether.json`.
+  - Implementar cópia automática de DLLs transitivas (`--bundle-dlls` / padrão em builds no Windows) via `ldd` ou `objdump -p` do MSYS2, copiando apenas as DLLs originárias do diretório `bin` do MSYS2 (ignorando DLLs de sistema do Windows) para a pasta do executável gerado.
+- [ ] **59.3 Descoberta e Integração de Pacotes Free Pascal (`fppkg` & Lazarus OPM)**:
+  - Estender `DetectToolchain` em `uAetherToolchain.pas` para detectar `fppkg` e os diretórios de units compiladas do `fppkg` e do Lazarus Online Package Manager (OPM).
+  - Suportar `"pascal_packages": [...]` no `aether.json`, resolvendo automaticamente os caminhos `-Fu` para `CompileWithFPC`, além do subcomando auxiliar `aetherc pkg add-fpc <pacote>`.
+- [ ] **59.4 Auto-Link de `extern c "<lib>"` & Pacotes Wrapper em Aether**:
+  - Propagar automaticamente declarações `extern c "<lib>"` encontradas nos módulos compilados para `-l<lib>` (ou consulta a `pkg-config` quando disponível) no backend GCC/Clang, dispensando repetição manual de flags de linker.
+  - Permitir que pacotes Wrapper Aether instalados via `aetherc pkg add` declarem `"system_libs"` e `"pascal_packages"` transitivos no próprio `aether.json` e expor testes de ponta a ponta (ex.: integração real com `sqlite3` do MSYS2).

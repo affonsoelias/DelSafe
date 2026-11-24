@@ -1,8 +1,0 @@
-{
-  "name": "vetores_2d",
-  "version": "1.2.3",
-  "author": "Aether Core Team <core@aether-lang.org>",
-  "description": "Math library for 2D vector operations and computational geometry",
-  "license": "MIT",
-  "entry": "src/vetores_2d.aeth"
-}

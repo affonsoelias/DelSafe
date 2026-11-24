@@ -97,7 +97,7 @@ Aether powers **Zephyr** (`vendor/zephyr`), the native backend engine for the Bl
 | :--- | :--- |
 | `aetherc build` | Build the current project based on `aether.json` |
 | `aetherc run [file.aeth]` | Compile and execute immediately |
-| `aetherc test [filter]` | Run test suite with pass/fail reports |
+| `aetherc test [filter]` | Run unit and compile-fail test suite (`--target=pascal\|c\|all`) |
 | `aetherc bench [filter]` | Run benchmark harness with multi-backend comparison |
 | `aetherc profile <file>` | Execution profiler and runtime memory leak audit (`--runs=N`, `--json`) |
 | `aetherc lint [path]` | Static linter and code quality analysis (`--fix` to auto-repair) |

@@ -1,0 +1,8 @@
+{
+  "name" : "consumer_app",
+  "version" : "0.1.0",
+  "entry" : "src/main.aeth",
+  "dependencies" : {
+    "vectors_2d" : "^1.2.3"
+  }
+}

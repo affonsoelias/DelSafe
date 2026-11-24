@@ -1,0 +1,318 @@
+module adt_generics_monads_test;
+
+type
+    Point = record
+        x: Int32;
+        y: Int32;
+    end record;
+
+    User = record
+        id: Int32;
+        name: String;
+    end record;
+
+    Shape = enum
+        Origin,
+        Circle(radius: Float64),
+        Rect(width: Float64, height: Float64)
+    end enum;
+
+    EventMsg = enum
+        Quit,
+        Move(dx: Int32, dy: Int32),
+        Label(text: String)
+    end enum;
+
+    AppError = enum
+        NotFound,
+        Validation(field: String, code: Int32)
+    end enum;
+
+    Pair<T, U> = record
+        first: T;
+        second: U;
+    end record;
+
+    Wrapper<T> = record
+        tag: String;
+        item: T;
+        extra: Option<T>;
+    end record;
+
+    Showable = trait
+        function Describe(borrow self) return String;
+    end trait;
+
+impl Showable for Point
+    function Describe(borrow self) return String is
+    begin
+        return "Point";
+    end Describe;
+end impl;
+
+impl Showable for User
+    function Describe(borrow self) return String is
+    begin
+        return self.name;
+    end Describe;
+end impl;
+
+function ShapeKind(s: Shape) return String is
+begin
+    return match s do
+        case Shape.Origin => "origin";
+        case Shape.Circle(let r) => if r > 4.0 then "big-circle" else "small-circle";
+        case Shape.Rect(let w, let h) if w > h => "wide-rect";
+        case Shape.Rect(let w, let h) => "rect";
+    end match;
+end ShapeKind;
+
+function ShapeArea(s: Shape) return Float64 is
+var
+    acc: Float64;
+begin
+    acc := 0.0;
+    match s do
+        case Shape.Origin =>
+            acc := 0.0;
+        case Shape.Circle(let r) =>
+            acc := 3.0 * r * r;
+        case Shape.Rect(let w, let h) =>
+            acc := w * h;
+    end match;
+    return acc;
+end ShapeArea;
+
+function Identity<T>(val: T) return T is
+begin
+    return val;
+end Identity;
+
+function SwapPair<A, B>(p: Pair<A, B>) return Pair<B, A> is
+begin
+    return Pair<B, A>(p.second, p.first);
+end SwapPair;
+
+function WrapInOption<T>(v: T) return Option<T> is
+begin
+    return Some(v);
+end WrapInOption;
+
+function CombineShowables<T: Showable, U: Showable>(borrow a: T, borrow b: U) return String is
+begin
+    return a.Describe() + ":" + b.Describe();
+end CombineShowables;
+
+function MakeArrayOfOne<T>(v: T) return array of T is
+var
+    arr: array of T;
+begin
+    SetLength(arr, 1);
+    arr[0] := v;
+    return arr;
+end MakeArrayOfOne;
+
+function FindUser(id: Int32) return Result<User, String> is
+begin
+    if id <= 0 then
+        return Err("invalid user id");
+    end if;
+    return Ok(User(id, "Alice"));
+end FindUser;
+
+function LoadUserPoint(id: Int32) return Result<Point, String> is
+var
+    u: User;
+begin
+    u := FindUser(id)?;
+    return Ok(Point(u.id, u.id * 10));
+end LoadUserPoint;
+
+function ParsePoint(flag: Int32) return Result<Point, AppError> is
+begin
+    if flag = 0 then
+        return Err(AppError.NotFound);
+    else if flag < 0 then
+        return Err(AppError.Validation("flag", flag));
+    end if;
+    return Ok(Point(flag, flag + 1));
+end ParsePoint;
+
+function DoubleParsedX(flag: Int32) return Result<Int32, AppError> is
+var
+    p: Point;
+begin
+    p := ParsePoint(flag)?;
+    return Ok(p.x * 2);
+end DoubleParsedX;
+
+function MaybePoint(valid: Bool) return Option<Point> is
+begin
+    if valid then
+        return Some(Point(7, 9));
+    end if;
+    return None;
+end MaybePoint;
+
+function ShiftMaybePoint(valid: Bool) return Option<Point> is
+var
+    p: Point;
+begin
+    p := MaybePoint(valid)?;
+    return Some(Point(p.x + 1, p.y + 1));
+end ShiftMaybePoint;
+
+function AddOneOrZero(opt: Option<Pair<Int32, String>>) return Int32 is
+begin
+    return match opt do
+        case Some(let p) => p.first + 1;
+        case None => 0;
+    end match;
+end AddOneOrZero;
+
+program Main;
+var
+    s0, s1, s2, s3, s4: Shape;
+    msg1, msg2: EventMsg;
+    sumCoord: Int32;
+    pExplicit, pInferred, pNamed: Pair<Int32, String>;
+    pSwapped: Pair<String, Int32>;
+    wNested: Wrapper<Pair<Int32, Float64>>;
+    pts: array of Point;
+    optPt, optShifted: Option<Point>;
+    optNone: Option<Point>;
+    optShape: Option<Shape>;
+    optPair: Option<Pair<Int32, String>>;
+    resUser, resBad: Result<User, String>;
+    resPtFromUser, resPtFail: Result<Point, String>;
+    resAppOk, resAppNotFound, resAppInvalid: Result<Point, AppError>;
+    resIntOk, resIntFail: Result<Int32, AppError>;
+
+begin
+    // 49.1 Payload Enums
+    s0 := Shape.Origin;
+    s1 := Shape.Circle(radius: 5.0);
+    s2 := Shape.Rect(height: 4.0, width: 6.0);
+    s3 := Circle(2.0);
+    s4 := Origin;
+
+    Assert(ShapeKind(s0) = "origin");
+    Assert(ShapeKind(s1) = "big-circle");
+    Assert(ShapeKind(s2) = "wide-rect");
+    Assert(ShapeKind(s3) = "small-circle");
+    Assert(ShapeKind(s4) = "origin");
+    Assert(ShapeArea(s1) = 75.0);
+    Assert(ShapeArea(s2) = 24.0);
+
+    msg1 := EventMsg.Move(10, 20);
+    msg2 := EventMsg.Label("hello-adt");
+    sumCoord := 0;
+    match msg1 do
+        case EventMsg.Quit =>
+            sumCoord := -1;
+        case EventMsg.Move(let x, let y) =>
+            sumCoord := x + y;
+        case EventMsg.Label(let txt) =>
+            sumCoord := Length(txt);
+    end match;
+    Assert(sumCoord = 30);
+
+    match msg2 do
+        case EventMsg.Label(let s) =>
+            Assert(s = "hello-adt");
+        case _ =>
+            Assert(false);
+    end match;
+
+    // 49.2 Generic Records & Multi-Param Generics
+    pExplicit := Pair<Int32, String>(42, "alpha");
+    pInferred := Pair(100, "beta");
+    pNamed := Pair<Int32, String>(second: "gamma", first: 7);
+    Assert(pExplicit.first = 42);
+    Assert(pExplicit.second = "alpha");
+    Assert(pInferred.first = 100);
+    Assert(pNamed.first = 7);
+    Assert(pNamed.second = "gamma");
+
+    pSwapped := SwapPair(pExplicit);
+    Assert(pSwapped.first = "alpha");
+    Assert(pSwapped.second = 42);
+    Assert(Identity<Int32>(99) = 99);
+    Assert(CombineShowables(Point(1, 2), User(5, "Bob")) = "Point:Bob");
+
+    wNested := Wrapper("outer", Pair(3, 1.5), Some(Pair(8, 2.5)));
+    Assert(wNested.tag = "outer");
+    Assert(wNested.item.first = 3);
+    Assert(wNested.extra.is_some);
+    Assert(wNested.extra.value.first = 8);
+
+    pts := MakeArrayOfOne(Point(11, 22));
+    Assert(pts[0].x = 11);
+    Assert(pts[0].y = 22);
+
+    // 49.3 Value Option<Record> and Result<Record, E>
+    optPt := MaybePoint(true);
+    optNone := MaybePoint(false);
+    Assert(optPt.is_some);
+    Assert(not optPt.is_none);
+    Assert(optPt.value.x = 7);
+    Assert(optPt.value.y = 9);
+    Assert(optNone.is_none);
+
+    optShifted := ShiftMaybePoint(true);
+    Assert(optShifted.is_some);
+    Assert(optShifted.value.x = 8);
+    Assert(ShiftMaybePoint(false).is_none);
+
+    optShape := WrapInOption(Shape.Circle(3.0));
+    Assert(optShape.is_some);
+    Assert(ShapeArea(optShape.value) = 27.0);
+
+    optPair := Some(Pair(55, "val"));
+    Assert(AddOneOrZero(optPair) = 56);
+    Assert(AddOneOrZero(None) = 0);
+
+    resUser := FindUser(3);
+    resBad := FindUser(0);
+    Assert(resUser.is_ok);
+    Assert(resUser.value.id = 3);
+    Assert(resUser.value.name = "Alice");
+    Assert(resBad.is_err);
+    Assert(resBad.error = "invalid user id");
+
+    resPtFromUser := LoadUserPoint(4);
+    resPtFail := LoadUserPoint(-1);
+    Assert(resPtFromUser.is_ok);
+    Assert(resPtFromUser.value.y = 40);
+    Assert(resPtFail.is_err);
+    Assert(resPtFail.error = "invalid user id");
+
+    resAppOk := ParsePoint(5);
+    resAppNotFound := ParsePoint(0);
+    resAppInvalid := ParsePoint(-7);
+    Assert(resAppOk.is_ok);
+    Assert(resAppOk.value.x = 5);
+    Assert(resAppNotFound.is_err);
+    Assert(resAppInvalid.is_err);
+
+    match resAppInvalid do
+        case Ok(let pt) =>
+            Assert(false);
+        case Err(let errVal) =>
+            match errVal do
+                case AppError.NotFound =>
+                    Assert(false);
+                case AppError.Validation(let f, let c) =>
+                    Assert(f = "flag");
+                    Assert(c = -7);
+            end match;
+    end match;
+
+    resIntOk := DoubleParsedX(6);
+    resIntFail := DoubleParsedX(0);
+    Assert(resIntOk.is_ok);
+    Assert(resIntOk.value = 12);
+    Assert(resIntFail.is_err);
+
+    PrintLn("=== PHASE 49 PART 1 TEST PASSED (ADTS, GENERIC RECORDS, VALUE OPTION/RESULT) ===");
+end adt_generics_monads_test.

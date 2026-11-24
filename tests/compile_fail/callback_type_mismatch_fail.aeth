@@ -1,0 +1,15 @@
+// expect-error: E0308
+module callback_type_mismatch_fail;
+
+type
+    IntTransform = function(Int32) return Int32;
+
+function Apply(x: Int32, op: IntTransform) return Int32 is
+begin
+    return op(x);
+end Apply;
+
+program Main;
+begin
+    PrintLn("%d", Apply(5, fn(x: String) return String => x));
+end callback_type_mismatch_fail.

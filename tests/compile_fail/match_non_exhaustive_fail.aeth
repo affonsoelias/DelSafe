@@ -1,0 +1,22 @@
+// expect-error: E0004
+module match_non_exhaustive_fail;
+
+type
+    Color = enum
+        Red,
+        Green,
+        Blue
+    end enum;
+
+program Main;
+var
+    c: Color;
+    code: Int32;
+begin
+    c := Color.Red;
+    match c with
+        case Color.Red: code := 1;
+        case Color.Green: code := 2;
+    end match;
+    PrintLn("%d", code);
+end match_non_exhaustive_fail.

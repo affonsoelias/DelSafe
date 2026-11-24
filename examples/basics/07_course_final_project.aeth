@@ -1,0 +1,92 @@
+module course_final_project;
+
+type
+    AccountError = enum
+        InsufficientBalance,
+        InvalidAmount
+    end enum;
+
+    BankAccount = record
+        id: UInt32;
+        balance: Float64;
+    end record;
+
+procedure DisplayBalance(borrow c: BankAccount) is
+begin
+    PrintLn("Account #%d - Current balance: $ %f", c.id, c.balance);
+end DisplayBalance;
+
+function Deposit(mut borrow c: BankAccount; borrow amount: Float64) return Result<Float64, AccountError> is
+contract
+    require
+        amount > 0.0;
+    ensure
+        result.is_ok;
+begin
+    if amount <= 0.0 then
+        return Err(AccountError.InvalidAmount);
+    else
+        c.balance := c.balance + amount;
+        return Ok(c.balance);
+    end if;
+end Deposit;
+
+function Withdraw(mut borrow c: BankAccount; borrow amount: Float64) return Result<Float64, AccountError> is
+contract
+    require
+        amount > 0.0;
+    ensure
+        true;
+begin
+    if amount <= 0.0 then
+        return Err(AccountError.InvalidAmount);
+    else
+        if c.balance < amount then
+            return Err(AccountError.InsufficientBalance);
+        else
+            c.balance := c.balance - amount;
+            return Ok(c.balance);
+        end if;
+    end if;
+end Withdraw;
+
+program Main;
+var
+    my_account: BankAccount;
+    deposit_res: Result<Float64, AccountError>;
+    withdraw_res: Result<Float64, AccountError>;
+begin
+    PrintLn("=== AETHER SAFE BANKING SYSTEM ===");
+
+    // Creating the account
+    my_account := BankAccount(id: 1001, balance: 250.0);
+    my_account.DisplayBalance();
+
+    // Performing a deposit
+    PrintLn("\nDepositing $ 150.00...");
+    deposit_res := my_account.Deposit(borrow 150.0);
+    match deposit_res do
+        case Ok(let new_balance):
+            PrintLn("Deposit complete! New balance: $ %f", new_balance);
+        case Err(AccountError.InvalidAmount):
+            PrintLn("Error: Invalid deposit amount.");
+        case Err(AccountError.InsufficientBalance):
+            PrintLn("Error: Insufficient balance.");
+    end match;
+
+    // Attempting an excessive withdrawal
+    PrintLn("\nAttempting to withdraw $ 500.00...");
+    withdraw_res := my_account.Withdraw(borrow 500.0);
+    match withdraw_res do
+        case Ok(let remaining_balance):
+            PrintLn("Withdrawal authorized! Remaining balance: $ %f", remaining_balance);
+        case Err(AccountError.InsufficientBalance):
+            PrintLn("Withdrawal denied: Insufficient account balance!");
+        case Err(AccountError.InvalidAmount):
+            PrintLn("Withdrawal denied: Invalid amount provided.");
+    end match;
+
+    // Final balance
+    PrintLn("\nFinal statement:");
+    my_account.DisplayBalance();
+end course_final_project.

@@ -1,0 +1,192 @@
+module stdlib_strings_fs_json_test;
+
+import Math;
+import Strings;
+import IO;
+import FS;
+import JSON;
+
+program Main;
+var
+    parts: array of String;
+    joined, pL, pR, pCh, repS: String;
+    fVal, rad: Float64;
+    optIntOk, optIntErr: Option<Int32>;
+    optFltOk, optFltErr: Option<Float64>;
+    rndI: Int32;
+    rndF: Float64;
+    i: Int32;
+    baseDir, f1, f2, f3: String;
+    entries: array of String;
+    found1, found3, okCopy, okRen: Bool;
+    jb: JSON.JsonBuilder;
+    builtJson, extStr, subObj, subArr, elStr: String;
+    extInt, extSubInt, arrLen, elInt: Int32;
+    extFloat, elFlt: Float64;
+    extBool: Bool;
+begin
+    Print("=== PHASE 55 ");
+    PrintLn("TEST START ===");
+
+    // 7.1 Strings & Conversions
+    parts := Split("alpha,,beta,gamma", ",");
+    Assert(parts.Length() = 4);
+    Assert(parts[0] = "alpha");
+    Assert(parts[1] = "");
+    Assert(parts[2] = "beta");
+    Assert(parts[3] = "gamma");
+
+    let ufcsParts := "x:y:z".Split(":");
+    Assert(ufcsParts.Length() = 3);
+    Assert(ufcsParts[1] = "y");
+
+    joined := Join(parts, "|");
+    Assert(joined = "alpha||beta|gamma");
+
+    pL := PadLeft("42", 5, '0');
+    pR := PadRight("ok", 5, ".");
+    pCh := PadLeft("7", 3);
+    Assert(pL = "00042");
+    Assert(pR = "ok...");
+    Assert(pCh = "  7");
+
+    repS := RepeatStr("ab", 3);
+    Assert(repS = "ababab");
+
+    fVal := StrToFloat("  -12.5  ");
+    Assert((fVal > -12.51) and (fVal < -12.49));
+
+    optIntOk := TryStrToInt("  -42 ");
+    optIntErr := TryStrToInt("42abc");
+    Assert(optIntOk.is_some and (Int32(optIntOk.value) = -42));
+    Assert(optIntErr.is_none);
+
+    optFltOk := TryStrToFloat("3.25");
+    optFltErr := TryStrToFloat("nope");
+    Assert(optFltOk.is_some and (optFltOk.value > 3.24) and (optFltOk.value < 3.26));
+    Assert(optFltErr.is_none);
+
+    Assert(Strings.JoinWith(Strings.SplitBy("a-b", "-"), "+") = "a+b");
+    Assert(Strings.RepeatText("x", 4) = "xxxx");
+
+    let safeRt := Math.SqrtSafe(16.0);
+    Assert(safeRt.is_ok and (safeRt.value > 3.99) and (safeRt.value < 4.01));
+
+    // 7.2 Math
+    Assert((Sqrt(81.0) > 8.99) and (Sqrt(81.0) < 9.01));
+    Assert(Floor(3.9) = 3.0);
+    Assert(Floor(-3.1) = -4.0);
+    Assert(Ceil(3.1) = 4.0);
+    Assert(Ceil(-3.9) = -3.0);
+    Assert(Round(2.5) = 3.0);
+    Assert(Round(-2.5) = -3.0);
+    Assert((Pow(2.0, 10.0) > 1023.9) and (Pow(2.0, 10.0) < 1024.1));
+    Assert((Exp(0.0) > 0.99) and (Exp(0.0) < 1.01));
+    Assert((Log(1.0) > -0.01) and (Log(1.0) < 0.01));
+
+    rad := 0.0;
+    Assert((Sin(rad) > -0.01) and (Sin(rad) < 0.01));
+    Assert((Cos(rad) > 0.99) and (Cos(rad) < 1.01));
+    Assert((Tan(rad) > -0.01) and (Tan(rad) < 0.01));
+    Assert((Atan2(1.0, 1.0) > 0.78) and (Atan2(1.0, 1.0) < 0.79));
+
+    for i := 1 to 20 do
+        rndI := RandomInt(10, 20);
+        Assert((rndI >= 10) and (rndI <= 20));
+        rndF := RandomFloat();
+        Assert((rndF >= 0.0) and (rndF < 1.0));
+    end for;
+
+    // 7.3 Env & FS (and ReadLn compilation without blocking stdin)
+    if false then
+        let _ignored := ReadLn();
+    end if;
+    Assert(SetEnv("AETHER_PHASE55_VAR", "ok_value"));
+    Assert(GetEnv("AETHER_PHASE55_VAR") = "ok_value");
+    Assert(IO.SetEnvVar("AETHER_PHASE55_IO", "ok2"));
+    Assert(IO.GetEnvVar("AETHER_PHASE55_IO") = "ok2");
+
+    baseDir := "build/tmp_phase55_fs_test";
+    f1 := baseDir + "/a.txt";
+    f2 := baseDir + "/b.txt";
+    f3 := baseDir + "/c.txt";
+    let _mk := CreateDir("build");
+    let _mk2 := CreateDir(baseDir);
+    Assert(DirExists(baseDir));
+    Assert(WriteFile(f1, "content123"));
+    okCopy := CopyFile(f1, f2);
+    Assert(okCopy and FileExists(f2));
+    Assert(Trim(ReadFile(f2)) = "content123");
+    okRen := RenameFile(f2, f3);
+    Assert(okRen and FileExists(f3) and (not FileExists(f2)));
+
+    entries := FS.ReadDir(baseDir);
+    Assert(entries.Length() = 2);
+    found1 := false;
+    found3 := false;
+    for i := 0 to entries.Length() - 1 do
+        if entries[i] = "a.txt" then found1 := true; end if;
+        if entries[i] = "c.txt" then found3 := true; end if;
+    end for;
+    Assert(found1 and found3);
+
+    Assert(DeleteFile(f1));
+    Assert(DeleteFile(f3));
+    Assert(RemoveDir(baseDir));
+
+    // 7.4 Structured JSON (Validate, Builder, Escapes, Nested Objects & Arrays)
+    jb := JSON.NewJsonBuilder();
+    JSON.AddString(mut borrow jb, borrow "name", borrow "Ana \"Dev\"\nLine2");
+    JSON.AddInt(mut borrow jb, borrow "age", borrow 28);
+    JSON.AddFloat(mut borrow jb, borrow "score", borrow 9.5);
+    JSON.AddBool(mut borrow jb, borrow "active", borrow true);
+    JSON.AddRaw(mut borrow jb, borrow "meta", borrow "{\"fake_key\": 1, \"level\": 7}");
+    JSON.AddRaw(mut borrow jb, borrow "scores", borrow "[10, 20.5, \"end\"]");
+    builtJson := JSON.Build(borrow jb);
+
+    Assert(JSON.Validate(borrow builtJson));
+    Assert(JSON.Validate(borrow "{\"a\": [1, true, null, {\"b\": -3.5e2}]}"));
+    Assert(not JSON.Validate(borrow ""));
+    Assert(not JSON.Validate(borrow "{\"a\": [1, 2,]}"));
+    Assert(not JSON.Validate(borrow "{\"a\": 1} extra"));
+
+    // Ensure nested key does not trigger false positive at root level
+    Assert(JSON.HasKey(borrow builtJson, borrow "name"));
+    Assert(not JSON.HasKey(borrow builtJson, borrow "fake_key"));
+
+    extStr := "";
+    Assert(JSON.ExtractString(borrow builtJson, borrow "name", mut borrow extStr));
+    Assert(extStr = "Ana \"Dev\"\nLine2");
+
+    extInt := 0;
+    Assert(JSON.ExtractInt(borrow builtJson, borrow "age", mut borrow extInt));
+    Assert(extInt = 28);
+
+    extFloat := 0.0;
+    Assert(JSON.ExtractFloat(borrow builtJson, borrow "score", mut borrow extFloat));
+    Assert((extFloat > 9.49) and (extFloat < 9.51));
+
+    extBool := false;
+    Assert(JSON.ExtractBool(borrow builtJson, borrow "active", mut borrow extBool));
+    Assert(extBool);
+
+    subObj := "";
+    Assert(JSON.ExtractObject(borrow builtJson, borrow "meta", mut borrow subObj));
+    extSubInt := 0;
+    Assert(JSON.ExtractInt(borrow subObj, borrow "level", mut borrow extSubInt));
+    Assert(extSubInt = 7);
+
+    subArr := "";
+    Assert(JSON.ExtractArray(borrow builtJson, borrow "scores", mut borrow subArr));
+    arrLen := JSON.ArrayLength(borrow subArr);
+    Assert(arrLen = 3);
+
+    elInt := 0;
+    Assert(JSON.ArrayGetInt(borrow subArr, 0, mut borrow elInt) and (elInt = 10));
+    elFlt := 0.0;
+    Assert(JSON.ArrayGetFloat(borrow subArr, 1, mut borrow elFlt) and (elFlt > 20.49) and (elFlt < 20.51));
+    elStr := "";
+    Assert(JSON.ArrayGetString(borrow subArr, 2, mut borrow elStr) and (elStr = "end"));
+
+    PrintLn("=== PHASE 55 TEST PASSED (STRINGS, MATH, ENV/FS & STRUCTURED JSON) ===");
+end stdlib_strings_fs_json_test.

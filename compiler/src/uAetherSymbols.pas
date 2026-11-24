@@ -366,7 +366,11 @@ var
   P: Integer;
   Sym: TSymbol;
 begin
-  CleanName := ATypeName;
+  CleanName := Trim(ATypeName);
+  if (Pos('fn(', CleanName) = 1) or
+     ((Length(CleanName) > 2) and (CleanName[1] = '(') and (CleanName[Length(CleanName)] = ')')) then
+    Exit(True);
+
   P := Pos('<', CleanName);
   if P > 0 then
     CleanName := Copy(CleanName, 1, P - 1);

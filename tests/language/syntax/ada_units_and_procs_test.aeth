@@ -1,0 +1,79 @@
+module ada_units_and_procs_test;
+
+import fixtures.structured_unit_helper as h57;
+
+procedure SetFlag(mut borrow flag: Int32) is
+begin
+    if flag < 0 then
+        return;
+    end if;
+    flag := flag + 1;
+end SetFlag;
+
+procedure NoParens is
+begin
+    return;
+end NoParens;
+
+procedure SumIntoOut(a, b: Int32; mut borrow out_val: Int32) is
+begin
+    out_val := a + b;
+end SumIntoOut;
+
+function ComputeDouble(number: Int32) return Int32 is
+begin
+    return number * 2;
+end ComputeDouble;
+
+function SafeDivide(num, den: Int32) return Int32 is
+contract
+    require
+        den <> 0;
+    ensure
+        (result * den) <= num;
+begin
+    return num / den;
+end SafeDivide;
+
+program Main;
+var
+    p1, p2: h57.Point;
+    out_val, flagVal: Int32;
+begin
+    // 1. Unit initialization must have set PublicCounter=100 and PrivateAccum=7
+    Assert(h57.BASE_MULTIPLIER = 10);
+    Assert(h57.PublicCounter = 100);
+    Assert(h57.GetState() = 107);
+
+    // 2. Procedures and encapsulated state mutation in the Unit
+    h57.IncrementState(5);
+    Assert(h57.PublicCounter = 105);
+    Assert(h57.GetState() = 122);
+
+    h57.ResetState();
+    Assert(h57.PublicCounter = 0);
+    Assert(h57.GetState() = 0);
+
+    // 3. Interface contract (executed in implementation) and grouped borrow parameters
+    Assert(h57.SumRangeContract(10, 15) = 25);
+    p1 := h57.Point(1, 2);
+    p2 := h57.Point(3, 4);
+    Assert(h57.SumPoints(borrow p1, borrow p2) = 10);
+
+    // 4. Local Ada-style Procedures/Functions (no (), grouped mut borrow, empty return, contract)
+    NoParens();
+    flagVal := -3;
+    SetFlag(mut borrow flagVal);
+    Assert(flagVal = -3);
+    flagVal := 4;
+    SetFlag(mut borrow flagVal);
+    Assert(flagVal = 5);
+
+    out_val := 0;
+    SumIntoOut(17, 25, mut borrow out_val);
+    Assert(out_val = 42);
+    Assert(ComputeDouble(21) = 42);
+    Assert(SafeDivide(42, 6) = 7);
+
+    PrintLn("=== PHASE 57 TEST PASSED (ADA SYNTAX, OBJECT PASCAL UNITS, MODULE VARS, INIT/FINI) ===");
+end ada_units_and_procs_test.

@@ -1,0 +1,107 @@
+module arrays_sets_subranges_test;
+
+import IO;
+
+type
+    Vector5 = array[5] of Int32;
+    Matrix3 = array[3, 3] of Int32;
+    Cube2 = array[2, 2, 2] of Int32;
+    Hypercube2 = array[2, 2, 2, 2] of Int32;
+
+    Permissions = set of (ReadPerm, WritePerm, ExecPerm);
+    DayOfMonth = 1..31;
+
+program Main;
+var
+    v: Vector5;
+    m: Matrix3;
+    c: Cube2;
+    h: Hypercube2;
+    i: Int32;
+    sum_val: Int32;
+    repCount: Int32;
+    p: Permissions;
+    p2: Permissions;
+    pUnion: Permissions;
+    pInter: Permissions;
+    day: DayOfMonth;
+begin
+    PrintLn("=== PHASE 43 TEST: ARRAYS, REPEAT-UNTIL, SETS AND SUBRANGES ===");
+
+    // 1. 1D Vector test
+    v[0] := 10;
+    v[1] := 20;
+    v[2] := 30;
+    v[3] := 40;
+    v[4] := 50;
+    assert(v[0] = 10);
+    assert(v[2] = 30);
+    assert(v[4] = 50);
+
+    // 2. 2D Matrix test
+    m[0, 0] := 1;
+    m[0, 1] := 2;
+    m[1, 1] := 5;
+    m[2, 2] := 9;
+    assert(m[0, 0] = 1);
+    assert(m[0, 1] = 2);
+    assert(m[1, 1] = 5);
+    assert(m[2, 2] = 9);
+
+    // 3. 3D Cube test
+    c[0, 0, 0] := 11;
+    c[1, 0, 1] := 77;
+    c[1, 1, 1] := 99;
+    assert(c[0, 0, 0] = 11);
+    assert(c[1, 0, 1] = 77);
+    assert(c[1, 1, 1] = 99);
+
+    // 4. 4D Hypercube test
+    h[0, 1, 0, 1] := 1234;
+    h[1, 1, 1, 1] := 5678;
+    assert(h[0, 1, 0, 1] = 1234);
+    assert(h[1, 1, 1, 1] = 5678);
+
+    // 5. repeat ... until test
+    repCount := 0;
+    sum_val := 0;
+    repeat
+        repCount := repCount + 1;
+        sum_val := sum_val + repCount;
+    until repCount >= 5;
+    assert(repCount = 5);
+    assert(sum_val = 15);
+
+    // Guaranteed at-least-once execution test
+    repCount := 100;
+    repeat
+        repCount := repCount + 1;
+    until repCount > 50;
+    assert(repCount = 101);
+
+    // 6. Sets (set of) and 'in' operator test
+    p := [ReadPerm, ExecPerm];
+    assert(ReadPerm in p);
+    assert(ExecPerm in p);
+    assert(not (WritePerm in p));
+
+    p2 := [WritePerm, ExecPerm];
+    assert(WritePerm in p2);
+
+    // Set operations: union (+) and intersection (*)
+    pUnion := p + p2;
+    assert(ReadPerm in pUnion);
+    assert(WritePerm in pUnion);
+    assert(ExecPerm in pUnion);
+
+    pInter := p * p2;
+    assert(ExecPerm in pInter);
+    assert(not (ReadPerm in pInter));
+    assert(not (WritePerm in pInter));
+
+    // 7. Subrange test
+    day := 22;
+    assert(day = 22);
+
+    PrintLn("Phase 43: All N-D Arrays, repeat-until, sets and subranges tests passed!");
+end arrays_sets_subranges_test.

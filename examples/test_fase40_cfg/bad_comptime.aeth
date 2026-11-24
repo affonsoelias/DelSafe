@@ -1,9 +1,0 @@
-module bad_comptime;
-
-program Main;
-var
-  x: Int32;
-begin
-  x := 10 / 0;
-  PrintLn(IntToStr(x));
-end bad_comptime.

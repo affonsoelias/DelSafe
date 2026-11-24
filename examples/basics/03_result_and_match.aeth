@@ -1,0 +1,37 @@
+module result_and_match;
+
+type
+    MathError = enum
+        DivisionByZero,
+        NegativeNumber
+    end enum;
+
+function Divide(borrow dividend, divisor: Float64) return Result<Float64, MathError> is
+contract
+    require
+        true;
+    ensure
+        result.is_ok implies divisor <> 0.0;
+begin
+    if divisor = 0.0 then
+        return Err(MathError.DivisionByZero);
+    else
+        return Ok(dividend / divisor);
+    end if;
+end Divide;
+
+program Main;
+var
+    outcome: Result<Float64, MathError>;
+begin
+    outcome := Divide(borrow 100.0, borrow 0.0);
+
+    match outcome do
+        case Ok(let val):
+            PrintLn("Division result: %f", val);
+        case Err(MathError.DivisionByZero):
+            PrintLn("Error detected: Division by zero prevented!");
+        case Err(MathError.NegativeNumber):
+            PrintLn("Error detected: Invalid negative number.");
+    end match;
+end result_and_match.

@@ -1,0 +1,32 @@
+module vectors_2d;
+
+interface
+
+type
+    Point2D = record
+        x: Float64;
+        y: Float64;
+    end record;
+
+function CreatePoint(x, y: Float64) return Point2D;
+function AddPoints(p1, p2: Point2D) return Point2D;
+function NormSquared(p: Point2D) return Float64;
+
+implementation
+
+function CreatePoint(x, y: Float64) return Point2D is
+begin
+    return Point2D(x: x, y: y);
+end CreatePoint;
+
+function AddPoints(p1, p2: Point2D) return Point2D is
+begin
+    return Point2D(x: p1.x + p2.x, y: p1.y + p2.y);
+end AddPoints;
+
+function NormSquared(p: Point2D) return Float64 is
+begin
+    return (p.x * p.x) + (p.y * p.y);
+end NormSquared;
+
+end vectors_2d.

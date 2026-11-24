@@ -1,8 +1,0 @@
-{
-  "name" : "app_consumidor",
-  "version" : "0.1.0",
-  "entry" : "src/main.aeth",
-  "dependencies" : {
-    "vetores_2d" : "^1.2.3"
-  }
-}

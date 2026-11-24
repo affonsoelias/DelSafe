@@ -327,7 +327,7 @@ begin
   if (T = 'Int8') or (T = 'Int16') or (T = 'Int32') or (T = 'Int64') or
      (T = 'UInt8') or (T = 'UInt16') or (T = 'UInt32') or (T = 'UInt64') or
      (T = 'Float32') or (T = 'Float64') or (T = 'Bool') or (T = 'Char') or
-     (T = 'Pointer') or (Pos('^', T) = 1) or
+     (T = 'Pointer') or (Pos('^', T) = 1) or (Pos('fn(', T) = 1) or
      (T = 'IntLiteral') or (T = 'FloatLiteral') then
     Exit(True);
 
@@ -339,7 +339,9 @@ begin
     Sym := FSymbols.ResolveTypeSymbol(T);
     if Assigned(Sym) and (Sym.Kind = skType) and Assigned(Sym.Node) then
     begin
-      if (Sym.Node is TASTEnumDecl) or (Sym.Node is TASTSubrangeDecl) or (Sym.Node is TASTSetDecl) then
+      if (Sym.Node is TASTEnumDecl) then
+        Exit(not TASTEnumDecl(Sym.Node).HasPayload);
+      if (Sym.Node is TASTSubrangeDecl) or (Sym.Node is TASTSetDecl) then
         Exit(True);
       if (Sym.Node is TASTRecordDecl) or (Sym.Node is TASTMapDecl) then
         Exit(False);
@@ -353,7 +355,7 @@ begin
     for I := 0 to FModule.Types.Count - 1 do
     begin
       if (TASTNode(FModule.Types[I]) is TASTEnumDecl) and SameText(TASTEnumDecl(FModule.Types[I]).Name, T) then
-        Exit(True);
+        Exit(not TASTEnumDecl(FModule.Types[I]).HasPayload);
       if (TASTNode(FModule.Types[I]) is TASTSubrangeDecl) and SameText(TASTSubrangeDecl(FModule.Types[I]).Name, T) then
         Exit(True);
       if (TASTNode(FModule.Types[I]) is TASTSetDecl) and SameText(TASTSetDecl(FModule.Types[I]).Name, T) then
@@ -696,6 +698,8 @@ begin
     Call := TASTCallExpr(Expr);
     SavedBorrowTop := Length(FBorrowOps);
     try
+      if Assigned(Call.CalleeExpr) then
+        CheckExpr(Call.CalleeExpr, accRead);
       if (SameText(Call.Callee, 'Free') or SameText(Call.Callee, 'Dispose')) and (Call.Args.Count = 1) then
         CheckExpr(TASTCallArg(Call.Args[0]).Expr, accMove)
       else
@@ -703,6 +707,33 @@ begin
           CheckCallArg(TASTCallArg(Call.Args[I]));
     finally
       ReleaseBorrowsTo(SavedBorrowTop);
+    end;
+    Exit;
+  end;
+
+  if Expr is TASTTupleLiteralExpr then
+  begin
+    for I := 0 to TASTTupleLiteralExpr(Expr).Elements.Count - 1 do
+      CheckExpr(TASTExpr(TASTTupleLiteralExpr(Expr).Elements[I]), accRead);
+    Exit;
+  end;
+
+  if Expr is TASTLambdaExpr then
+  begin
+    EnterScope;
+    try
+      for I := 0 to TASTLambdaExpr(Expr).Params.Count - 1 do
+      begin
+        with TASTParam(TASTLambdaExpr(Expr).Params[I]) do
+          FCurrentScope.AddVar(Name, TypeName, vsOwned, Line, Col, IsPrimitiveType(TypeName));
+      end;
+      if Assigned(TASTLambdaExpr(Expr).BodyExpr) then
+        CheckExpr(TASTLambdaExpr(Expr).BodyExpr, accRead)
+      else
+        for I := 0 to TASTLambdaExpr(Expr).BodyStmts.Count - 1 do
+          CheckStmt(TASTStmt(TASTLambdaExpr(Expr).BodyStmts[I]));
+    finally
+      LeaveScope;
     end;
     Exit;
   end;
@@ -781,7 +812,13 @@ begin
       CaseNode := TASTMatchCase(MExpr.Cases[I]);
       EnterScope;
       try
-        if CaseNode.Pattern.SubPattern <> '' then
+        if CaseNode.Pattern.Bindings.Count > 0 then
+        begin
+          for SavedBorrowTop := 0 to CaseNode.Pattern.Bindings.Count - 1 do
+            if CaseNode.Pattern.Bindings[SavedBorrowTop] <> '_' then
+              FCurrentScope.AddVar(CaseNode.Pattern.Bindings[SavedBorrowTop], '', vsOwned, CaseNode.Line, CaseNode.Col, False);
+        end
+        else if (CaseNode.Pattern.SubPattern <> '') and (CaseNode.Pattern.SubPattern <> '_') then
           FCurrentScope.AddVar(CaseNode.Pattern.SubPattern, '', vsOwned, CaseNode.Line, CaseNode.Col, False);
         if Assigned(CaseNode.Guard) then
           CheckExpr(CaseNode.Guard, accRead);
@@ -1047,7 +1084,13 @@ begin
       CaseNode := TASTMatchCase(MatchStmt.Cases[I]);
       EnterScope;
       try
-        if CaseNode.Pattern.SubPattern <> '' then
+        if CaseNode.Pattern.Bindings.Count > 0 then
+        begin
+          for J := 0 to CaseNode.Pattern.Bindings.Count - 1 do
+            if CaseNode.Pattern.Bindings[J] <> '_' then
+              FCurrentScope.AddVar(CaseNode.Pattern.Bindings[J], '', vsOwned, CaseNode.Line, CaseNode.Col, False);
+        end
+        else if (CaseNode.Pattern.SubPattern <> '') and (CaseNode.Pattern.SubPattern <> '_') then
           FCurrentScope.AddVar(CaseNode.Pattern.SubPattern, '', vsOwned, CaseNode.Line, CaseNode.Col, False);
         if Assigned(CaseNode.Guard) then
           CheckExpr(CaseNode.Guard, accRead);
@@ -1146,7 +1189,8 @@ begin
     for I := 0 to AModule.Functions.Count - 1 do
     begin
       Func := TASTFunction(AModule.Functions[I]);
-      CheckFunction(Func);
+      if (Func.GenericParams.Count = 0) and (Func.GenericParam = '') then
+        CheckFunction(Func);
     end;
 
     for I := 0 to AModule.InitBody.Count - 1 do

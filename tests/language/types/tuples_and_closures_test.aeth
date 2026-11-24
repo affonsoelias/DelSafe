@@ -1,0 +1,202 @@
+module tuples_and_closures_test;
+
+type
+    Coord = (Int32, Int32);
+    IntTransform = function(Int32) return Int32;
+    IntPredicate = function(Int32): Bool;
+    IntSink = procedure(Int32);
+
+    CallbackHolder = record
+        tag: String;
+        apply: IntTransform;
+    end record;
+
+function SwapPair(pair: (Int32, String)) return (String, Int32) is
+begin
+    return (pair.1, pair.0);
+end SwapPair;
+
+function SumCoord(c: Coord) return Int32 is
+begin
+    return c.0 + c.1;
+end SumCoord;
+
+function WrapTagged<T>(id: Int32, item: T) return (Int32, T) is
+begin
+    return (id, item);
+end WrapTagged;
+
+function MaybeEntry(ok: Bool) return Option<(Int32, String)> is
+begin
+    if ok then
+        return Some((42, "ok"));
+    else
+        return None;
+    end if;
+end MaybeEntry;
+
+function DividePair(a: Int32, b: Int32) return Result<(Int32, Int32), String> is
+begin
+    if b = 0 then
+        return Err("division by zero");
+    else
+        return Ok((a div b, a mod b));
+    end if;
+end DividePair;
+
+function DoubleIt(x: Int32) return Int32 is
+begin
+    return x * 2;
+end DoubleIt;
+
+function IsPositive(x: Int32) return Bool is
+begin
+    return x > 0;
+end IsPositive;
+
+procedure CheckPositiveSink(x: Int32) is
+begin
+    Assert(x > 0);
+end CheckPositiveSink;
+
+function ApplyTransform(x: Int32, op: IntTransform) return Int32 is
+begin
+    return op(x);
+end ApplyTransform;
+
+function FilterAndScale(x: Int32, pred: IntPredicate, op: IntTransform) return Int32 is
+begin
+    if pred(x) then
+        return op(x);
+    end if;
+    return 0;
+end FilterAndScale;
+
+procedure RunSink(x: Int32, sink: IntSink) is
+begin
+    sink(x);
+end RunSink;
+
+function MakeAdder(base: Int32) return IntTransform is
+begin
+    return fn(delta: Int32) return Int32 => base + delta;
+end MakeAdder;
+
+function MakeWeightedSum(weight: Int32, offset: Int32) return function(Int32) return Int32 is
+begin
+    return fn(v: Int32) return Int32
+    begin
+        let scaled := v * weight;
+        return scaled + offset;
+    end fn;
+end MakeWeightedSum;
+
+program Main;
+var
+    pair: (Int32, String);
+    swapped: (String, Int32);
+    pt: Coord;
+    nested: ((Int32, Int32), String);
+    optEntry: Option<(Int32, String)>;
+    resDiv: Result<(Int32, Int32), String>;
+    pts: array of Coord;
+    tagged: (Int32, String);
+    holder: CallbackHolder;
+    factor: Int32;
+    adderFn: IntTransform;
+    weightedFn: IntTransform;
+    blockFn: IntTransform;
+begin
+    // 49.4 Tuple literals, aliases, nested tuples, positional access
+    pair := (10, "aether");
+    Assert(pair.0 = 10);
+    Assert(pair.1 = "aether");
+
+    swapped := SwapPair(pair);
+    Assert(swapped.0 = "aether");
+    Assert(swapped.1 = 10);
+
+    pt := (15, 27);
+    Assert(SumCoord(pt) = 42);
+
+    nested := ((7, 8), "nested");
+    Assert(nested.0.0 = 7);
+    Assert(nested.0.1 = 8);
+    Assert(nested.1 = "nested");
+
+    // Tuple destructuring with let / var, wildcards, and explicit type
+    let (num, name) := pair;
+    Assert(num = 10);
+    Assert(name = "aether");
+
+    var (firstCoord, _) := pt;
+    Assert(firstCoord = 15);
+    firstCoord := 99;
+    Assert(firstCoord = 99);
+
+    let (typedId, typedTag): (Int32, String) := (77, "typed");
+    Assert(typedId = 77);
+    Assert(typedTag = "typed");
+
+    // Tuples inside Option, Result, dynamic arrays, and generics
+    optEntry := MaybeEntry(true);
+    Assert(optEntry.is_some);
+    Assert(optEntry.value.0 = 42);
+    Assert(optEntry.value.1 = "ok");
+    Assert(MaybeEntry(false).is_none);
+
+    resDiv := DividePair(17, 5);
+    Assert(resDiv.is_ok);
+    Assert(resDiv.value.0 = 3);
+    Assert(resDiv.value.1 = 2);
+    Assert(DividePair(17, 0).is_err);
+
+    SetLength(pts, 2);
+    pts[0] := (1, 2);
+    pts[1] := (3, 4);
+    Assert(pts[0].0 + pts[1].1 = 5);
+
+    tagged := WrapTagged<String>(5, "generic");
+    Assert(tagged.0 = 5);
+    Assert(tagged.1 = "generic");
+
+    // 49.5 Function types, named thunks, and record callbacks
+    Assert(ApplyTransform(21, DoubleIt) = 42);
+    Assert(FilterAndScale(6, IsPositive, DoubleIt) = 12);
+    Assert(FilterAndScale(-3, IsPositive, DoubleIt) = 0);
+
+    holder := CallbackHolder("doubler", DoubleIt);
+    Assert(holder.apply(9) = 18);
+
+    RunSink(5, CheckPositiveSink);
+    RunSink(8, fn(v: Int32)
+    begin
+        Assert(v = 8);
+        end fn);
+
+        // Stateless lambdas and parameter/return type inference
+        Assert(ApplyTransform(10, fn(x: Int32) return Int32 => x * 3) = 30);
+        Assert(ApplyTransform(5, fn(x) => x + 7) = 12);
+        Assert(FilterAndScale(4, fn(x) => x > 0, fn(x) => x + 10) = 14);
+
+        // Multi-line block lambda
+        blockFn := fn(x: Int32) return Int32
+        begin
+            let stepped := x + 10;
+            return stepped * 2;
+        end fn;
+        Assert(blockFn(5) = 30);
+
+        // Closures capturing outer variables + chained call
+        factor := 3;
+        Assert(ApplyTransform(7, fn(x: Int32) return Int32 => x * factor) = 21);
+
+        adderFn := MakeAdder(100);
+        Assert(adderFn(23) = 123);
+        Assert(MakeAdder(50)(7) = 57);
+
+        weightedFn := MakeWeightedSum(4, 5);
+        Assert(weightedFn(6) = 29);
+
+        PrintLn("=== PHASE 49 PART 2 TEST PASSED (TUPLES, FUNCTION TYPES & CLOSURES) ===");
+    end tuples_and_closures_test.

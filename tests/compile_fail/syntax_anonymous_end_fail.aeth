@@ -1,0 +1,12 @@
+// expect-error: Expected "if" after "end" to close if
+module syntax_anonymous_end_fail;
+
+program Main;
+var
+    x: Int32;
+begin
+    x := 5;
+    if x > 0 then
+        PrintLn("positive");
+    end;
+end syntax_anonymous_end_fail.

@@ -1,0 +1,11 @@
+// expect-error: E0308
+module tuple_arity_mismatch_fail;
+
+program Main;
+var
+    t: (Int32, String);
+begin
+    t := (10, "ok");
+    let (a, b, c) := t;
+    PrintLn("%d", a);
+end tuple_arity_mismatch_fail.

@@ -48,7 +48,7 @@ Begin
   WriteLn('Build and Execution Commands:');
   WriteLn('  build             Compile the current project based on the aether.json manifest');
   WriteLn('  run               Compile and immediately run the project binary');
-  WriteLn('  test [filter]     Run unit tests (individual files or tests/ directory)');
+  WriteLn('  test [filter]     Run unit tests (--target=pascal|c|all, --both)');
   WriteLn('  bench [filter]    Run benchmark suite (--compare to compare backends)');
   WriteLn('  profile <file>    Run profiling and memory audit (--runs=N, --json)');
   WriteLn('  lint [path]       Run static code quality analysis (--fix for auto-fix)');
@@ -78,7 +78,7 @@ Begin
   );
   WriteLn('  publish           Publish the current package to the official Aether Registry (--dry-run)');
   WriteLn('  search <query>    Search community packages available in the Registry');
-  WriteLn('  test [filter]     Run unit tests from the tests/ directory');
+  WriteLn('  test [filter]     Run unit tests from the tests/ directory (--target=all)');
   WriteLn(
       '  build             Compile the current project based on the aether.json manifest'
   );
@@ -1484,23 +1484,139 @@ Begin
   End;
 End;
 
-Procedure HandleProjectTest(Const Filter: String; TargetPascal: Boolean);
-Var 
-  ProjConfig: TAetherProjectConfig;
-  TestsDir, TestFile, TestExe, BaseDir: string;
+Function NormalizeTestRelPath(Const S: String): string;
+Begin
+  Result := StringReplace(S, '\', '/', [rfReplaceAll]);
+End;
+
+Function EndsWithLower(Const S, Suffix: String): Boolean;
+Var
+  LS, LSuf: string;
+Begin
+  LS := LowerCase(S);
+  LSuf := LowerCase(Suffix);
+  If Length(LS) < Length(LSuf) Then
+    Exit(False);
+  Result := Copy(LS, Length(LS) - Length(LSuf) + 1, Length(LSuf)) = LSuf;
+End;
+
+Function IsExcludedTestDir(Const DirName: String): Boolean;
+Var
+  LowName: string;
+Begin
+  LowName := LowerCase(DirName);
+  Result := (LowName = '.') Or (LowName = '..') Or
+            (LowName = 'fixtures') Or (LowName = 'lib') Or
+            (LowName = 'tooling') Or (LowName = 'bin') Or
+            (LowName = 'generated') Or (LowName = '.aether') Or
+            (LowName = 'docs') Or (LowName = 'benches') Or
+            (LowName = '.git');
+End;
+
+Function IsMatchingTestFile(Const FileName: String; AtTestsRoot: Boolean): Boolean;
+Var
+  LowName: string;
+Begin
+  LowName := LowerCase(FileName);
+  If Not EndsWithLower(LowName, '.aeth') Then
+    Exit(False);
+  Result := EndsWithLower(LowName, '_test.aeth') Or
+            EndsWithLower(LowName, '_fail.aeth') Or
+            (AtTestsRoot And (Pos('test', LowName) > 0));
+End;
+
+Procedure CollectTestFiles(Const RootDir, CurrentDir, FilterLower: String;
+                           AtRoot: Boolean; OutFiles: TStringList);
+Var
   SearchRec: TSearchRec;
-  TestFiles: TStringList;
-  I, ExitCode: Integer;
+  FullPath, RelPath: string;
+Begin
+  // Collect matching test files in the current directory
+  If FindFirst(IncludeTrailingPathDelimiter(CurrentDir) + '*.aeth', faAnyFile, SearchRec) = 0 Then
+  Begin
+    Try
+      Repeat
+        If (SearchRec.Attr And faDirectory) = 0 Then
+        Begin
+          If IsMatchingTestFile(SearchRec.Name, AtRoot) Then
+          Begin
+            FullPath := IncludeTrailingPathDelimiter(CurrentDir) + SearchRec.Name;
+            If Length(FullPath) > Length(IncludeTrailingPathDelimiter(RootDir)) Then
+              RelPath := Copy(FullPath, Length(IncludeTrailingPathDelimiter(RootDir)) + 1, Length(FullPath))
+            Else
+              RelPath := SearchRec.Name;
+            RelPath := NormalizeTestRelPath(RelPath);
+            If (FilterLower = '') Or (Pos(FilterLower, LowerCase(RelPath)) > 0) Then
+              OutFiles.Add(FullPath);
+          End;
+        End;
+      Until FindNext(SearchRec) <> 0;
+    Finally
+      FindClose(SearchRec);
+    End;
+  End;
+
+  // Recurse into non-excluded subdirectories
+  If FindFirst(IncludeTrailingPathDelimiter(CurrentDir) + '*', faDirectory, SearchRec) = 0 Then
+  Begin
+    Try
+      Repeat
+        If ((SearchRec.Attr And faDirectory) <> 0) And (Not IsExcludedTestDir(SearchRec.Name)) Then
+          CollectTestFiles(RootDir, IncludeTrailingPathDelimiter(CurrentDir) + SearchRec.Name,
+                           FilterLower, False, OutFiles);
+      Until FindNext(SearchRec) <> 0;
+    Finally
+      FindClose(SearchRec);
+    End;
+  End;
+End;
+
+Procedure ExtractExpectedErrors(Const FilePath: String; Expected: TStringList);
+Var
+  Lines: TStringList;
+  I: Integer;
+  Trimmed, Sub: string;
+Begin
+  Lines := TStringList.Create;
+  Try
+    Lines.LoadFromFile(FilePath);
+    For I := 0 To Lines.Count - 1 Do
+    Begin
+      Trimmed := Trim(Lines[I]);
+      If LowerCase(Copy(Trimmed, 1, 16)) = '// expect-error:' Then
+      Begin
+        Sub := Trim(Copy(Trimmed, 17, Length(Trimmed)));
+        If Sub <> '' Then
+          Expected.Add(Sub);
+      End;
+    End;
+  Finally
+    Lines.Free;
+  End;
+End;
+
+Function HandleProjectTest(Const Filter: String; TargetPascal: Boolean;
+                           Out OutPassed, OutFailed, OutTotal: Integer): Boolean;
+Var
+  ProjConfig: TAetherProjectConfig;
+  TestsDir, RootBase, TestFile, TestExe, BaseDir, RelDisplay: string;
+  TestFiles, ExpectedErrs: TStringList;
+  I, J, ExitCode: Integer;
   PassedCount, FailedCount: Integer;
   StartTime, ElapsedTime: TDateTime;
   ElapsedMs: Int64;
-  BackendName: string;
-  HasConfig: Boolean;
+  BackendName, FilterNorm, MissingSubstr: string;
+  HasConfig, IsCompileFail, AllMatched: Boolean;
 Begin
+  OutPassed := 0;
+  OutFailed := 0;
+  OutTotal := 0;
+  Result := False;
+
+  InitGlobalPaths;
   HasConfig := LoadProjectConfig(ProjConfig);
   If HasConfig Then
   Begin
-    InitGlobalPaths;
     RestoreProjectDependencies(ProjConfig);
     BaseDir := ProjConfig.RootDir;
     For I := 0 To High(ProjConfig.PathsAether) Do
@@ -1528,54 +1644,40 @@ Begin
   Else
     BaseDir := GetCurrentDir;
 
+  TestsDir := BaseDir + PathDelim + 'tests';
+  If Not DirectoryExists(TestsDir) Then
+    TestsDir := BaseDir;
+  If DirectoryExists(TestsDir) And (GlobalIncludePaths.IndexOf(TestsDir) < 0) Then
+    GlobalIncludePaths.Add(TestsDir);
+
   TestFiles := TStringList.Create;
   Try
+    FilterNorm := LowerCase(NormalizeTestRelPath(Filter));
+
     // 1. If the filter is a directly existing file
-    If FileExists(Filter) Then
+    If (Filter <> '') And FileExists(Filter) Then
     Begin
       TestFiles.Add(ExpandFileName(Filter));
     End
-    Else If DirectoryExists(Filter) Then
+    Else If (Filter <> '') And DirectoryExists(Filter) Then
     Begin
-      TestsDir := ExpandFileName(Filter);
-      If FindFirst(TestsDir + PathDelim + '*.aeth', faAnyFile, SearchRec) = 0 Then
-      Begin
-        Repeat
-          If (SearchRec.Attr And faDirectory) = 0 Then
-            TestFiles.Add(TestsDir + PathDelim + SearchRec.Name);
-        Until FindNext(SearchRec) <> 0;
-        FindClose(SearchRec);
-      End;
+      RootBase := ExpandFileName(Filter);
+      CollectTestFiles(RootBase, RootBase, '', True, TestFiles);
     End
     Else
     Begin
-      TestsDir := BaseDir + PathDelim + 'tests';
-      If Not DirectoryExists(TestsDir) Then
-        TestsDir := BaseDir;
-
-      If FindFirst(TestsDir + PathDelim + '*.aeth', faAnyFile, SearchRec) = 0 Then
-      Begin
-        Repeat
-          If (SearchRec.Attr And faDirectory) = 0 Then
-          Begin
-            If (Filter = '') Or (Pos(LowerCase(Filter), LowerCase(SearchRec.Name)) > 0) Then
-            Begin
-              If (Filter <> '') Or (Pos('test', LowerCase(SearchRec.Name)) > 0) Or (TestsDir <> BaseDir) Then
-                TestFiles.Add(TestsDir + PathDelim + SearchRec.Name);
-            End;
-          End;
-        Until FindNext(SearchRec) <> 0;
-        FindClose(SearchRec);
-      End;
+      CollectTestFiles(TestsDir, TestsDir, FilterNorm, True, TestFiles);
     End;
+
+    TestFiles.Sort;
 
     If TestFiles.Count = 0 Then
     Begin
       If Filter <> '' Then
         WriteLn(Format('No tests found matching filter "%s".', [Filter]))
       Else
-        WriteLn('No test files (*.aeth) found in the "tests/" directory.');
-      Exit;
+        WriteLn('No test files (*_test.aeth / *_fail.aeth) found in the "tests/" directory.');
+      Exit(False);
     End;
 
     If TargetPascal Then
@@ -1594,35 +1696,90 @@ Begin
     For I := 0 To TestFiles.Count - 1 Do
     Begin
       TestFile := TestFiles[I];
-      TestExe := BaseDir + PathDelim + 'bin' + PathDelim + 'tests'
-                 + PathDelim + ChangeFileExt(ExtractFileName(TestFile), '.exe');
-      ForceDirectories(ExtractFileDir(TestExe));
+      If Pos(LowerCase(IncludeTrailingPathDelimiter(TestsDir)), LowerCase(TestFile)) = 1 Then
+        RelDisplay := NormalizeTestRelPath(Copy(TestFile, Length(IncludeTrailingPathDelimiter(TestsDir)) + 1, Length(TestFile)))
+      Else
+        RelDisplay := ExtractFileName(TestFile);
 
-      Write(Format('  [TEST] %s ... ', [ExtractFileName(TestFile)]));
+      IsCompileFail := EndsWithLower(TestFile, '_fail.aeth') Or
+                       (Pos('compile_fail/', LowerCase(RelDisplay)) > 0);
 
-      Try
-        CompileFile(TestFile, TargetPascal, False, False, TestExe, True);
+      If IsCompileFail Then
+      Begin
+        Write(Format('  [COMPILE-FAIL] %s ... ', [RelDisplay]));
+        ExpectedErrs := TStringList.Create;
+        Try
+          ExtractExpectedErrors(TestFile, ExpectedErrs);
+          StartTime := Now;
+          Try
+            CompileFile(TestFile, TargetPascal, True, False, '', True);
+            Inc(FailedCount);
+            WriteLn('FAIL! (Unexpectedly compiled without error)');
+          Except
+            on E: Exception Do
+            Begin
+              ElapsedTime := Now - StartTime;
+              ElapsedMs := Round(ElapsedTime * 86400 * 1000);
+              AllMatched := True;
+              MissingSubstr := '';
+              For J := 0 To ExpectedErrs.Count - 1 Do
+              Begin
+                If Pos(LowerCase(ExpectedErrs[J]), LowerCase(E.Message)) = 0 Then
+                Begin
+                  AllMatched := False;
+                  MissingSubstr := ExpectedErrs[J];
+                  Break;
+                End;
+              End;
 
-        StartTime := Now;
-        ExitCode := ExecuteProcess(TestExe, '');
-        ElapsedTime := Now - StartTime;
-        ElapsedMs := Round(ElapsedTime * 86400 * 1000);
-
-        If ExitCode = 0 Then
-        Begin
-          Inc(PassedCount);
-          WriteLn(Format('PASS (%d ms)', [ElapsedMs]));
-        End
-        Else
-        Begin
-          Inc(FailedCount);
-          WriteLn(Format('FAIL! (ExitCode: %d)', [ExitCode]));
+              If AllMatched Then
+              Begin
+                Inc(PassedCount);
+                WriteLn(Format('PASS (expected error, %d ms)', [ElapsedMs]));
+              End
+              Else
+              Begin
+                Inc(FailedCount);
+                WriteLn(Format('FAIL! (Expected error "%s", got: %s)', [MissingSubstr, E.Message]));
+              End;
+            End;
+          End;
+        Finally
+          ExpectedErrs.Free;
         End;
-      Except
-        on E: Exception Do
-        Begin
-          Inc(FailedCount);
-          WriteLn('COMPILATION ERROR: ' + E.Message);
+      End
+      Else
+      Begin
+        TestExe := BaseDir + PathDelim + 'bin' + PathDelim + 'tests'
+                   + PathDelim + ChangeFileExt(ExtractFileName(TestFile), '.exe');
+        ForceDirectories(ExtractFileDir(TestExe));
+
+        Write(Format('  [TEST] %s ... ', [RelDisplay]));
+
+        Try
+          CompileFile(TestFile, TargetPascal, False, False, TestExe, True);
+
+          StartTime := Now;
+          ExitCode := ExecuteProcess(TestExe, '');
+          ElapsedTime := Now - StartTime;
+          ElapsedMs := Round(ElapsedTime * 86400 * 1000);
+
+          If ExitCode = 0 Then
+          Begin
+            Inc(PassedCount);
+            WriteLn(Format('PASS (%d ms)', [ElapsedMs]));
+          End
+          Else
+          Begin
+            Inc(FailedCount);
+            WriteLn(Format('FAIL! (ExitCode: %d)', [ExitCode]));
+          End;
+        Except
+          on E: Exception Do
+          Begin
+            Inc(FailedCount);
+            WriteLn('COMPILATION ERROR: ' + E.Message);
+          End;
         End;
       End;
     End;
@@ -1632,10 +1789,10 @@ Begin
             TestFiles.Count, PassedCount, FailedCount]));
     WriteLn('========================================================');
 
-    If FailedCount > 0 Then
-      Halt(1)
-    Else
-      Halt(0);
+    OutPassed := PassedCount;
+    OutFailed := FailedCount;
+    OutTotal := TestFiles.Count;
+    Result := (FailedCount = 0) And (TestFiles.Count > 0);
   Finally
     TestFiles.Free;
   End;
@@ -1876,6 +2033,8 @@ Var
   EmitTargetPascal, EmitToStdout, HasTargetSpecified, EmitAsUnit, EmitSilent, EmitWatch: Boolean;
   EmitSource, EmitOut, EmitOutDir: string;
   UpgradeOpts: TUpgradeOptions;
+  OptionTargetAll, OkPas, OkC, TestOk: Boolean;
+  PasPass, PasFail, PasTotal, CPass, CFail, CTotal: Integer;
 Begin
   InitGlobalPaths;
   InputFile := '';
@@ -2527,23 +2686,50 @@ If (ParamCount >= 1) And ((LowerCase(ParamStr(1)) = 'search') Or (LowerCase(Para
     End;
   End;
 
-// 3. Check test command: test
+// 3. Check test command: test [filter] [--target=pascal|c|all] [--both]
 If (ParamCount >= 1) And (LowerCase(ParamStr(1)) = 'test') Then
   Begin
     PrintBanner;
     FilterName := '';
     OptionTargetPascal := True;
+    OptionTargetAll := False;
     I := 2;
     While I <= ParamCount Do
       Begin
         Arg := ParamStr(I);
-        If Arg = '--target=pascal' Then OptionTargetPascal := True
-        Else If Arg = '--target=c' Then OptionTargetPascal := False
+        If Arg = '--target=pascal' Then
+          Begin
+            OptionTargetPascal := True;
+            OptionTargetAll := False;
+          End
+        Else If Arg = '--target=c' Then
+          Begin
+            OptionTargetPascal := False;
+            OptionTargetAll := False;
+          End
+        Else If (Arg = '--target=all') Or (Arg = '--both') Then
+          OptionTargetAll := True
         Else If FilterName = '' Then FilterName := Arg;
         Inc(I);
       End;
     Try
-      HandleProjectTest(FilterName, OptionTargetPascal);
+      If OptionTargetAll Then
+        Begin
+          OkPas := HandleProjectTest(FilterName, True, PasPass, PasFail, PasTotal);
+          WriteLn('');
+          OkC := HandleProjectTest(FilterName, False, CPass, CFail, CTotal);
+          WriteLn('');
+          WriteLn('========================================================');
+          WriteLn(Format('  Summary (All Backends): FPC %d/%d | C99 %d/%d',
+                  [PasPass, PasTotal, CPass, CTotal]));
+          WriteLn('========================================================');
+          If OkPas And OkC Then Halt(0) Else Halt(1);
+        End
+      Else
+        Begin
+          TestOk := HandleProjectTest(FilterName, OptionTargetPascal, PasPass, PasFail, PasTotal);
+          If TestOk Then Halt(0) Else Halt(1);
+        End;
     Except
       on E: Exception Do
             Begin

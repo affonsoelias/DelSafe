@@ -1,0 +1,28 @@
+module Main;
+
+import trees.oak;
+import cave.dragon;
+import c "helper.h";
+
+extern function MultiplicarC(a, b: Int32) return Int32;
+
+program Main;
+var
+    my_tree: Tree;
+    res_c: Int32;
+begin
+    PrintLn("=== Paths, Subfolders, and C Interop Test (Aether / C / DLLs) ===");
+
+    // 1. Test trees/ subfolder
+    my_tree := CreateOak(15, 60);
+    PrintLn("Oak created: height = %d m, age = %d years", my_tree.height, my_tree.age);
+
+    // 2. Test cave/ subfolder
+    Roar();
+
+    // 3. Test C interop (c_sources and c_includes via paths)
+    res_c := MultiplicarC(6, 7);
+    PrintLn("MultiplicarC(6, 7) returned: %d", res_c);
+
+    PrintLn("=== SUCCESS: All modules, subfolders, and interop operational! ===");
+end Main.

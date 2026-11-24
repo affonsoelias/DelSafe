@@ -1,0 +1,14 @@
+module dragon;
+
+interface
+
+procedure Roar;
+
+implementation
+
+procedure Roar is
+begin
+    PrintLn("The cave dragon woke up successfully!");
+end Roar;
+
+end dragon.

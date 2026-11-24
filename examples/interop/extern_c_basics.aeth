@@ -1,0 +1,36 @@
+module extern_c_basics;
+
+import pascal Math;
+
+// 1. Explicit FFI (extern c): Required to call C functions from native
+// libraries / libc (such as puts) in FPC and GCC backends with strict type checking.
+extern c function puts(s: String) return Int32;
+
+// 2. Note on 'sqrt': Functions from standard modules (such as Math and SysUtils)
+// are auto-imported without requiring manual 'extern' (Zero-Boilerplate).
+// Here we declare it with 'contract require' to demonstrate contracts on FFI functions:
+extern c function sqrt(x: Float64) return Float64
+contract
+    require
+        x >= 0.0;
+
+program Main;
+var
+    root_val: Float64;
+    res_puts: Int32;
+begin
+    PrintLn("=== EXTERNAL INTEROPERABILITY TEST (FFI C & PASCAL) ===");
+
+    // 1. Calling external C function: puts() via FFI
+    res_puts := puts("Message printed directly by C function: puts()");
+
+    // 2. Calling C function with contract and precondition check
+    root_val := sqrt(144.0);
+    PrintLn("Square root of 144.0 computed via C sqrt(): " + FloatToStr(root_val));
+
+    root_val := sqrt(49.0);
+    PrintLn("Square root of 49.0 computed via C sqrt(): " + FloatToStr(root_val));
+
+    PrintLn("");
+    PrintLn("C interoperability (extern c) and Pascal import working successfully!");
+end extern_c_basics.

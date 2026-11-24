@@ -1,7 +1,0 @@
-module HelloWorld;
-
-program Main;
-begin
-    PrintLn("Hello, Aether World!");
-    PrintLn("Combining Pascal elegance with Rust-grade safety.");
-end HelloWorld.

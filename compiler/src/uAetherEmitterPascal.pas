@@ -22,10 +22,17 @@ type
     FRaiiTypes: TStringList;
     FLoopRaiiBase: Integer;
     FCurrentScopeList: TASTNodeList;
-    FGuardBindName: string;
-    FGuardBindExpr: string;
-    FMatchBindName: string;
-    FMatchBindType: string;
+    FGuardBindNames: TStringList;
+    FGuardBindExprs: TStringList;
+    FMatchBindNames: TStringList;
+    FMatchBindTargets: TStringList;
+    FMatchBindTypes: TStringList;
+    FDynTags: TStringList;
+    FDynElems: TStringList;
+    FFnTags: TStringList;
+    FFnSigs: TStringList;
+    FThunkFuncs: TStringList;
+    FLambdas: TFPList;
 
     procedure Emit(const Line: string = '');
     procedure IncIndent;
@@ -43,6 +50,8 @@ type
     procedure EmitStmtList(List: TASTNodeList; IsLoopBody: Boolean = False);
 
     function IsEnumName(const AName: string): Boolean;
+    function FindEnumDecl(const AName: string): TASTEnumDecl;
+    function FindEnumVariantUnqualified(const AName: string; out Enm: TASTEnumDecl; out VarN: TASTEnumVariant): Boolean;
     function IsRecordName(const AName: string): Boolean;
     function IsModulePrefixName(const AName: string): Boolean;
     function ResolveAliasType(const AType: string): string;
@@ -50,6 +59,34 @@ type
     function IsDynamicArrayType(const AType: string): Boolean;
     function IsValueOptionType(const AType: string): Boolean;
     function SplitResultTypes(const AType: string; out ValType, ErrType: string): Boolean;
+    function SplitFnType(const AType: string; ParamTypes: TStringList; out RetType: string): Boolean;
+    function FnTypeTag(const AType: string): string;
+    procedure RegisterFnType(const AType: string);
+    procedure RegisterLambda(Lambda: TASTLambdaExpr);
+    procedure RegisterThunkFunc(const FuncName: string);
+    procedure EmitFnRuntimeHelpers(DeclOnly: Boolean);
+    procedure EmitLambdaAndThunkDecls(ForwardOnly: Boolean);
+    function MangleTypeTag(const AType: string): string;
+    function IsCompoundMonadType(const AType: string): Boolean;
+    function IsTypedValueOption(const AType: string; out InnerT: string): Boolean;
+    function IsTypedResult(const AType: string; out ValT, ErrT: string): Boolean;
+    function SafeUnwrapGeneric(const AType, Prefix: string): string;
+    procedure PushMatchBindings(CaseNode: TASTMatchCase; const MatchedType: string);
+    procedure PopMatchBindings(Count: Integer);
+    function GetMatchArmBindingCount(CaseNode: TASTMatchCase): Integer;
+    procedure GetMatchArmBindingInfo(CaseNode: TASTMatchCase; Idx: Integer; const MatchedType: string;
+      out BindName, TargetVar, BindType: string);
+    procedure CollectTypedMonadsFromType(const AType: string; OptTags, OptInners, ResTags, ResVals, ResErrs: TStrings);
+    procedure CollectTypedMonadsFromExpr(Expr: TASTExpr; OptTags, OptInners, ResTags, ResVals, ResErrs: TStrings);
+    procedure CollectTypedMonadsFromStmts(Stmts: TASTNodeList; OptTags, OptInners, ResTags, ResVals, ResErrs: TStrings);
+    procedure CollectTypedMonadsFromModule(AModule: TASTModule; OptTags, OptInners, ResTags, ResVals, ResErrs: TStrings);
+    procedure EmitTypedOptionDecl(const Tag, InnerT: string);
+    procedure EmitTypedResultDecl(const Tag, ValT, ErrT: string);
+    procedure EmitTypedMonadHelpers(OptTags, OptInners, ResTags, ResVals, ResErrs: TStrings; DeclOnly: Boolean);
+    procedure EmitPayloadEnumConstructors(Enm: TASTEnumDecl; DeclOnly: Boolean);
+    procedure EmitTopologicalTypesAndMonads(const TypeUsed: array of Boolean;
+      OptTags, OptInners: TStrings; const OptUsed: array of Boolean;
+      ResTags, ResVals, ResErrs: TStrings; const ResUsed: array of Boolean);
     function IsTypeIdentifier(const AName: string): Boolean;
     function EmitMonadFieldExtract(const ExprStr, FieldType, NumField, StrField: string): string;
     procedure EmitArrayLiteralAssign(const TargetStr, TargetType: string; SetLit: TASTSetLiteralExpr);
@@ -113,10 +150,32 @@ begin
   FRaiiTypes := TStringList.Create;
   FLoopRaiiBase := 0;
   FCurrentScopeList := nil;
+  FGuardBindNames := TStringList.Create;
+  FGuardBindExprs := TStringList.Create;
+  FMatchBindNames := TStringList.Create;
+  FMatchBindTargets := TStringList.Create;
+  FMatchBindTypes := TStringList.Create;
+  FDynTags := TStringList.Create;
+  FDynElems := TStringList.Create;
+  FFnTags := TStringList.Create;
+  FFnSigs := TStringList.Create;
+  FThunkFuncs := TStringList.Create;
+  FLambdas := TFPList.Create;
 end;
 
 destructor TAetherEmitterPascal.Destroy;
 begin
+  FLambdas.Free;
+  FThunkFuncs.Free;
+  FFnSigs.Free;
+  FFnTags.Free;
+  FDynElems.Free;
+  FDynTags.Free;
+  FMatchBindTypes.Free;
+  FMatchBindTargets.Free;
+  FMatchBindNames.Free;
+  FGuardBindExprs.Free;
+  FGuardBindNames.Free;
   FRaiiNames.Free;
   FRaiiTypes.Free;
   FActiveDefers.Free;
@@ -149,15 +208,45 @@ begin
 end;
 
 function TAetherEmitterPascal.IsEnumName(const AName: string): Boolean;
+begin
+  Result := Assigned(FindEnumDecl(AName));
+end;
+
+function TAetherEmitterPascal.FindEnumDecl(const AName: string): TASTEnumDecl;
 var
   I: Integer;
 begin
-  Result := False;
+  Result := nil;
   if Assigned(FModule) then
     for I := 0 to FModule.Types.Count - 1 do
       if (TASTNode(FModule.Types[I]) is TASTEnumDecl) and
-         (TASTEnumDecl(FModule.Types[I]).Name = AName) then
-        Exit(True);
+         SameText(TASTEnumDecl(FModule.Types[I]).Name, AName) then
+        Exit(TASTEnumDecl(FModule.Types[I]));
+end;
+
+function TAetherEmitterPascal.FindEnumVariantUnqualified(const AName: string; out Enm: TASTEnumDecl; out VarN: TASTEnumVariant): Boolean;
+var
+  I, J: Integer;
+  E: TASTEnumDecl;
+begin
+  Result := False;
+  Enm := nil;
+  VarN := nil;
+  if not Assigned(FModule) then Exit;
+  for I := 0 to FModule.Types.Count - 1 do
+  begin
+    if TASTNode(FModule.Types[I]) is TASTEnumDecl then
+    begin
+      E := TASTEnumDecl(FModule.Types[I]);
+      for J := 0 to E.Variants.Count - 1 do
+        if SameText(TASTEnumVariant(E.Variants[J]).Name, AName) then
+        begin
+          Enm := E;
+          VarN := TASTEnumVariant(E.Variants[J]);
+          Exit(True);
+        end;
+    end;
+  end;
 end;
 
 function TAetherEmitterPascal.IsRecordName(const AName: string): Boolean;
@@ -359,6 +448,845 @@ begin
     Exit(True);
   end;
   Result := False;
+end;
+
+function TAetherEmitterPascal.SafeUnwrapGeneric(const AType, Prefix: string): string;
+var
+  T, Pre: string;
+begin
+  T := Trim(AType);
+  Pre := Prefix + '<';
+  if (Pos(Pre, T) = 1) and (Length(T) > Length(Pre)) and (T[Length(T)] = '>') then
+    Result := Trim(Copy(T, Length(Pre) + 1, Length(T) - Length(Pre) - 1))
+  else
+    Result := '';
+end;
+
+function TAetherEmitterPascal.SplitFnType(const AType: string; ParamTypes: TStringList; out RetType: string): Boolean;
+var
+  T, Inner, Cur, AfterParen: string;
+  I, DepthParen, DepthAngle, DepthBracket, ClosePos: Integer;
+begin
+  Result := False;
+  ParamTypes.Clear;
+  RetType := 'Void';
+  T := Trim(AType);
+  if Pos('fn(', T) <> 1 then Exit;
+  DepthParen := 0;
+  ClosePos := 0;
+  for I := 3 to Length(T) do
+  begin
+    if T[I] = '(' then Inc(DepthParen)
+    else if T[I] = ')' then
+    begin
+      Dec(DepthParen);
+      if DepthParen = 0 then
+      begin
+        ClosePos := I;
+        Break;
+      end;
+    end;
+  end;
+  if ClosePos = 0 then Exit;
+  AfterParen := Trim(Copy(T, ClosePos + 1, Length(T)));
+  if Pos('->', AfterParen) <> 1 then Exit;
+  RetType := Trim(Copy(AfterParen, 3, Length(AfterParen)));
+  Inner := Trim(Copy(T, 4, ClosePos - 4));
+  if Inner <> '' then
+  begin
+    DepthParen := 0;
+    DepthAngle := 0;
+    DepthBracket := 0;
+    Cur := '';
+    for I := 1 to Length(Inner) do
+    begin
+      case Inner[I] of
+        '<': Inc(DepthAngle);
+        '>': Dec(DepthAngle);
+        '(': Inc(DepthParen);
+        ')': Dec(DepthParen);
+        '[': Inc(DepthBracket);
+        ']': Dec(DepthBracket);
+      end;
+      if (Inner[I] = ',') and (DepthAngle = 0) and (DepthParen = 0) and (DepthBracket = 0) then
+      begin
+        ParamTypes.Add(Trim(Cur));
+        Cur := '';
+      end
+      else
+        Cur := Cur + Inner[I];
+    end;
+    if Trim(Cur) <> '' then ParamTypes.Add(Trim(Cur));
+  end;
+  Result := RetType <> '';
+end;
+
+function TAetherEmitterPascal.FnTypeTag(const AType: string): string;
+var
+  Params: TStringList;
+  RetT: string;
+  I: Integer;
+begin
+  Params := TStringList.Create;
+  try
+    if SplitFnType(AType, Params, RetT) then
+    begin
+      if Params.Count = 0 then
+        Result := 'void'
+      else
+      begin
+        Result := '';
+        for I := 0 to Params.Count - 1 do
+        begin
+          if I > 0 then Result := Result + '_';
+          Result := Result + MangleTypeTag(Params[I]);
+        end;
+      end;
+      Result := Result + '__ret__' + MangleTypeTag(RetT);
+    end
+    else
+      Result := 'unknown';
+  finally
+    Params.Free;
+  end;
+end;
+
+procedure TAetherEmitterPascal.RegisterFnType(const AType: string);
+var
+  T, Tag: string;
+begin
+  T := ResolveAliasType(Trim(AType));
+  if Pos('fn(', T) <> 1 then Exit;
+  Tag := FnTypeTag(T);
+  if FFnTags.IndexOf(Tag) < 0 then
+  begin
+    FFnTags.Add(Tag);
+    FFnSigs.Add(T);
+  end;
+end;
+
+procedure TAetherEmitterPascal.RegisterLambda(Lambda: TASTLambdaExpr);
+begin
+  if Assigned(Lambda) and (FLambdas.IndexOf(Lambda) < 0) then
+    FLambdas.Add(Lambda);
+end;
+
+procedure TAetherEmitterPascal.RegisterThunkFunc(const FuncName: string);
+begin
+  if (FuncName <> '') and (FThunkFuncs.IndexOf(FuncName) < 0) then
+    FThunkFuncs.Add(FuncName);
+end;
+
+function TAetherEmitterPascal.MangleTypeTag(const AType: string): string;
+var
+  T, ValT, ErrT, InnerT, Res: string;
+  I: Integer;
+  Ch: Char;
+begin
+  T := ResolveAliasType(Trim(AType));
+  if T = '' then Exit('Void');
+  if Pos('fn(', T) = 1 then
+    Exit('Fn__' + FnTypeTag(T));
+  if Pos('^', T) = 1 then
+    Exit('ptr_' + MangleTypeTag(Copy(T, 2, Length(T))));
+  if Pos('array of ', T) = 1 then
+    Exit('arr_' + MangleTypeTag(Copy(T, 10, Length(T))));
+  if SplitResultTypes(T, ValT, ErrT) then
+    Exit('Result__' + MangleTypeTag(ValT) + '__' + MangleTypeTag(ErrT));
+  if Pos('Option<', T) = 1 then
+  begin
+    InnerT := SafeUnwrapGeneric(T, 'Option');
+    if InnerT <> '' then
+      Exit('Option__' + MangleTypeTag(InnerT));
+  end;
+  if Pos('Box<', T) = 1 then
+  begin
+    InnerT := SafeUnwrapGeneric(T, 'Box');
+    if InnerT <> '' then
+      Exit('Box__' + MangleTypeTag(InnerT));
+  end;
+  Res := '';
+  for I := 1 to Length(T) do
+  begin
+    Ch := T[I];
+    if Ch in ['A'..'Z', 'a'..'z', '0'..'9', '_'] then
+      Res := Res + Ch
+    else if (Res = '') or (Res[Length(Res)] <> '_') then
+      Res := Res + '_';
+  end;
+  Result := Res;
+end;
+
+function TAetherEmitterPascal.IsCompoundMonadType(const AType: string): Boolean;
+var
+  T, K, V: string;
+  I: Integer;
+  Enm: TASTEnumDecl;
+begin
+  T := ResolveAliasType(Trim(AType));
+  if (T = '') or (T = 'IntLiteral') or (T = 'FloatLiteral') or
+     (T = 'GenericValue') or (T = 'GenericError') or (T = 'GenericNone') or
+     (T = 'Int8') or (T = 'Int16') or (T = 'Int32') or (T = 'Int64') or
+     (T = 'UInt8') or (T = 'UInt16') or (T = 'UInt32') or (T = 'UInt64') or
+     (T = 'Float32') or (T = 'Float64') or (T = 'Bool') or (T = 'Char') or
+     (T = 'String') or (T = 'Pointer') or (Pos('^', T) = 1) or (Pos('Box<', T) = 1) then
+    Exit(False);
+
+  if (Pos('array of ', T) = 1) or (Pos('array[', T) = 1) or (Pos('fn(', T) = 1) or
+     (Pos('Option<', T) = 1) or (Pos('Result<', T) = 1) or IsMapType(T, K, V) then
+    Exit(True);
+
+  Enm := FindEnumDecl(T);
+  if Assigned(Enm) then
+    Exit(Enm.HasPayload);
+
+  if Assigned(FModule) then
+  begin
+    for I := 0 to FModule.Types.Count - 1 do
+    begin
+      if (TASTNode(FModule.Types[I]) is TASTRecordDecl) and SameText(TASTRecordDecl(FModule.Types[I]).Name, T) then
+        Exit(True);
+      if (TASTNode(FModule.Types[I]) is TASTArrayDecl) and SameText(TASTArrayDecl(FModule.Types[I]).Name, T) then
+        Exit(True);
+    end;
+  end;
+  Result := False;
+end;
+
+function TAetherEmitterPascal.IsTypedValueOption(const AType: string; out InnerT: string): Boolean;
+var
+  T: string;
+begin
+  InnerT := '';
+  if not IsValueOptionType(AType) then Exit(False);
+  T := ResolveAliasType(AType);
+  InnerT := ResolveAliasType(SafeUnwrapGeneric(T, 'Option'));
+  if (InnerT = '') or (InnerT = 'GenericNone') or (InnerT = 'IntLiteral') or (InnerT = 'FloatLiteral') then
+    Exit(False);
+  Result := IsCompoundMonadType(InnerT) or IsEnumName(InnerT);
+end;
+
+function TAetherEmitterPascal.IsTypedResult(const AType: string; out ValT, ErrT: string): Boolean;
+begin
+  if not SplitResultTypes(AType, ValT, ErrT) then Exit(False);
+  ValT := ResolveAliasType(ValT);
+  ErrT := ResolveAliasType(ErrT);
+  if (ValT = 'GenericValue') or (ErrT = 'GenericError') or (ValT = 'IntLiteral') or (ValT = 'FloatLiteral') then
+    Exit(False);
+  Result := IsCompoundMonadType(ValT) or IsCompoundMonadType(ErrT);
+end;
+
+function TAetherEmitterPascal.GetMatchArmBindingCount(CaseNode: TASTMatchCase): Integer;
+begin
+  if CaseNode.Pattern.Bindings.Count > 0 then
+    Result := CaseNode.Pattern.Bindings.Count
+  else if CaseNode.Pattern.IsLet and (CaseNode.Pattern.SubPattern <> '') then
+    Result := 1
+  else
+    Result := 0;
+end;
+
+procedure TAetherEmitterPascal.GetMatchArmBindingInfo(CaseNode: TASTMatchCase; Idx: Integer; const MatchedType: string;
+  out BindName, TargetVar, BindType: string);
+var
+  PatStr, ValF, ErrF, EnmName, VarName: string;
+  PDot: Integer;
+  Enm: TASTEnumDecl;
+  VarN: TASTEnumVariant;
+  J: Integer;
+begin
+  if CaseNode.Pattern.Bindings.Count > 0 then
+    BindName := CaseNode.Pattern.Bindings[Idx]
+  else
+    BindName := CaseNode.Pattern.SubPattern;
+
+  TargetVar := Format('_mb_%d_%d_%s', [CaseNode.Line, CaseNode.Col, BindName]);
+  BindType := MatchedType;
+  PatStr := CaseNode.Pattern.Value;
+
+  if PatStr = '_' then
+    BindType := MatchedType
+  else if Pos('Ok', PatStr) = 1 then
+  begin
+    SplitResultTypes(MatchedType, ValF, ErrF);
+    BindType := ValF;
+  end
+  else if Pos('Err', PatStr) = 1 then
+  begin
+    SplitResultTypes(MatchedType, ValF, ErrF);
+    BindType := ErrF;
+  end
+  else if PatStr = 'Some' then
+  begin
+    BindType := SafeUnwrapGeneric(MatchedType, 'Option');
+    if BindType = '' then BindType := 'Int32';
+  end
+  else
+  begin
+    Enm := FindEnumDecl(MatchedType);
+    if Assigned(Enm) and Enm.HasPayload then
+    begin
+      EnmName := PatStr;
+      PDot := Pos('.', EnmName);
+      if PDot > 0 then VarName := Copy(EnmName, PDot + 1, Length(EnmName))
+      else VarName := EnmName;
+      for J := 0 to Enm.Variants.Count - 1 do
+      begin
+        VarN := TASTEnumVariant(Enm.Variants[J]);
+        if SameText(VarN.Name, VarName) and (Idx < VarN.Fields.Count) then
+        begin
+          BindType := TASTRecordField(VarN.Fields[Idx]).TypeName;
+          Break;
+        end;
+      end;
+    end;
+  end;
+end;
+
+procedure TAetherEmitterPascal.PushMatchBindings(CaseNode: TASTMatchCase; const MatchedType: string);
+var
+  I, Cnt: Integer;
+  BName, TVar, BType: string;
+begin
+  Cnt := GetMatchArmBindingCount(CaseNode);
+  for I := 0 to Cnt - 1 do
+  begin
+    GetMatchArmBindingInfo(CaseNode, I, MatchedType, BName, TVar, BType);
+    if (BName <> '') and (BName <> '_') then
+    begin
+      FMatchBindNames.Add(BName);
+      FMatchBindTargets.Add(TVar);
+      FMatchBindTypes.Add(BType);
+    end;
+  end;
+end;
+
+procedure TAetherEmitterPascal.PopMatchBindings(Count: Integer);
+var
+  I: Integer;
+begin
+  for I := 1 to Count do
+  begin
+    if FMatchBindNames.Count > 0 then
+    begin
+      FMatchBindNames.Delete(FMatchBindNames.Count - 1);
+      FMatchBindTargets.Delete(FMatchBindTargets.Count - 1);
+      FMatchBindTypes.Delete(FMatchBindTypes.Count - 1);
+    end;
+  end;
+end;
+
+procedure TAetherEmitterPascal.CollectTypedMonadsFromType(const AType: string; OptTags, OptInners, ResTags, ResVals, ResErrs: TStrings);
+var
+  T, InnerT, ValT, ErrT, Tag, KeyT, ValM, RetT: string;
+  FnParams: TStringList;
+  K: Integer;
+begin
+  T := ResolveAliasType(Trim(AType));
+  if T = '' then Exit;
+  FnParams := TStringList.Create;
+  try
+    if SplitFnType(T, FnParams, RetT) then
+    begin
+      for K := 0 to FnParams.Count - 1 do
+        CollectTypedMonadsFromType(FnParams[K], OptTags, OptInners, ResTags, ResVals, ResErrs);
+      if (RetT <> '') and (not SameText(RetT, 'Void')) then
+        CollectTypedMonadsFromType(RetT, OptTags, OptInners, ResTags, ResVals, ResErrs);
+      RegisterFnType(T);
+      Exit;
+    end;
+  finally
+    FnParams.Free;
+  end;
+  if Pos('^', T) = 1 then
+  begin
+    CollectTypedMonadsFromType(Copy(T, 2, Length(T)), OptTags, OptInners, ResTags, ResVals, ResErrs);
+    Exit;
+  end;
+  if Pos('array of ', T) = 1 then
+  begin
+    InnerT := Trim(Copy(T, 10, Length(T)));
+    CollectTypedMonadsFromType(InnerT, OptTags, OptInners, ResTags, ResVals, ResErrs);
+    if not ((InnerT = 'Int8') or (InnerT = 'Int16') or (InnerT = 'Int32') or (InnerT = 'Int64') or
+            (InnerT = 'UInt8') or (InnerT = 'UInt16') or (InnerT = 'UInt32') or (InnerT = 'UInt64') or
+            (InnerT = 'Float32') or (InnerT = 'Float64') or (InnerT = 'Bool') or (InnerT = 'Char') or
+            (InnerT = 'String') or (InnerT = 'Pointer')) then
+    begin
+      Tag := MangleTypeTag(InnerT);
+      if Assigned(FDynTags) and (FDynTags.IndexOf(Tag) = -1) then
+      begin
+        FDynTags.Add(Tag);
+        FDynElems.Add(InnerT);
+      end;
+    end;
+    Exit;
+  end;
+  if IsMapType(T, KeyT, ValM) then
+  begin
+    CollectTypedMonadsFromType(KeyT, OptTags, OptInners, ResTags, ResVals, ResErrs);
+    CollectTypedMonadsFromType(ValM, OptTags, OptInners, ResTags, ResVals, ResErrs);
+    Exit;
+  end;
+  if IsTypedValueOption(T, InnerT) then
+  begin
+    CollectTypedMonadsFromType(InnerT, OptTags, OptInners, ResTags, ResVals, ResErrs);
+    Tag := MangleTypeTag(InnerT);
+    if OptTags.IndexOf(Tag) = -1 then
+    begin
+      OptTags.Add(Tag);
+      OptInners.Add(InnerT);
+    end;
+  end
+  else if IsTypedResult(T, ValT, ErrT) then
+  begin
+    CollectTypedMonadsFromType(ValT, OptTags, OptInners, ResTags, ResVals, ResErrs);
+    CollectTypedMonadsFromType(ErrT, OptTags, OptInners, ResTags, ResVals, ResErrs);
+    Tag := MangleTypeTag(ValT) + '__' + MangleTypeTag(ErrT);
+    if ResTags.IndexOf(Tag) = -1 then
+    begin
+      ResTags.Add(Tag);
+      ResVals.Add(ValT);
+      ResErrs.Add(ErrT);
+    end;
+  end;
+end;
+
+procedure TAetherEmitterPascal.CollectTypedMonadsFromExpr(Expr: TASTExpr; OptTags, OptInners, ResTags, ResVals, ResErrs: TStrings);
+var
+  I, Cnt, AddedB: Integer;
+  Call: TASTCallExpr;
+  ME: TASTMatchExpr;
+  CaseN: TASTMatchCase;
+  MT, BName, TVar, BType: string;
+begin
+  if not Assigned(Expr) then Exit;
+  if Expr is TASTIdentifierExpr then
+  begin
+    if TASTIdentifierExpr(Expr).IsFnValueRef then
+    begin
+      CollectTypedMonadsFromType(TASTIdentifierExpr(Expr).ResolvedFnType, OptTags, OptInners, ResTags, ResVals, ResErrs);
+      RegisterThunkFunc(TASTIdentifierExpr(Expr).Name);
+    end;
+    if TASTIdentifierExpr(Expr).ResolvedMonadType <> '' then
+      CollectTypedMonadsFromType(TASTIdentifierExpr(Expr).ResolvedMonadType, OptTags, OptInners, ResTags, ResVals, ResErrs);
+  end
+  else if Expr is TASTTupleLiteralExpr then
+  begin
+    CollectTypedMonadsFromType(TASTTupleLiteralExpr(Expr).ResolvedType, OptTags, OptInners, ResTags, ResVals, ResErrs);
+    for I := 0 to TASTTupleLiteralExpr(Expr).Elements.Count - 1 do
+      CollectTypedMonadsFromExpr(TASTExpr(TASTTupleLiteralExpr(Expr).Elements[I]), OptTags, OptInners, ResTags, ResVals, ResErrs);
+  end
+  else if Expr is TASTLambdaExpr then
+  begin
+    CollectTypedMonadsFromType(TASTLambdaExpr(Expr).ResolvedFnType, OptTags, OptInners, ResTags, ResVals, ResErrs);
+    RegisterLambda(TASTLambdaExpr(Expr));
+    for I := 0 to TASTLambdaExpr(Expr).CaptureTypes.Count - 1 do
+      CollectTypedMonadsFromType(TASTLambdaExpr(Expr).CaptureTypes[I], OptTags, OptInners, ResTags, ResVals, ResErrs);
+    if Assigned(TASTLambdaExpr(Expr).BodyExpr) then
+      CollectTypedMonadsFromExpr(TASTLambdaExpr(Expr).BodyExpr, OptTags, OptInners, ResTags, ResVals, ResErrs)
+    else
+      CollectTypedMonadsFromStmts(TASTLambdaExpr(Expr).BodyStmts, OptTags, OptInners, ResTags, ResVals, ResErrs);
+  end
+  else if Expr is TASTMemberAccessExpr then
+    CollectTypedMonadsFromExpr(TASTMemberAccessExpr(Expr).Target, OptTags, OptInners, ResTags, ResVals, ResErrs)
+  else if Expr is TASTBinaryExpr then
+  begin
+    CollectTypedMonadsFromExpr(TASTBinaryExpr(Expr).Left, OptTags, OptInners, ResTags, ResVals, ResErrs);
+    CollectTypedMonadsFromExpr(TASTBinaryExpr(Expr).Right, OptTags, OptInners, ResTags, ResVals, ResErrs);
+  end
+  else if Expr is TASTUnaryExpr then
+  begin
+    if TASTUnaryExpr(Expr).Op = '?' then
+      CollectTypedMonadsFromType(GetExprTypeName(TASTUnaryExpr(Expr).Expr), OptTags, OptInners, ResTags, ResVals, ResErrs);
+    CollectTypedMonadsFromExpr(TASTUnaryExpr(Expr).Expr, OptTags, OptInners, ResTags, ResVals, ResErrs);
+  end
+  else if Expr is TASTAwaitExpr then
+    CollectTypedMonadsFromExpr(TASTAwaitExpr(Expr).Expr, OptTags, OptInners, ResTags, ResVals, ResErrs)
+  else if Expr is TASTSpawnExpr then
+    CollectTypedMonadsFromExpr(TASTSpawnExpr(Expr).CallExpr, OptTags, OptInners, ResTags, ResVals, ResErrs)
+  else if Expr is TASTCallExpr then
+  begin
+    Call := TASTCallExpr(Expr);
+    if Assigned(Call.CalleeExpr) then
+      CollectTypedMonadsFromExpr(Call.CalleeExpr, OptTags, OptInners, ResTags, ResVals, ResErrs);
+    if Call.IsIndirectCall and (Call.IndirectFnType <> '') then
+      CollectTypedMonadsFromType(Call.IndirectFnType, OptTags, OptInners, ResTags, ResVals, ResErrs);
+    if Call.ResolvedMonadType <> '' then
+      CollectTypedMonadsFromType(Call.ResolvedMonadType, OptTags, OptInners, ResTags, ResVals, ResErrs)
+    else if (Call.Callee = 'Some') and (Call.Args.Count >= 1) then
+      CollectTypedMonadsFromType('Option<' + GetExprTypeName(TASTCallArg(Call.Args[0]).Expr) + '>', OptTags, OptInners, ResTags, ResVals, ResErrs);
+    for I := 0 to Call.Args.Count - 1 do
+      CollectTypedMonadsFromExpr(TASTCallArg(Call.Args[I]).Expr, OptTags, OptInners, ResTags, ResVals, ResErrs);
+  end
+  else if Expr is TASTIndexExpr then
+  begin
+    CollectTypedMonadsFromExpr(TASTIndexExpr(Expr).Target, OptTags, OptInners, ResTags, ResVals, ResErrs);
+    for I := 0 to TASTIndexExpr(Expr).Indices.Count - 1 do
+      CollectTypedMonadsFromExpr(TASTExpr(TASTIndexExpr(Expr).Indices[I]), OptTags, OptInners, ResTags, ResVals, ResErrs);
+  end
+  else if Expr is TASTSetLiteralExpr then
+  begin
+    for I := 0 to TASTSetLiteralExpr(Expr).Elements.Count - 1 do
+      CollectTypedMonadsFromExpr(TASTExpr(TASTSetLiteralExpr(Expr).Elements[I]), OptTags, OptInners, ResTags, ResVals, ResErrs);
+  end
+  else if Expr is TASTMapLiteralExpr then
+  begin
+    for I := 0 to TASTMapLiteralExpr(Expr).Keys.Count - 1 do
+    begin
+      CollectTypedMonadsFromExpr(TASTExpr(TASTMapLiteralExpr(Expr).Keys[I]), OptTags, OptInners, ResTags, ResVals, ResErrs);
+      CollectTypedMonadsFromExpr(TASTExpr(TASTMapLiteralExpr(Expr).Values[I]), OptTags, OptInners, ResTags, ResVals, ResErrs);
+    end;
+  end
+  else if Expr is TASTIfExpr then
+  begin
+    CollectTypedMonadsFromExpr(TASTIfExpr(Expr).Condition, OptTags, OptInners, ResTags, ResVals, ResErrs);
+    CollectTypedMonadsFromExpr(TASTIfExpr(Expr).ThenExpr, OptTags, OptInners, ResTags, ResVals, ResErrs);
+    CollectTypedMonadsFromExpr(TASTIfExpr(Expr).ElseExpr, OptTags, OptInners, ResTags, ResVals, ResErrs);
+  end
+  else if Expr is TASTMatchExpr then
+  begin
+    ME := TASTMatchExpr(Expr);
+    CollectTypedMonadsFromExpr(ME.Expr, OptTags, OptInners, ResTags, ResVals, ResErrs);
+    MT := ResolveAliasType(GetExprTypeName(ME.Expr));
+    CollectTypedMonadsFromType(MT, OptTags, OptInners, ResTags, ResVals, ResErrs);
+    for I := 0 to ME.Cases.Count - 1 do
+    begin
+      CaseN := TASTMatchCase(ME.Cases[I]);
+      Cnt := GetMatchArmBindingCount(CaseN);
+      for AddedB := 0 to Cnt - 1 do
+      begin
+        GetMatchArmBindingInfo(CaseN, AddedB, MT, BName, TVar, BType);
+        if (BName <> '') and (BName <> '_') then
+        begin
+          FMatchBindNames.Add(BName);
+          FMatchBindTargets.Add(TVar);
+          FMatchBindTypes.Add(BType);
+        end;
+      end;
+      try
+        CollectTypedMonadsFromExpr(CaseN.Guard, OptTags, OptInners, ResTags, ResVals, ResErrs);
+        CollectTypedMonadsFromExpr(CaseN.ValueExpr, OptTags, OptInners, ResTags, ResVals, ResErrs);
+      finally
+        for AddedB := 0 to Cnt - 1 do
+        begin
+          GetMatchArmBindingInfo(CaseN, AddedB, MT, BName, TVar, BType);
+          if (BName <> '') and (BName <> '_') then PopMatchBindings(1);
+        end;
+      end;
+    end;
+  end;
+end;
+
+procedure TAetherEmitterPascal.CollectTypedMonadsFromStmts(Stmts: TASTNodeList; OptTags, OptInners, ResTags, ResVals, ResErrs: TStrings);
+var
+  I, J, K, Cnt: Integer;
+  S: TASTStmt;
+  VD: TASTVarDecl;
+  ForS: TASTForStmt;
+  MS: TASTMatchStmt;
+  CN: TASTMatchCase;
+  MT, BName, TVar, BType: string;
+begin
+  if not Assigned(Stmts) then Exit;
+  for I := 0 to Stmts.Count - 1 do
+  begin
+    S := TASTStmt(Stmts[I]);
+    if S is TASTVarDeclStmt then
+    begin
+      for K := 0 to TASTVarDeclStmt(S).Decls.Count - 1 do
+      begin
+        VD := TASTVarDecl(TASTVarDeclStmt(S).Decls[K]);
+        CollectTypedMonadsFromType(VD.TypeName, OptTags, OptInners, ResTags, ResVals, ResErrs);
+        CollectTypedMonadsFromExpr(VD.InitialExpr, OptTags, OptInners, ResTags, ResVals, ResErrs);
+      end;
+    end
+    else if S is TASTAssignStmt then
+    begin
+      CollectTypedMonadsFromExpr(TASTAssignStmt(S).Target, OptTags, OptInners, ResTags, ResVals, ResErrs);
+      CollectTypedMonadsFromExpr(TASTAssignStmt(S).Expr, OptTags, OptInners, ResTags, ResVals, ResErrs);
+    end
+    else if S is TASTCallStmt then
+      CollectTypedMonadsFromExpr(TASTCallStmt(S).CallExpr, OptTags, OptInners, ResTags, ResVals, ResErrs)
+    else if S is TASTReturnStmt then
+      CollectTypedMonadsFromExpr(TASTReturnStmt(S).Expr, OptTags, OptInners, ResTags, ResVals, ResErrs)
+    else if S is TASTIfStmt then
+    begin
+      CollectTypedMonadsFromExpr(TASTIfStmt(S).Condition, OptTags, OptInners, ResTags, ResVals, ResErrs);
+      CollectTypedMonadsFromStmts(TASTIfStmt(S).ThenBranch, OptTags, OptInners, ResTags, ResVals, ResErrs);
+      CollectTypedMonadsFromStmts(TASTIfStmt(S).ElseBranch, OptTags, OptInners, ResTags, ResVals, ResErrs);
+    end
+    else if S is TASTWhileStmt then
+    begin
+      CollectTypedMonadsFromExpr(TASTWhileStmt(S).Condition, OptTags, OptInners, ResTags, ResVals, ResErrs);
+      CollectTypedMonadsFromStmts(TASTWhileStmt(S).Body, OptTags, OptInners, ResTags, ResVals, ResErrs);
+    end
+    else if S is TASTForStmt then
+    begin
+      ForS := TASTForStmt(S);
+      CollectTypedMonadsFromExpr(ForS.StartExpr, OptTags, OptInners, ResTags, ResVals, ResErrs);
+      CollectTypedMonadsFromExpr(ForS.EndExpr, OptTags, OptInners, ResTags, ResVals, ResErrs);
+      CollectTypedMonadsFromExpr(ForS.CollectionExpr, OptTags, OptInners, ResTags, ResVals, ResErrs);
+      CollectTypedMonadsFromStmts(ForS.Body, OptTags, OptInners, ResTags, ResVals, ResErrs);
+    end
+    else if S is TASTRepeatStmt then
+    begin
+      CollectTypedMonadsFromStmts(TASTRepeatStmt(S).Body, OptTags, OptInners, ResTags, ResVals, ResErrs);
+      CollectTypedMonadsFromExpr(TASTRepeatStmt(S).Condition, OptTags, OptInners, ResTags, ResVals, ResErrs);
+    end
+    else if S is TASTUnsafeStmt then
+      CollectTypedMonadsFromStmts(TASTUnsafeStmt(S).Body, OptTags, OptInners, ResTags, ResVals, ResErrs)
+    else if S is TASTTryStmt then
+    begin
+      CollectTypedMonadsFromStmts(TASTTryStmt(S).TryBody, OptTags, OptInners, ResTags, ResVals, ResErrs);
+      CollectTypedMonadsFromStmts(TASTTryStmt(S).ExceptBody, OptTags, OptInners, ResTags, ResVals, ResErrs);
+    end
+    else if S is TASTMatchStmt then
+    begin
+      MS := TASTMatchStmt(S);
+      CollectTypedMonadsFromExpr(MS.Expr, OptTags, OptInners, ResTags, ResVals, ResErrs);
+      MT := ResolveAliasType(GetExprTypeName(MS.Expr));
+      CollectTypedMonadsFromType(MT, OptTags, OptInners, ResTags, ResVals, ResErrs);
+      for K := 0 to MS.Cases.Count - 1 do
+      begin
+        CN := TASTMatchCase(MS.Cases[K]);
+        Cnt := GetMatchArmBindingCount(CN);
+        for J := 0 to Cnt - 1 do
+        begin
+          GetMatchArmBindingInfo(CN, J, MT, BName, TVar, BType);
+          if (BName <> '') and (BName <> '_') then
+          begin
+            FMatchBindNames.Add(BName);
+            FMatchBindTargets.Add(TVar);
+            FMatchBindTypes.Add(BType);
+          end;
+        end;
+        try
+          CollectTypedMonadsFromExpr(CN.Guard, OptTags, OptInners, ResTags, ResVals, ResErrs);
+          CollectTypedMonadsFromStmts(CN.Body, OptTags, OptInners, ResTags, ResVals, ResErrs);
+        finally
+          for J := 0 to Cnt - 1 do
+          begin
+            GetMatchArmBindingInfo(CN, J, MT, BName, TVar, BType);
+            if (BName <> '') and (BName <> '_') then PopMatchBindings(1);
+          end;
+        end;
+      end;
+    end;
+  end;
+end;
+
+procedure TAetherEmitterPascal.CollectTypedMonadsFromModule(AModule: TASTModule; OptTags, OptInners, ResTags, ResVals, ResErrs: TStrings);
+var
+  I, J, K: Integer;
+  Node: TASTNode;
+  Rec: TASTRecordDecl;
+  Enm: TASTEnumDecl;
+  VarN: TASTEnumVariant;
+  Func: TASTFunction;
+  OldFunc: TASTFunction;
+  OldProg: TASTProgramBlock;
+begin
+  for I := 0 to AModule.Types.Count - 1 do
+  begin
+    Node := AModule.Types[I];
+    if Node is TASTRecordDecl then
+    begin
+      Rec := TASTRecordDecl(Node);
+      if Rec.GenericParams.Count = 0 then
+        for J := 0 to Rec.Fields.Count - 1 do
+          CollectTypedMonadsFromType(TASTRecordField(Rec.Fields[J]).TypeName, OptTags, OptInners, ResTags, ResVals, ResErrs);
+    end
+    else if Node is TASTEnumDecl then
+    begin
+      Enm := TASTEnumDecl(Node);
+      for J := 0 to Enm.Variants.Count - 1 do
+      begin
+        VarN := TASTEnumVariant(Enm.Variants[J]);
+        for K := 0 to VarN.Fields.Count - 1 do
+          CollectTypedMonadsFromType(TASTRecordField(VarN.Fields[K]).TypeName, OptTags, OptInners, ResTags, ResVals, ResErrs);
+      end;
+    end
+    else if Node is TASTArrayDecl then
+      CollectTypedMonadsFromType(TASTArrayDecl(Node).ElemType, OptTags, OptInners, ResTags, ResVals, ResErrs)
+    else if Node is TASTMapDecl then
+    begin
+      CollectTypedMonadsFromType(TASTMapDecl(Node).KeyType, OptTags, OptInners, ResTags, ResVals, ResErrs);
+      CollectTypedMonadsFromType(TASTMapDecl(Node).ValType, OptTags, OptInners, ResTags, ResVals, ResErrs);
+    end
+    else if Node is TASTTypeAliasDecl then
+      CollectTypedMonadsFromType(TASTTypeAliasDecl(Node).TargetType, OptTags, OptInners, ResTags, ResVals, ResErrs);
+  end;
+
+  for I := 0 to AModule.ModuleVars.Count - 1 do
+  begin
+    CollectTypedMonadsFromType(TASTVarDecl(AModule.ModuleVars[I]).TypeName, OptTags, OptInners, ResTags, ResVals, ResErrs);
+    CollectTypedMonadsFromExpr(TASTVarDecl(AModule.ModuleVars[I]).InitialExpr, OptTags, OptInners, ResTags, ResVals, ResErrs);
+  end;
+
+  OldFunc := FCurrentFunc;
+  OldProg := FProgramBlock;
+  try
+    for I := 0 to AModule.Functions.Count - 1 do
+    begin
+      Func := TASTFunction(AModule.Functions[I]);
+      if (Func.GenericParams.Count > 0) or (Func.GenericParam <> '') then Continue;
+      FCurrentFunc := Func;
+      FProgramBlock := nil;
+      if not Func.IsProcedure then
+        CollectTypedMonadsFromType(Func.ReturnType, OptTags, OptInners, ResTags, ResVals, ResErrs);
+      for J := 0 to Func.Params.Count - 1 do
+        CollectTypedMonadsFromType(TASTParam(Func.Params[J]).TypeName, OptTags, OptInners, ResTags, ResVals, ResErrs);
+      for J := 0 to Func.LocalVars.Count - 1 do
+      begin
+        CollectTypedMonadsFromType(TASTVarDecl(Func.LocalVars[J]).TypeName, OptTags, OptInners, ResTags, ResVals, ResErrs);
+        CollectTypedMonadsFromExpr(TASTVarDecl(Func.LocalVars[J]).InitialExpr, OptTags, OptInners, ResTags, ResVals, ResErrs);
+      end;
+      CollectTypedMonadsFromStmts(Func.Body, OptTags, OptInners, ResTags, ResVals, ResErrs);
+    end;
+
+    CollectTypedMonadsFromStmts(AModule.InitBody, OptTags, OptInners, ResTags, ResVals, ResErrs);
+    CollectTypedMonadsFromStmts(AModule.FiniBody, OptTags, OptInners, ResTags, ResVals, ResErrs);
+
+    if Assigned(AModule.ProgramBlock) then
+    begin
+      FCurrentFunc := nil;
+      FProgramBlock := AModule.ProgramBlock;
+      for J := 0 to AModule.ProgramBlock.LocalVars.Count - 1 do
+      begin
+        CollectTypedMonadsFromType(TASTVarDecl(AModule.ProgramBlock.LocalVars[J]).TypeName, OptTags, OptInners, ResTags, ResVals, ResErrs);
+        CollectTypedMonadsFromExpr(TASTVarDecl(AModule.ProgramBlock.LocalVars[J]).InitialExpr, OptTags, OptInners, ResTags, ResVals, ResErrs);
+      end;
+      CollectTypedMonadsFromStmts(AModule.ProgramBlock.Body, OptTags, OptInners, ResTags, ResVals, ResErrs);
+    end;
+  finally
+    FCurrentFunc := OldFunc;
+    FProgramBlock := OldProg;
+  end;
+end;
+
+procedure TAetherEmitterPascal.EmitTypedOptionDecl(const Tag, InnerT: string);
+begin
+  Emit(Format('TAetherOpt_%s = record', [Tag]));
+  IncIndent;
+  Emit('is_some: Boolean;');
+  Emit('is_none: Boolean;');
+  Emit(Format('value: %s;', [EmitTypeRef(InnerT)]));
+  DecIndent;
+  Emit('end;');
+  Emit('');
+end;
+
+procedure TAetherEmitterPascal.EmitTypedResultDecl(const Tag, ValT, ErrT: string);
+begin
+  Emit(Format('TAetherRes_%s = record', [Tag]));
+  IncIndent;
+  Emit('is_ok: Boolean;');
+  Emit('is_err: Boolean;');
+  Emit(Format('value: %s;', [EmitTypeRef(ValT)]));
+  Emit(Format('error: %s;', [EmitTypeRef(ErrT)]));
+  DecIndent;
+  Emit('end;');
+  Emit('');
+end;
+
+procedure TAetherEmitterPascal.EmitTypedMonadHelpers(OptTags, OptInners, ResTags, ResVals, ResErrs: TStrings; DeclOnly: Boolean);
+var
+  I: Integer;
+  T, InnerPas, ValPas, ErrPas: string;
+begin
+  for I := 0 to OptTags.Count - 1 do
+  begin
+    T := OptTags[I];
+    InnerPas := EmitTypeRef(OptInners[I]);
+    Emit(Format('function AetherSome_%s(const V: %s): TAetherOpt_%s;', [T, InnerPas, T]));
+    if not DeclOnly then
+    begin
+      Emit('begin');
+      Emit(Format('  Result := Default(TAetherOpt_%s);', [T]));
+      Emit('  Result.is_some := True;');
+      Emit('  Result.is_none := False;');
+      Emit('  Result.value := V;');
+      Emit('end;');
+      Emit('');
+    end;
+    Emit(Format('function AetherNone_%s(): TAetherOpt_%s;', [T, T]));
+    if not DeclOnly then
+    begin
+      Emit('begin');
+      Emit(Format('  Result := Default(TAetherOpt_%s);', [T]));
+      Emit('  Result.is_some := False;');
+      Emit('  Result.is_none := True;');
+      Emit('end;');
+      Emit('');
+    end;
+  end;
+
+  for I := 0 to ResTags.Count - 1 do
+  begin
+    T := ResTags[I];
+    ValPas := EmitTypeRef(ResVals[I]);
+    ErrPas := EmitTypeRef(ResErrs[I]);
+    Emit(Format('function AetherOk_%s(const V: %s): TAetherRes_%s;', [T, ValPas, T]));
+    if not DeclOnly then
+    begin
+      Emit('begin');
+      Emit(Format('  Result := Default(TAetherRes_%s);', [T]));
+      Emit('  Result.is_ok := True;');
+      Emit('  Result.is_err := False;');
+      Emit('  Result.value := V;');
+      Emit('end;');
+      Emit('');
+    end;
+    Emit(Format('function AetherErr_%s(const E: %s): TAetherRes_%s;', [T, ErrPas, T]));
+    if not DeclOnly then
+    begin
+      Emit('begin');
+      Emit(Format('  Result := Default(TAetherRes_%s);', [T]));
+      Emit('  Result.is_ok := False;');
+      Emit('  Result.is_err := True;');
+      Emit('  Result.error := E;');
+      Emit('end;');
+      Emit('');
+    end;
+  end;
+end;
+
+procedure TAetherEmitterPascal.EmitPayloadEnumConstructors(Enm: TASTEnumDecl; DeclOnly: Boolean);
+var
+  I, J: Integer;
+  V: TASTEnumVariant;
+  F: TASTRecordField;
+  ParamsStr, FnName: string;
+begin
+  if not Enm.HasPayload then Exit;
+  for I := 0 to Enm.Variants.Count - 1 do
+  begin
+    V := TASTEnumVariant(Enm.Variants[I]);
+    FnName := Enm.Name + '_' + V.Name;
+    ParamsStr := '';
+    for J := 0 to V.Fields.Count - 1 do
+    begin
+      F := TASTRecordField(V.Fields[J]);
+      if J > 0 then ParamsStr := ParamsStr + '; ';
+      ParamsStr := ParamsStr + Format('const A_%s: %s', [F.Name, EmitTypeRef(F.TypeName)]);
+    end;
+    Emit(Format('function %s(%s): T%s;', [FnName, ParamsStr, Enm.Name]));
+    if not DeclOnly then
+    begin
+      Emit('begin');
+      IncIndent;
+      Emit(Format('Result := Default(T%s);', [Enm.Name]));
+      Emit(Format('Result.tag := %s_Tag_%s;', [Enm.Name, V.Name]));
+      for J := 0 to V.Fields.Count - 1 do
+      begin
+        F := TASTRecordField(V.Fields[J]);
+        Emit(Format('Result._v_%s_%s := A_%s;', [V.Name, F.Name, F.Name]));
+      end;
+      DecIndent;
+      Emit('end;');
+      Emit('');
+    end;
+  end;
 end;
 
 function TAetherEmitterPascal.IsTypeIdentifier(const AName: string): Boolean;
@@ -617,9 +1545,9 @@ end;
 
 procedure TAetherEmitterPascal.CollectAutoVarsFromExpr(Expr: TASTExpr; VarNames, VarTypes: TStrings; const SkipNames: TStrings);
 var
-  I, K: Integer;
+  I, K, BIdx: Integer;
   CaseNode: TASTMatchCase;
-  MT, DeclType, KeyT, ValT, ErrT: string;
+  MT, DeclType, KeyT, ValT, BName, TVar, BType: string;
 
   procedure AddAutoVarLocal(const AName, AType: string);
   var
@@ -657,8 +1585,15 @@ begin
     CollectAutoVarsFromExpr(TASTSpawnExpr(Expr).CallExpr, VarNames, VarTypes, SkipNames)
   else if Expr is TASTCallExpr then
   begin
+    if Assigned(TASTCallExpr(Expr).CalleeExpr) then
+      CollectAutoVarsFromExpr(TASTCallExpr(Expr).CalleeExpr, VarNames, VarTypes, SkipNames);
     for I := 0 to TASTCallExpr(Expr).Args.Count - 1 do
       CollectAutoVarsFromExpr(TASTCallArg(TASTCallExpr(Expr).Args[I]).Expr, VarNames, VarTypes, SkipNames);
+  end
+  else if Expr is TASTTupleLiteralExpr then
+  begin
+    for I := 0 to TASTTupleLiteralExpr(Expr).Elements.Count - 1 do
+      CollectAutoVarsFromExpr(TASTExpr(TASTTupleLiteralExpr(Expr).Elements[I]), VarNames, VarTypes, SkipNames);
   end
   else if Expr is TASTIndexExpr then
   begin
@@ -695,52 +1630,47 @@ begin
     AddAutoVarLocal(Format('_aether_mexpr_%d_%d', [Expr.Line, Expr.Col]), DeclType);
     CollectAutoVarsFromExpr(TASTMatchExpr(Expr).Expr, VarNames, VarTypes, SkipNames);
     MT := ResolveAliasType(GetExprTypeName(TASTMatchExpr(Expr).Expr));
+    DeclType := EmitTypeRef(MT);
+    if DeclType = '' then DeclType := 'Int32';
+    AddAutoVarLocal(Format('_aether_mval_%d_%d', [Expr.Line, Expr.Col]), DeclType);
     for K := 0 to TASTMatchExpr(Expr).Cases.Count - 1 do
     begin
       CaseNode := TASTMatchCase(TASTMatchExpr(Expr).Cases[K]);
-      if CaseNode.Pattern.IsLet and (CaseNode.Pattern.SubPattern <> '') and (CaseNode.Pattern.SubPattern <> '_') then
+      I := GetMatchArmBindingCount(CaseNode);
+      for BIdx := 0 to I - 1 do
       begin
-        if Pos('Err', CaseNode.Pattern.Value) = 1 then
+        GetMatchArmBindingInfo(CaseNode, BIdx, MT, BName, TVar, BType);
+        if (BName <> '') and (BName <> '_') then
         begin
-          SplitResultTypes(MT, ValT, ErrT);
-          DeclType := EmitTypeRef(ErrT);
-          if DeclType = '' then DeclType := 'LongInt';
-        end
-        else if Pos('Ok', CaseNode.Pattern.Value) = 1 then
-        begin
-          SplitResultTypes(MT, ValT, ErrT);
-          DeclType := EmitTypeRef(ValT);
-          if DeclType = '' then DeclType := 'Double';
-        end
-        else if CaseNode.Pattern.Value = 'Some' then
-        begin
-          if Pos('Option<', MT) = 1 then
-            DeclType := EmitTypeRef(Trim(Copy(MT, 8, Length(MT) - 8)))
-          else
-            DeclType := 'Pointer';
-        end
-        else
-        begin
-          DeclType := EmitTypeRef(MT);
+          DeclType := EmitTypeRef(BType);
           if DeclType = '' then DeclType := 'Int32';
+          AddAutoVarLocal(TVar, DeclType);
         end;
-        AddAutoVarLocal(CaseNode.Pattern.SubPattern, DeclType);
       end;
-      CollectAutoVarsFromExpr(CaseNode.Guard, VarNames, VarTypes, SkipNames);
-      CollectAutoVarsFromExpr(CaseNode.ValueExpr, VarNames, VarTypes, SkipNames);
+      PushMatchBindings(CaseNode, MT);
+      try
+        CollectAutoVarsFromExpr(CaseNode.Guard, VarNames, VarTypes, SkipNames);
+        CollectAutoVarsFromExpr(CaseNode.ValueExpr, VarNames, VarTypes, SkipNames);
+      finally
+        for BIdx := 0 to I - 1 do
+        begin
+          GetMatchArmBindingInfo(CaseNode, BIdx, MT, BName, TVar, BType);
+          if (BName <> '') and (BName <> '_') then PopMatchBindings(1);
+        end;
+      end;
     end;
   end;
 end;
 
 procedure TAetherEmitterPascal.CollectAutoVarsFromStmts(Stmts: TASTNodeList; VarNames, VarTypes: TStrings; const SkipNames: TStrings);
 var
-  I, K: Integer;
+  I, K, BIdx, BCount: Integer;
   S: TASTStmt;
   ForStmt: TASTForStmt;
   MatchNode: TASTMatchStmt;
   CaseNode: TASTMatchCase;
   VD: TASTVarDecl;
-  ElemT, MT, DeclType, KeyT, ValT, ErrT: string;
+  ElemT, MT, DeclType, KeyT, ValT, BName, TVar, BType: string;
 
   procedure AddAutoVar(const AName, AType: string);
   var
@@ -847,39 +1777,34 @@ begin
       MatchNode := TASTMatchStmt(S);
       CollectAutoVarsFromExpr(MatchNode.Expr, VarNames, VarTypes, SkipNames);
       MT := ResolveAliasType(GetExprTypeName(MatchNode.Expr));
+      DeclType := EmitTypeRef(MT);
+      if DeclType = '' then DeclType := 'Int32';
+      AddAutoVar(Format('_aether_mval_%d_%d', [MatchNode.Line, MatchNode.Col]), DeclType);
       for K := 0 to MatchNode.Cases.Count - 1 do
       begin
         CaseNode := TASTMatchCase(MatchNode.Cases[K]);
-        if CaseNode.Pattern.IsLet and (CaseNode.Pattern.SubPattern <> '') and (CaseNode.Pattern.SubPattern <> '_') then
+        BCount := GetMatchArmBindingCount(CaseNode);
+        for BIdx := 0 to BCount - 1 do
         begin
-          if Pos('Err', CaseNode.Pattern.Value) = 1 then
+          GetMatchArmBindingInfo(CaseNode, BIdx, MT, BName, TVar, BType);
+          if (BName <> '') and (BName <> '_') then
           begin
-            SplitResultTypes(MT, ValT, ErrT);
-            DeclType := EmitTypeRef(ErrT);
-            if DeclType = '' then DeclType := 'LongInt';
-          end
-          else if Pos('Ok', CaseNode.Pattern.Value) = 1 then
-          begin
-            SplitResultTypes(MT, ValT, ErrT);
-            DeclType := EmitTypeRef(ValT);
-            if DeclType = '' then DeclType := 'Double';
-          end
-          else if CaseNode.Pattern.Value = 'Some' then
-          begin
-            if Pos('Option<', MT) = 1 then
-              DeclType := EmitTypeRef(Trim(Copy(MT, 8, Length(MT) - 8)))
-            else
-              DeclType := 'Pointer';
-          end
-          else
-          begin
-            DeclType := EmitTypeRef(MT);
+            DeclType := EmitTypeRef(BType);
             if DeclType = '' then DeclType := 'Int32';
+            AddAutoVar(TVar, DeclType);
           end;
-          AddAutoVar(CaseNode.Pattern.SubPattern, DeclType);
         end;
-        CollectAutoVarsFromExpr(CaseNode.Guard, VarNames, VarTypes, SkipNames);
-        CollectAutoVarsFromStmts(CaseNode.Body, VarNames, VarTypes, SkipNames);
+        PushMatchBindings(CaseNode, MT);
+        try
+          CollectAutoVarsFromExpr(CaseNode.Guard, VarNames, VarTypes, SkipNames);
+          CollectAutoVarsFromStmts(CaseNode.Body, VarNames, VarTypes, SkipNames);
+        finally
+          for BIdx := 0 to BCount - 1 do
+          begin
+            GetMatchArmBindingInfo(CaseNode, BIdx, MT, BName, TVar, BType);
+            if (BName <> '') and (BName <> '_') then PopMatchBindings(1);
+          end;
+        end;
       end;
     end;
   end;
@@ -1183,6 +2108,7 @@ var
   Rec: TASTRecordDecl;
   V: TASTVarDecl;
   P: TASTParam;
+  FnParams: TStringList;
 begin
   Result := '';
   if not Assigned(Expr) then Exit;
@@ -1201,8 +2127,13 @@ begin
   if Expr is TASTIdentifierExpr then
   begin
     Id := TASTIdentifierExpr(Expr);
-    if (FMatchBindName <> '') and SameText(Id.Name, FMatchBindName) then
-      Exit(FMatchBindType);
+    if Id.IsFnValueRef and (Id.ResolvedFnType <> '') then
+      Exit(Id.ResolvedFnType);
+    if Id.ResolvedMonadType <> '' then
+      Exit(Id.ResolvedMonadType);
+    for I := FMatchBindNames.Count - 1 downto 0 do
+      if SameText(FMatchBindNames[I], Id.Name) then
+        Exit(FMatchBindTypes[I]);
     if Assigned(FCurrentFunc) and SameText(Id.Name, 'result') then
       Exit(FCurrentFunc.ReturnType);
     if Assigned(FCurrentFunc) then
@@ -1235,11 +2166,18 @@ begin
       for I := 0 to FModule.Constants.Count - 1 do
         if SameText(TASTConstDecl(FModule.Constants[I]).Name, Id.Name) then
           Exit(TASTConstDecl(FModule.Constants[I]).TypeName);
+      for I := 0 to FModule.Types.Count - 1 do
+        if FModule.Types[I] is TASTEnumDecl then
+          for J := 0 to TASTEnumDecl(FModule.Types[I]).Variants.Count - 1 do
+            if SameText(TASTEnumVariant(TASTEnumDecl(FModule.Types[I]).Variants[J]).Name, Id.Name) then
+              Exit(TASTEnumDecl(FModule.Types[I]).Name);
     end;
   end
   else if Expr is TASTMemberAccessExpr then
   begin
     Acc := TASTMemberAccessExpr(Expr);
+    if (Acc.Target is TASTIdentifierExpr) and IsEnumName(TASTIdentifierExpr(Acc.Target).Name) then
+      Exit(TASTIdentifierExpr(Acc.Target).Name);
     TargetType := ResolveAliasType(GetExprTypeName(Acc.Target));
     if (Pos('Result', TargetType) = 1) then
     begin
@@ -1253,27 +2191,25 @@ begin
       if SameText(Acc.Member, 'is_some') or SameText(Acc.Member, 'is_none') then Exit('Bool');
       if SameText(Acc.Member, 'value') then
       begin
-        CleanTarget := Trim(Copy(TargetType, 8, Length(TargetType) - 8));
+        CleanTarget := SafeUnwrapGeneric(TargetType, 'Option');
         if Pos('Box<', CleanTarget) = 1 then
-          CleanTarget := Trim(Copy(CleanTarget, 5, Length(CleanTarget) - 5));
+          CleanTarget := SafeUnwrapGeneric(CleanTarget, 'Box');
         Exit(CleanTarget);
       end;
     end;
     if Pos('Box<', TargetType) > 0 then
     begin
-      P1 := Pos('Box<', TargetType);
-      CleanTarget := Copy(TargetType, P1 + 4, Length(TargetType));
-      P2 := Pos('>', CleanTarget);
-      if P2 > 0 then CleanTarget := Copy(CleanTarget, 1, P2 - 1);
+      CleanTarget := TargetType;
+      if Pos('Option<', CleanTarget) = 1 then
+        CleanTarget := SafeUnwrapGeneric(CleanTarget, 'Option');
+      if Pos('Box<', CleanTarget) = 1 then
+        CleanTarget := SafeUnwrapGeneric(CleanTarget, 'Box');
     end
     else if Pos('Option<', TargetType) = 1 then
     begin
-      P1 := Pos('<', TargetType);
-      CleanTarget := Copy(TargetType, P1 + 1, Length(TargetType) - P1 - 1);
+      CleanTarget := SafeUnwrapGeneric(TargetType, 'Option');
       if Pos('Box<', CleanTarget) = 1 then
-      begin
-        CleanTarget := Copy(CleanTarget, 5, Length(CleanTarget) - 5);
-      end;
+        CleanTarget := SafeUnwrapGeneric(CleanTarget, 'Box');
     end
     else
       CleanTarget := TargetType;
@@ -1389,9 +2325,24 @@ begin
     if LeftType <> '' then Exit(LeftType);
     Exit(CleanTarget);
   end
+  else if Expr is TASTTupleLiteralExpr then
+    Exit(TASTTupleLiteralExpr(Expr).ResolvedType)
+  else if Expr is TASTLambdaExpr then
+    Exit(TASTLambdaExpr(Expr).ResolvedFnType)
   else if Expr is TASTCallExpr then
   begin
     Call := TASTCallExpr(Expr);
+    if Call.IsIndirectCall and (Call.IndirectFnType <> '') then
+    begin
+      FnParams := TStringList.Create;
+      try
+        if SplitFnType(Call.IndirectFnType, FnParams, TargetType) then
+          Exit(TargetType);
+      finally
+        FnParams.Free;
+      end;
+    end;
+    if Call.ResolvedMonadType <> '' then Exit(Call.ResolvedMonadType);
     if Call.Callee = 'Box' then Exit('Box');
     if (Call.Callee = 'Ok') and (Call.Args.Count >= 1) then
     begin
@@ -1419,6 +2370,12 @@ begin
         Exit('Option<' + TargetType + '>')
       else
         Exit('Option');
+    end;
+    if Pos('.', Call.Callee) > 0 then
+    begin
+      LeftType := Copy(Call.Callee, 1, Pos('.', Call.Callee) - 1);
+      if IsEnumName(LeftType) then
+        Exit(LeftType);
     end;
     if SameText(Call.Callee, 'Default') and (Call.Args.Count = 1) and (TASTCallArg(Call.Args[0]).Expr is TASTIdentifierExpr) then
       Exit(TASTIdentifierExpr(TASTCallArg(Call.Args[0]).Expr).Name);
@@ -1537,8 +2494,7 @@ end;
 
 function TAetherEmitterPascal.EmitTypeRef(const AType: string): string;
 var
-  Inner, Inner2: string;
-  P1, P2: Integer;
+  Inner, Inner2, ValT, ErrT: string;
 begin
   if AType = 'Bool' then Result := 'Boolean'
   else if AType = 'Float32' then Result := 'Single'
@@ -1556,6 +2512,8 @@ begin
        (Inner = 'Float32') or (Inner = 'Float64') or (Inner = 'Bool') or (Inner = 'Char') or
        (Inner = 'String') then
       Result := 'PAetherPtr_' + Inner
+    else if IsRecordName(Inner) or (Assigned(FindEnumDecl(Inner)) and FindEnumDecl(Inner).HasPayload) then
+      Result := 'PT' + Inner
     else
       Result := '^' + EmitTypeRef(Inner);
   end
@@ -1568,8 +2526,10 @@ begin
        (Inner = 'String') or (Inner = 'Pointer') then
       Result := 'TAetherDyn_' + Inner
     else
-      Result := 'array of ' + EmitTypeRef(Inner);
+      Result := 'TAetherDyn_' + MangleTypeTag(Inner);
   end
+  else if IsTypedResult(AType, ValT, ErrT) then
+    Result := 'TAetherRes_' + MangleTypeTag(ValT) + '__' + MangleTypeTag(ErrT)
   else if Pos('Result', AType) = 1 then
     Result := 'TResultDoubleError'
   else if Pos('array[', AType) = 1 then
@@ -1578,10 +2538,11 @@ begin
     Result := 'set of ' + EmitTypeRef(Trim(Copy(AType, 8, Length(AType))))
   else if Pos('Box<', AType) > 0 then
   begin
-    P1 := Pos('Box<', AType);
-    Inner := Copy(AType, P1 + 4, Length(AType));
-    P2 := Pos('>', Inner);
-    if P2 > 0 then Inner := Copy(Inner, 1, P2 - 1);
+    Inner := AType;
+    if Pos('Option<', Inner) = 1 then
+      Inner := SafeUnwrapGeneric(Inner, 'Option');
+    if Pos('Box<', Inner) = 1 then
+      Inner := SafeUnwrapGeneric(Inner, 'Box');
     Result := 'P' + EmitTypeRef(Inner);
   end
   else if (Copy(AType, 1, 5) = 'Task<') and (AType[Length(AType)] = '>') then
@@ -1589,18 +2550,22 @@ begin
     Inner := Copy(AType, 6, Length(AType) - 6);
     Result := 'specialize TAetherTask<' + EmitTypeRef(Inner) + '>';
   end
+  else if IsTypedValueOption(AType, Inner) then
+    Result := 'TAetherOpt_' + MangleTypeTag(Inner)
   else if Pos('Option<', AType) = 1 then
   begin
     if IsValueOptionType(AType) then
       Result := 'TAetherOption'
     else
     begin
-      Inner := Copy(AType, 8, Length(AType) - 8);
+      Inner := SafeUnwrapGeneric(AType, 'Option');
       Result := EmitTypeRef(Inner);
     end;
   end
   else if IsMapType(AType, Inner, Inner2) then
     Result := 'TAetherMap_' + MapTag(Inner, Inner2)
+  else if Pos('fn(', AType) = 1 then
+    Result := 'TAetherFn_' + FnTypeTag(AType)
   else
     Result := 'T' + AType;
 end;
@@ -1615,11 +2580,14 @@ var
   Call: TASTCallExpr;
   Idx: TASTIndexExpr;
   SetLit: TASTSetLiteralExpr;
-  ArgsStr, KeyT, ValT, TargetT, ValF, ErrF: string;
-  I: Integer;
-  TargetStr: string;
-  IsWild: Boolean;
-  BindVarT, OldBindName, OldBindType: string;
+  ArgsStr, KeyT, ValT, TargetT, ValF, ErrF, RetT, RetValF, RetErrF, MTag, RetMTag, ErrValExpr: string;
+  I, BindCount, BIdx: Integer;
+  TargetStr, ScruVar, BName, TVar, BType: string;
+  IsWild, OpTyped, RetTyped: Boolean;
+  BindVarT: string;
+  Enm: TASTEnumDecl;
+  VarN: TASTEnumVariant;
+  MC: TASTMatchCase;
 begin
   if not Assigned(Expr) then Exit('');
 
@@ -1641,12 +2609,30 @@ begin
   if Expr is TASTIdentifierExpr then
   begin
     Id := TASTIdentifierExpr(Expr);
-    if (FGuardBindName <> '') and SameText(Id.Name, FGuardBindName) then
-      Result := '(' + FGuardBindExpr + ')'
-    else if Id.Name = '__ValueNone' then
-      Result := 'AetherNone()'
+    for I := FGuardBindNames.Count - 1 downto 0 do
+      if SameText(FGuardBindNames[I], Id.Name) then
+        Exit('(' + FGuardBindExprs[I] + ')');
+    for I := FMatchBindNames.Count - 1 downto 0 do
+      if SameText(FMatchBindNames[I], Id.Name) then
+        Exit(FMatchBindTargets[I]);
+    if Id.Name = '__ValueNone' then
+    begin
+      if (Id.ResolvedMonadType <> '') and IsTypedValueOption(Id.ResolvedMonadType, ValF) then
+        Result := 'AetherNone_' + MangleTypeTag(ValF) + '()'
+      else
+        Result := 'AetherNone()';
+    end
     else if Id.Name = 'None' then
       Result := 'nil'
+    else if FindEnumVariantUnqualified(Id.Name, Enm, VarN) then
+    begin
+      if Enm.HasPayload then
+        Result := Enm.Name + '_' + VarN.Name + '()'
+      else
+        Result := Enm.Name + '_' + VarN.Name;
+    end
+    else if Id.IsFnValueRef and (Id.ResolvedFnType <> '') then
+      Result := Format('AetherMakeFn_%s(@__aether_thunk_%s, nil)', [FnTypeTag(Id.ResolvedFnType), Id.Name])
     else
       Result := Id.Name;
     Exit;
@@ -1662,7 +2648,18 @@ begin
     // Case Enum.Variant or Alias.Enum.Variant
     if ((Acc.Target is TASTIdentifierExpr) and IsEnumName(TASTIdentifierExpr(Acc.Target).Name)) or
        ((Acc.Target is TASTMemberAccessExpr) and IsEnumName(TargetStr)) then
-      Result := TargetStr + '_' + Acc.Member
+    begin
+      if Acc.Target is TASTIdentifierExpr then
+        Enm := FindEnumDecl(TASTIdentifierExpr(Acc.Target).Name)
+      else
+        Enm := FindEnumDecl(TargetStr);
+      if Assigned(Enm) and Enm.HasPayload then
+        Result := TargetStr + '_' + Acc.Member + '()'
+      else
+        Result := TargetStr + '_' + Acc.Member;
+    end
+    else if IsTypedResult(TargetT, ValF, ErrF) then
+      Result := TargetStr + '.' + Acc.Member
     else if Pos('Result', TargetT) = 1 then
     begin
       if Acc.Member = 'value' then
@@ -1681,6 +2678,8 @@ begin
       else
         Result := TargetStr + '.' + Acc.Member;
     end
+    else if IsTypedValueOption(TargetT, ValF) then
+      Result := TargetStr + '.' + Acc.Member
     else if IsValueOptionType(TargetT) then
     begin
       if Acc.Member = 'is_some' then
@@ -1689,7 +2688,7 @@ begin
         Result := TargetStr + '.is_none'
       else if Acc.Member = 'value' then
       begin
-        ValF := Trim(Copy(TargetT, 8, Length(TargetT) - 8));
+        ValF := SafeUnwrapGeneric(TargetT, 'Option');
         Result := EmitMonadFieldExtract(TargetStr, ValF, 'num_val', 'str_val');
       end
       else
@@ -1745,37 +2744,85 @@ begin
       TargetT := ResolveAliasType(GetExprTypeName(Un.Expr));
       TargetStr := Format('_aether_try_%d_%d', [Un.Line, Un.Col]);
       Emit(Format('%s := %s;', [TargetStr, EmitExpr(Un.Expr)]));
+      RetT := '';
+      if Assigned(FCurrentFunc) then RetT := ResolveAliasType(FCurrentFunc.ReturnType);
+
       if Pos('Result', TargetT) = 1 then
       begin
         SplitResultTypes(TargetT, ValF, ErrF);
+        OpTyped := IsTypedResult(TargetT, ValF, ErrF);
+        RetTyped := (RetT <> '') and IsTypedResult(RetT, RetValF, RetErrF);
         Emit(Format('if %s.is_err then', [TargetStr]));
         Emit('begin');
         IncIndent;
         if FActiveDefers.Count > 0 then EmitActiveDefers(0);
-        Emit(Format('Exit(%s);', [TargetStr]));
+        if not OpTyped and not RetTyped then
+          Emit(Format('Exit(%s);', [TargetStr]))
+        else if OpTyped and RetTyped then
+        begin
+          MTag := MangleTypeTag(ValF) + '__' + MangleTypeTag(ErrF);
+          RetMTag := MangleTypeTag(RetValF) + '__' + MangleTypeTag(RetErrF);
+          if MTag = RetMTag then
+            Emit(Format('Exit(%s);', [TargetStr]))
+          else
+            Emit(Format('Exit(AetherErr_%s(%s.error));', [RetMTag, TargetStr]));
+        end
+        else if (not OpTyped) and RetTyped then
+        begin
+          RetMTag := MangleTypeTag(RetValF) + '__' + MangleTypeTag(RetErrF);
+          if ResolveAliasType(ErrF) = 'String' then
+            ErrValExpr := TargetStr + '.err_str'
+          else
+            ErrValExpr := Format('%s(%s.error)', [EmitTypeRef(ErrF), TargetStr]);
+          Emit(Format('Exit(AetherErr_%s(%s));', [RetMTag, ErrValExpr]));
+        end
+        else
+        begin
+          if ResolveAliasType(ErrF) = 'String' then
+            Emit(Format('Exit(AetherErr(%s.error));', [TargetStr]))
+          else
+            Emit(Format('Exit(AetherErr(Integer(%s.error)));', [TargetStr]));
+        end;
         DecIndent;
         Emit('end;');
-        Result := EmitMonadFieldExtract(TargetStr, ValF, 'value', 'str_val');
+        if OpTyped then
+          Result := TargetStr + '.value'
+        else
+          Result := EmitMonadFieldExtract(TargetStr, ValF, 'value', 'str_val');
       end
       else if IsValueOptionType(TargetT) then
       begin
-        ValF := Trim(Copy(TargetT, 8, Length(TargetT) - 8));
+        OpTyped := IsTypedValueOption(TargetT, ValF);
+        if not OpTyped then ValF := SafeUnwrapGeneric(TargetT, 'Option');
+        RetTyped := (RetT <> '') and IsTypedValueOption(RetT, RetValF);
         Emit(Format('if %s.is_none then', [TargetStr]));
         Emit('begin');
         IncIndent;
         if FActiveDefers.Count > 0 then EmitActiveDefers(0);
-        Emit(Format('Exit(%s);', [TargetStr]));
+        if RetTyped then
+          Emit(Format('Exit(AetherNone_%s());', [MangleTypeTag(RetValF)]))
+        else if (RetT = '') or IsValueOptionType(RetT) then
+          Emit('Exit(AetherNone());')
+        else
+          Emit('Exit(nil);');
         DecIndent;
         Emit('end;');
-        Result := EmitMonadFieldExtract(TargetStr, ValF, 'num_val', 'str_val');
+        if OpTyped then
+          Result := TargetStr + '.value'
+        else
+          Result := EmitMonadFieldExtract(TargetStr, ValF, 'num_val', 'str_val');
       end
       else
       begin
+        RetTyped := (RetT <> '') and IsTypedValueOption(RetT, RetValF);
         Emit(Format('if %s = nil then', [TargetStr]));
         Emit('begin');
         IncIndent;
         if FActiveDefers.Count > 0 then EmitActiveDefers(0);
-        Emit('Exit(nil);');
+        if RetTyped then
+          Emit(Format('Exit(AetherNone_%s());', [MangleTypeTag(RetValF)]))
+        else
+          Emit('Exit(nil);');
         DecIndent;
         Emit('end;');
         Result := TargetStr;
@@ -1866,6 +2913,24 @@ begin
   if Expr is TASTCallExpr then
   begin
     Call := TASTCallExpr(Expr);
+    if Call.IsIndirectCall then
+    begin
+      if Assigned(Call.CalleeExpr) then
+        TargetStr := EmitExpr(Call.CalleeExpr)
+      else
+        TargetStr := Call.Callee;
+      ArgsStr := '';
+      for I := 0 to Call.Args.Count - 1 do
+      begin
+        if I > 0 then ArgsStr := ArgsStr + ', ';
+        ArgsStr := ArgsStr + EmitExpr(TASTCallArg(Call.Args[I]).Expr);
+      end;
+      if ArgsStr <> '' then
+        Result := Format('AetherCallFn_%s(%s, %s)', [FnTypeTag(Call.IndirectFnType), TargetStr, ArgsStr])
+      else
+        Result := Format('AetherCallFn_%s(%s)', [FnTypeTag(Call.IndirectFnType), TargetStr]);
+      Exit;
+    end;
 
     // PrintLn / Print translates to WriteLn / Write or Format(...)
     if (Call.Callee = 'PrintLn') or (Call.Callee = 'Print') then
@@ -1910,21 +2975,37 @@ begin
     // Ok, Err, and Some constructors
     if Call.Callee = 'Ok' then
     begin
-      TargetT := ResolveAliasType(GetExprTypeName(TASTCallArg(Call.Args[0]).Expr));
-      if TargetT = 'Char' then
-        Result := 'AetherOk(Ord(' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + '))'
+      if (Call.ResolvedMonadType <> '') and IsTypedResult(Call.ResolvedMonadType, ValF, ErrF) then
+      begin
+        MTag := MangleTypeTag(ValF) + '__' + MangleTypeTag(ErrF);
+        Result := Format('AetherOk_%s(%s)', [MTag, EmitExpr(TASTCallArg(Call.Args[0]).Expr)]);
+      end
       else
-        Result := 'AetherOk(' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + ')';
+      begin
+        TargetT := ResolveAliasType(GetExprTypeName(TASTCallArg(Call.Args[0]).Expr));
+        if TargetT = 'Char' then
+          Result := 'AetherOk(Ord(' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + '))'
+        else
+          Result := 'AetherOk(' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + ')';
+      end;
       Exit;
     end;
 
     if Call.Callee = 'Err' then
     begin
-      TargetT := ResolveAliasType(GetExprTypeName(TASTCallArg(Call.Args[0]).Expr));
-      if TargetT = 'String' then
-        Result := 'AetherErr(' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + ')'
+      if (Call.ResolvedMonadType <> '') and IsTypedResult(Call.ResolvedMonadType, ValF, ErrF) then
+      begin
+        MTag := MangleTypeTag(ValF) + '__' + MangleTypeTag(ErrF);
+        Result := Format('AetherErr_%s(%s)', [MTag, EmitExpr(TASTCallArg(Call.Args[0]).Expr)]);
+      end
       else
-        Result := 'AetherErr(Integer(' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + '))';
+      begin
+        TargetT := ResolveAliasType(GetExprTypeName(TASTCallArg(Call.Args[0]).Expr));
+        if TargetT = 'String' then
+          Result := 'AetherErr(' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + ')'
+        else
+          Result := 'AetherErr(Integer(' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + '))';
+      end;
       Exit;
     end;
 
@@ -1934,11 +3015,19 @@ begin
         Result := EmitExpr(TASTCallArg(Call.Args[0]).Expr)
       else
       begin
-        TargetT := ResolveAliasType(GetExprTypeName(TASTCallArg(Call.Args[0]).Expr));
-        if TargetT = 'Char' then
-          Result := 'AetherSome(Ord(' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + '))'
+        MTag := Call.ResolvedMonadType;
+        if MTag = '' then
+          MTag := 'Option<' + ResolveAliasType(GetExprTypeName(TASTCallArg(Call.Args[0]).Expr)) + '>';
+        if IsTypedValueOption(MTag, ValF) then
+          Result := Format('AetherSome_%s(%s)', [MangleTypeTag(ValF), EmitExpr(TASTCallArg(Call.Args[0]).Expr)])
         else
-          Result := 'AetherSome(' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + ')';
+        begin
+          TargetT := ResolveAliasType(GetExprTypeName(TASTCallArg(Call.Args[0]).Expr));
+          if TargetT = 'Char' then
+            Result := 'AetherSome(Ord(' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + '))'
+          else
+            Result := 'AetherSome(' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + ')';
+        end;
       end;
       Exit;
     end;
@@ -2574,13 +3663,19 @@ begin
       Exit;
     end;
 
-    // Normal call or record constructor
+    // Normal call, enum variant constructor, or record constructor
     ArgsStr := '';
     for I := 0 to Call.Args.Count - 1 do
     begin
       ArgsStr := ArgsStr + EmitExpr(TASTCallArg(Call.Args[I]).Expr);
       if I < Call.Args.Count - 1 then
         ArgsStr := ArgsStr + ', ';
+    end;
+    if Pos('.', Call.Callee) > 0 then
+    begin
+      ValF := Copy(Call.Callee, 1, Pos('.', Call.Callee) - 1);
+      if IsEnumName(ValF) then
+        Exit(StringReplace(Call.Callee, '.', '_', [rfReplaceAll]) + '(' + ArgsStr + ')');
     end;
     Result := Call.Callee + '(' + ArgsStr + ')';
     Exit;
@@ -2596,13 +3691,13 @@ begin
   else if Expr is TASTMatchExpr then
   begin
     TargetStr := Format('_aether_mexpr_%d_%d', [Expr.Line, Expr.Col]);
-    ValF := EmitExpr(TASTMatchExpr(Expr).Expr);
+    ScruVar := Format('_aether_mval_%d_%d', [Expr.Line, Expr.Col]);
+    Emit(Format('%s := %s;', [ScruVar, EmitExpr(TASTMatchExpr(Expr).Expr)]));
     ErrF := ResolveAliasType(GetExprTypeName(TASTMatchExpr(Expr).Expr));
-    OldBindName := FMatchBindName;
-    OldBindType := FMatchBindType;
     for I := 0 to TASTMatchExpr(Expr).Cases.Count - 1 do
     begin
-      BuildMatchCaseCond(TASTMatchExpr(Expr).Cases[I] as TASTMatchCase, ValF, ErrF, KeyT, ValT, BindVarT, IsWild);
+      MC := TASTMatchCase(TASTMatchExpr(Expr).Cases[I]);
+      BuildMatchCaseCond(MC, ScruVar, ErrF, KeyT, ValT, BindVarT, IsWild);
       if IsWild then
       begin
         if I > 0 then Emit('else');
@@ -2616,20 +3711,51 @@ begin
       Emit('begin');
       IncIndent;
       if ValT <> '' then Emit(ValT);
-      if TASTMatchCase(TASTMatchExpr(Expr).Cases[I]).Pattern.IsLet and
-         (TASTMatchCase(TASTMatchExpr(Expr).Cases[I]).Pattern.SubPattern <> '') and
-         (TASTMatchCase(TASTMatchExpr(Expr).Cases[I]).Pattern.SubPattern <> '_') then
-      begin
-        FMatchBindName := TASTMatchCase(TASTMatchExpr(Expr).Cases[I]).Pattern.SubPattern;
-        FMatchBindType := BindVarT;
+      BindCount := GetMatchArmBindingCount(MC);
+      PushMatchBindings(MC, ErrF);
+      try
+        Emit(Format('%s := %s;', [TargetStr, EmitExpr(MC.ValueExpr)]));
+      finally
+        for BIdx := 0 to BindCount - 1 do
+        begin
+          GetMatchArmBindingInfo(MC, BIdx, ErrF, BName, TVar, BType);
+          if (BName <> '') and (BName <> '_') then PopMatchBindings(1);
+        end;
       end;
-      Emit(Format('%s := %s;', [TargetStr, EmitExpr(TASTMatchCase(TASTMatchExpr(Expr).Cases[I]).ValueExpr)]));
-      FMatchBindName := OldBindName;
-      FMatchBindType := OldBindType;
       DecIndent;
       if I < TASTMatchExpr(Expr).Cases.Count - 1 then Emit('end') else Emit('end;');
     end;
     Result := TargetStr;
+    Exit;
+  end
+  else if Expr is TASTTupleLiteralExpr then
+  begin
+    ArgsStr := '';
+    for I := 0 to TASTTupleLiteralExpr(Expr).Elements.Count - 1 do
+    begin
+      if I > 0 then ArgsStr := ArgsStr + ', ';
+      ArgsStr := ArgsStr + EmitExpr(TASTExpr(TASTTupleLiteralExpr(Expr).Elements[I]));
+    end;
+    Result := Format('%s(%s)', [TASTTupleLiteralExpr(Expr).ResolvedType, ArgsStr]);
+    Exit;
+  end
+  else if Expr is TASTLambdaExpr then
+  begin
+    with TASTLambdaExpr(Expr) do
+    begin
+      if CaptureNames.Count = 0 then
+        Result := Format('AetherMakeFn_%s(@__aether_lambda_%d, nil)', [FnTypeTag(ResolvedFnType), LambdaId])
+      else
+      begin
+        ArgsStr := '';
+        for I := 0 to CaptureNames.Count - 1 do
+        begin
+          if I > 0 then ArgsStr := ArgsStr + ', ';
+          ArgsStr := ArgsStr + CaptureNames[I];
+        end;
+        Result := Format('__aether_make_lambda_%d(%s)', [LambdaId, ArgsStr]);
+      end;
+    end;
     Exit;
   end;
 
@@ -2664,7 +3790,7 @@ begin
   BaseT := ResolveAliasType(ATypeName);
   if BaseT = '' then Exit;
   Fn := FindFunction(BaseT + '_Drop');
-  if Assigned(Fn) and (not Fn.IsExtern) and (Fn.GenericParam = '') and (Fn.Params.Count = 1) then
+  if Assigned(Fn) and (not Fn.IsExtern) and (Fn.GenericParams.Count = 0) and (Fn.GenericParam = '') and (Fn.Params.Count = 1) then
     Result := Fn;
 end;
 
@@ -2696,8 +3822,19 @@ begin
   if Expr is TASTCallExpr then
   begin
     C := TASTCallExpr(Expr);
+    if Assigned(C.CalleeExpr) and RaiiExprUsesVar(C.CalleeExpr, AVarName) then Exit(True);
     for I := 0 to C.Args.Count - 1 do
       if RaiiExprUsesVar(TASTCallArg(C.Args[I]).Expr, AVarName) then Exit(True);
+  end;
+  if Expr is TASTTupleLiteralExpr then
+  begin
+    for I := 0 to TASTTupleLiteralExpr(Expr).Elements.Count - 1 do
+      if RaiiExprUsesVar(TASTExpr(TASTTupleLiteralExpr(Expr).Elements[I]), AVarName) then Exit(True);
+  end;
+  if Expr is TASTLambdaExpr then
+  begin
+    for I := 0 to TASTLambdaExpr(Expr).CaptureNames.Count - 1 do
+      if SameText(TASTLambdaExpr(Expr).CaptureNames[I], AVarName) then Exit(True);
   end;
   if Expr is TASTSetLiteralExpr then
   begin
@@ -3004,7 +4141,10 @@ procedure TAetherEmitterPascal.BuildMatchCaseCond(CaseNode: TASTMatchCase; const
   out CondStr, BindStmt, BindVarType: string; out IsWildcardArm: Boolean);
 var
   PatStr, ValF, ErrF, PatItem, LoStr, HiStr, LoExpr, HiExpr, ItemCond, BindExprStr, GuardStr: string;
-  K, P2: Integer;
+  K, P2, BIdx, BCount, GuardAdded, PDot, J: Integer;
+  Enm: TASTEnumDecl;
+  VarN: TASTEnumVariant;
+  VarName, BName, TVar, BType: string;
 
   function FormatMatchAtom(const S, MT: string): string;
   begin
@@ -3028,11 +4168,20 @@ begin
   BindVarType := MatchedType;
   BindExprStr := ExprStr;
   IsWildcardArm := (PatStr = '_') and (not Assigned(CaseNode.Guard));
+  GuardAdded := 0;
+
+  Enm := FindEnumDecl(MatchedType);
 
   if PatStr = '_' then
   begin
     if CaseNode.Pattern.IsLet and (CaseNode.Pattern.SubPattern <> '') and (CaseNode.Pattern.SubPattern <> '_') then
-      BindStmt := Format('%s := %s;', [CaseNode.Pattern.SubPattern, ExprStr]);
+    begin
+      GetMatchArmBindingInfo(CaseNode, 0, MatchedType, BName, TVar, BType);
+      BindStmt := Format('%s := %s;', [TVar, ExprStr]);
+      FGuardBindNames.Add(BName);
+      FGuardBindExprs.Add(ExprStr);
+      Inc(GuardAdded);
+    end;
   end
   else if Pos('Ok', PatStr) = 1 then
   begin
@@ -3041,24 +4190,46 @@ begin
     begin
       SplitResultTypes(MatchedType, ValF, ErrF);
       BindVarType := ValF;
-      BindExprStr := EmitMonadFieldExtract(ExprStr, ValF, 'value', 'str_val');
-      BindStmt := Format('%s := %s;', [CaseNode.Pattern.SubPattern, BindExprStr]);
+      GetMatchArmBindingInfo(CaseNode, 0, MatchedType, BName, TVar, BType);
+      if IsTypedResult(MatchedType, ValF, ErrF) then
+        BindExprStr := ExprStr + '.value'
+      else
+        BindExprStr := EmitMonadFieldExtract(ExprStr, ValF, 'value', 'str_val');
+      BindStmt := Format('%s := %s;', [TVar, BindExprStr]);
+      FGuardBindNames.Add(BName);
+      FGuardBindExprs.Add(BindExprStr);
+      Inc(GuardAdded);
     end;
   end
   else if Pos('Err', PatStr) = 1 then
   begin
     if (CaseNode.Pattern.SubPattern <> '') and (CaseNode.Pattern.SubPattern <> '_') then
     begin
+      SplitResultTypes(MatchedType, ValF, ErrF);
       if CaseNode.Pattern.IsLet then
       begin
         CondStr := Format('%s.is_err', [ExprStr]);
-        SplitResultTypes(MatchedType, ValF, ErrF);
         BindVarType := ErrF;
-        if ResolveAliasType(ErrF) = 'String' then
+        GetMatchArmBindingInfo(CaseNode, 0, MatchedType, BName, TVar, BType);
+        if IsTypedResult(MatchedType, ValF, ErrF) then
+          BindExprStr := ExprStr + '.error'
+        else if ResolveAliasType(ErrF) = 'String' then
           BindExprStr := ExprStr + '.err_str'
         else
           BindExprStr := Format('%s(%s.error)', [EmitTypeRef(ErrF), ExprStr]);
-        BindStmt := Format('%s := %s;', [CaseNode.Pattern.SubPattern, BindExprStr]);
+        BindStmt := Format('%s := %s;', [TVar, BindExprStr]);
+        FGuardBindNames.Add(BName);
+        FGuardBindExprs.Add(BindExprStr);
+        Inc(GuardAdded);
+      end
+      else if IsTypedResult(MatchedType, ValF, ErrF) then
+      begin
+        if (Length(CaseNode.Pattern.SubPattern) >= 2) and (CaseNode.Pattern.SubPattern[1] = '"') then
+          CondStr := Format('(%s.is_err) and (%s.error = %s)',
+            [ExprStr, ExprStr, EscapePascalString(Copy(CaseNode.Pattern.SubPattern, 2, Length(CaseNode.Pattern.SubPattern) - 2))])
+        else
+          CondStr := Format('(%s.is_err) and (%s.error = %s)',
+            [ExprStr, ExprStr, StringReplace(CaseNode.Pattern.SubPattern, '.', '_', [rfReplaceAll])]);
       end
       else if (Length(CaseNode.Pattern.SubPattern) >= 2) and (CaseNode.Pattern.SubPattern[1] = '"') then
         CondStr := Format('(%s.is_err) and (%s.err_str = %s)',
@@ -3072,15 +4243,33 @@ begin
   end
   else if PatStr = 'Some' then
   begin
-    if IsValueOptionType(MatchedType) then
+    if IsTypedValueOption(MatchedType, ValF) then
     begin
       CondStr := Format('%s.is_some', [ExprStr]);
       if CaseNode.Pattern.IsLet and (CaseNode.Pattern.SubPattern <> '') and (CaseNode.Pattern.SubPattern <> '_') then
       begin
-        ValF := Trim(Copy(MatchedType, 8, Length(MatchedType) - 8));
         BindVarType := ValF;
+        GetMatchArmBindingInfo(CaseNode, 0, MatchedType, BName, TVar, BType);
+        BindExprStr := ExprStr + '.value';
+        BindStmt := Format('%s := %s;', [TVar, BindExprStr]);
+        FGuardBindNames.Add(BName);
+        FGuardBindExprs.Add(BindExprStr);
+        Inc(GuardAdded);
+      end;
+    end
+    else if IsValueOptionType(MatchedType) then
+    begin
+      CondStr := Format('%s.is_some', [ExprStr]);
+      if CaseNode.Pattern.IsLet and (CaseNode.Pattern.SubPattern <> '') and (CaseNode.Pattern.SubPattern <> '_') then
+      begin
+        ValF := SafeUnwrapGeneric(MatchedType, 'Option');
+        BindVarType := ValF;
+        GetMatchArmBindingInfo(CaseNode, 0, MatchedType, BName, TVar, BType);
         BindExprStr := EmitMonadFieldExtract(ExprStr, ValF, 'num_val', 'str_val');
-        BindStmt := Format('%s := %s;', [CaseNode.Pattern.SubPattern, BindExprStr]);
+        BindStmt := Format('%s := %s;', [TVar, BindExprStr]);
+        FGuardBindNames.Add(BName);
+        FGuardBindExprs.Add(BindExprStr);
+        Inc(GuardAdded);
       end;
     end
     else
@@ -3089,17 +4278,64 @@ begin
       if CaseNode.Pattern.IsLet and (CaseNode.Pattern.SubPattern <> '') and (CaseNode.Pattern.SubPattern <> '_') then
       begin
         if Pos('Option<', MatchedType) = 1 then
-          BindVarType := Trim(Copy(MatchedType, 8, Length(MatchedType) - 8));
-        BindStmt := Format('%s := %s;', [CaseNode.Pattern.SubPattern, ExprStr]);
+          BindVarType := SafeUnwrapGeneric(MatchedType, 'Option');
+        GetMatchArmBindingInfo(CaseNode, 0, MatchedType, BName, TVar, BType);
+        BindStmt := Format('%s := %s;', [TVar, ExprStr]);
+        FGuardBindNames.Add(BName);
+        FGuardBindExprs.Add(ExprStr);
+        Inc(GuardAdded);
       end;
     end;
   end
-  else if (CaseNode.Pattern.Items.Count <= 1) and (PatStr = 'None') then
+  else if (CaseNode.Pattern.Items.Count <= 1) and (PatStr = 'None') and (not Assigned(Enm)) then
   begin
     if IsValueOptionType(MatchedType) then
       CondStr := Format('%s.is_none', [ExprStr])
     else
       CondStr := Format('(%s = nil)', [ExprStr]);
+  end
+  else if Assigned(Enm) and Enm.HasPayload then
+  begin
+    VarN := nil;
+    for K := 0 to CaseNode.Pattern.Items.Count - 1 do
+    begin
+      PatItem := Trim(CaseNode.Pattern.Items[K]);
+      PDot := Pos('.', PatItem);
+      if PDot > 0 then VarName := Copy(PatItem, PDot + 1, Length(PatItem))
+      else VarName := PatItem;
+      for J := 0 to Enm.Variants.Count - 1 do
+        if SameText(TASTEnumVariant(Enm.Variants[J]).Name, VarName) then
+        begin
+          VarN := TASTEnumVariant(Enm.Variants[J]);
+          VarName := VarN.Name;
+          Break;
+        end;
+      ItemCond := Format('(%s.tag = %s_Tag_%s)', [ExprStr, Enm.Name, VarName]);
+      if K > 0 then CondStr := CondStr + ' or ';
+      CondStr := CondStr + ItemCond;
+    end;
+    if CaseNode.Pattern.Items.Count > 1 then
+      CondStr := '(' + CondStr + ')';
+
+    BCount := GetMatchArmBindingCount(CaseNode);
+    if Assigned(VarN) and (BCount > 0) then
+    begin
+      for BIdx := 0 to BCount - 1 do
+      begin
+        GetMatchArmBindingInfo(CaseNode, BIdx, MatchedType, BName, TVar, BType);
+        if (BIdx < VarN.Fields.Count) then
+        begin
+          BindExprStr := Format('%s._v_%s_%s', [ExprStr, VarN.Name, TASTRecordField(VarN.Fields[BIdx]).Name]);
+          if (BName <> '') and (BName <> '_') then
+          begin
+            BindStmt := BindStmt + Format('%s := %s; ', [TVar, BindExprStr]);
+            FGuardBindNames.Add(BName);
+            FGuardBindExprs.Add(BindExprStr);
+            Inc(GuardAdded);
+          end;
+        end;
+      end;
+    end;
   end
   else
   begin
@@ -3128,18 +4364,29 @@ begin
 
   if Assigned(CaseNode.Guard) then
   begin
-    if CaseNode.Pattern.IsLet and (CaseNode.Pattern.SubPattern <> '') and (CaseNode.Pattern.SubPattern <> '_') then
-    begin
-      FGuardBindName := CaseNode.Pattern.SubPattern;
-      FGuardBindExpr := BindExprStr;
+    try
+      GuardStr := EmitExpr(CaseNode.Guard);
+    finally
+      for BIdx := 1 to GuardAdded do
+        if FGuardBindNames.Count > 0 then
+        begin
+          FGuardBindNames.Delete(FGuardBindNames.Count - 1);
+          FGuardBindExprs.Delete(FGuardBindExprs.Count - 1);
+        end;
     end;
-    GuardStr := EmitExpr(CaseNode.Guard);
-    FGuardBindName := '';
-    FGuardBindExpr := '';
     if CondStr = '' then
       CondStr := GuardStr
     else
       CondStr := Format('((%s) and (%s))', [CondStr, GuardStr]);
+  end
+  else
+  begin
+    for BIdx := 1 to GuardAdded do
+      if FGuardBindNames.Count > 0 then
+      begin
+        FGuardBindNames.Delete(FGuardBindNames.Count - 1);
+        FGuardBindExprs.Delete(FGuardBindExprs.Count - 1);
+      end;
   end;
 end;
 
@@ -3158,7 +4405,7 @@ var
   Lines: TStringList;
   LineStr, ExprStr, MatchedType, Prefix, CondStr, BindStmt, BindVarT, OldBindName, OldBindType, KeyT, ValT, TargetT, IdxVar: string;
   IsWild: Boolean;
-  I, J: Integer;
+  I, J, Idx: Integer;
 begin
   if Stmt is TASTVarDeclStmt then
   begin
@@ -3389,31 +4636,19 @@ begin
   else if Stmt is TASTMatchStmt then
   begin
     MatchStmt := TASTMatchStmt(Stmt);
-    ExprStr := EmitExpr(MatchStmt.Expr);
+    TargetT := Format('_aether_mval_%d_%d', [MatchStmt.Line, MatchStmt.Col]);
+    Emit(Format('%s := %s;', [TargetT, EmitExpr(MatchStmt.Expr)]));
     MatchedType := ResolveAliasType(GetExprTypeName(MatchStmt.Expr));
     Emit('// Match generated by the Aether compiler');
-    OldBindName := FMatchBindName;
-    OldBindType := FMatchBindType;
     for I := 0 to MatchStmt.Cases.Count - 1 do
     begin
       CaseNode := TASTMatchCase(MatchStmt.Cases[I]);
-      BuildMatchCaseCond(CaseNode, ExprStr, MatchedType, CondStr, BindStmt, BindVarT, IsWild);
+      BuildMatchCaseCond(CaseNode, TargetT, MatchedType, CondStr, BindStmt, BindVarT, IsWild);
       if IsWild then
       begin
         if I > 0 then Emit('else');
         Emit('begin');
         IncIndent;
-        if BindStmt <> '' then Emit(BindStmt);
-        if CaseNode.Pattern.IsLet and (CaseNode.Pattern.SubPattern <> '') and (CaseNode.Pattern.SubPattern <> '_') then
-        begin
-          FMatchBindName := CaseNode.Pattern.SubPattern;
-          FMatchBindType := BindVarT;
-        end;
-        for J := 0 to CaseNode.Body.Count - 1 do
-          EmitStmt(TASTStmt(CaseNode.Body[J]));
-        FMatchBindName := OldBindName;
-        FMatchBindType := OldBindType;
-        DecIndent;
       end
       else
       begin
@@ -3422,18 +4657,21 @@ begin
         Emit(Prefix + CondStr + ' then');
         Emit('begin');
         IncIndent;
-        if BindStmt <> '' then Emit(BindStmt);
-        if CaseNode.Pattern.IsLet and (CaseNode.Pattern.SubPattern <> '') and (CaseNode.Pattern.SubPattern <> '_') then
-        begin
-          FMatchBindName := CaseNode.Pattern.SubPattern;
-          FMatchBindType := BindVarT;
-        end;
-        for J := 0 to CaseNode.Body.Count - 1 do
-          EmitStmt(TASTStmt(CaseNode.Body[J]));
-        FMatchBindName := OldBindName;
-        FMatchBindType := OldBindType;
-        DecIndent;
       end;
+      if BindStmt <> '' then Emit(BindStmt);
+      J := GetMatchArmBindingCount(CaseNode);
+      PushMatchBindings(CaseNode, MatchedType);
+      try
+        for Idx := 0 to CaseNode.Body.Count - 1 do
+          EmitStmt(TASTStmt(CaseNode.Body[Idx]));
+      finally
+        for Idx := 0 to J - 1 do
+        begin
+          GetMatchArmBindingInfo(CaseNode, Idx, MatchedType, KeyT, ValT, LineStr);
+          if (KeyT <> '') and (KeyT <> '_') then PopMatchBindings(1);
+        end;
+      end;
+      DecIndent;
 
       if I < MatchStmt.Cases.Count - 1 then
         Emit('end')
@@ -3490,9 +4728,44 @@ end;
 
 procedure TAetherEmitterPascal.EmitEnumDecl(Enm: TASTEnumDecl);
 var
-  I: Integer;
+  I, J: Integer;
   VariantName: string;
+  V: TASTEnumVariant;
+  F: TASTRecordField;
 begin
+  if Enm.HasPayload then
+  begin
+    Emit(Format('T%s_Tag = (', [Enm.Name]));
+    IncIndent;
+    for I := 0 to Enm.Variants.Count - 1 do
+    begin
+      VariantName := Enm.Name + '_Tag_' + TASTEnumVariant(Enm.Variants[I]).Name;
+      if I < Enm.Variants.Count - 1 then
+        Emit(VariantName + ',')
+      else
+        Emit(VariantName);
+    end;
+    DecIndent;
+    Emit(');');
+    Emit(Format('T%s = record', [Enm.Name]));
+    IncIndent;
+    Emit(Format('tag: T%s_Tag;', [Enm.Name]));
+    for I := 0 to Enm.Variants.Count - 1 do
+    begin
+      V := TASTEnumVariant(Enm.Variants[I]);
+      for J := 0 to V.Fields.Count - 1 do
+      begin
+        F := TASTRecordField(V.Fields[J]);
+        Emit(Format('_v_%s_%s: %s;', [V.Name, F.Name, EmitTypeRef(F.TypeName)]));
+      end;
+    end;
+    DecIndent;
+    Emit('end;');
+    Emit(Format('%s = T%s;', [Enm.Name, Enm.Name]));
+    Emit('');
+    Exit;
+  end;
+
   Emit(Format('T%s = (', [Enm.Name]));
   IncIndent;
   for I := 0 to Enm.Variants.Count - 1 do
@@ -3516,7 +4789,7 @@ var
 begin
   if Arr.Dims.Count = 0 then
   begin
-    Emit(Format('T%s = %s;', [Arr.Name, EmitTypeRef('array of ' + Arr.ElemType)]));
+    Emit(Format('T%s = array of %s;', [Arr.Name, EmitTypeRef(Arr.ElemType)]));
     Emit(Format('%s = T%s;', [Arr.Name, Arr.Name]));
     Emit('');
     Exit;
@@ -3590,7 +4863,7 @@ var
   ParamType, KeyT, ValT: string;
   SkipNames, AutoNames, AutoTypes: TStringList;
 begin
-  if Func.GenericParam <> '' then Exit; // Generic template does not emit code directly
+  if (Func.GenericParams.Count > 0) or (Func.GenericParam <> '') then Exit; // Generic template does not emit code directly
   if SameText(Func.Name, 'Abs') or SameText(Func.Name, 'Min') or SameText(Func.Name, 'Max') or SameText(Func.Name, 'Clamp') then Exit;
   FCurrentFunc := Func;
   if Func.IsExtern then
@@ -4966,17 +6239,522 @@ begin
   end;
 end;
 
+procedure TAetherEmitterPascal.EmitTopologicalTypesAndMonads(const TypeUsed: array of Boolean;
+  OptTags, OptInners: TStrings; const OptUsed: array of Boolean;
+  ResTags, ResVals, ResErrs: TStrings; const ResUsed: array of Boolean);
+var
+  ItemKind, ItemIdx: array of Integer;
+  ItemKey: array of string;
+  ItemDeps: array of TStringList;
+  ItemEmitted: array of Boolean;
+  Count, I, J, K, Rem, ReadyIdx: Integer;
+  Node: TASTNode;
+  Rec: TASTRecordDecl;
+  Enm: TASTEnumDecl;
+  VarN: TASTEnumVariant;
+  FnParams2: TStringList;
+  FnRet2, FnPSig: string;
+  FIdx: Integer;
+
+  procedure AddDepToList(Deps: TStrings; const TStr: string);
+  var
+    T, InnerT, VT, ET, M, RetT: string;
+    POf: Integer;
+    FnP: TStringList;
+  begin
+    T := ResolveAliasType(Trim(TStr));
+    if (T = '') or (Pos('^', T) = 1) or (Pos('Box<', T) = 1) or
+       (T = 'Int8') or (T = 'Int16') or (T = 'Int32') or (T = 'Int64') or
+       (T = 'UInt8') or (T = 'UInt16') or (T = 'UInt32') or (T = 'UInt64') or
+       (T = 'Float32') or (T = 'Float64') or (T = 'Bool') or (T = 'Char') or
+       (T = 'String') or (T = 'Pointer') then
+      Exit;
+    FnP := TStringList.Create;
+    try
+      if SplitFnType(T, FnP, RetT) then
+      begin
+        Deps.Add('__FN_' + UpperCase(FnTypeTag(T)));
+        Exit;
+      end;
+    finally
+      FnP.Free;
+    end;
+    if Pos('array of ', T) = 1 then
+    begin
+      InnerT := Trim(Copy(T, 10, Length(T)));
+      if not ((InnerT = 'Int8') or (InnerT = 'Int16') or (InnerT = 'Int32') or (InnerT = 'Int64') or
+              (InnerT = 'UInt8') or (InnerT = 'UInt16') or (InnerT = 'UInt32') or (InnerT = 'UInt64') or
+              (InnerT = 'Float32') or (InnerT = 'Float64') or (InnerT = 'Bool') or (InnerT = 'Char') or
+              (InnerT = 'String') or (InnerT = 'Pointer')) then
+        Deps.Add('__DYN_' + UpperCase(MangleTypeTag(InnerT)))
+      else
+        AddDepToList(Deps, InnerT);
+      Exit;
+    end;
+    if Pos('array[', T) = 1 then
+    begin
+      POf := Pos(' of ', T);
+      if POf > 0 then AddDepToList(Deps, Copy(T, POf + 4, Length(T)));
+      Exit;
+    end;
+    if IsMapType(T, VT, ET) then Exit;
+    if IsTypedValueOption(T, InnerT) then
+    begin
+      Deps.Add('__OPT_' + UpperCase(MangleTypeTag(InnerT)));
+      Exit;
+    end;
+    if IsTypedResult(T, VT, ET) then
+    begin
+      M := MangleTypeTag(VT) + '__' + MangleTypeTag(ET);
+      Deps.Add('__RES_' + UpperCase(M));
+      Exit;
+    end;
+    Deps.Add(UpperCase(T));
+  end;
+
+  function AllDepsEmitted(Idx: Integer): Boolean;
+  var
+    D, M: Integer;
+    DepKey: string;
+  begin
+    Result := True;
+    for D := 0 to ItemDeps[Idx].Count - 1 do
+    begin
+      DepKey := ItemDeps[Idx][D];
+      if DepKey = ItemKey[Idx] then Continue;
+      for M := 0 to Count - 1 do
+        if (not ItemEmitted[M]) and (ItemKey[M] = DepKey) then
+          Exit(False);
+    end;
+  end;
+
+  procedure AppendItem(Kind, Idx: Integer; const Key: string);
+  begin
+    SetLength(ItemKind, Count + 1);
+    SetLength(ItemIdx, Count + 1);
+    SetLength(ItemKey, Count + 1);
+    SetLength(ItemDeps, Count + 1);
+    SetLength(ItemEmitted, Count + 1);
+    ItemKind[Count] := Kind;
+    ItemIdx[Count] := Idx;
+    ItemKey[Count] := Key;
+    ItemDeps[Count] := TStringList.Create;
+    ItemEmitted[Count] := False;
+    Inc(Count);
+  end;
+
+begin
+  Count := 0;
+  for I := 0 to FModule.Types.Count - 1 do
+  begin
+    if not TypeUsed[I] then Continue;
+    Node := TASTNode(FModule.Types[I]);
+    if (Node is TASTRecordDecl) and (TASTRecordDecl(Node).GenericParams.Count > 0) then Continue;
+    if Node is TASTMapDecl then Continue;
+    if Node is TASTRecordDecl then
+    begin
+      Rec := TASTRecordDecl(Node);
+      AppendItem(0, I, UpperCase(Rec.Name));
+      for J := 0 to Rec.Fields.Count - 1 do
+        AddDepToList(ItemDeps[Count - 1], TASTRecordField(Rec.Fields[J]).TypeName);
+    end
+    else if Node is TASTEnumDecl then
+    begin
+      Enm := TASTEnumDecl(Node);
+      AppendItem(0, I, UpperCase(Enm.Name));
+      if Enm.HasPayload then
+        for J := 0 to Enm.Variants.Count - 1 do
+        begin
+          VarN := TASTEnumVariant(Enm.Variants[J]);
+          for K := 0 to VarN.Fields.Count - 1 do
+            AddDepToList(ItemDeps[Count - 1], TASTRecordField(VarN.Fields[K]).TypeName);
+        end;
+    end
+    else if Node is TASTArrayDecl then
+    begin
+      AppendItem(0, I, UpperCase(TASTArrayDecl(Node).Name));
+      AddDepToList(ItemDeps[Count - 1], TASTArrayDecl(Node).ElemType);
+    end
+    else if Node is TASTSetDecl then
+      AppendItem(0, I, UpperCase(TASTSetDecl(Node).Name))
+    else if Node is TASTSubrangeDecl then
+      AppendItem(0, I, UpperCase(TASTSubrangeDecl(Node).Name))
+    else if Node is TASTTypeAliasDecl then
+    begin
+      AppendItem(0, I, UpperCase(TASTTypeAliasDecl(Node).Name));
+      AddDepToList(ItemDeps[Count - 1], TASTTypeAliasDecl(Node).TargetType);
+    end;
+  end;
+
+  for I := 0 to OptTags.Count - 1 do
+  begin
+    if (I <= High(OptUsed)) and OptUsed[I] then
+    begin
+      AppendItem(1, I, '__OPT_' + UpperCase(OptTags[I]));
+      AddDepToList(ItemDeps[Count - 1], OptInners[I]);
+    end;
+  end;
+
+  for I := 0 to ResTags.Count - 1 do
+  begin
+    if (I <= High(ResUsed)) and ResUsed[I] then
+    begin
+      AppendItem(2, I, '__RES_' + UpperCase(ResTags[I]));
+      AddDepToList(ItemDeps[Count - 1], ResVals[I]);
+      AddDepToList(ItemDeps[Count - 1], ResErrs[I]);
+    end;
+  end;
+
+  if Assigned(FDynTags) then
+    for I := 0 to FDynTags.Count - 1 do
+    begin
+      AppendItem(3, I, '__DYN_' + UpperCase(FDynTags[I]));
+      AddDepToList(ItemDeps[Count - 1], FDynElems[I]);
+    end;
+
+  if Assigned(FFnTags) then
+    for I := 0 to FFnTags.Count - 1 do
+    begin
+      AppendItem(4, I, '__FN_' + UpperCase(FFnTags[I]));
+      FnParams2 := TStringList.Create;
+      try
+        if SplitFnType(FFnSigs[I], FnParams2, FnRet2) then
+        begin
+          for J := 0 to FnParams2.Count - 1 do
+            AddDepToList(ItemDeps[Count - 1], FnParams2[J]);
+          if (FnRet2 <> '') and (not SameText(FnRet2, 'Void')) then
+            AddDepToList(ItemDeps[Count - 1], FnRet2);
+        end;
+      finally
+        FnParams2.Free;
+      end;
+    end;
+
+  try
+    Rem := Count;
+    while Rem > 0 do
+    begin
+      ReadyIdx := -1;
+      for I := 0 to Count - 1 do
+        if (not ItemEmitted[I]) and AllDepsEmitted(I) then
+        begin
+          ReadyIdx := I;
+          Break;
+        end;
+      if ReadyIdx = -1 then
+        for I := 0 to Count - 1 do
+          if not ItemEmitted[I] then
+          begin
+            ReadyIdx := I;
+            Break;
+          end;
+      if ReadyIdx = -1 then Break;
+      ItemEmitted[ReadyIdx] := True;
+      Dec(Rem);
+
+      if ItemKind[ReadyIdx] = 0 then
+      begin
+        Node := TASTNode(FModule.Types[ItemIdx[ReadyIdx]]);
+        if Node is TASTRecordDecl then EmitRecordType(TASTRecordDecl(Node))
+        else if Node is TASTEnumDecl then EmitEnumDecl(TASTEnumDecl(Node))
+        else if Node is TASTArrayDecl then EmitArrayDecl(TASTArrayDecl(Node))
+        else if Node is TASTSetDecl then EmitSetDecl(TASTSetDecl(Node))
+        else if Node is TASTSubrangeDecl then EmitSubrangeDecl(TASTSubrangeDecl(Node))
+        else if Node is TASTTypeAliasDecl then EmitTypeAliasDecl(TASTTypeAliasDecl(Node));
+      end
+      else if ItemKind[ReadyIdx] = 1 then
+        EmitTypedOptionDecl(OptTags[ItemIdx[ReadyIdx]], OptInners[ItemIdx[ReadyIdx]])
+      else if ItemKind[ReadyIdx] = 2 then
+        EmitTypedResultDecl(ResTags[ItemIdx[ReadyIdx]], ResVals[ItemIdx[ReadyIdx]], ResErrs[ItemIdx[ReadyIdx]])
+      else if ItemKind[ReadyIdx] = 3 then
+      begin
+        Emit(Format('TAetherDyn_%s = array of %s;', [FDynTags[ItemIdx[ReadyIdx]], EmitTypeRef(FDynElems[ItemIdx[ReadyIdx]])]));
+        Emit('');
+      end
+      else if ItemKind[ReadyIdx] = 4 then
+      begin
+        FIdx := ItemIdx[ReadyIdx];
+        FnParams2 := TStringList.Create;
+        try
+          if SplitFnType(FFnSigs[FIdx], FnParams2, FnRet2) then
+          begin
+            FnPSig := 'AEnv: Pointer';
+            for J := 0 to FnParams2.Count - 1 do
+              FnPSig := FnPSig + Format('; const _p%d: %s', [J, EmitTypeRef(FnParams2[J])]);
+            if (FnRet2 = '') or SameText(FnRet2, 'Void') then
+              Emit(Format('TAetherFn_%s_Call = procedure(%s);', [FFnTags[FIdx], FnPSig]))
+            else
+              Emit(Format('TAetherFn_%s_Call = function(%s): %s;', [FFnTags[FIdx], FnPSig, EmitTypeRef(FnRet2)]));
+            Emit(Format('TAetherFn_%s = record', [FFnTags[FIdx]]));
+            IncIndent;
+            Emit(Format('fn_ptr: TAetherFn_%s_Call;', [FFnTags[FIdx]]));
+            Emit('env: Pointer;');
+            DecIndent;
+            Emit('end;');
+            Emit('');
+          end;
+        finally
+          FnParams2.Free;
+        end;
+      end;
+    end;
+  finally
+    for I := 0 to Count - 1 do
+      ItemDeps[I].Free;
+  end;
+end;
+
+procedure TAetherEmitterPascal.EmitFnRuntimeHelpers(DeclOnly: Boolean);
+var
+  I, J: Integer;
+  Params: TStringList;
+  RetT, ParamDecls, CallArgs, Tag: string;
+  IsProc: Boolean;
+begin
+  Params := TStringList.Create;
+  try
+    for I := 0 to FFnTags.Count - 1 do
+    begin
+      Tag := FFnTags[I];
+      if not SplitFnType(FFnSigs[I], Params, RetT) then Continue;
+      IsProc := (RetT = '') or SameText(RetT, 'Void');
+
+      Emit(Format('function AetherMakeFn_%s(AFn: TAetherFn_%s_Call; AEnv: Pointer): TAetherFn_%s;', [Tag, Tag, Tag]));
+      if not DeclOnly then
+      begin
+        Emit('begin');
+        IncIndent;
+        Emit('Result.fn_ptr := AFn;');
+        Emit('Result.env := AEnv;');
+        DecIndent;
+        Emit('end;');
+        Emit('');
+      end;
+
+      ParamDecls := Format('const AFn: TAetherFn_%s', [Tag]);
+      CallArgs := 'AFn.env';
+      for J := 0 to Params.Count - 1 do
+      begin
+        ParamDecls := ParamDecls + Format('; const _p%d: %s', [J, EmitTypeRef(Params[J])]);
+        CallArgs := CallArgs + Format(', _p%d', [J]);
+      end;
+      if IsProc then
+        Emit(Format('procedure AetherCallFn_%s(%s);', [Tag, ParamDecls]))
+      else
+        Emit(Format('function AetherCallFn_%s(%s): %s;', [Tag, ParamDecls, EmitTypeRef(RetT)]));
+
+      if not DeclOnly then
+      begin
+        Emit('begin');
+        IncIndent;
+        if IsProc then
+          Emit(Format('AFn.fn_ptr(%s);', [CallArgs]))
+        else
+          Emit(Format('Result := AFn.fn_ptr(%s);', [CallArgs]));
+        DecIndent;
+        Emit('end;');
+        Emit('');
+      end;
+    end;
+  finally
+    Params.Free;
+  end;
+end;
+
+procedure TAetherEmitterPascal.EmitLambdaAndThunkDecls(ForwardOnly: Boolean);
+var
+  I, J: Integer;
+  Fn, TempFunc, OldFunc: TASTFunction;
+  L: TASTLambdaExpr;
+  ParamDecls, CallArgs, Sig, FwdSuffix, Tag, MakeParams: string;
+  SkipNames, AutoNames, AutoTypes: TStringList;
+  OldProg: TASTProgramBlock;
+  OldScopeList: TASTNodeList;
+  IsProc: Boolean;
+begin
+  if ForwardOnly then FwdSuffix := ' forward;' else FwdSuffix := '';
+
+  // 1. Named function thunks
+  for I := 0 to FThunkFuncs.Count - 1 do
+  begin
+    Fn := FindFunction(FThunkFuncs[I]);
+    if not Assigned(Fn) then Continue;
+    ParamDecls := 'AEnv: Pointer';
+    CallArgs := '';
+    for J := 0 to Fn.Params.Count - 1 do
+    begin
+      if TASTParam(Fn.Params[J]).Ownership = owMutBorrow then
+        ParamDecls := ParamDecls + Format('; var _p%d: %s', [J, EmitTypeRef(TASTParam(Fn.Params[J]).TypeName)])
+      else
+        ParamDecls := ParamDecls + Format('; const _p%d: %s', [J, EmitTypeRef(TASTParam(Fn.Params[J]).TypeName)]);
+      if J > 0 then CallArgs := CallArgs + ', ';
+      CallArgs := CallArgs + Format('_p%d', [J]);
+    end;
+    IsProc := Fn.IsProcedure or (Fn.ReturnType = '') or SameText(Fn.ReturnType, 'Void');
+    if IsProc then
+      Sig := Format('procedure __aether_thunk_%s(%s);%s', [Fn.Name, ParamDecls, FwdSuffix])
+    else
+      Sig := Format('function __aether_thunk_%s(%s): %s;%s', [Fn.Name, ParamDecls, EmitTypeRef(Fn.ReturnType), FwdSuffix]);
+    Emit(Sig);
+    if not ForwardOnly then
+    begin
+      Emit('begin');
+      IncIndent;
+      Emit('if AEnv <> nil then ;');
+      if IsProc then
+        Emit(Format('%s(%s);', [Fn.Name, CallArgs]))
+      else
+        Emit(Format('Result := %s(%s);', [Fn.Name, CallArgs]));
+      DecIndent;
+      Emit('end;');
+      Emit('');
+    end;
+  end;
+
+  // 2. Lifted lambdas and env constructors
+  for I := 0 to FLambdas.Count - 1 do
+  begin
+    L := TASTLambdaExpr(FLambdas[I]);
+    Tag := FnTypeTag(L.ResolvedFnType);
+    ParamDecls := 'AEnv: Pointer';
+    for J := 0 to L.Params.Count - 1 do
+    begin
+      if TASTParam(L.Params[J]).Ownership = owMutBorrow then
+        ParamDecls := ParamDecls + Format('; var %s: %s', [TASTParam(L.Params[J]).Name, EmitTypeRef(TASTParam(L.Params[J]).TypeName)])
+      else
+        ParamDecls := ParamDecls + Format('; const %s: %s', [TASTParam(L.Params[J]).Name, EmitTypeRef(TASTParam(L.Params[J]).TypeName)]);
+    end;
+    IsProc := (L.ReturnType = '') or SameText(L.ReturnType, 'Void');
+    if IsProc then
+      Sig := Format('procedure __aether_lambda_%d(%s);%s', [L.LambdaId, ParamDecls, FwdSuffix])
+    else
+      Sig := Format('function __aether_lambda_%d(%s): %s;%s', [L.LambdaId, ParamDecls, EmitTypeRef(L.ReturnType), FwdSuffix]);
+    Emit(Sig);
+
+    if not ForwardOnly then
+    begin
+      OldFunc := FCurrentFunc;
+      OldProg := FProgramBlock;
+      OldScopeList := FCurrentScopeList;
+      TempFunc := TASTFunction.Create(L.Line, L.Col, '__aether_lambda_' + IntToStr(L.LambdaId), L.ReturnType);
+      TempFunc.IsProcedure := IsProc;
+      for J := 0 to L.Params.Count - 1 do
+        TempFunc.Params.Add(CloneASTNode(TASTParam(L.Params[J])));
+      for J := 0 to L.CaptureNames.Count - 1 do
+        TempFunc.LocalVars.Add(TASTVarDecl.Create(L.Line, L.Col, L.CaptureNames[J], L.CaptureTypes[J], nil, True));
+
+      FCurrentFunc := TempFunc;
+      FProgramBlock := nil;
+      SkipNames := TStringList.Create;
+      AutoNames := TStringList.Create;
+      AutoTypes := TStringList.Create;
+      try
+        for J := 0 to TempFunc.Params.Count - 1 do
+          SkipNames.Add(TASTParam(TempFunc.Params[J]).Name);
+        for J := 0 to TempFunc.LocalVars.Count - 1 do
+          SkipNames.Add(TASTVarDecl(TempFunc.LocalVars[J]).Name);
+        if Assigned(L.BodyExpr) then
+          CollectAutoVarsFromExpr(L.BodyExpr, AutoNames, AutoTypes, SkipNames)
+        else
+          CollectAutoVarsFromStmts(L.BodyStmts, AutoNames, AutoTypes, SkipNames);
+
+        if (TempFunc.LocalVars.Count > 0) or (AutoNames.Count > 0) then
+        begin
+          Emit('var');
+          IncIndent;
+          for J := 0 to TempFunc.LocalVars.Count - 1 do
+            Emit(Format('%s: %s;', [TASTVarDecl(TempFunc.LocalVars[J]).Name, EmitTypeRef(TASTVarDecl(TempFunc.LocalVars[J]).TypeName)]));
+          for J := 0 to AutoNames.Count - 1 do
+            Emit(Format('%s: %s;', [AutoNames[J], AutoTypes[J]]));
+          DecIndent;
+        end;
+
+        Emit('begin');
+        IncIndent;
+        if L.CaptureNames.Count = 0 then
+          Emit('if AEnv <> nil then ;')
+        else
+          for J := 0 to L.CaptureNames.Count - 1 do
+            Emit(Format('%s := PAetherEnv_lambda_%d(AEnv)^.%s;', [L.CaptureNames[J], L.LambdaId, L.CaptureNames[J]]));
+
+        if Assigned(L.BodyExpr) then
+        begin
+          if IsProc then
+            Emit(EmitExpr(L.BodyExpr) + ';')
+          else
+            Emit('Result := ' + EmitExpr(L.BodyExpr) + ';');
+        end
+        else
+        begin
+          FActiveDefers.Clear;
+          FLoopDeferBase := 0;
+          FRaiiNames.Clear;
+          FRaiiTypes.Clear;
+          FLoopRaiiBase := 0;
+          FCurrentScopeList := L.BodyStmts;
+          EmitStmtList(L.BodyStmts);
+          if FRaiiNames.Count > 0 then
+            EmitActiveRaii(0);
+          FActiveDefers.Clear;
+          FRaiiNames.Clear;
+          FRaiiTypes.Clear;
+        end;
+        DecIndent;
+        Emit('end;');
+        Emit('');
+      finally
+        SkipNames.Free;
+        AutoNames.Free;
+        AutoTypes.Free;
+        FCurrentFunc := OldFunc;
+        FProgramBlock := OldProg;
+        FCurrentScopeList := OldScopeList;
+        TempFunc.Free;
+      end;
+    end;
+
+    if L.CaptureNames.Count > 0 then
+    begin
+      MakeParams := '';
+      for J := 0 to L.CaptureNames.Count - 1 do
+      begin
+        if J > 0 then MakeParams := MakeParams + '; ';
+        MakeParams := MakeParams + Format('const A_%s: %s', [L.CaptureNames[J], EmitTypeRef(L.CaptureTypes[J])]);
+      end;
+      Emit(Format('function __aether_make_lambda_%d(%s): TAetherFn_%s;%s', [L.LambdaId, MakeParams, Tag, FwdSuffix]));
+      if not ForwardOnly then
+      begin
+        Emit('var');
+        IncIndent;
+        Emit(Format('_env: PAetherEnv_lambda_%d;', [L.LambdaId]));
+        DecIndent;
+        Emit('begin');
+        IncIndent;
+        Emit('New(_env);');
+        for J := 0 to L.CaptureNames.Count - 1 do
+          Emit(Format('_env^.%s := A_%s;', [L.CaptureNames[J], L.CaptureNames[J]]));
+        Emit(Format('Result := AetherMakeFn_%s(@__aether_lambda_%d, _env);', [Tag, L.LambdaId]));
+        DecIndent;
+        Emit('end;');
+        Emit('');
+      end;
+    end;
+  end;
+end;
+
 function TAetherEmitterPascal.Generate(AModule: TASTModule; AsUnit: Boolean = False; AsLibrary: Boolean = False): string;
 var
-  I, ExportCount, CurExp, UsedConstCount, UsedTypeCount: Integer;
-  UsesClause, Sig, ReachText, ProgText, MapText: string;
+  I, ExportCount, CurExp, UsedConstCount, UsedTypeCount, UsedOptCount, UsedResCount: Integer;
+  UsesClause, Sig, ReachText, ProgText, MapText, FnHelperText: string;
   Func: TASTFunction;
   Rec: TASTRecordDecl;
   ConstDecl: TASTConstDecl;
   VarDecl: TASTVarDecl;
-  EffectiveLibrary, KeepAll, Changed, NeedBox, HasCustomMap, HasVarsBlock: Boolean;
+  EffectiveLibrary, KeepAll, Changed, NeedBox, HasCustomMap, HasVarsBlock, HasEnvTypes: Boolean;
   MapTags, MapKeys, MapVals: TStringList;
-  ConstUsed, TypeUsed, FuncUsed: array of Boolean;
+  OptTags, OptInners, ResTags, ResVals, ResErrs: TStringList;
+  UOptTags, UOptInners, UResTags, UResVals, UResErrs: TStringList;
+  ConstUsed, TypeUsed, FuncUsed, OptUsed, ResUsed: array of Boolean;
   ConstBodies, TypeBodies, TypeNames, FuncBodies, FuncSigs: array of string;
 begin
   FModule := AModule;
@@ -4985,8 +6763,32 @@ begin
   MapTags := TStringList.Create;
   MapKeys := TStringList.Create;
   MapVals := TStringList.Create;
+  OptTags := TStringList.Create;
+  OptInners := TStringList.Create;
+  ResTags := TStringList.Create;
+  ResVals := TStringList.Create;
+  ResErrs := TStringList.Create;
+  UOptTags := TStringList.Create;
+  UOptInners := TStringList.Create;
+  UResTags := TStringList.Create;
+  UResVals := TStringList.Create;
+  UResErrs := TStringList.Create;
   try
+  FDynTags.Clear;
+  FDynElems.Clear;
+  FFnTags.Clear;
+  FFnSigs.Clear;
+  FThunkFuncs.Clear;
+  FLambdas.Clear;
   CollectMapsFromModule(AModule, MapTags, MapKeys, MapVals);
+  CollectTypedMonadsFromModule(AModule, OptTags, OptInners, ResTags, ResVals, ResErrs);
+  HasEnvTypes := False;
+  for I := 0 to FLambdas.Count - 1 do
+    if TASTLambdaExpr(FLambdas[I]).CaptureNames.Count > 0 then
+    begin
+      HasEnvTypes := True;
+      Break;
+    end;
 
   EffectiveLibrary := AsLibrary;
   if (not EffectiveLibrary) and (not Assigned(AModule.ProgramBlock)) then
@@ -5027,14 +6829,18 @@ begin
     if AModule.Types[I] is TASTRecordDecl then
     begin
       Rec := TASTRecordDecl(AModule.Types[I]);
-      TypeNames[I] := Rec.Name;
-      EmitRecordType(Rec);
-      EmitRecordConstructor(Rec);
+      if Rec.GenericParams.Count = 0 then
+      begin
+        TypeNames[I] := Rec.Name;
+        EmitRecordType(Rec);
+        EmitRecordConstructor(Rec);
+      end;
     end
     else if AModule.Types[I] is TASTEnumDecl then
     begin
       TypeNames[I] := TASTEnumDecl(AModule.Types[I]).Name;
       EmitEnumDecl(TASTEnumDecl(AModule.Types[I]));
+      EmitPayloadEnumConstructors(TASTEnumDecl(AModule.Types[I]), False);
     end
     else if AModule.Types[I] is TASTArrayDecl then
     begin
@@ -5109,15 +6915,31 @@ begin
       Emit(EmitExpr(TASTVarDecl(AModule.ModuleVars[I]).InitialExpr) + ';');
   ProgText := FOutput.Text;
 
-  ReachText := ProgText + #10 + MapText;
+  FOutput.Clear;
+  FIndent := 0;
+  EmitFnRuntimeHelpers(False);
+  EmitLambdaAndThunkDecls(False);
+  FnHelperText := FOutput.Text;
+
+  ReachText := ProgText + #10 + MapText + #10 + FnHelperText;
   for I := 0 to AModule.Constants.Count - 1 do
     if ConstUsed[I] then ReachText := ReachText + #10 + ConstBodies[I];
   for I := 0 to AModule.ModuleVars.Count - 1 do
     ReachText := ReachText + #10 + TASTVarDecl(AModule.ModuleVars[I]).Name + ': ' + EmitTypeRef(TASTVarDecl(AModule.ModuleVars[I]).TypeName);
   for I := 0 to AModule.Types.Count - 1 do
-    if TypeUsed[I] then ReachText := ReachText + #10 + TypeBodies[I];
+    if (TypeBodies[I] <> '') and TypeUsed[I] then ReachText := ReachText + #10 + TypeBodies[I];
   for I := 0 to AModule.Functions.Count - 1 do
     if FuncUsed[I] then ReachText := ReachText + #10 + FuncSigs[I] + #10 + FuncBodies[I];
+
+  SetLength(OptUsed, OptTags.Count);
+  for I := 0 to OptTags.Count - 1 do
+    OptUsed[I] := KeepAll or (Pos('TAetherOpt_' + OptTags[I], ReachText) > 0) or
+      (Pos('AetherSome_' + OptTags[I], ReachText) > 0) or (Pos('AetherNone_' + OptTags[I], ReachText) > 0);
+
+  SetLength(ResUsed, ResTags.Count);
+  for I := 0 to ResTags.Count - 1 do
+    ResUsed[I] := KeepAll or (Pos('TAetherRes_' + ResTags[I], ReachText) > 0) or
+      (Pos('AetherOk_' + ResTags[I], ReachText) > 0) or (Pos('AetherErr_' + ResTags[I], ReachText) > 0);
 
   if not KeepAll then
   begin
@@ -5131,6 +6953,26 @@ begin
         begin
           FuncUsed[I] := True;
           ReachText := ReachText + #10 + FuncSigs[I] + #10 + FuncBodies[I];
+          Changed := True;
+        end;
+      end;
+      for I := 0 to OptTags.Count - 1 do
+      begin
+        if (not OptUsed[I]) and ((Pos('TAetherOpt_' + OptTags[I], ReachText) > 0) or
+           (Pos('AetherSome_' + OptTags[I], ReachText) > 0) or (Pos('AetherNone_' + OptTags[I], ReachText) > 0)) then
+        begin
+          OptUsed[I] := True;
+          ReachText := ReachText + #10 + EmitTypeRef(OptInners[I]);
+          Changed := True;
+        end;
+      end;
+      for I := 0 to ResTags.Count - 1 do
+      begin
+        if (not ResUsed[I]) and ((Pos('TAetherRes_' + ResTags[I], ReachText) > 0) or
+           (Pos('AetherOk_' + ResTags[I], ReachText) > 0) or (Pos('AetherErr_' + ResTags[I], ReachText) > 0)) then
+        begin
+          ResUsed[I] := True;
+          ReachText := ReachText + #10 + EmitTypeRef(ResVals[I]) + ' ' + EmitTypeRef(ResErrs[I]);
           Changed := True;
         end;
       end;
@@ -5157,13 +6999,32 @@ begin
     until not Changed;
   end;
 
+  UsedOptCount := 0;
+  for I := 0 to OptTags.Count - 1 do
+    if OptUsed[I] then
+    begin
+      Inc(UsedOptCount);
+      UOptTags.Add(OptTags[I]);
+      UOptInners.Add(OptInners[I]);
+    end;
+
+  UsedResCount := 0;
+  for I := 0 to ResTags.Count - 1 do
+    if ResUsed[I] then
+    begin
+      Inc(UsedResCount);
+      UResTags.Add(ResTags[I]);
+      UResVals.Add(ResVals[I]);
+      UResErrs.Add(ResErrs[I]);
+    end;
+
   UsedConstCount := 0;
   for I := 0 to AModule.Constants.Count - 1 do
     if ConstUsed[I] then Inc(UsedConstCount);
 
   UsedTypeCount := 0;
   for I := 0 to AModule.Types.Count - 1 do
-    if TypeUsed[I] then Inc(UsedTypeCount);
+    if TypeUsed[I] and (TypeNames[I] <> '') then Inc(UsedTypeCount);
 
   HasCustomMap := False;
   for I := 0 to MapTags.Count - 1 do
@@ -5216,35 +7077,25 @@ begin
       Emit('');
     end;
 
-    if (UsedTypeCount > 0) or HasCustomMap then
+    if (UsedTypeCount > 0) or (UsedOptCount > 0) or (UsedResCount > 0) or (FDynTags.Count > 0) or HasCustomMap or (FFnTags.Count > 0) then
     begin
       Emit('type');
       IncIndent;
       for I := 0 to AModule.Types.Count - 1 do
       begin
-        if TypeUsed[I] and (AModule.Types[I] is TASTRecordDecl) then
+        if TypeUsed[I] and (AModule.Types[I] is TASTRecordDecl) and (TASTRecordDecl(AModule.Types[I]).GenericParams.Count = 0) then
         begin
           Emit(Format('P%s = ^T%s;', [TASTRecordDecl(AModule.Types[I]).Name, TASTRecordDecl(AModule.Types[I]).Name]));
           Emit(Format('PT%s = ^T%s;', [TASTRecordDecl(AModule.Types[I]).Name, TASTRecordDecl(AModule.Types[I]).Name]));
+        end
+        else if TypeUsed[I] and (AModule.Types[I] is TASTEnumDecl) and TASTEnumDecl(AModule.Types[I]).HasPayload then
+        begin
+          Emit(Format('P%s = ^T%s;', [TASTEnumDecl(AModule.Types[I]).Name, TASTEnumDecl(AModule.Types[I]).Name]));
+          Emit(Format('PT%s = ^T%s;', [TASTEnumDecl(AModule.Types[I]).Name, TASTEnumDecl(AModule.Types[I]).Name]));
         end;
       end;
 
-      for I := 0 to AModule.Types.Count - 1 do
-      begin
-        if not TypeUsed[I] then Continue;
-        if AModule.Types[I] is TASTRecordDecl then
-          EmitRecordType(TASTRecordDecl(AModule.Types[I]))
-        else if AModule.Types[I] is TASTEnumDecl then
-          EmitEnumDecl(TASTEnumDecl(AModule.Types[I]))
-        else if AModule.Types[I] is TASTArrayDecl then
-          EmitArrayDecl(TASTArrayDecl(AModule.Types[I]))
-        else if AModule.Types[I] is TASTSetDecl then
-          EmitSetDecl(TASTSetDecl(AModule.Types[I]))
-        else if AModule.Types[I] is TASTSubrangeDecl then
-          EmitSubrangeDecl(TASTSubrangeDecl(AModule.Types[I]))
-        else if AModule.Types[I] is TASTTypeAliasDecl then
-          EmitTypeAliasDecl(TASTTypeAliasDecl(AModule.Types[I]));
-      end;
+      EmitTopologicalTypesAndMonads(TypeUsed, OptTags, OptInners, OptUsed, ResTags, ResVals, ResErrs, ResUsed);
       EmitMapRuntimeDecls(MapTags, MapKeys, MapVals, False);
       for I := 0 to AModule.Types.Count - 1 do
         if TypeUsed[I] and (AModule.Types[I] is TASTMapDecl) then
@@ -5254,19 +7105,23 @@ begin
 
       for I := 0 to AModule.Types.Count - 1 do
       begin
-        if TypeUsed[I] and (AModule.Types[I] is TASTRecordDecl) then
+        if TypeUsed[I] and (AModule.Types[I] is TASTRecordDecl) and (TASTRecordDecl(AModule.Types[I]).GenericParams.Count = 0) then
         begin
           Rec := TASTRecordDecl(AModule.Types[I]);
           Emit(BuildRecordConstructorSig(Rec));
           if NeedBox then
             Emit(Format('function AetherBox(const V: T%s): P%s;', [Rec.Name, Rec.Name]));
-        end;
+        end
+        else if TypeUsed[I] and (AModule.Types[I] is TASTEnumDecl) then
+          EmitPayloadEnumConstructors(TASTEnumDecl(AModule.Types[I]), True);
       end;
       Emit('');
     end;
 
     EmitRuntimeHelpersInterface(ReachText);
+    EmitTypedMonadHelpers(UOptTags, UOptInners, UResTags, UResVals, UResErrs, True);
     EmitMapRuntimeHelpers(MapTags, MapKeys, MapVals, True);
+    EmitFnRuntimeHelpers(True);
 
     HasVarsBlock := False;
     for I := 0 to AModule.ModuleVars.Count - 1 do
@@ -5293,7 +7148,7 @@ begin
     begin
       if not FuncUsed[I] then Continue;
       Func := TASTFunction(AModule.Functions[I]);
-      if (not Func.IsExtern) and (Func.GenericParam = '') then
+      if (not Func.IsExtern) and (Func.GenericParams.Count = 0) and (Func.GenericParam = '') then
       begin
         Sig := FuncSigs[I];
         if Sig <> '' then
@@ -5304,6 +7159,27 @@ begin
 
     Emit('implementation');
     Emit('');
+
+    if HasEnvTypes then
+    begin
+      Emit('type');
+      IncIndent;
+      for I := 0 to FLambdas.Count - 1 do
+      begin
+        if TASTLambdaExpr(FLambdas[I]).CaptureNames.Count > 0 then
+        begin
+          Emit(Format('PAetherEnv_lambda_%d = ^TAetherEnv_lambda_%d;', [TASTLambdaExpr(FLambdas[I]).LambdaId, TASTLambdaExpr(FLambdas[I]).LambdaId]));
+          Emit(Format('TAetherEnv_lambda_%d = record', [TASTLambdaExpr(FLambdas[I]).LambdaId]));
+          IncIndent;
+          for CurExp := 0 to TASTLambdaExpr(FLambdas[I]).CaptureNames.Count - 1 do
+            Emit(Format('%s: %s;', [TASTLambdaExpr(FLambdas[I]).CaptureNames[CurExp], EmitTypeRef(TASTLambdaExpr(FLambdas[I]).CaptureTypes[CurExp])]));
+          DecIndent;
+          Emit('end;');
+          Emit('');
+        end;
+      end;
+      DecIndent;
+    end;
 
     HasVarsBlock := False;
     for I := 0 to AModule.ModuleVars.Count - 1 do
@@ -5330,7 +7206,7 @@ begin
     begin
       for I := 0 to AModule.Types.Count - 1 do
       begin
-        if TypeUsed[I] and (AModule.Types[I] is TASTRecordDecl) then
+        if TypeUsed[I] and (AModule.Types[I] is TASTRecordDecl) and (TASTRecordDecl(AModule.Types[I]).GenericParams.Count = 0) then
         begin
           EmitRecordConstructor(TASTRecordDecl(AModule.Types[I]));
           if NeedBox then
@@ -5342,16 +7218,23 @@ begin
             Emit('end;');
             Emit('');
           end;
-        end;
+        end
+        else if TypeUsed[I] and (AModule.Types[I] is TASTEnumDecl) then
+          EmitPayloadEnumConstructors(TASTEnumDecl(AModule.Types[I]), False);
       end;
     end;
 
     EmitRuntimeHelpersImplementation(ReachText);
+    EmitTypedMonadHelpers(UOptTags, UOptInners, UResTags, UResVals, UResErrs, False);
     EmitMapRuntimeHelpers(MapTags, MapKeys, MapVals, False);
+    EmitFnRuntimeHelpers(False);
+    EmitLambdaAndThunkDecls(True);
 
     for I := 0 to AModule.Functions.Count - 1 do
       if FuncUsed[I] then
         EmitFunction(TASTFunction(AModule.Functions[I]));
+
+    EmitLambdaAndThunkDecls(False);
 
     HasVarsBlock := False;
     for I := 0 to AModule.ModuleVars.Count - 1 do
@@ -5425,45 +7308,49 @@ begin
       Emit('');
     end;
 
-    if (UsedTypeCount > 0) or HasCustomMap then
+    if (UsedTypeCount > 0) or (UsedOptCount > 0) or (UsedResCount > 0) or (FDynTags.Count > 0) or HasCustomMap or (FFnTags.Count > 0) or HasEnvTypes then
     begin
       Emit('type');
       IncIndent;
       for I := 0 to AModule.Types.Count - 1 do
       begin
-        if TypeUsed[I] and (AModule.Types[I] is TASTRecordDecl) then
+        if TypeUsed[I] and (AModule.Types[I] is TASTRecordDecl) and (TASTRecordDecl(AModule.Types[I]).GenericParams.Count = 0) then
         begin
           Emit(Format('P%s = ^T%s;', [TASTRecordDecl(AModule.Types[I]).Name, TASTRecordDecl(AModule.Types[I]).Name]));
           Emit(Format('PT%s = ^T%s;', [TASTRecordDecl(AModule.Types[I]).Name, TASTRecordDecl(AModule.Types[I]).Name]));
+        end
+        else if TypeUsed[I] and (AModule.Types[I] is TASTEnumDecl) and TASTEnumDecl(AModule.Types[I]).HasPayload then
+        begin
+          Emit(Format('P%s = ^T%s;', [TASTEnumDecl(AModule.Types[I]).Name, TASTEnumDecl(AModule.Types[I]).Name]));
+          Emit(Format('PT%s = ^T%s;', [TASTEnumDecl(AModule.Types[I]).Name, TASTEnumDecl(AModule.Types[I]).Name]));
         end;
       end;
 
-      for I := 0 to AModule.Types.Count - 1 do
-      begin
-        if not TypeUsed[I] then Continue;
-        if AModule.Types[I] is TASTRecordDecl then
-          EmitRecordType(TASTRecordDecl(AModule.Types[I]))
-        else if AModule.Types[I] is TASTEnumDecl then
-          EmitEnumDecl(TASTEnumDecl(AModule.Types[I]))
-        else if AModule.Types[I] is TASTArrayDecl then
-          EmitArrayDecl(TASTArrayDecl(AModule.Types[I]))
-        else if AModule.Types[I] is TASTSetDecl then
-          EmitSetDecl(TASTSetDecl(AModule.Types[I]))
-        else if AModule.Types[I] is TASTSubrangeDecl then
-          EmitSubrangeDecl(TASTSubrangeDecl(AModule.Types[I]))
-        else if AModule.Types[I] is TASTTypeAliasDecl then
-          EmitTypeAliasDecl(TASTTypeAliasDecl(AModule.Types[I]));
-      end;
+      EmitTopologicalTypesAndMonads(TypeUsed, OptTags, OptInners, OptUsed, ResTags, ResVals, ResErrs, ResUsed);
       EmitMapRuntimeDecls(MapTags, MapKeys, MapVals, False);
       for I := 0 to AModule.Types.Count - 1 do
         if TypeUsed[I] and (AModule.Types[I] is TASTMapDecl) then
           EmitMapDecl(TASTMapDecl(AModule.Types[I]));
+      for I := 0 to FLambdas.Count - 1 do
+      begin
+        if TASTLambdaExpr(FLambdas[I]).CaptureNames.Count > 0 then
+        begin
+          Emit(Format('PAetherEnv_lambda_%d = ^TAetherEnv_lambda_%d;', [TASTLambdaExpr(FLambdas[I]).LambdaId, TASTLambdaExpr(FLambdas[I]).LambdaId]));
+          Emit(Format('TAetherEnv_lambda_%d = record', [TASTLambdaExpr(FLambdas[I]).LambdaId]));
+          IncIndent;
+          for CurExp := 0 to TASTLambdaExpr(FLambdas[I]).CaptureNames.Count - 1 do
+            Emit(Format('%s: %s;', [TASTLambdaExpr(FLambdas[I]).CaptureNames[CurExp], EmitTypeRef(TASTLambdaExpr(FLambdas[I]).CaptureTypes[CurExp])]));
+          DecIndent;
+          Emit('end;');
+          Emit('');
+        end;
+      end;
       DecIndent;
       Emit('');
 
       for I := 0 to AModule.Types.Count - 1 do
       begin
-        if TypeUsed[I] and (AModule.Types[I] is TASTRecordDecl) then
+        if TypeUsed[I] and (AModule.Types[I] is TASTRecordDecl) and (TASTRecordDecl(AModule.Types[I]).GenericParams.Count = 0) then
         begin
           EmitRecordConstructor(TASTRecordDecl(AModule.Types[I]));
           if NeedBox then
@@ -5475,12 +7362,16 @@ begin
             Emit('end;');
             Emit('');
           end;
-        end;
+        end
+        else if TypeUsed[I] and (AModule.Types[I] is TASTEnumDecl) then
+          EmitPayloadEnumConstructors(TASTEnumDecl(AModule.Types[I]), False);
       end;
     end;
 
     EmitRuntimeHelpersImplementation(ReachText);
+    EmitTypedMonadHelpers(UOptTags, UOptInners, UResTags, UResVals, UResErrs, False);
     EmitMapRuntimeHelpers(MapTags, MapKeys, MapVals, False);
+    EmitFnRuntimeHelpers(False);
 
     HasVarsBlock := False;
     for I := 0 to AModule.ModuleVars.Count - 1 do
@@ -5508,18 +7399,21 @@ begin
     begin
       if not FuncUsed[I] then Continue;
       Func := TASTFunction(AModule.Functions[I]);
-      if (not Func.IsExtern) and (Func.GenericParam = '') and (Func.InlineMode <> 'always') then
+      if (not Func.IsExtern) and (Func.GenericParams.Count = 0) and (Func.GenericParam = '') and (Func.InlineMode <> 'always') then
       begin
         Sig := FuncSigs[I];
         if Sig <> '' then
           Emit(Copy(Sig, 1, Length(Sig) - 1) + ' forward;');
       end;
     end;
+    EmitLambdaAndThunkDecls(True);
     Emit('');
 
     for I := 0 to AModule.Functions.Count - 1 do
       if FuncUsed[I] then
         EmitFunction(TASTFunction(AModule.Functions[I]));
+
+    EmitLambdaAndThunkDecls(False);
 
     if EffectiveLibrary then
     begin
@@ -5563,6 +7457,16 @@ begin
 
   Result := FOutput.Text;
   finally
+    UResErrs.Free;
+    UResVals.Free;
+    UResTags.Free;
+    UOptInners.Free;
+    UOptTags.Free;
+    ResErrs.Free;
+    ResVals.Free;
+    ResTags.Free;
+    OptInners.Free;
+    OptTags.Free;
     MapTags.Free;
     MapKeys.Free;
     MapVals.Free;

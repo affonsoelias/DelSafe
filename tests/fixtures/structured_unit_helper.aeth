@@ -1,0 +1,74 @@
+module structured_unit_helper;
+
+interface
+
+const
+    BASE_MULTIPLIER = 10;
+
+type
+    Point = record
+        x: Int32;
+        y: Int32;
+end record;
+
+var
+    PublicCounter: Int32;
+
+function SumRangeContract(a, b: Int32) return Int32
+contract
+    require
+        a >= 0;
+        b >= 0;
+    ensure
+        result >= a;
+
+function SumPoints(borrow a, b: Point) return Int32;
+procedure IncrementState(delta: Int32);
+procedure ResetState;
+function GetState() return Int32;
+
+implementation
+
+var
+    PrivateAccum: Int32;
+
+function PrivateDouble(v: Int32) return Int32 is
+begin
+    return v * 2;
+end PrivateDouble;
+
+function SumRangeContract(a, b: Int32) return Int32 is
+begin
+    return a + b;
+end SumRangeContract;
+
+function SumPoints(borrow a, b: Point) return Int32 is
+begin
+    return a.x + a.y + b.x + b.y;
+end SumPoints;
+
+procedure IncrementState(delta: Int32) is
+begin
+    PrivateAccum := PrivateAccum + PrivateDouble(delta);
+    PublicCounter := PublicCounter + delta;
+end IncrementState;
+
+procedure ResetState is
+begin
+    PrivateAccum := 0;
+    PublicCounter := 0;
+end ResetState;
+
+function GetState() return Int32 is
+begin
+    return PublicCounter + PrivateAccum;
+end GetState;
+
+initialization
+    PublicCounter := 100;
+    PrivateAccum := 7;
+
+finalization
+    PublicCounter := PublicCounter + 1;
+
+end structured_unit_helper.

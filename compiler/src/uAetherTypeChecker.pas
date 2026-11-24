@@ -35,6 +35,7 @@ type
     FTraitImpls: TFPList;
     FLoopDepth: Integer;
     FUnsafeDepth: Integer;
+    FLambdaCounter: Integer;
 
     procedure Error(const ACode, AMsg: string; ALine, ACol: Integer);
     function ResolveAliasType(const AType: string): string;
@@ -47,6 +48,19 @@ type
     function IsValueOptionType(const AType: string): Boolean;
     function SplitResultTypes(const AType: string; out ValType, ErrType: string): Boolean;
     function IsMapType(const AType: string; out KeyType, ValType: string): Boolean;
+    function SplitGenericType(const AType: string; out BaseName: string; Args: TStringList): Boolean;
+    function SplitTupleTypes(const AType: string; Elems: TStringList): Boolean;
+    function SplitFnType(const AType: string; ParamTypes: TStringList; out RetType: string): Boolean;
+    function EnsureTupleRecord(ElemTypes: TStringList; ALine, ACol: Integer): string;
+    function BuildFuncSignatureType(Func: TASTFunction): string;
+    function MangleTypeName(const AType: string): string;
+    function SubstituteGenericType(const AType: string; GenericParams, ConcreteArgs: TStringList): string;
+    function NormalizeTypeName(const AType: string): string;
+    function InstantiateGenericRecord(RecDecl: TASTRecordDecl; TypeArgs: TStringList; ALine, ACol: Integer): string;
+    function UnifyGenericTypes(const FormalType, ActualType: string; GenericParams, Inferred: TStringList): Boolean;
+    procedure AnnotateMonadExpr(Expr: TASTExpr; const ExpectedType: string);
+    function MergeInferredMonadTypes(const T1, T2: string): string;
+    procedure ReorderAndCheckFields(const KindLabel, TargetName: string; Fields: TASTNodeList; Call: TASTCallExpr);
     function TypesAreCompatible(const TargetType, SourceType: string): Boolean;
 
     function CheckExpr(Expr: TASTExpr): string;
@@ -61,6 +75,9 @@ type
     function CheckIndexExpr(Idx: TASTIndexExpr): string;
     function CheckSetLiteral(SetLit: TASTSetLiteralExpr): string;
     function CheckMapLiteral(MapLit: TASTMapLiteralExpr): string;
+    function CheckTupleLiteral(Tup: TASTTupleLiteralExpr): string;
+    function CheckLambda(Lambda: TASTLambdaExpr): string;
+    procedure CollectLambdaCaptures(Lambda: TASTLambdaExpr; OuterScope: TScope);
     function CheckMatchExpr(MatchExpr: TASTMatchExpr): string;
     function CheckMatchInternal(MatchTarget: TASTExpr; Cases: TASTNodeList; IsExpr: Boolean; MLine, MCol: Integer): string;
 
@@ -80,9 +97,12 @@ type
     procedure RegisterTraits(AModule: TASTModule);
     procedure RegisterImpls(AModule: TASTModule);
     procedure RegisterFunctions(AModule: TASTModule);
+    procedure NormalizeModuleSignatures(AModule: TASTModule);
     function TypeImplementsTrait(const ATypeName, ATraitName: string): Boolean;
     function FindTraitMethod(const ATypeName, AMethodName: string): string;
-    function MonomorphizeFunction(OriginalFunc: TASTFunction; const ConcreteType: string): TASTFunction;
+    function MonomorphizeFunction(OriginalFunc: TASTFunction; ConcreteArgs: TStringList): TASTFunction;
+    procedure SubstituteGenericInExpr(Expr: TASTExpr; GenericParams, ConcreteArgs: TStringList);
+    procedure SubstituteGenericInStmts(Stmts: TASTNodeList; GenericParams, ConcreteArgs: TStringList);
     function HasForeignImports: Boolean;
     function InferForeignFunctionReturnType(const FuncName: string): string;
     procedure CheckVisibility(AIsPublic: Boolean; const ASrcMod, ASymName: string; ALine, ACol: Integer);
@@ -99,6 +119,8 @@ type
   end;
 
 implementation
+
+function StmtListAlwaysReturns(Stmts: TASTNodeList): Boolean; forward;
 
 constructor EAetherTypeError.Create(const ACode, AMsg: string; ALine, ACol: Integer);
 begin
@@ -117,6 +139,7 @@ begin
   FTraitImpls := TFPList.Create;
   FLoopDepth := 0;
   FUnsafeDepth := 0;
+  FLambdaCounter := 0;
 end;
 
 destructor TAetherTypeChecker.Destroy;
@@ -327,6 +350,862 @@ begin
   Result := False;
 end;
 
+function TAetherTypeChecker.SplitGenericType(const AType: string; out BaseName: string; Args: TStringList): Boolean;
+var
+  T, Inner, Cur: string;
+  PStart, PEnd, I, DepthAngle, DepthParen, DepthBracket: Integer;
+begin
+  Result := False;
+  BaseName := '';
+  Args.Clear;
+  T := Trim(AType);
+  PStart := Pos('<', T);
+  if (PStart <= 1) or (T[Length(T)] <> '>') then Exit;
+  PEnd := Length(T);
+  BaseName := Trim(Copy(T, 1, PStart - 1));
+  Inner := Copy(T, PStart + 1, PEnd - PStart - 1);
+  if Trim(Inner) = '' then Exit;
+
+  DepthAngle := 0;
+  DepthParen := 0;
+  DepthBracket := 0;
+  Cur := '';
+  for I := 1 to Length(Inner) do
+  begin
+    case Inner[I] of
+      '<': Inc(DepthAngle);
+      '>': Dec(DepthAngle);
+      '(': Inc(DepthParen);
+      ')': Dec(DepthParen);
+      '[': Inc(DepthBracket);
+      ']': Dec(DepthBracket);
+    end;
+    if (Inner[I] = ',') and (DepthAngle = 0) and (DepthParen = 0) and (DepthBracket = 0) then
+    begin
+      Args.Add(Trim(Cur));
+      Cur := '';
+    end
+    else
+      Cur := Cur + Inner[I];
+  end;
+  if Trim(Cur) <> '' then
+    Args.Add(Trim(Cur));
+  Result := (BaseName <> '') and (Args.Count > 0);
+end;
+
+function TAetherTypeChecker.SplitTupleTypes(const AType: string; Elems: TStringList): Boolean;
+var
+  T, Inner, Cur: string;
+  I, DepthAngle, DepthParen, DepthBracket: Integer;
+begin
+  Result := False;
+  Elems.Clear;
+  T := Trim(AType);
+  if (Length(T) < 5) or (T[1] <> '(') or (T[Length(T)] <> ')') then Exit;
+  Inner := Copy(T, 2, Length(T) - 2);
+  DepthAngle := 0;
+  DepthParen := 0;
+  DepthBracket := 0;
+  Cur := '';
+  for I := 1 to Length(Inner) do
+  begin
+    case Inner[I] of
+      '<': Inc(DepthAngle);
+      '>': Dec(DepthAngle);
+      '(': Inc(DepthParen);
+      ')': Dec(DepthParen);
+      '[': Inc(DepthBracket);
+      ']': Dec(DepthBracket);
+    end;
+    if (Inner[I] = ',') and (DepthAngle = 0) and (DepthParen = 0) and (DepthBracket = 0) then
+    begin
+      Elems.Add(Trim(Cur));
+      Cur := '';
+    end
+    else
+      Cur := Cur + Inner[I];
+  end;
+  if Trim(Cur) <> '' then
+    Elems.Add(Trim(Cur));
+  Result := (DepthAngle = 0) and (DepthParen = 0) and (DepthBracket = 0) and (Elems.Count >= 2);
+end;
+
+function TAetherTypeChecker.SplitFnType(const AType: string; ParamTypes: TStringList; out RetType: string): Boolean;
+var
+  T, Inner, Cur, AfterParen: string;
+  I, DepthParen, DepthAngle, DepthBracket, ClosePos, ArrowPos: Integer;
+begin
+  Result := False;
+  ParamTypes.Clear;
+  RetType := 'Void';
+  T := Trim(AType);
+  if Pos('fn(', T) <> 1 then Exit;
+
+  DepthParen := 0;
+  DepthAngle := 0;
+  DepthBracket := 0;
+  ClosePos := 0;
+  for I := 3 to Length(T) do
+  begin
+    case T[I] of
+      '(': Inc(DepthParen);
+      ')':
+        begin
+          Dec(DepthParen);
+          if DepthParen = 0 then
+          begin
+            ClosePos := I;
+            Break;
+          end;
+        end;
+    end;
+  end;
+  if ClosePos = 0 then Exit;
+
+  AfterParen := Trim(Copy(T, ClosePos + 1, Length(T)));
+  ArrowPos := Pos('->', AfterParen);
+  if ArrowPos <> 1 then Exit;
+  RetType := Trim(Copy(AfterParen, 3, Length(AfterParen)));
+
+  Inner := Trim(Copy(T, 4, ClosePos - 4));
+  if Inner <> '' then
+  begin
+    DepthParen := 0;
+    DepthAngle := 0;
+    DepthBracket := 0;
+    Cur := '';
+    for I := 1 to Length(Inner) do
+    begin
+      case Inner[I] of
+        '<': Inc(DepthAngle);
+        '>': Dec(DepthAngle);
+        '(': Inc(DepthParen);
+        ')': Dec(DepthParen);
+        '[': Inc(DepthBracket);
+        ']': Dec(DepthBracket);
+      end;
+      if (Inner[I] = ',') and (DepthAngle = 0) and (DepthParen = 0) and (DepthBracket = 0) then
+      begin
+        ParamTypes.Add(Trim(Cur));
+        Cur := '';
+      end
+      else
+        Cur := Cur + Inner[I];
+    end;
+    if Trim(Cur) <> '' then
+      ParamTypes.Add(Trim(Cur));
+  end;
+  Result := RetType <> '';
+end;
+
+function TAetherTypeChecker.EnsureTupleRecord(ElemTypes: TStringList; ALine, ACol: Integer): string;
+var
+  I: Integer;
+  NormT, RecName: string;
+  ExistingSym, NewSym: TSymbol;
+  RecDecl: TASTRecordDecl;
+  FieldNode: TASTRecordField;
+begin
+  RecName := 'Tuple' + IntToStr(ElemTypes.Count);
+  for I := 0 to ElemTypes.Count - 1 do
+  begin
+    NormT := NormalizeTypeName(ElemTypes[I]);
+    ElemTypes[I] := NormT;
+    if not FSymbols.ResolveType(NormT) then
+      Error('E0412', Format('Unknown type "%s" in tuple type', [NormT]), ALine, ACol);
+    RecName := RecName + '__' + MangleTypeName(NormT);
+  end;
+
+  ExistingSym := FSymbols.GlobalScope.ResolveType(RecName);
+  if not Assigned(ExistingSym) then
+    ExistingSym := FSymbols.ResolveTypeSymbol(RecName);
+  if Assigned(ExistingSym) then
+    Exit(RecName);
+
+  RecDecl := TASTRecordDecl.Create(ALine, ACol, RecName);
+  RecDecl.IsPublic := True;
+  for I := 0 to ElemTypes.Count - 1 do
+  begin
+    FieldNode := TASTRecordField.Create(ALine, ACol, 'item' + IntToStr(I), ElemTypes[I]);
+    FieldNode.IsPublic := True;
+    RecDecl.Fields.Add(FieldNode);
+  end;
+
+  NewSym := TSymbol.Create(RecName, skType, RecName, ALine, ACol, True, owNone, RecDecl);
+  NewSym.IsPublic := True;
+  FSymbols.GlobalScope.Define(NewSym);
+  if Assigned(FModule) then
+    FModule.Types.Add(RecDecl);
+  Result := RecName;
+end;
+
+function TAetherTypeChecker.BuildFuncSignatureType(Func: TASTFunction): string;
+var
+  I: Integer;
+  PList, RetT: string;
+begin
+  PList := '';
+  for I := 0 to Func.Params.Count - 1 do
+  begin
+    if I > 0 then PList := PList + ', ';
+    PList := PList + NormalizeTypeName(TASTParam(Func.Params[I]).TypeName);
+  end;
+  if Func.IsProcedure then
+    RetT := 'Void'
+  else
+    RetT := NormalizeTypeName(Func.ReturnType);
+  Result := 'fn(' + PList + ') -> ' + RetT;
+end;
+
+function TAetherTypeChecker.MangleTypeName(const AType: string): string;
+var
+  T, BaseName, Res, RetT: string;
+  Args: TStringList;
+  I: Integer;
+  Ch: Char;
+begin
+  T := Trim(AType);
+  if T = '' then Exit('');
+  if Pos('^', T) = 1 then
+    Exit('ptr_' + MangleTypeName(Copy(T, 2, Length(T))));
+  if Pos('array of ', T) = 1 then
+    Exit('arr_' + MangleTypeName(Copy(T, 10, Length(T))));
+
+  Args := TStringList.Create;
+  try
+    if SplitFnType(T, Args, RetT) then
+    begin
+      if Args.Count = 0 then
+        Res := 'Fn__void'
+      else
+      begin
+        Res := 'Fn';
+        for I := 0 to Args.Count - 1 do
+          Res := Res + '__' + MangleTypeName(Args[I]);
+      end;
+      Exit(Res + '__ret__' + MangleTypeName(RetT));
+    end;
+    if SplitTupleTypes(T, Args) then
+    begin
+      Res := 'Tuple' + IntToStr(Args.Count);
+      for I := 0 to Args.Count - 1 do
+        Res := Res + '__' + MangleTypeName(Args[I]);
+      Exit(Res);
+    end;
+    if SplitGenericType(T, BaseName, Args) then
+    begin
+      Res := BaseName;
+      for I := 0 to Args.Count - 1 do
+        Res := Res + '__' + MangleTypeName(Args[I]);
+      Exit(Res);
+    end;
+  finally
+    Args.Free;
+  end;
+
+  Res := '';
+  for I := 1 to Length(T) do
+  begin
+    Ch := T[I];
+    if Ch in ['A'..'Z', 'a'..'z', '0'..'9', '_'] then
+      Res := Res + Ch
+    else if (Res = '') or (Res[Length(Res)] <> '_') then
+      Res := Res + '_';
+  end;
+  Result := Res;
+end;
+
+function TAetherTypeChecker.SubstituteGenericType(const AType: string; GenericParams, ConcreteArgs: TStringList): string;
+var
+  T, BaseName, ElemType, Prefix, KeyT, ValT, RetT: string;
+  Args: TStringList;
+  I, POf, PClose: Integer;
+begin
+  T := Trim(AType);
+  if T = '' then Exit('');
+  for I := 0 to GenericParams.Count - 1 do
+  begin
+    if (I < ConcreteArgs.Count) and SameText(T, GenericParams[I]) then
+      Exit(ConcreteArgs[I]);
+  end;
+
+  if Pos('^', T) = 1 then
+    Exit('^' + SubstituteGenericType(Copy(T, 2, Length(T)), GenericParams, ConcreteArgs));
+
+  if Pos('array of ', T) = 1 then
+    Exit('array of ' + SubstituteGenericType(Trim(Copy(T, 10, Length(T))), GenericParams, ConcreteArgs));
+
+  if Pos('array[', T) = 1 then
+  begin
+    POf := Pos(' of ', T);
+    if POf > 0 then
+    begin
+      Prefix := Copy(T, 1, POf + 3);
+      ElemType := Trim(Copy(T, POf + 4, Length(T)));
+      Exit(Prefix + SubstituteGenericType(ElemType, GenericParams, ConcreteArgs));
+    end;
+  end;
+
+  if Pos('map[', T) = 1 then
+  begin
+    PClose := Pos(']', T);
+    if PClose > 4 then
+    begin
+      KeyT := Trim(Copy(T, 5, PClose - 5));
+      ValT := Trim(Copy(T, PClose + 1, Length(T)));
+      Exit('map[' + SubstituteGenericType(KeyT, GenericParams, ConcreteArgs) + '] ' +
+        SubstituteGenericType(ValT, GenericParams, ConcreteArgs));
+    end;
+  end;
+
+  Args := TStringList.Create;
+  try
+    if SplitFnType(T, Args, RetT) then
+    begin
+      Result := 'fn(';
+      for I := 0 to Args.Count - 1 do
+      begin
+        if I > 0 then Result := Result + ', ';
+        Result := Result + SubstituteGenericType(Args[I], GenericParams, ConcreteArgs);
+      end;
+      Result := Result + ') -> ' + SubstituteGenericType(RetT, GenericParams, ConcreteArgs);
+      Exit;
+    end;
+    if SplitTupleTypes(T, Args) then
+    begin
+      Result := '(';
+      for I := 0 to Args.Count - 1 do
+      begin
+        if I > 0 then Result := Result + ', ';
+        Result := Result + SubstituteGenericType(Args[I], GenericParams, ConcreteArgs);
+      end;
+      Result := Result + ')';
+      Exit;
+    end;
+    if SplitGenericType(T, BaseName, Args) then
+    begin
+      Result := BaseName + '<';
+      for I := 0 to Args.Count - 1 do
+      begin
+        if I > 0 then Result := Result + ', ';
+        Result := Result + SubstituteGenericType(Args[I], GenericParams, ConcreteArgs);
+      end;
+      Result := Result + '>';
+      Exit;
+    end;
+  finally
+    Args.Free;
+  end;
+
+  Result := T;
+end;
+
+function TAetherTypeChecker.InstantiateGenericRecord(RecDecl: TASTRecordDecl; TypeArgs: TStringList; ALine, ACol: Integer): string;
+var
+  I: Integer;
+  NormArgs: TStringList;
+  Mangled, FieldType: string;
+  ExistingSym, NewSym: TSymbol;
+  MonoRec: TASTRecordDecl;
+  SrcField, NewField: TASTRecordField;
+begin
+  if RecDecl.GenericParams.Count <> TypeArgs.Count then
+    Error('E0061', Format('Generic record "%s" expects %d type argument(s), but got %d',
+      [RecDecl.Name, RecDecl.GenericParams.Count, TypeArgs.Count]), ALine, ACol);
+
+  NormArgs := TStringList.Create;
+  try
+    Mangled := RecDecl.Name;
+    for I := 0 to TypeArgs.Count - 1 do
+    begin
+      NormArgs.Add(NormalizeTypeName(TypeArgs[I]));
+      Mangled := Mangled + '__' + MangleTypeName(NormArgs[I]);
+    end;
+
+    ExistingSym := FSymbols.GlobalScope.ResolveType(Mangled);
+    if not Assigned(ExistingSym) then
+      ExistingSym := FSymbols.ResolveTypeSymbol(Mangled);
+    if Assigned(ExistingSym) then
+      Exit(Mangled);
+
+    MonoRec := TASTRecordDecl.Create(RecDecl.Line, RecDecl.Col, Mangled);
+    MonoRec.TemplateName := RecDecl.Name;
+    MonoRec.ConcreteGenericArgs.AddStrings(NormArgs);
+    MonoRec.IsPublic := RecDecl.IsPublic;
+    MonoRec.SourceModule := RecDecl.SourceModule;
+
+    // Define symbol in global scope before field normalization to break pointer self-cycles
+    NewSym := TSymbol.Create(Mangled, skType, Mangled, RecDecl.Line, RecDecl.Col, True, owNone, MonoRec);
+    NewSym.IsPublic := RecDecl.IsPublic;
+    NewSym.SourceModule := RecDecl.SourceModule;
+    FSymbols.GlobalScope.Define(NewSym);
+
+    for I := 0 to RecDecl.Fields.Count - 1 do
+    begin
+      SrcField := TASTRecordField(RecDecl.Fields[I]);
+      FieldType := NormalizeTypeName(SubstituteGenericType(SrcField.TypeName, RecDecl.GenericParams, NormArgs));
+      if not FSymbols.ResolveType(FieldType) then
+        Error('E0412', Format('Unknown type "%s" while instantiating "%s"', [FieldType, Mangled]), ALine, ACol);
+      NewField := TASTRecordField.Create(SrcField.Line, SrcField.Col, SrcField.Name, FieldType);
+      NewField.IsPublic := SrcField.IsPublic;
+      NewField.HasExplicitVis := SrcField.HasExplicitVis;
+      NewField.SourceModule := SrcField.SourceModule;
+      MonoRec.Fields.Add(NewField);
+    end;
+
+    if Assigned(FModule) then
+      FModule.Types.Add(MonoRec);
+    Result := Mangled;
+  finally
+    NormArgs.Free;
+  end;
+end;
+
+function TAetherTypeChecker.NormalizeTypeName(const AType: string): string;
+var
+  T, BaseName, Prefix, ElemType, KeyT, ValT, Joined, RetT: string;
+  Args: TStringList;
+  I, POf, PClose: Integer;
+  Sym: TSymbol;
+  RecDecl: TASTRecordDecl;
+  AllResolved: Boolean;
+begin
+  T := Trim(AType);
+  if T = '' then Exit('');
+
+  if Pos('^', T) = 1 then
+    Exit('^' + NormalizeTypeName(Copy(T, 2, Length(T))));
+
+  if Pos('array of ', T) = 1 then
+    Exit('array of ' + NormalizeTypeName(Trim(Copy(T, 10, Length(T)))));
+
+  if Pos('array[', T) = 1 then
+  begin
+    POf := Pos(' of ', T);
+    if POf > 0 then
+    begin
+      Prefix := Copy(T, 1, POf + 3);
+      ElemType := Trim(Copy(T, POf + 4, Length(T)));
+      Exit(Prefix + NormalizeTypeName(ElemType));
+    end;
+  end;
+
+  if Pos('map[', T) = 1 then
+  begin
+    PClose := Pos(']', T);
+    if PClose > 4 then
+    begin
+      KeyT := Trim(Copy(T, 5, PClose - 5));
+      ValT := Trim(Copy(T, PClose + 1, Length(T)));
+      Exit('map[' + NormalizeTypeName(KeyT) + '] ' + NormalizeTypeName(ValT));
+    end;
+  end;
+
+  Args := TStringList.Create;
+  try
+    if SplitFnType(T, Args, RetT) then
+    begin
+      Joined := 'fn(';
+      for I := 0 to Args.Count - 1 do
+      begin
+        Args[I] := NormalizeTypeName(Args[I]);
+        if I > 0 then Joined := Joined + ', ';
+        Joined := Joined + Args[I];
+      end;
+      RetT := NormalizeTypeName(RetT);
+      Exit(Joined + ') -> ' + RetT);
+    end;
+
+    if SplitTupleTypes(T, Args) then
+    begin
+      AllResolved := Assigned(FSymbols);
+      for I := 0 to Args.Count - 1 do
+      begin
+        Args[I] := NormalizeTypeName(Args[I]);
+        if AllResolved and (not FSymbols.ResolveType(Args[I])) then
+          AllResolved := False;
+      end;
+      if AllResolved then
+        Exit(EnsureTupleRecord(Args, 0, 0));
+      Joined := '(';
+      for I := 0 to Args.Count - 1 do
+      begin
+        if I > 0 then Joined := Joined + ', ';
+        Joined := Joined + Args[I];
+      end;
+      Exit(Joined + ')');
+    end;
+
+    if SplitGenericType(T, BaseName, Args) then
+    begin
+      for I := 0 to Args.Count - 1 do
+        Args[I] := NormalizeTypeName(Args[I]);
+
+      Joined := BaseName + '<';
+      for I := 0 to Args.Count - 1 do
+      begin
+        if I > 0 then Joined := Joined + ', ';
+        Joined := Joined + Args[I];
+      end;
+      Joined := Joined + '>';
+
+      if SameText(BaseName, 'Option') or SameText(BaseName, 'Result') or
+         SameText(BaseName, 'Box') or SameText(BaseName, 'Task') then
+        Exit(Joined);
+
+      if Assigned(FSymbols) then
+      begin
+        Sym := FSymbols.ResolveTypeSymbol(BaseName);
+        if Assigned(Sym) and (Sym.Node is TASTRecordDecl) and (TASTRecordDecl(Sym.Node).GenericParams.Count > 0) then
+        begin
+          RecDecl := TASTRecordDecl(Sym.Node);
+          for I := 0 to Args.Count - 1 do
+            if not FSymbols.ResolveType(Args[I]) then
+              Exit(Joined);
+          Exit(InstantiateGenericRecord(RecDecl, Args, RecDecl.Line, RecDecl.Col));
+        end;
+      end;
+      Exit(Joined);
+    end;
+  finally
+    Args.Free;
+  end;
+
+  Result := T;
+end;
+
+function TAetherTypeChecker.UnifyGenericTypes(const FormalType, ActualType: string; GenericParams, Inferred: TStringList): Boolean;
+var
+  F, A, FormalBase, ActualBase, FormalElem, ActualElem, FormalKey, FormalVal, ActualKey, ActualVal: string;
+  FormalRet, ActualRet: string;
+  FArgs, AArgs: TStringList;
+  I: Integer;
+  Sym: TSymbol;
+  RecDecl: TASTRecordDecl;
+begin
+  F := Trim(FormalType);
+  A := NormalizeTypeName(ResolveAliasType(Trim(ActualType)));
+
+  for I := 0 to GenericParams.Count - 1 do
+  begin
+    if SameText(F, GenericParams[I]) then
+    begin
+      if (Inferred[I] = '') or (Inferred[I] = 'IntLiteral') or (Inferred[I] = 'FloatLiteral') then
+        Inferred[I] := A;
+      Exit(True);
+    end;
+  end;
+
+  if (Pos('^', F) = 1) and (Pos('^', A) = 1) then
+    Exit(UnifyGenericTypes(Copy(F, 2, Length(F)), Copy(A, 2, Length(A)), GenericParams, Inferred));
+
+  if IsDynamicArrayType(F, FormalElem) and IsDynamicArrayType(A, ActualElem) then
+    Exit(UnifyGenericTypes(FormalElem, ActualElem, GenericParams, Inferred));
+
+  if IsMapType(F, FormalKey, FormalVal) and IsMapType(A, ActualKey, ActualVal) then
+    Exit(UnifyGenericTypes(FormalKey, ActualKey, GenericParams, Inferred) and
+         UnifyGenericTypes(FormalVal, ActualVal, GenericParams, Inferred));
+
+  FArgs := TStringList.Create;
+  AArgs := TStringList.Create;
+  try
+    if SplitFnType(F, FArgs, FormalRet) and SplitFnType(A, AArgs, ActualRet) and (FArgs.Count = AArgs.Count) then
+    begin
+      Result := True;
+      for I := 0 to FArgs.Count - 1 do
+        if not UnifyGenericTypes(FArgs[I], AArgs[I], GenericParams, Inferred) then
+          Result := False;
+      if not UnifyGenericTypes(FormalRet, ActualRet, GenericParams, Inferred) then
+        Result := False;
+      Exit;
+    end;
+
+    if SplitTupleTypes(F, FArgs) then
+    begin
+      if SplitTupleTypes(A, AArgs) and (FArgs.Count = AArgs.Count) then
+      begin
+        Result := True;
+        for I := 0 to FArgs.Count - 1 do
+          if not UnifyGenericTypes(FArgs[I], AArgs[I], GenericParams, Inferred) then
+            Result := False;
+        Exit;
+      end;
+      if Assigned(FSymbols) then
+      begin
+        Sym := FSymbols.ResolveTypeSymbol(A);
+        if Assigned(Sym) and (Sym.Node is TASTRecordDecl) and (Pos('Tuple', TASTRecordDecl(Sym.Node).Name) = 1) and
+           (TASTRecordDecl(Sym.Node).Fields.Count = FArgs.Count) then
+        begin
+          RecDecl := TASTRecordDecl(Sym.Node);
+          Result := True;
+          for I := 0 to FArgs.Count - 1 do
+            if not UnifyGenericTypes(FArgs[I], TASTRecordField(RecDecl.Fields[I]).TypeName, GenericParams, Inferred) then
+              Result := False;
+          Exit;
+        end;
+      end;
+    end;
+
+    if SplitGenericType(F, FormalBase, FArgs) then
+    begin
+      if SplitGenericType(A, ActualBase, AArgs) and SameText(FormalBase, ActualBase) and (FArgs.Count = AArgs.Count) then
+      begin
+        Result := True;
+        for I := 0 to FArgs.Count - 1 do
+          if not UnifyGenericTypes(FArgs[I], AArgs[I], GenericParams, Inferred) then
+            Result := False;
+        Exit;
+      end;
+      if Assigned(FSymbols) then
+      begin
+        Sym := FSymbols.ResolveTypeSymbol(A);
+        if Assigned(Sym) and (Sym.Node is TASTRecordDecl) then
+        begin
+          RecDecl := TASTRecordDecl(Sym.Node);
+          if (RecDecl.TemplateName <> '') and SameText(RecDecl.TemplateName, FormalBase) and
+             (RecDecl.ConcreteGenericArgs.Count = FArgs.Count) then
+          begin
+            Result := True;
+            for I := 0 to FArgs.Count - 1 do
+              if not UnifyGenericTypes(FArgs[I], RecDecl.ConcreteGenericArgs[I], GenericParams, Inferred) then
+                Result := False;
+            Exit;
+          end;
+        end;
+      end;
+    end;
+  finally
+    FArgs.Free;
+    AArgs.Free;
+  end;
+
+  Result := True;
+end;
+
+procedure TAetherTypeChecker.AnnotateMonadExpr(Expr: TASTExpr; const ExpectedType: string);
+var
+  T, ExpRet: string;
+  Call: TASTCallExpr;
+  IfE: TASTIfExpr;
+  ME: TASTMatchExpr;
+  Tup: TASTTupleLiteralExpr;
+  Lam: TASTLambdaExpr;
+  RecDecl: TASTRecordDecl;
+  Sym: TSymbol;
+  ExpParams: TStringList;
+  I: Integer;
+begin
+  if not Assigned(Expr) then Exit;
+  T := NormalizeTypeName(ResolveAliasType(ExpectedType));
+  if T = '' then Exit;
+
+  if Expr is TASTIdentifierExpr then
+  begin
+    if (SameText(TASTIdentifierExpr(Expr).Name, 'None') or (TASTIdentifierExpr(Expr).Name = '__ValueNone')) and
+       IsValueOptionType(T) then
+    begin
+      TASTIdentifierExpr(Expr).Name := '__ValueNone';
+      TASTIdentifierExpr(Expr).ResolvedMonadType := T;
+    end;
+  end
+  else if Expr is TASTTupleLiteralExpr then
+  begin
+    Tup := TASTTupleLiteralExpr(Expr);
+    if Assigned(FSymbols) then
+    begin
+      Sym := FSymbols.ResolveTypeSymbol(T);
+      if Assigned(Sym) and (Sym.Node is TASTRecordDecl) and (Pos('Tuple', TASTRecordDecl(Sym.Node).Name) = 1) then
+      begin
+        RecDecl := TASTRecordDecl(Sym.Node);
+        if RecDecl.Fields.Count = Tup.Elements.Count then
+        begin
+          Tup.ResolvedType := RecDecl.Name;
+          for I := 0 to Tup.Elements.Count - 1 do
+            AnnotateMonadExpr(TASTExpr(Tup.Elements[I]), TASTRecordField(RecDecl.Fields[I]).TypeName);
+        end;
+      end;
+    end;
+  end
+  else if Expr is TASTLambdaExpr then
+  begin
+    Lam := TASTLambdaExpr(Expr);
+    ExpParams := TStringList.Create;
+    try
+      if SplitFnType(T, ExpParams, ExpRet) then
+      begin
+        for I := 0 to Lam.Params.Count - 1 do
+          if (TASTParam(Lam.Params[I]).TypeName = '') and (I < ExpParams.Count) then
+            TASTParam(Lam.Params[I]).TypeName := ExpParams[I];
+        if Lam.ReturnType = '' then
+          Lam.ReturnType := ExpRet;
+        if Assigned(Lam.BodyExpr) then
+          AnnotateMonadExpr(Lam.BodyExpr, ExpRet);
+      end;
+    finally
+      ExpParams.Free;
+    end;
+  end
+  else if Expr is TASTCallExpr then
+  begin
+    Call := TASTCallExpr(Expr);
+    if ((Call.Callee = 'Some') and (Pos('Option<', T) = 1)) or
+       (((Call.Callee = 'Ok') or (Call.Callee = 'Err')) and (Pos('Result<', T) = 1)) then
+      Call.ResolvedMonadType := T;
+  end
+  else if Expr is TASTIfExpr then
+  begin
+    IfE := TASTIfExpr(Expr);
+    AnnotateMonadExpr(IfE.ThenExpr, T);
+    AnnotateMonadExpr(IfE.ElseExpr, T);
+  end
+  else if Expr is TASTMatchExpr then
+  begin
+    ME := TASTMatchExpr(Expr);
+    for I := 0 to ME.Cases.Count - 1 do
+      AnnotateMonadExpr(TASTMatchCase(ME.Cases[I]).ValueExpr, T);
+  end;
+end;
+
+function TAetherTypeChecker.MergeInferredMonadTypes(const T1, T2: string): string;
+var
+  A1, A2, V1, E1, V2, E2, V, E: string;
+  B1, B2: string;
+  Args1, Args2: TStringList;
+begin
+  A1 := ResolveAliasType(T1);
+  A2 := ResolveAliasType(T2);
+  if A1 = '' then Exit(A2);
+  if A2 = '' then Exit(A1);
+
+  if (Pos('Option<', A1) = 1) and (Pos('Option<', A2) = 1) then
+  begin
+    if A1 = 'Option<GenericNone>' then Exit(A2);
+    if A2 = 'Option<GenericNone>' then Exit(A1);
+    Args1 := TStringList.Create;
+    Args2 := TStringList.Create;
+    try
+      if SplitGenericType(A1, B1, Args1) and SplitGenericType(A2, B2, Args2) then
+      begin
+        V := Args1[0];
+        if (V = 'IntLiteral') and (Args2[0] <> 'IntLiteral') then V := Args2[0]
+        else if (V = 'FloatLiteral') and (Args2[0] <> 'FloatLiteral') then V := Args2[0];
+        if V = 'IntLiteral' then V := 'Int32'
+        else if V = 'FloatLiteral' then V := 'Float64';
+        Exit('Option<' + NormalizeTypeName(V) + '>');
+      end;
+    finally
+      Args1.Free;
+      Args2.Free;
+    end;
+  end;
+
+  if (Pos('Result<', A1) = 1) and (Pos('Result<', A2) = 1) then
+  begin
+    SplitResultTypes(A1, V1, E1);
+    SplitResultTypes(A2, V2, E2);
+    if (V1 = 'GenericValue') or (V1 = 'IntLiteral') or (V1 = 'FloatLiteral') then
+    begin
+      if V2 <> 'GenericValue' then V := V2 else V := V1;
+    end
+    else
+      V := V1;
+    if (E1 = 'GenericError') or (E1 = 'IntLiteral') or (E1 = 'FloatLiteral') then
+    begin
+      if E2 <> 'GenericError' then E := E2 else E := E1;
+    end
+    else
+      E := E1;
+    if V = 'IntLiteral' then V := 'Int32' else if V = 'FloatLiteral' then V := 'Float64';
+    if E = 'IntLiteral' then E := 'Int32' else if E = 'FloatLiteral' then E := 'Float64';
+    Exit('Result<' + NormalizeTypeName(V) + ', ' + NormalizeTypeName(E) + '>');
+  end;
+
+  if A1 = 'Option<GenericNone>' then Exit(A2);
+  if A2 = 'Option<GenericNone>' then Exit(A1);
+  if A1 = 'IntLiteral' then Exit(A2);
+  if A2 = 'IntLiteral' then Exit(A1);
+  if A1 = 'FloatLiteral' then Exit(A2);
+  if A2 = 'FloatLiteral' then Exit(A1);
+  Result := A1;
+end;
+
+procedure TAetherTypeChecker.ReorderAndCheckFields(const KindLabel, TargetName: string; Fields: TASTNodeList; Call: TASTCallExpr);
+var
+  I, K: Integer;
+  Arg: TASTCallArg;
+  HasNamed, HasPositional, FoundField: Boolean;
+  ReorderedArgs: array of TASTCallArg;
+  ArgType, ExpectedType: string;
+begin
+  HasNamed := False;
+  HasPositional := False;
+  for I := 0 to Call.Args.Count - 1 do
+    if TASTCallArg(Call.Args[I]).FieldName <> '' then
+      HasNamed := True
+    else
+      HasPositional := True;
+
+  if HasNamed and HasPositional then
+    Error('E0061', Format('%s "%s" constructor cannot mix positional and named arguments',
+      [KindLabel, TargetName]), Call.Line, Call.Col);
+
+  if Call.Args.Count <> Fields.Count then
+    Error('E0061', Format('%s "%s" constructor expects %d fields, but got %d',
+      [KindLabel, TargetName, Fields.Count, Call.Args.Count]), Call.Line, Call.Col);
+
+  if HasNamed and (Fields.Count > 0) then
+  begin
+    SetLength(ReorderedArgs, Fields.Count);
+    for K := 0 to High(ReorderedArgs) do
+      ReorderedArgs[K] := nil;
+    for I := 0 to Call.Args.Count - 1 do
+    begin
+      Arg := TASTCallArg(Call.Args[I]);
+      FoundField := False;
+      for K := 0 to Fields.Count - 1 do
+      begin
+        if SameText(TASTRecordField(Fields[K]).Name, Arg.FieldName) then
+        begin
+          FoundField := True;
+          if ReorderedArgs[K] <> nil then
+            Error('E0061', Format('Duplicate field "%s" in constructor for %s "%s"',
+              [Arg.FieldName, LowerCase(KindLabel), TargetName]), Arg.Line, Arg.Col);
+          ReorderedArgs[K] := Arg;
+          Break;
+        end;
+      end;
+      if not FoundField then
+        Error('E0609', Format('%s "%s" has no field named "%s"',
+          [KindLabel, TargetName, Arg.FieldName]), Arg.Line, Arg.Col);
+    end;
+    FoundField := True;
+    for K := 0 to High(ReorderedArgs) do
+      if ReorderedArgs[K] = nil then
+        FoundField := False;
+    if FoundField then
+    begin
+      while Call.Args.Count > 0 do
+        Call.Args.ExtractIndex(0);
+      for K := 0 to High(ReorderedArgs) do
+      begin
+        ReorderedArgs[K].FieldName := '';
+        Call.Args.Add(ReorderedArgs[K]);
+      end;
+    end;
+  end;
+
+  for I := 0 to Call.Args.Count - 1 do
+  begin
+    Arg := TASTCallArg(Call.Args[I]);
+    ArgType := CheckExpr(Arg.Expr);
+    ExpectedType := NormalizeTypeName(TASTRecordField(Fields[I]).TypeName);
+    AnnotateMonadExpr(Arg.Expr, ExpectedType);
+    if not TypesAreCompatible(ExpectedType, ArgType) then
+      Error('E0308', Format('Field "%s" of %s "%s" expects "%s", but got "%s"',
+        [TASTRecordField(Fields[I]).Name, LowerCase(KindLabel), TargetName, ExpectedType, ArgType]), Arg.Line, Arg.Col);
+  end;
+end;
+
 function TAetherTypeChecker.IsMapType(const AType: string; out KeyType, ValType: string): Boolean;
 var
   Sym: TSymbol;
@@ -364,12 +1243,51 @@ end;
 function TAetherTypeChecker.TypesAreCompatible(const TargetType, SourceType: string): Boolean;
 var
   TargetElem, SourceElem, TargetKey, TargetVal, SourceKey, SourceVal, T, S: string;
+  TBase, SBase, TV, TE, SV, SE, TRet, SRet: string;
+  TArgs, SArgs: TStringList;
   IsFix: Boolean;
-  DimN: Integer;
+  DimN, I: Integer;
+  SymT, SymS: TSymbol;
 begin
-  T := ResolveAliasType(TargetType);
-  S := ResolveAliasType(SourceType);
+  T := NormalizeTypeName(ResolveAliasType(TargetType));
+  S := NormalizeTypeName(ResolveAliasType(SourceType));
   if T = S then Exit(True);
+  // Function types
+  TArgs := TStringList.Create;
+  SArgs := TStringList.Create;
+  try
+    if SplitFnType(T, TArgs, TRet) and SplitFnType(S, SArgs, SRet) then
+    begin
+      if TArgs.Count <> SArgs.Count then Exit(False);
+      for I := 0 to TArgs.Count - 1 do
+        if not TypesAreCompatible(TArgs[I], SArgs[I]) then Exit(False);
+      if SameText(TRet, 'Void') or SameText(SRet, 'Void') then
+        Exit(SameText(TRet, SRet));
+      Exit(TypesAreCompatible(TRet, SRet));
+    end;
+  finally
+    TArgs.Free;
+    SArgs.Free;
+  end;
+  // Anonymous tuple records (element-wise compatibility, e.g. IntLiteral promoted in literal)
+  if (Pos('Tuple', T) = 1) and (Pos('Tuple', S) = 1) and Assigned(FSymbols) then
+  begin
+    SymT := FSymbols.ResolveTypeSymbol(T);
+    SymS := FSymbols.ResolveTypeSymbol(S);
+    if Assigned(SymT) and Assigned(SymS) and (SymT.Node is TASTRecordDecl) and (SymS.Node is TASTRecordDecl) and
+       (TASTRecordDecl(SymT.Node).Fields.Count = TASTRecordDecl(SymS.Node).Fields.Count) then
+    begin
+      Result := True;
+      for I := 0 to TASTRecordDecl(SymT.Node).Fields.Count - 1 do
+        if not TypesAreCompatible(TASTRecordField(TASTRecordDecl(SymT.Node).Fields[I]).TypeName,
+                                  TASTRecordField(TASTRecordDecl(SymS.Node).Fields[I]).TypeName) then
+        begin
+          Result := False;
+          Break;
+        end;
+      if Result then Exit(True);
+    end;
+  end;
   // Associative maps
   if IsMapType(T, TargetKey, TargetVal) and IsMapType(S, SourceKey, SourceVal) then
     Exit(TypesAreCompatible(TargetKey, SourceKey) and TypesAreCompatible(TargetVal, SourceVal));
@@ -388,12 +1306,43 @@ begin
   if IsIntegerType(T) and IsIntegerType(S) then Exit(True);
   // Generic float literals are compatible with Float32 or Float64
   if (S = 'FloatLiteral') and (Pos('Float', T) > 0) then Exit(True);
-  // Generic Result / Option / Box
-  if (Pos('Result', T) = 1) and (Pos('Result', S) = 1) then Exit(True);
-  if (Pos('Option', T) = 1) and ((Pos('Option', S) = 1) or (S = 'Option<GenericNone>')) then Exit(True);
-  if (Pos('Box', T) = 1) and (Pos('Box', S) = 1) then Exit(True);
-  if (Pos('Task', T) = 1) and (Pos('Task', S) = 1) then Exit(True);
+  // Generic Result / Option / Box / Task
+  if (Pos('Result<', T) = 1) and (Pos('Result<', S) = 1) then
+  begin
+    if SplitResultTypes(T, TV, TE) and SplitResultTypes(S, SV, SE) then
+      Exit(((TV = 'GenericValue') or (SV = 'GenericValue') or TypesAreCompatible(TV, SV)) and
+           ((TE = 'GenericError') or (SE = 'GenericError') or TypesAreCompatible(TE, SE)));
+    Exit(True);
+  end;
+  if (Pos('Option<', T) = 1) and (Pos('Option<', S) = 1) then
+  begin
+    if (S = 'Option<GenericNone>') or (T = 'Option<GenericNone>') then Exit(True);
+    TArgs := TStringList.Create;
+    SArgs := TStringList.Create;
+    try
+      if SplitGenericType(T, TBase, TArgs) and SplitGenericType(S, SBase, SArgs) then
+        Exit(TypesAreCompatible(TArgs[0], SArgs[0]));
+    finally
+      TArgs.Free;
+      SArgs.Free;
+    end;
+    Exit(True);
+  end;
   if (Pos('Option<Box<', T) = 1) and ((Pos('Box<', S) = 1) or (S = 'Option<GenericNone>')) then Exit(True);
+  if (Pos('Box<', T) = 1) and (Pos('Box<', S) = 1) then
+  begin
+    TArgs := TStringList.Create;
+    SArgs := TStringList.Create;
+    try
+      if SplitGenericType(T, TBase, TArgs) and SplitGenericType(S, SBase, SArgs) then
+        Exit(TypesAreCompatible(TArgs[0], SArgs[0]));
+    finally
+      TArgs.Free;
+      SArgs.Free;
+    end;
+    Exit(True);
+  end;
+  if (Pos('Task<', T) = 1) and (Pos('Task<', S) = 1) then Exit(True);
   // Set literals, array literals, and map literals
   if (S = 'MapLiteral') and IsMapType(T, TargetKey, TargetVal) then Exit(True);
   if (S = 'SetLiteral') and (IsSetType(T) or IsArrayType(T, TargetElem, IsFix, DimN)) then Exit(True);
@@ -435,6 +1384,13 @@ begin
   // Special case: 'None' (empty Option)
   if SameText(Id.Name, 'None') then
     Exit('Option<GenericNone>');
+  if Id.Name = '__ValueNone' then
+  begin
+    if Id.ResolvedMonadType <> '' then
+      Exit(Id.ResolvedMonadType)
+    else
+      Exit('Option<GenericNone>');
+  end;
 
   // Special case: 'result' inside contracts
   if SameText(Id.Name, 'result') and Assigned(FCurrentFunction) then
@@ -445,18 +1401,29 @@ begin
     Error('E0425', Format('Identifier not found: "%s"', [Id.Name]), Id.Line, Id.Col);
 
   CheckVisibility(Sym.IsPublic, Sym.SourceModule, Sym.Name, Id.Line, Id.Col);
-  Result := Sym.TypeName;
+  if (Sym.Kind = skFunction) and (Sym.Node is TASTFunction) then
+  begin
+    Id.IsFnValueRef := True;
+    Id.ResolvedFnType := BuildFuncSignatureType(TASTFunction(Sym.Node));
+    Exit(Id.ResolvedFnType);
+  end;
+  if (Sym.Kind = skEnumVariant) and (Sym.Node is TASTEnumVariant) and
+     (TASTEnumVariant(Sym.Node).Fields.Count > 0) then
+    Error('E0061', Format('Enum variant "%s" expects %d field argument(s)',
+      [Sym.Name, TASTEnumVariant(Sym.Node).Fields.Count]), Id.Line, Id.Col);
+  Result := NormalizeTypeName(Sym.TypeName);
 end;
 
 function TAetherTypeChecker.CheckMemberAccess(Acc: TASTMemberAccessExpr): string;
 var
   TargetType, ModName: string;
   Sym: TSymbol;
-  I, P1, P2: Integer;
+  I: Integer;
   RecDecl: TASTRecordDecl;
   EnumDecl: TASTEnumDecl;
   Field: TASTRecordField;
-  InnerRecName, ResVal, ResErr: string;
+  InnerRecName, ResVal, ResErr, BaseG: string;
+  GArgs: TStringList;
 begin
   // If target is an Identifier or Module.Enum, it may be a Module/Alias, Enum, or variable
   if (Acc.Target is TASTMemberAccessExpr) and
@@ -472,7 +1439,13 @@ begin
       for I := 0 to EnumDecl.Variants.Count - 1 do
       begin
         if SameText(TASTEnumVariant(EnumDecl.Variants[I]).Name, Acc.Member) then
+        begin
+          if TASTEnumVariant(EnumDecl.Variants[I]).Fields.Count > 0 then
+            Error('E0061', Format('Enum variant "%s.%s" expects %d field argument(s)',
+              [EnumDecl.Name, TASTEnumVariant(EnumDecl.Variants[I]).Name, TASTEnumVariant(EnumDecl.Variants[I]).Fields.Count]),
+              Acc.Line, Acc.Col);
           Exit(EnumDecl.Name);
+        end;
       end;
       Error('E0599', Format('Variant "%s" does not belong to enum "%s"', [Acc.Member, EnumDecl.Name]), Acc.Line, Acc.Col);
     end;
@@ -486,7 +1459,7 @@ begin
       if (not Assigned(Sym)) or ((Sym.SourceModule <> '') and (not MatchesModuleName(ModName, Sym.SourceModule))) then
         Error('E0425', Format('Symbol "%s" not found in module "%s"', [Acc.Member, TASTIdentifierExpr(Acc.Target).Name]), Acc.Line, Acc.Col);
       CheckVisibility(Sym.IsPublic, Sym.SourceModule, Sym.Name, Acc.Line, Acc.Col);
-      Exit(Sym.TypeName);
+      Exit(NormalizeTypeName(Sym.TypeName));
     end;
 
     Sym := FSymbols.Resolve(TASTIdentifierExpr(Acc.Target).Name);
@@ -500,62 +1473,82 @@ begin
         for I := 0 to EnumDecl.Variants.Count - 1 do
         begin
           if SameText(TASTEnumVariant(EnumDecl.Variants[I]).Name, Acc.Member) then
+          begin
+            if TASTEnumVariant(EnumDecl.Variants[I]).Fields.Count > 0 then
+              Error('E0061', Format('Enum variant "%s.%s" expects %d field argument(s)',
+                [EnumDecl.Name, TASTEnumVariant(EnumDecl.Variants[I]).Name, TASTEnumVariant(EnumDecl.Variants[I]).Fields.Count]),
+                Acc.Line, Acc.Col);
             Exit(EnumDecl.Name);
+          end;
         end;
         Error('E0599', Format('Variant "%s" does not belong to enum "%s"', [Acc.Member, EnumDecl.Name]), Acc.Line, Acc.Col);
       end;
     end;
   end;
 
-  TargetType := ResolveAliasType(CheckExpr(Acc.Target));
+  TargetType := NormalizeTypeName(ResolveAliasType(CheckExpr(Acc.Target)));
 
   // Intrinsic Result properties (e.g., result.is_ok, result.value, result.error)
-  if Pos('Result', TargetType) = 1 then
+  if Pos('Result<', TargetType) = 1 then
   begin
     if SameText(Acc.Member, 'is_ok') or SameText(Acc.Member, 'is_err') then
       Exit('Bool');
     if SameText(Acc.Member, 'value') then
     begin
       SplitResultTypes(TargetType, ResVal, ResErr);
-      Exit(ResVal);
+      Exit(NormalizeTypeName(ResVal));
     end;
     if SameText(Acc.Member, 'error') then
     begin
       SplitResultTypes(TargetType, ResVal, ResErr);
-      Exit(ResErr);
+      Exit(NormalizeTypeName(ResErr));
     end;
   end;
 
   // Intrinsic Option properties (e.g., opt.is_some, opt.is_none, opt.value)
-  if (Pos('Option', TargetType) = 1) then
+  if Pos('Option<', TargetType) = 1 then
   begin
     if SameText(Acc.Member, 'is_some') or SameText(Acc.Member, 'is_none') then
       Exit('Bool');
 
     if SameText(Acc.Member, 'value') then
     begin
-      P1 := Pos('<', TargetType);
-      InnerRecName := Copy(TargetType, P1 + 1, Length(TargetType));
-      P2 := Pos('>', InnerRecName);
-      if P2 > 0 then InnerRecName := Copy(InnerRecName, 1, P2 - 1);
-      if Pos('Box<', InnerRecName) = 1 then
-      begin
-        P1 := Pos('<', InnerRecName);
-        InnerRecName := Copy(InnerRecName, P1 + 1, Length(InnerRecName));
-        P2 := Pos('>', InnerRecName);
-        if P2 > 0 then InnerRecName := Copy(InnerRecName, 1, P2 - 1);
+      GArgs := TStringList.Create;
+      try
+        if SplitGenericType(TargetType, BaseG, GArgs) then
+          InnerRecName := GArgs[0]
+        else
+          InnerRecName := Trim(Copy(TargetType, 8, Length(TargetType) - 8));
+        if Pos('Box<', InnerRecName) = 1 then
+        begin
+          GArgs.Clear;
+          if SplitGenericType(InnerRecName, BaseG, GArgs) then
+            InnerRecName := GArgs[0];
+        end;
+      finally
+        GArgs.Free;
       end;
-      Exit(InnerRecName);
+      Exit(NormalizeTypeName(InnerRecName));
     end;
   end;
 
   // Auto-deref of Box<Record> or Option<Box<Record>>
   if Pos('Box<', TargetType) > 0 then
   begin
-    P1 := Pos('Box<', TargetType);
-    InnerRecName := Copy(TargetType, P1 + 4, Length(TargetType));
-    P2 := Pos('>', InnerRecName);
-    if P2 > 0 then InnerRecName := Copy(InnerRecName, 1, P2 - 1);
+    InnerRecName := TargetType;
+    GArgs := TStringList.Create;
+    try
+      if Pos('Option<', InnerRecName) = 1 then
+      begin
+        if SplitGenericType(InnerRecName, BaseG, GArgs) then
+          InnerRecName := GArgs[0];
+      end;
+      GArgs.Clear;
+      if SplitGenericType(InnerRecName, BaseG, GArgs) and SameText(BaseG, 'Box') then
+        InnerRecName := NormalizeTypeName(GArgs[0]);
+    finally
+      GArgs.Free;
+    end;
 
     if SameText(Acc.Member, 'value') then
       Exit(InnerRecName);
@@ -568,7 +1561,7 @@ begin
       begin
         Field := TASTRecordField(RecDecl.Fields[I]);
         if SameText(Field.Name, Acc.Member) then
-          Exit(Field.TypeName);
+          Exit(NormalizeTypeName(Field.TypeName));
       end;
     end;
   end;
@@ -704,19 +1697,19 @@ begin
   begin
     if not Assigned(FCurrentFunction) then
       Error('E0572', 'Propagation operator "?" / "try" can only be used inside a function', Un.Line, Un.Col);
-    OperandType := ResolveAliasType(CheckExpr(Un.Expr));
-    FuncRet := ResolveAliasType(FCurrentFunction.ReturnType);
-    if Pos('Result', OperandType) = 1 then
+    OperandType := NormalizeTypeName(ResolveAliasType(CheckExpr(Un.Expr)));
+    FuncRet := NormalizeTypeName(ResolveAliasType(FCurrentFunction.ReturnType));
+    if Pos('Result<', OperandType) = 1 then
     begin
       SplitResultTypes(OperandType, ValType, ErrType);
-      if Pos('Result', FuncRet) <> 1 then
+      if Pos('Result<', FuncRet) <> 1 then
         Error('E0308', Format('Operator "?" on "%s" requires function "%s" to return Result, but it returns "%s"',
           [OperandType, FCurrentFunction.Name, FCurrentFunction.ReturnType]), Un.Line, Un.Col);
       SplitResultTypes(FuncRet, FuncValType, FuncErrType);
       if not TypesAreCompatible(FuncErrType, ErrType) then
         Error('E0308', Format('Error type "%s" in "?" is incompatible with error "%s" in return type of "%s"',
           [ErrType, FuncErrType, FCurrentFunction.Name]), Un.Line, Un.Col);
-      Exit(ValType);
+      Exit(NormalizeTypeName(ValType));
     end
     else if Pos('Option<', OperandType) = 1 then
     begin
@@ -724,7 +1717,7 @@ begin
       if Pos('Option<', FuncRet) <> 1 then
         Error('E0308', Format('Operator "?" on "%s" requires function "%s" to return Option, but it returns "%s"',
           [OperandType, FCurrentFunction.Name, FCurrentFunction.ReturnType]), Un.Line, Un.Col);
-      Exit(ValType);
+      Exit(NormalizeTypeName(ValType));
     end
     else
       Error('E0308', Format('Operator "?" / "try" requires a Result<T, E> or Option<T> expression, got "%s"', [OperandType]), Un.Line, Un.Col);
@@ -891,16 +1884,46 @@ end;
 function TAetherTypeChecker.CheckCall(Call: TASTCallExpr): string;
 var
   Sym, SymMono, TypeSym: TSymbol;
-  FuncNode, MonoFunc: TASTFunction;
+  FuncNode, MonoFunc, SavedCurFunc: TASTFunction;
   RecDecl: TASTRecordDecl;
+  EnumDecl: TASTEnumDecl;
+  VariantNode: TASTEnumVariant;
   SubSym: TSymbol;
-  I, K: Integer;
+  I, K, G: Integer;
   Arg: TASTCallArg;
   HasNamed, HasPositional, FoundField: Boolean;
-  ReorderedArgs: array of TASTCallArg;
   ArgType, ExpectedType, Mangled, MonomorphedName, ElemType, KeyType, ValType: string;
-  T1, T2, T3: string;
+  T1, T2, T3, NormArg, FieldNameTarget, FnRet, CalleeT: string;
+  ConcreteArgs, Inferred, FnParams: TStringList;
+  RecExpr: TASTExpr;
 begin
+  if Assigned(Call.CalleeExpr) then
+  begin
+    CalleeT := NormalizeTypeName(ResolveAliasType(CheckExpr(Call.CalleeExpr)));
+    FnParams := TStringList.Create;
+    try
+      if not SplitFnType(CalleeT, FnParams, FnRet) then
+        Error('E0618', Format('Expression of type "%s" is not callable', [CalleeT]), Call.Line, Call.Col);
+      if Call.Args.Count <> FnParams.Count then
+        Error('E0061', Format('Callable of type "%s" expects %d arguments, but got %d',
+          [CalleeT, FnParams.Count, Call.Args.Count]), Call.Line, Call.Col);
+      for I := 0 to Call.Args.Count - 1 do
+      begin
+        Arg := TASTCallArg(Call.Args[I]);
+        ExpectedType := NormalizeTypeName(FnParams[I]);
+        AnnotateMonadExpr(Arg.Expr, ExpectedType);
+        ArgType := CheckExpr(Arg.Expr);
+        if not TypesAreCompatible(ExpectedType, ArgType) then
+          Error('E0308', Format('Argument %d expects "%s", but got "%s"',
+            [I + 1, ExpectedType, ArgType]), Arg.Line, Arg.Col);
+      end;
+      Call.IsIndirectCall := True;
+      Call.IndirectFnType := CalleeT;
+      Exit(FnRet);
+    finally
+      FnParams.Free;
+    end;
+  end;
   if Call.Callee = '__InterpToStr' then
   begin
     if Call.Args.Count <> 1 then
@@ -949,7 +1972,11 @@ begin
   begin
     if Call.Args.Count <> 1 then
       Error('E0061', 'Some() requires exactly 1 argument', Call.Line, Call.Col);
-    ArgType := CheckExpr(TASTCallArg(Call.Args[0]).Expr);
+    ArgType := NormalizeTypeName(CheckExpr(TASTCallArg(Call.Args[0]).Expr));
+    NormArg := ArgType;
+    if NormArg = 'IntLiteral' then NormArg := 'Int32'
+    else if NormArg = 'FloatLiteral' then NormArg := 'Float64';
+    Call.ResolvedMonadType := 'Option<' + NormArg + '>';
     Exit('Option<' + ArgType + '>');
   end;
 
@@ -977,6 +2004,29 @@ begin
     else Exit('String');
   end;
 
+  if (Pos('.', Call.Callee) > 0) then
+  begin
+    T1 := Copy(Call.Callee, 1, Pos('.', Call.Callee) - 1);
+    T2 := Copy(Call.Callee, Pos('.', Call.Callee) + 1, Length(Call.Callee));
+    TypeSym := FSymbols.ResolveTypeSymbol(T1);
+    if Assigned(TypeSym) and (TypeSym.Kind = skType) and (TypeSym.Node is TASTEnumDecl) then
+    begin
+      EnumDecl := TASTEnumDecl(TypeSym.Node);
+      VariantNode := nil;
+      for I := 0 to EnumDecl.Variants.Count - 1 do
+        if SameText(TASTEnumVariant(EnumDecl.Variants[I]).Name, T2) then
+        begin
+          VariantNode := TASTEnumVariant(EnumDecl.Variants[I]);
+          Break;
+        end;
+      if Assigned(VariantNode) then
+      begin
+        ReorderAndCheckFields('Enum variant', Call.Callee, VariantNode.Fields, Call);
+        Exit(EnumDecl.Name);
+      end;
+    end;
+  end;
+
   // Qualified resolution via Alias/Module (e.g., math.Sin(x), hmod.Type.New(x)) or Associated Method (e.g., Point.New(x, y))
   if Call.IsQualified and (Call.Args.Count > 0) then
   begin
@@ -997,6 +2047,24 @@ begin
         if Assigned(TypeSym) and (TypeSym.Kind = skType) then
         begin
           CheckVisibility(TypeSym.IsPublic, TypeSym.SourceModule, TypeSym.Name, Call.Line, Call.Col);
+          if TypeSym.Node is TASTEnumDecl then
+          begin
+            EnumDecl := TASTEnumDecl(TypeSym.Node);
+            VariantNode := nil;
+            for I := 0 to EnumDecl.Variants.Count - 1 do
+              if SameText(TASTEnumVariant(EnumDecl.Variants[I]).Name, Call.Callee) then
+              begin
+                VariantNode := TASTEnumVariant(EnumDecl.Variants[I]);
+                Break;
+              end;
+            if not Assigned(VariantNode) then
+              Error('E0599', Format('Variant "%s" does not belong to enum "%s"', [Call.Callee, EnumDecl.Name]), Call.Line, Call.Col);
+            Call.Args.Delete(0);
+            Call.IsQualified := False;
+            Call.Callee := EnumDecl.Name + '.' + VariantNode.Name;
+            ReorderAndCheckFields('Enum variant', Call.Callee, VariantNode.Fields, Call);
+            Exit(EnumDecl.Name);
+          end;
           Mangled := FindTraitMethod(T1, Call.Callee);
           if Mangled <> '' then
           begin
@@ -1019,6 +2087,24 @@ begin
         Error('E0425', Format('Type "%s" not found in module "%s"',
           [T1, TASTIdentifierExpr(TASTMemberAccessExpr(TASTCallArg(Call.Args[0]).Expr).Target).Name]), Call.Line, Call.Col);
       CheckVisibility(TypeSym.IsPublic, TypeSym.SourceModule, TypeSym.Name, Call.Line, Call.Col);
+      if TypeSym.Node is TASTEnumDecl then
+      begin
+        EnumDecl := TASTEnumDecl(TypeSym.Node);
+        VariantNode := nil;
+        for I := 0 to EnumDecl.Variants.Count - 1 do
+          if SameText(TASTEnumVariant(EnumDecl.Variants[I]).Name, Call.Callee) then
+          begin
+            VariantNode := TASTEnumVariant(EnumDecl.Variants[I]);
+            Break;
+          end;
+        if not Assigned(VariantNode) then
+          Error('E0599', Format('Variant "%s" does not belong to enum "%s"', [Call.Callee, EnumDecl.Name]), Call.Line, Call.Col);
+        Call.Args.Delete(0);
+        Call.IsQualified := False;
+        Call.Callee := EnumDecl.Name + '.' + VariantNode.Name;
+        ReorderAndCheckFields('Enum variant', Call.Callee, VariantNode.Fields, Call);
+        Exit(EnumDecl.Name);
+      end;
       Mangled := FindTraitMethod(T1, Call.Callee);
       if Mangled <> '' then
       begin
@@ -1030,7 +2116,90 @@ begin
     end;
   end;
 
+  // Record field callback via UFCS syntax: obj.cb(arg)
+  if Call.IsQualified and (Call.Args.Count >= 1) then
+  begin
+    RecExpr := TASTCallArg(Call.Args[0]).Expr;
+    if not ((RecExpr is TASTIdentifierExpr) and
+            Assigned(FSymbols.Resolve(TASTIdentifierExpr(RecExpr).Name)) and
+            (FSymbols.Resolve(TASTIdentifierExpr(RecExpr).Name).Kind = skType)) then
+    begin
+      ArgType := NormalizeTypeName(ResolveAliasType(CheckExpr(RecExpr)));
+      TypeSym := FSymbols.ResolveTypeSymbol(ArgType);
+      if Assigned(TypeSym) and (TypeSym.Node is TASTRecordDecl) then
+      begin
+        RecDecl := TASTRecordDecl(TypeSym.Node);
+        for I := 0 to RecDecl.Fields.Count - 1 do
+        begin
+          if SameText(TASTRecordField(RecDecl.Fields[I]).Name, Call.Callee) then
+          begin
+            CalleeT := NormalizeTypeName(ResolveAliasType(TASTRecordField(RecDecl.Fields[I]).TypeName));
+            FnParams := TStringList.Create;
+            try
+              if SplitFnType(CalleeT, FnParams, FnRet) then
+              begin
+                CheckVisibility(TASTRecordField(RecDecl.Fields[I]).IsPublic, RecDecl.SourceModule, RecDecl.Name + '.' + Call.Callee, Call.Line, Call.Col);
+                TASTCallArg(Call.Args[0]).Expr := nil;
+                Call.Args.Delete(0);
+                Call.IsQualified := False;
+                Call.CalleeExpr := TASTMemberAccessExpr.Create(Call.Line, Call.Col, RecExpr, Call.Callee);
+                Call.Callee := '';
+                if Call.Args.Count <> FnParams.Count then
+                  Error('E0061', Format('Callback "%s" expects %d arguments, but got %d',
+                    [TASTRecordField(RecDecl.Fields[I]).Name, FnParams.Count, Call.Args.Count]), Call.Line, Call.Col);
+                for K := 0 to Call.Args.Count - 1 do
+                begin
+                  Arg := TASTCallArg(Call.Args[K]);
+                  ExpectedType := NormalizeTypeName(FnParams[K]);
+                  AnnotateMonadExpr(Arg.Expr, ExpectedType);
+                  T3 := CheckExpr(Arg.Expr);
+                  if not TypesAreCompatible(ExpectedType, T3) then
+                    Error('E0308', Format('Argument %d expects "%s", but got "%s"',
+                      [K + 1, ExpectedType, T3]), Arg.Line, Arg.Col);
+                end;
+                Call.IsIndirectCall := True;
+                Call.IndirectFnType := CalleeT;
+                Exit(FnRet);
+              end;
+            finally
+              FnParams.Free;
+            end;
+          end;
+        end;
+      end;
+    end;
+  end;
+
   Sym := FSymbols.Resolve(Call.Callee);
+  if Assigned(Sym) and (Sym.Kind = skVariable) then
+  begin
+    CalleeT := NormalizeTypeName(ResolveAliasType(Sym.TypeName));
+    FnParams := TStringList.Create;
+    try
+      if SplitFnType(CalleeT, FnParams, FnRet) then
+      begin
+        if Call.Args.Count <> FnParams.Count then
+          Error('E0061', Format('Callable "%s" expects %d arguments, but got %d',
+            [Call.Callee, FnParams.Count, Call.Args.Count]), Call.Line, Call.Col);
+        for I := 0 to Call.Args.Count - 1 do
+        begin
+          Arg := TASTCallArg(Call.Args[I]);
+          ExpectedType := NormalizeTypeName(FnParams[I]);
+          AnnotateMonadExpr(Arg.Expr, ExpectedType);
+          ArgType := CheckExpr(Arg.Expr);
+          if not TypesAreCompatible(ExpectedType, ArgType) then
+            Error('E0308', Format('Argument %d of callable "%s" expects "%s", but got "%s"',
+              [I + 1, Call.Callee, ExpectedType, ArgType]), Arg.Line, Arg.Col);
+        end;
+        Call.IsIndirectCall := True;
+        Call.IndirectFnType := CalleeT;
+        Exit(FnRet);
+      end;
+    finally
+      FnParams.Free;
+    end;
+  end;
+
   if (not Assigned(Sym)) or (Sym.Kind = skVariable) or (Sym.Kind = skTrait) then
   begin
     TypeSym := FSymbols.ResolveTypeSymbol(Call.Callee);
@@ -1081,79 +2250,85 @@ begin
 
   CheckVisibility(Sym.IsPublic, Sym.SourceModule, Sym.Name, Call.Line, Call.Col);
 
-  // Record Constructor: DataBuffer(id: 101, size: 2048) or positional
+  // Unqualified Enum Variant Constructor: Circle(5.0), Rect(width: 3.0, height: 4.0)
+  if (Sym.Kind = skEnumVariant) and (Sym.Node is TASTEnumVariant) then
+  begin
+    VariantNode := TASTEnumVariant(Sym.Node);
+    Call.Callee := Sym.TypeName + '.' + VariantNode.Name;
+    ReorderAndCheckFields('Enum variant', Call.Callee, VariantNode.Fields, Call);
+    Exit(Sym.TypeName);
+  end;
+
+  // Record Constructor: DataBuffer(id: 101, size: 2048), Pair<Int32, String>(1, "a"), or Pair(1, "a")
   if (Sym.Kind = skType) and (Sym.Node is TASTRecordDecl) then
   begin
     RecDecl := TASTRecordDecl(Sym.Node);
-    HasNamed := False;
-    HasPositional := False;
-    for I := 0 to Call.Args.Count - 1 do
-      if TASTCallArg(Call.Args[I]).FieldName <> '' then
-        HasNamed := True
-      else
-        HasPositional := True;
-
-    if HasNamed and HasPositional then
-      Error('E0061', Format('Record "%s" constructor cannot mix positional and named arguments',
-        [RecDecl.Name]), Call.Line, Call.Col);
-
-    if Call.Args.Count <> RecDecl.Fields.Count then
-      Error('E0061', Format('Record "%s" constructor expects %d fields, but got %d',
-        [RecDecl.Name, RecDecl.Fields.Count, Call.Args.Count]), Call.Line, Call.Col);
-
-    if HasNamed then
+    if Call.GenericArgs.Count > 0 then
     begin
-      SetLength(ReorderedArgs, RecDecl.Fields.Count);
-      for K := 0 to High(ReorderedArgs) do
-        ReorderedArgs[K] := nil;
+      if RecDecl.GenericParams.Count = 0 then
+        Error('E0107', Format('Record "%s" does not take generic type arguments', [RecDecl.Name]), Call.Line, Call.Col);
+      Mangled := InstantiateGenericRecord(RecDecl, Call.GenericArgs, Call.Line, Call.Col);
+      TypeSym := FSymbols.ResolveTypeSymbol(Mangled);
+      RecDecl := TASTRecordDecl(TypeSym.Node);
+      Call.Callee := Mangled;
+    end
+    else if RecDecl.GenericParams.Count > 0 then
+    begin
+      HasNamed := False;
+      HasPositional := False;
       for I := 0 to Call.Args.Count - 1 do
-      begin
-        Arg := TASTCallArg(Call.Args[I]);
-        FoundField := False;
-        for K := 0 to RecDecl.Fields.Count - 1 do
+        if TASTCallArg(Call.Args[I]).FieldName <> '' then HasNamed := True
+        else HasPositional := True;
+      if HasNamed and HasPositional then
+        Error('E0061', Format('Record "%s" constructor cannot mix positional and named arguments', [RecDecl.Name]), Call.Line, Call.Col);
+      if Call.Args.Count <> RecDecl.Fields.Count then
+        Error('E0061', Format('Record "%s" constructor expects %d fields, but got %d',
+          [RecDecl.Name, RecDecl.Fields.Count, Call.Args.Count]), Call.Line, Call.Col);
+
+      Inferred := TStringList.Create;
+      try
+        for G := 0 to RecDecl.GenericParams.Count - 1 do
+          Inferred.Add('');
+        for I := 0 to Call.Args.Count - 1 do
         begin
-          if SameText(TASTRecordField(RecDecl.Fields[K]).Name, Arg.FieldName) then
+          Arg := TASTCallArg(Call.Args[I]);
+          ArgType := CheckExpr(Arg.Expr);
+          if HasNamed then
           begin
-            FoundField := True;
-            if ReorderedArgs[K] <> nil then
-              Error('E0061', Format('Duplicate field "%s" in constructor for record "%s"',
-                [Arg.FieldName, RecDecl.Name]), Arg.Line, Arg.Col);
-            ReorderedArgs[K] := Arg;
-            Break;
-          end;
+            FieldNameTarget := Arg.FieldName;
+            FoundField := False;
+            for K := 0 to RecDecl.Fields.Count - 1 do
+              if SameText(TASTRecordField(RecDecl.Fields[K]).Name, FieldNameTarget) then
+              begin
+                UnifyGenericTypes(TASTRecordField(RecDecl.Fields[K]).TypeName, ArgType, RecDecl.GenericParams, Inferred);
+                FoundField := True;
+                Break;
+              end;
+            if not FoundField then
+              Error('E0609', Format('Record "%s" has no field named "%s"', [RecDecl.Name, FieldNameTarget]), Arg.Line, Arg.Col);
+          end
+          else
+            UnifyGenericTypes(TASTRecordField(RecDecl.Fields[I]).TypeName, ArgType, RecDecl.GenericParams, Inferred);
         end;
-        if not FoundField then
-          Error('E0609', Format('Record "%s" has no field named "%s"',
-            [RecDecl.Name, Arg.FieldName]), Arg.Line, Arg.Col);
-      end;
-      FoundField := True;
-      for K := 0 to High(ReorderedArgs) do
-        if ReorderedArgs[K] = nil then
-          FoundField := False;
-      if FoundField then
-      begin
-        while Call.Args.Count > 0 do
-          Call.Args.ExtractIndex(0);
-        for K := 0 to High(ReorderedArgs) do
+        for G := 0 to RecDecl.GenericParams.Count - 1 do
         begin
-          ReorderedArgs[K].FieldName := '';
-          Call.Args.Add(ReorderedArgs[K]);
+          if Inferred[G] = '' then
+            Error('E0282', Format('Cannot infer generic type parameter "%s" for record "%s"; specify "<...>" explicitly',
+              [RecDecl.GenericParams[G], RecDecl.Name]), Call.Line, Call.Col);
+          if Inferred[G] = 'IntLiteral' then Inferred[G] := 'Int32'
+          else if Inferred[G] = 'FloatLiteral' then Inferred[G] := 'Float64'
+          else Inferred[G] := NormalizeTypeName(Inferred[G]);
         end;
+        Mangled := InstantiateGenericRecord(RecDecl, Inferred, Call.Line, Call.Col);
+        TypeSym := FSymbols.ResolveTypeSymbol(Mangled);
+        RecDecl := TASTRecordDecl(TypeSym.Node);
+        Call.Callee := Mangled;
+      finally
+        Inferred.Free;
       end;
     end;
 
-    for I := 0 to Call.Args.Count - 1 do
-    begin
-      Arg := TASTCallArg(Call.Args[I]);
-      ArgType := CheckExpr(Arg.Expr);
-      ExpectedType := TASTRecordField(RecDecl.Fields[I]).TypeName;
-      if (Arg.Expr is TASTIdentifierExpr) and SameText(TASTIdentifierExpr(Arg.Expr).Name, 'None') and
-         IsValueOptionType(ExpectedType) then
-        TASTIdentifierExpr(Arg.Expr).Name := '__ValueNone';
-      if not TypesAreCompatible(ExpectedType, ArgType) then
-        Error('E0308', Format('Field "%s" of record "%s" expects "%s", but got "%s"',
-          [TASTRecordField(RecDecl.Fields[I]).Name, RecDecl.Name, ExpectedType, ArgType]), Arg.Line, Arg.Col);
-    end;
+    ReorderAndCheckFields('Record', RecDecl.Name, RecDecl.Fields, Call);
     Exit(RecDecl.Name);
   end;
 
@@ -1172,42 +2347,99 @@ begin
   begin
     FuncNode := TASTFunction(Sym.Node);
 
-    // If generic function with Trait Bound, monomorphize for the concrete type
-    if Assigned(FuncNode) and (FuncNode.GenericParam <> '') then
+    // If generic function (<T> or <T, U: Trait>), resolve/infer arguments and monomorphize
+    if Assigned(FuncNode) and ((FuncNode.GenericParams.Count > 0) or (FuncNode.GenericParam <> '')) then
     begin
-      if Call.Args.Count = 0 then
-        Error('E0061', Format('Generic function "%s" requires at least 1 argument for type inference', [FuncNode.Name]), Call.Line, Call.Col);
-
-      ArgType := CheckExpr(TASTCallArg(Call.Args[0]).Expr);
-      if ArgType = 'IntLiteral' then ArgType := 'Int32'
-      else if ArgType = 'FloatLiteral' then ArgType := 'Float64';
-      if Pos('Box<', ArgType) = 1 then
+      if FuncNode.GenericParams.Count = 0 then
       begin
-        ArgType := Copy(ArgType, 5, Length(ArgType) - 5);
-        if (Length(ArgType) > 0) and (ArgType[Length(ArgType)] = '>') then
-          ArgType := Copy(ArgType, 1, Length(ArgType) - 1);
+        FuncNode.GenericParams.Add(FuncNode.GenericParam);
+        FuncNode.TraitBounds.Add(FuncNode.TraitBound);
       end;
 
-      if FuncNode.TraitBound <> '' then
-      begin
-        if not TypeImplementsTrait(ArgType, FuncNode.TraitBound) then
-          Error('E0277', Format('Type "%s" does not implement trait "%s"', [ArgType, FuncNode.TraitBound]), Call.Line, Call.Col);
-      end;
+      ConcreteArgs := TStringList.Create;
+      try
+        if Call.GenericArgs.Count > 0 then
+        begin
+          if Call.GenericArgs.Count <> FuncNode.GenericParams.Count then
+            Error('E0061', Format('Generic function "%s" expects %d type argument(s), but got %d',
+              [FuncNode.Name, FuncNode.GenericParams.Count, Call.GenericArgs.Count]), Call.Line, Call.Col);
+          for G := 0 to Call.GenericArgs.Count - 1 do
+            ConcreteArgs.Add(NormalizeTypeName(Call.GenericArgs[G]));
+        end
+        else
+        begin
+          if Call.Args.Count <> FuncNode.Params.Count then
+            Error('E0061', Format('Generic function "%s" expects %d arguments, but got %d',
+              [FuncNode.Name, FuncNode.Params.Count, Call.Args.Count]), Call.Line, Call.Col);
+          for G := 0 to FuncNode.GenericParams.Count - 1 do
+            ConcreteArgs.Add('');
+          for I := 0 to Call.Args.Count - 1 do
+          begin
+            ArgType := CheckExpr(TASTCallArg(Call.Args[I]).Expr);
+            ExpectedType := TASTParam(FuncNode.Params[I]).TypeName;
+            // Preserve Box<Record> unwrapping for single-param trait-bounded generics
+            if (FuncNode.GenericParams.Count = 1) and (FuncNode.TraitBounds.Count > 0) and
+               (FuncNode.TraitBounds[0] <> '') and SameText(ExpectedType, FuncNode.GenericParams[0]) and
+               (Pos('Box<', ArgType) = 1) then
+              ArgType := Trim(Copy(ArgType, 5, Length(ArgType) - 5));
+            UnifyGenericTypes(ExpectedType, ArgType, FuncNode.GenericParams, ConcreteArgs);
+          end;
+          for G := 0 to FuncNode.GenericParams.Count - 1 do
+          begin
+            if ConcreteArgs[G] = '' then
+              Error('E0282', Format('Cannot infer type parameter "%s" for generic function "%s"',
+                [FuncNode.GenericParams[G], FuncNode.Name]), Call.Line, Call.Col);
+            if ConcreteArgs[G] = 'IntLiteral' then ConcreteArgs[G] := 'Int32'
+            else if ConcreteArgs[G] = 'FloatLiteral' then ConcreteArgs[G] := 'Float64'
+            else ConcreteArgs[G] := NormalizeTypeName(ConcreteArgs[G]);
+          end;
+        end;
 
-      MonomorphedName := FuncNode.Name + '_' + ArgType;
-      SymMono := FSymbols.Resolve(MonomorphedName);
-      if not Assigned(SymMono) then
-      begin
-        MonoFunc := MonomorphizeFunction(FuncNode, ArgType);
-        FModule.Functions.Add(MonoFunc);
-        FSymbols.Define(TSymbol.Create(MonoFunc.Name, skFunction, MonoFunc.ReturnType, MonoFunc.Line, MonoFunc.Col, False, owNone, MonoFunc));
-        CheckFunction(MonoFunc);
-        SymMono := FSymbols.Resolve(MonomorphedName);
-      end;
+        for G := 0 to FuncNode.GenericParams.Count - 1 do
+        begin
+          if (G < FuncNode.TraitBounds.Count) and (FuncNode.TraitBounds[G] <> '') then
+          begin
+            if not TypeImplementsTrait(ConcreteArgs[G], FuncNode.TraitBounds[G]) then
+              Error('E0277', Format('Type "%s" does not implement trait "%s"',
+                [ConcreteArgs[G], FuncNode.TraitBounds[G]]), Call.Line, Call.Col);
+          end;
+        end;
 
-      Call.Callee := MonomorphedName;
-      Sym := SymMono;
-      FuncNode := TASTFunction(Sym.Node);
+        if ConcreteArgs.Count = 1 then
+          MonomorphedName := FuncNode.Name + '_' + MangleTypeName(ConcreteArgs[0])
+        else
+        begin
+          MonomorphedName := FuncNode.Name;
+          for G := 0 to ConcreteArgs.Count - 1 do
+            MonomorphedName := MonomorphedName + '__' + MangleTypeName(ConcreteArgs[G]);
+        end;
+
+        SymMono := FSymbols.GlobalScope.Resolve(MonomorphedName);
+        if not Assigned(SymMono) then
+          SymMono := FSymbols.Resolve(MonomorphedName);
+        if not Assigned(SymMono) then
+        begin
+          MonoFunc := MonomorphizeFunction(FuncNode, ConcreteArgs);
+          MonoFunc.Name := MonomorphedName;
+          FModule.Functions.Add(MonoFunc);
+          SymMono := TSymbol.Create(MonoFunc.Name, skFunction, MonoFunc.ReturnType, MonoFunc.Line, MonoFunc.Col, False, owNone, MonoFunc);
+          SymMono.IsPublic := MonoFunc.IsPublic;
+          SymMono.SourceModule := MonoFunc.SourceModule;
+          FSymbols.GlobalScope.Define(SymMono);
+          SavedCurFunc := FCurrentFunction;
+          try
+            CheckFunction(MonoFunc);
+          finally
+            FCurrentFunction := SavedCurFunc;
+          end;
+        end;
+
+        Call.Callee := MonomorphedName;
+        Sym := SymMono;
+        FuncNode := TASTFunction(Sym.Node);
+      finally
+        ConcreteArgs.Free;
+      end;
     end;
 
     // Built-in PrintLn with variadic parameters
@@ -1966,21 +3198,374 @@ begin
       for I := 0 to Call.Args.Count - 1 do
       begin
         Arg := TASTCallArg(Call.Args[I]);
+        ExpectedType := NormalizeTypeName(TASTParam(FuncNode.Params[I]).TypeName);
+        AnnotateMonadExpr(Arg.Expr, ExpectedType);
         ArgType := CheckExpr(Arg.Expr);
-        ExpectedType := TASTParam(FuncNode.Params[I]).TypeName;
-        if (Arg.Expr is TASTIdentifierExpr) and SameText(TASTIdentifierExpr(Arg.Expr).Name, 'None') and
-           IsValueOptionType(ExpectedType) then
-          TASTIdentifierExpr(Arg.Expr).Name := '__ValueNone';
+        AnnotateMonadExpr(Arg.Expr, ExpectedType);
         if not TypesAreCompatible(ExpectedType, ArgType) then
           Error('E0308', Format('Argument %d of function "%s" expects "%s", but got "%s"',
             [I + 1, FuncNode.Name, ExpectedType, ArgType]), Arg.Line, Arg.Col);
       end;
     end;
-    Exit(Sym.TypeName);
+    Exit(NormalizeTypeName(Sym.TypeName));
   end;
 
   Error('E0618', Format('"%s" is neither a function nor a constructor', [Call.Callee]), Call.Line, Call.Col);
   Result := 'Unknown';
+end;
+
+function TAetherTypeChecker.CheckTupleLiteral(Tup: TASTTupleLiteralExpr): string;
+var
+  I: Integer;
+  ET, ExistingType: string;
+  ElemTypes: TStringList;
+  Sym: TSymbol;
+  RecDecl: TASTRecordDecl;
+begin
+  ExistingType := ResolveAliasType(Tup.ResolvedType);
+  ElemTypes := TStringList.Create;
+  try
+    for I := 0 to Tup.Elements.Count - 1 do
+    begin
+      ET := NormalizeTypeName(CheckExpr(TASTExpr(Tup.Elements[I])));
+      if ET = 'IntLiteral' then ET := 'Int32'
+      else if ET = 'FloatLiteral' then ET := 'Float64';
+      ElemTypes.Add(ET);
+    end;
+
+    if (ExistingType <> '') and Assigned(FSymbols) then
+    begin
+      Sym := FSymbols.ResolveTypeSymbol(ExistingType);
+      if Assigned(Sym) and (Sym.Node is TASTRecordDecl) and (Pos('Tuple', TASTRecordDecl(Sym.Node).Name) = 1) and
+         (TASTRecordDecl(Sym.Node).Fields.Count = Tup.Elements.Count) then
+      begin
+        RecDecl := TASTRecordDecl(Sym.Node);
+        Result := RecDecl.Name;
+        for I := 0 to RecDecl.Fields.Count - 1 do
+          if not TypesAreCompatible(TASTRecordField(RecDecl.Fields[I]).TypeName, ElemTypes[I]) then
+          begin
+            Result := '';
+            Break;
+          end;
+        if Result <> '' then
+        begin
+          Tup.ResolvedType := Result;
+          Exit;
+        end;
+      end;
+    end;
+
+    Result := EnsureTupleRecord(ElemTypes, Tup.Line, Tup.Col);
+    Tup.ResolvedType := Result;
+  finally
+    ElemTypes.Free;
+  end;
+end;
+
+procedure TAetherTypeChecker.CollectLambdaCaptures(Lambda: TASTLambdaExpr; OuterScope: TScope);
+var
+  Bound: TStringList;
+
+  procedure AddBound(const S: string);
+  begin
+    if (S <> '') and (S <> '_') and (Bound.IndexOf(S) < 0) then
+      Bound.Add(S);
+  end;
+
+  procedure TryCapture(const IdName: string);
+  var
+    Sym: TSymbol;
+    CType: string;
+  begin
+    if (IdName = '') or SameText(IdName, 'None') or SameText(IdName, 'result') or
+       (Bound.IndexOf(IdName) >= 0) then
+      Exit;
+    if not Assigned(OuterScope) then Exit;
+    Sym := OuterScope.Resolve(IdName);
+    if Assigned(Sym) and (Sym.Kind = skVariable) then
+    begin
+      if Assigned(FSymbols) and Assigned(FSymbols.GlobalScope.ResolveLocal(Sym.Name)) then
+        Exit; // module variable is globally visible
+      if Lambda.CaptureNames.IndexOf(Sym.Name) < 0 then
+      begin
+        CType := NormalizeTypeName(Sym.TypeName);
+        Lambda.CaptureNames.Add(Sym.Name);
+        Lambda.CaptureTypes.Add(CType);
+      end;
+    end;
+  end;
+
+  procedure WalkExpr(E: TASTExpr);
+  var
+    I, K: Integer;
+    C: TASTCallExpr;
+    ME: TASTMatchExpr;
+    CaseN: TASTMatchCase;
+    NestedL: TASTLambdaExpr;
+  begin
+    if not Assigned(E) then Exit;
+    if E is TASTIdentifierExpr then
+      TryCapture(TASTIdentifierExpr(E).Name)
+    else if E is TASTMemberAccessExpr then
+      WalkExpr(TASTMemberAccessExpr(E).Target)
+    else if E is TASTBinaryExpr then
+    begin
+      WalkExpr(TASTBinaryExpr(E).Left);
+      WalkExpr(TASTBinaryExpr(E).Right);
+    end
+    else if E is TASTUnaryExpr then
+      WalkExpr(TASTUnaryExpr(E).Expr)
+    else if E is TASTAwaitExpr then
+      WalkExpr(TASTAwaitExpr(E).Expr)
+    else if E is TASTSpawnExpr then
+      WalkExpr(TASTSpawnExpr(E).CallExpr)
+    else if E is TASTCallExpr then
+    begin
+      C := TASTCallExpr(E);
+      if Assigned(C.CalleeExpr) then
+        WalkExpr(C.CalleeExpr)
+      else if C.IsIndirectCall and (C.Callee <> '') then
+        TryCapture(C.Callee);
+      for I := 0 to C.Args.Count - 1 do
+        WalkExpr(TASTCallArg(C.Args[I]).Expr);
+    end
+    else if E is TASTIndexExpr then
+    begin
+      WalkExpr(TASTIndexExpr(E).Target);
+      for I := 0 to TASTIndexExpr(E).Indices.Count - 1 do
+        WalkExpr(TASTExpr(TASTIndexExpr(E).Indices[I]));
+    end
+    else if E is TASTSetLiteralExpr then
+      for I := 0 to TASTSetLiteralExpr(E).Elements.Count - 1 do
+        WalkExpr(TASTExpr(TASTSetLiteralExpr(E).Elements[I]))
+    else if E is TASTMapLiteralExpr then
+      for I := 0 to TASTMapLiteralExpr(E).Keys.Count - 1 do
+      begin
+        WalkExpr(TASTExpr(TASTMapLiteralExpr(E).Keys[I]));
+        WalkExpr(TASTExpr(TASTMapLiteralExpr(E).Values[I]));
+      end
+    else if E is TASTTupleLiteralExpr then
+      for I := 0 to TASTTupleLiteralExpr(E).Elements.Count - 1 do
+        WalkExpr(TASTExpr(TASTTupleLiteralExpr(E).Elements[I]))
+    else if E is TASTIfExpr then
+    begin
+      WalkExpr(TASTIfExpr(E).Condition);
+      WalkExpr(TASTIfExpr(E).ThenExpr);
+      WalkExpr(TASTIfExpr(E).ElseExpr);
+    end
+    else if E is TASTMatchExpr then
+    begin
+      ME := TASTMatchExpr(E);
+      WalkExpr(ME.Expr);
+      for I := 0 to ME.Cases.Count - 1 do
+      begin
+        CaseN := TASTMatchCase(ME.Cases[I]);
+        if Assigned(CaseN.Pattern.Bindings) then
+          for K := 0 to CaseN.Pattern.Bindings.Count - 1 do
+            AddBound(CaseN.Pattern.Bindings[K]);
+        if CaseN.Pattern.SubPattern <> '' then
+          AddBound(CaseN.Pattern.SubPattern);
+        WalkExpr(CaseN.Guard);
+        WalkExpr(CaseN.ValueExpr);
+      end;
+    end
+    else if E is TASTLambdaExpr then
+    begin
+      NestedL := TASTLambdaExpr(E);
+      for I := 0 to NestedL.CaptureNames.Count - 1 do
+        TryCapture(NestedL.CaptureNames[I]);
+    end;
+  end;
+
+  procedure WalkStmts(Stmts: TASTNodeList);
+  var
+    I, J, K: Integer;
+    S: TASTStmt;
+    VD: TASTVarDecl;
+    MS: TASTMatchStmt;
+    CN: TASTMatchCase;
+  begin
+    if not Assigned(Stmts) then Exit;
+    for I := 0 to Stmts.Count - 1 do
+    begin
+      S := TASTStmt(Stmts[I]);
+      if S is TASTVarDeclStmt then
+      begin
+        for J := 0 to TASTVarDeclStmt(S).Decls.Count - 1 do
+        begin
+          VD := TASTVarDecl(TASTVarDeclStmt(S).Decls[J]);
+          WalkExpr(VD.InitialExpr);
+          AddBound(VD.Name);
+        end;
+      end
+      else if S is TASTAssignStmt then
+      begin
+        WalkExpr(TASTAssignStmt(S).Target);
+        WalkExpr(TASTAssignStmt(S).Expr);
+      end
+      else if S is TASTCallStmt then
+        WalkExpr(TASTCallStmt(S).CallExpr)
+      else if S is TASTReturnStmt then
+        WalkExpr(TASTReturnStmt(S).Expr)
+      else if S is TASTIfStmt then
+      begin
+        WalkExpr(TASTIfStmt(S).Condition);
+        WalkStmts(TASTIfStmt(S).ThenBranch);
+        WalkStmts(TASTIfStmt(S).ElseBranch);
+      end
+      else if S is TASTWhileStmt then
+      begin
+        WalkExpr(TASTWhileStmt(S).Condition);
+        WalkStmts(TASTWhileStmt(S).Body);
+      end
+      else if S is TASTForStmt then
+      begin
+        WalkExpr(TASTForStmt(S).StartExpr);
+        WalkExpr(TASTForStmt(S).EndExpr);
+        WalkExpr(TASTForStmt(S).CollectionExpr);
+        AddBound(TASTForStmt(S).VarName);
+        if TASTForStmt(S).ValVarName <> '' then
+          AddBound(TASTForStmt(S).ValVarName);
+        WalkStmts(TASTForStmt(S).Body);
+      end
+      else if S is TASTRepeatStmt then
+      begin
+        WalkStmts(TASTRepeatStmt(S).Body);
+        WalkExpr(TASTRepeatStmt(S).Condition);
+      end
+      else if S is TASTMatchStmt then
+      begin
+        MS := TASTMatchStmt(S);
+        WalkExpr(MS.Expr);
+        for J := 0 to MS.Cases.Count - 1 do
+        begin
+          CN := TASTMatchCase(MS.Cases[J]);
+          if Assigned(CN.Pattern.Bindings) then
+            for K := 0 to CN.Pattern.Bindings.Count - 1 do
+              AddBound(CN.Pattern.Bindings[K]);
+          if CN.Pattern.SubPattern <> '' then
+            AddBound(CN.Pattern.SubPattern);
+          WalkExpr(CN.Guard);
+          WalkStmts(CN.Body);
+        end;
+      end
+      else if S is TASTUnsafeStmt then
+        WalkStmts(TASTUnsafeStmt(S).Body)
+      else if S is TASTTryStmt then
+      begin
+        WalkStmts(TASTTryStmt(S).TryBody);
+        WalkStmts(TASTTryStmt(S).ExceptBody);
+      end
+      else if S is TASTRaiseStmt then
+        WalkExpr(TASTRaiseStmt(S).Expr)
+      else if S is TASTDeferStmt then
+      begin
+        if TASTDeferStmt(S).Stmt is TASTCallStmt then
+          WalkExpr(TASTCallStmt(TASTDeferStmt(S).Stmt).CallExpr);
+      end;
+    end;
+  end;
+
+var
+  I: Integer;
+begin
+  Lambda.CaptureNames.Clear;
+  Lambda.CaptureTypes.Clear;
+  Bound := TStringList.Create;
+  Bound.CaseSensitive := False;
+  try
+    for I := 0 to Lambda.Params.Count - 1 do
+      AddBound(TASTParam(Lambda.Params[I]).Name);
+    if Assigned(Lambda.BodyExpr) then
+      WalkExpr(Lambda.BodyExpr)
+    else
+      WalkStmts(Lambda.BodyStmts);
+  finally
+    Bound.Free;
+  end;
+end;
+
+function TAetherTypeChecker.CheckLambda(Lambda: TASTLambdaExpr): string;
+var
+  OuterScope: TScope;
+  SavedCurFunc, TempFunc: TASTFunction;
+  I: Integer;
+  Param: TASTParam;
+  BodyT, PList, DeclRetT: string;
+begin
+  OuterScope := FSymbols.CurrentScope;
+  SavedCurFunc := FCurrentFunction;
+  FSymbols.EnterScope;
+  TempFunc := nil;
+  try
+    for I := 0 to Lambda.Params.Count - 1 do
+    begin
+      Param := TASTParam(Lambda.Params[I]);
+      if Param.TypeName = '' then
+        Error('E0282', Format('Cannot infer type for lambda parameter "%s"; add explicit type annotation', [Param.Name]), Param.Line, Param.Col);
+      Param.TypeName := NormalizeTypeName(Param.TypeName);
+      if not FSymbols.ResolveType(Param.TypeName) then
+        Error('E0412', Format('Type "%s" of lambda parameter "%s" not found', [Param.TypeName, Param.Name]), Param.Line, Param.Col);
+      FSymbols.Define(TSymbol.Create(Param.Name, skVariable, Param.TypeName, Param.Line, Param.Col, Param.Ownership = owMutBorrow, Param.Ownership));
+    end;
+
+    DeclRetT := '';
+    if Lambda.ReturnType <> '' then
+      DeclRetT := NormalizeTypeName(Lambda.ReturnType);
+
+    if Assigned(Lambda.BodyExpr) then
+    begin
+      if DeclRetT <> '' then
+        AnnotateMonadExpr(Lambda.BodyExpr, DeclRetT);
+      BodyT := NormalizeTypeName(CheckExpr(Lambda.BodyExpr));
+      if BodyT = 'IntLiteral' then BodyT := 'Int32'
+      else if BodyT = 'FloatLiteral' then BodyT := 'Float64';
+      if DeclRetT = '' then
+        Lambda.ReturnType := BodyT
+      else
+      begin
+        if not TypesAreCompatible(DeclRetT, BodyT) then
+          Error('E0308', Format('Lambda return type expects "%s", but body returned "%s"', [DeclRetT, BodyT]), Lambda.Line, Lambda.Col);
+        Lambda.ReturnType := DeclRetT;
+      end;
+    end
+    else
+    begin
+      TempFunc := TASTFunction.Create(Lambda.Line, Lambda.Col, '__lambda', DeclRetT);
+      TempFunc.IsProcedure := SameText(DeclRetT, 'Void');
+      FCurrentFunction := TempFunc;
+      for I := 0 to Lambda.BodyStmts.Count - 1 do
+        CheckStmt(TASTStmt(Lambda.BodyStmts[I]));
+      if TempFunc.ReturnType = '' then
+        Lambda.ReturnType := 'Void'
+      else
+      begin
+        Lambda.ReturnType := NormalizeTypeName(TempFunc.ReturnType);
+        if (not TempFunc.IsProcedure) and (not StmtListAlwaysReturns(Lambda.BodyStmts)) then
+          Error('E0308', Format('Not all code paths in lambda return a value of type "%s"', [Lambda.ReturnType]), Lambda.Line, Lambda.Col);
+      end;
+    end;
+  finally
+    FCurrentFunction := SavedCurFunc;
+    TempFunc.Free;
+    FSymbols.LeaveScope;
+  end;
+
+  CollectLambdaCaptures(Lambda, OuterScope);
+  if Lambda.LambdaId = 0 then
+  begin
+    Inc(FLambdaCounter);
+    Lambda.LambdaId := FLambdaCounter;
+  end;
+
+  PList := '';
+  for I := 0 to Lambda.Params.Count - 1 do
+  begin
+    if I > 0 then PList := PList + ', ';
+    PList := PList + TASTParam(Lambda.Params[I]).TypeName;
+  end;
+  Lambda.ResolvedFnType := 'fn(' + PList + ') -> ' + Lambda.ReturnType;
+  Result := Lambda.ResolvedFnType;
 end;
 
 function TAetherTypeChecker.CheckExpr(Expr: TASTExpr): string;
@@ -2010,6 +3595,10 @@ begin
     Result := CheckSetLiteral(TASTSetLiteralExpr(Expr))
   else if Expr is TASTMapLiteralExpr then
     Result := CheckMapLiteral(TASTMapLiteralExpr(Expr))
+  else if Expr is TASTTupleLiteralExpr then
+    Result := CheckTupleLiteral(TASTTupleLiteralExpr(Expr))
+  else if Expr is TASTLambdaExpr then
+    Result := CheckLambda(TASTLambdaExpr(Expr))
   else if Expr is TASTMatchExpr then
     Result := CheckMatchExpr(TASTMatchExpr(Expr))
   else if Expr is TASTIfExpr then
@@ -2021,19 +3610,17 @@ begin
         IfExpr.Line, IfExpr.Col);
     T1 := ResolveAliasType(CheckExpr(IfExpr.ThenExpr));
     T2 := ResolveAliasType(CheckExpr(IfExpr.ElseExpr));
-    if (IfExpr.ThenExpr is TASTIdentifierExpr) and SameText(TASTIdentifierExpr(IfExpr.ThenExpr).Name, 'None') and
-       IsValueOptionType(T2) then
-      TASTIdentifierExpr(IfExpr.ThenExpr).Name := '__ValueNone';
-    if (IfExpr.ElseExpr is TASTIdentifierExpr) and SameText(TASTIdentifierExpr(IfExpr.ElseExpr).Name, 'None') and
-       IsValueOptionType(T1) then
-      TASTIdentifierExpr(IfExpr.ElseExpr).Name := '__ValueNone';
     if (not TypesAreCompatible(T1, T2)) and (not TypesAreCompatible(T2, T1)) then
       Error('E0308', Format('Branches of "if..then..else" have incompatible types: "%s" and "%s"', [T1, T2]),
         IfExpr.Line, IfExpr.Col);
+    CondT := MergeInferredMonadTypes(T1, T2);
+    AnnotateMonadExpr(IfExpr.ThenExpr, CondT);
+    AnnotateMonadExpr(IfExpr.ElseExpr, CondT);
     if T1 = 'NilLiteral' then Exit(T2);
     if T2 = 'NilLiteral' then Exit(T1);
     if T1 = 'Option<GenericNone>' then Exit(T2);
     if T2 = 'Option<GenericNone>' then Exit(T1);
+    if (Pos('Result<', CondT) = 1) or (Pos('Option<', CondT) = 1) then Exit(CondT);
     if (T1 = 'Float64') or (T2 = 'Float64') then Exit('Float64')
     else if (T1 = 'Float32') or (T2 = 'Float32') then Exit('Float32')
     else if (T1 = 'FloatLiteral') and (T2 = 'FloatLiteral') then Exit('FloatLiteral')
@@ -2170,12 +3757,10 @@ var
   IsFixed: Boolean;
   DimN, I: Integer;
 begin
-  TargetType := CheckExpr(Assign.Target);
+  TargetType := NormalizeTypeName(CheckExpr(Assign.Target));
+  AnnotateMonadExpr(Assign.Expr, TargetType);
   ValueType := CheckExpr(Assign.Expr);
-
-  if (Assign.Expr is TASTIdentifierExpr) and SameText(TASTIdentifierExpr(Assign.Expr).Name, 'None') and
-     IsValueOptionType(TargetType) then
-    TASTIdentifierExpr(Assign.Expr).Name := '__ValueNone';
+  AnnotateMonadExpr(Assign.Expr, TargetType);
 
   if (Assign.Expr is TASTSetLiteralExpr) and (not IsSetType(TargetType)) and IsArrayType(TargetType, ElemType, IsFixed, DimN) then
   begin
@@ -2358,10 +3943,17 @@ begin
     Error('E0308', Format('Function "%s" expects return type "%s", but found empty "return;"',
       [FCurrentFunction.Name, FCurrentFunction.ReturnType]), Ret.Line, Ret.Col);
 
+  if FCurrentFunction.ReturnType <> '' then
+    AnnotateMonadExpr(Ret.Expr, FCurrentFunction.ReturnType);
   RetType := CheckExpr(Ret.Expr);
-  if (Ret.Expr is TASTIdentifierExpr) and SameText(TASTIdentifierExpr(Ret.Expr).Name, 'None') and
-     IsValueOptionType(FCurrentFunction.ReturnType) then
-    TASTIdentifierExpr(Ret.Expr).Name := '__ValueNone';
+  if (FCurrentFunction.Name = '__lambda') and (FCurrentFunction.ReturnType = '') then
+  begin
+    RetType := NormalizeTypeName(RetType);
+    if RetType = 'IntLiteral' then RetType := 'Int32'
+    else if RetType = 'FloatLiteral' then RetType := 'Float64';
+    FCurrentFunction.ReturnType := RetType;
+  end;
+  AnnotateMonadExpr(Ret.Expr, FCurrentFunction.ReturnType);
 
   if not TypesAreCompatible(FCurrentFunction.ReturnType, RetType) then
     Error('E0308', Format('Function "%s" expects return type "%s", but statement returned "%s"',
@@ -2373,9 +3965,10 @@ var
   MatchedType: string;
   Sym: TSymbol;
   EnumDecl: TASTEnumDecl;
-  I, J, K, PDot, P2: Integer;
+  MatchedVariant: TASTEnumVariant;
+  I, J, K, B, PDot, P2: Integer;
   CaseNode: TASTMatchCase;
-  PatternVal, Prefix, InnerType, ErrType, PatType, PatItem, LoStr, HiStr, LoT, HiT: string;
+  PatternVal, Prefix, InnerType, ErrType, PatType, PatItem, LoStr, HiStr, LoT, HiT, BindType: string;
   HasWildcard, FoundVariant: Boolean;
   CoveredVariants: TStringList;
   VariantName, MissingVariant: string;
@@ -2424,12 +4017,8 @@ var
       else if ArmT = 'FloatLiteral' then ArmT := 'Float64';
       if Result = '' then
         Result := ArmT
-      else if TypesAreCompatible(Result, ArmT) then
-      begin
-        // Keep Result
-      end
-      else if TypesAreCompatible(ArmT, Result) then
-        Result := ArmT
+      else if TypesAreCompatible(Result, ArmT) or TypesAreCompatible(ArmT, Result) then
+        Result := MergeInferredMonadTypes(Result, ArmT)
       else
         Error('E0308', Format('Arms of "match" expression have incompatible types: "%s" and "%s"', [Result, ArmT]), ACase.Line, ACase.Col);
     end
@@ -2442,7 +4031,7 @@ var
 
 begin
   Result := '';
-  MatchedType := ResolveAliasType(CheckExpr(MatchTarget));
+  MatchedType := NormalizeTypeName(ResolveAliasType(CheckExpr(MatchTarget)));
   if MatchedType = 'IntLiteral' then MatchedType := 'Int32'
   else if MatchedType = 'FloatLiteral' then MatchedType := 'Float64';
   HasWildcard := False;
@@ -2450,8 +4039,10 @@ begin
   if IsExpr and (Cases.Count = 0) then
     Error('E0004', '"match" expression must have at least one arm', MLine, MCol);
 
-  // Exhaustiveness Check for Enum
-  Sym := FSymbols.Resolve(MatchedType);
+  // Exhaustiveness Check for Enum (simple and payload ADTs)
+  Sym := FSymbols.ResolveTypeSymbol(MatchedType);
+  if not Assigned(Sym) then
+    Sym := FSymbols.Resolve(MatchedType);
   if Assigned(Sym) and (Sym.Node is TASTEnumDecl) then
   begin
     EnumDecl := TASTEnumDecl(Sym.Node);
@@ -2460,6 +4051,7 @@ begin
       for I := 0 to Cases.Count - 1 do
       begin
         CaseNode := TASTMatchCase(Cases[I]);
+        MatchedVariant := nil;
         if CaseNode.Pattern.Value = '_' then
         begin
           if not Assigned(CaseNode.Guard) then
@@ -2489,6 +4081,7 @@ begin
               if SameText(TASTEnumVariant(EnumDecl.Variants[J]).Name, PatternVal) then
               begin
                 FoundVariant := True;
+                MatchedVariant := TASTEnumVariant(EnumDecl.Variants[J]);
                 Break;
               end;
             if not FoundVariant then
@@ -2500,10 +4093,41 @@ begin
 
         FSymbols.EnterScope;
         try
-          if (CaseNode.Pattern.SubPattern <> '') and (CaseNode.Pattern.SubPattern <> '_') then
+          if CaseNode.Pattern.Bindings.Count > 0 then
+          begin
+            if Assigned(MatchedVariant) and (CaseNode.Pattern.Items.Count = 1) then
+            begin
+              if CaseNode.Pattern.Bindings.Count <> MatchedVariant.Fields.Count then
+                Error('E0061', Format('Pattern "%s.%s" binds %d variable(s), but variant has %d field(s)',
+                  [EnumDecl.Name, MatchedVariant.Name, CaseNode.Pattern.Bindings.Count, MatchedVariant.Fields.Count]),
+                  CaseNode.Line, CaseNode.Col);
+              for B := 0 to CaseNode.Pattern.Bindings.Count - 1 do
+              begin
+                if CaseNode.Pattern.Bindings[B] <> '_' then
+                begin
+                  BindType := NormalizeTypeName(TASTRecordField(MatchedVariant.Fields[B]).TypeName);
+                  FSymbols.Define(TSymbol.Create(CaseNode.Pattern.Bindings[B], skVariable, BindType, CaseNode.Line, CaseNode.Col, False));
+                end;
+              end;
+            end
+            else if CaseNode.Pattern.Value = '_' then
+            begin
+              for B := 0 to CaseNode.Pattern.Bindings.Count - 1 do
+                if CaseNode.Pattern.Bindings[B] <> '_' then
+                  FSymbols.Define(TSymbol.Create(CaseNode.Pattern.Bindings[B], skVariable, EnumDecl.Name, CaseNode.Line, CaseNode.Col, False));
+            end
+            else
+              Error('E0308', 'Cannot destructure payload fields inside multi-variant "|" pattern', CaseNode.Line, CaseNode.Col);
+          end
+          else if (CaseNode.Pattern.SubPattern <> '') and (CaseNode.Pattern.SubPattern <> '_') then
           begin
             if CaseNode.Pattern.Value = '_' then
               FSymbols.Define(TSymbol.Create(CaseNode.Pattern.SubPattern, skVariable, EnumDecl.Name, CaseNode.Line, CaseNode.Col, False))
+            else if Assigned(MatchedVariant) and (MatchedVariant.Fields.Count = 1) then
+            begin
+              BindType := NormalizeTypeName(TASTRecordField(MatchedVariant.Fields[0]).TypeName);
+              FSymbols.Define(TSymbol.Create(CaseNode.Pattern.SubPattern, skVariable, BindType, CaseNode.Line, CaseNode.Col, False));
+            end
             else
               FSymbols.Define(TSymbol.Create(CaseNode.Pattern.SubPattern, skVariable, 'Any', CaseNode.Line, CaseNode.Col, False));
           end;
@@ -2526,6 +4150,10 @@ begin
           end;
         end;
       end;
+
+      if IsExpr then
+        for I := 0 to Cases.Count - 1 do
+          AnnotateMonadExpr(TASTMatchCase(Cases[I]).ValueExpr, Result);
     finally
       CoveredVariants.Free;
     end;
@@ -2533,9 +4161,11 @@ begin
   end;
 
   // Exhaustiveness Check for Result<T, E>
-  if Pos('Result', MatchedType) = 1 then
+  if Pos('Result<', MatchedType) = 1 then
   begin
     SplitResultTypes(MatchedType, InnerType, ErrType);
+    InnerType := NormalizeTypeName(InnerType);
+    ErrType := NormalizeTypeName(ErrType);
     HasOk := False;
     HasErr := False;
     for I := 0 to Cases.Count - 1 do
@@ -2569,13 +4199,16 @@ begin
     if not HasWildcard and (not HasOk or not HasErr) then
       Error('E0004', 'Non-exhaustive match on Result. Both "Ok" and "Err" must be covered (or add "_:")',
         MLine, MCol);
+    if IsExpr then
+      for I := 0 to Cases.Count - 1 do
+        AnnotateMonadExpr(TASTMatchCase(Cases[I]).ValueExpr, Result);
     Exit;
   end;
 
   // Exhaustiveness Check for Option<T>
   if Pos('Option<', MatchedType) = 1 then
   begin
-    InnerType := Trim(Copy(MatchedType, 8, Length(MatchedType) - 8));
+    InnerType := NormalizeTypeName(Trim(Copy(MatchedType, 8, Length(MatchedType) - 8)));
     HasSome := False;
     HasNone := False;
     for I := 0 to Cases.Count - 1 do
@@ -2615,6 +4248,9 @@ begin
     if not HasWildcard and (not HasSome or not HasNone) then
       Error('E0004', Format('Non-exhaustive match on "%s". Cover both "Some" and "None" (or add "_:")', [MatchedType]),
         MLine, MCol);
+    if IsExpr then
+      for I := 0 to Cases.Count - 1 do
+        AnnotateMonadExpr(TASTMatchCase(Cases[I]).ValueExpr, Result);
     Exit;
   end;
 
@@ -2909,6 +4545,7 @@ var
   IsFixed: Boolean;
   DimN, I: Integer;
   Sym: TSymbol;
+  RecDecl: TASTRecordDecl;
 begin
   if VarDecl.TypeName = '' then
   begin
@@ -2927,6 +4564,10 @@ begin
       VarDecl.TypeName := 'Int32'
     else if VarInitType = 'FloatLiteral' then
       VarDecl.TypeName := 'Float64'
+    else if VarInitType = 'Option<IntLiteral>' then
+      VarDecl.TypeName := 'Option<Int32>'
+    else if VarInitType = 'Option<FloatLiteral>' then
+      VarDecl.TypeName := 'Option<Float64>'
     else if VarInitType = 'NilLiteral' then
       Error('E0282', Format('Cannot infer type of "%s" from "nil" alone; declare the type explicitly', [VarDecl.Name]), VarDecl.Line, VarDecl.Col)
     else
@@ -2935,16 +4576,28 @@ begin
   else
     VarInitType := '';
 
+  VarDecl.TypeName := NormalizeTypeName(VarDecl.TypeName);
+
   if not FSymbols.ResolveType(VarDecl.TypeName) then
     Error('E0412', Format('Type "%s" of variable "%s" not found', [VarDecl.TypeName, VarDecl.Name]), VarDecl.Line, VarDecl.Col);
 
+  if VarDecl.ExpectedTupleArity > 0 then
+  begin
+    Sym := FSymbols.ResolveTypeSymbol(ResolveAliasType(VarDecl.TypeName));
+    if (not Assigned(Sym)) or (not (Sym.Node is TASTRecordDecl)) or (Pos('Tuple', TASTRecordDecl(Sym.Node).Name) <> 1) then
+      Error('E0308', Format('Cannot destructure non-tuple type "%s"', [VarDecl.TypeName]), VarDecl.Line, VarDecl.Col);
+    RecDecl := TASTRecordDecl(Sym.Node);
+    if RecDecl.Fields.Count <> VarDecl.ExpectedTupleArity then
+      Error('E0308', Format('Tuple destructuring expects %d element(s), but tuple has %d',
+        [VarDecl.ExpectedTupleArity, RecDecl.Fields.Count]), VarDecl.Line, VarDecl.Col);
+  end;
+
   if Assigned(VarDecl.InitialExpr) then
   begin
+    AnnotateMonadExpr(VarDecl.InitialExpr, VarDecl.TypeName);
     if VarInitType = '' then
       VarInitType := CheckExpr(VarDecl.InitialExpr);
-    if (VarDecl.InitialExpr is TASTIdentifierExpr) and SameText(TASTIdentifierExpr(VarDecl.InitialExpr).Name, 'None') and
-       IsValueOptionType(VarDecl.TypeName) then
-      TASTIdentifierExpr(VarDecl.InitialExpr).Name := '__ValueNone';
+    AnnotateMonadExpr(VarDecl.InitialExpr, VarDecl.TypeName);
     if (VarDecl.InitialExpr is TASTSetLiteralExpr) and (not IsSetType(VarDecl.TypeName)) and
        IsArrayType(VarDecl.TypeName, ElemType, IsFixed, DimN) then
     begin
@@ -3024,6 +4677,9 @@ begin
   FCurrentFunction := Func;
   FSymbols.EnterScope;
   try
+    if (Func.GenericParams.Count = 0) and (Func.GenericParam = '') then
+      Func.ReturnType := NormalizeTypeName(Func.ReturnType);
+
     if (not Func.IsProcedure) and ((Func.ReturnType = '') or SameText(Func.ReturnType, 'Void')) then
       Error('E0308', Format('Function "%s" must declare a non-Void return type (use "procedure" instead)', [Func.Name]), Func.Line, Func.Col);
 
@@ -3031,6 +4687,8 @@ begin
     for I := 0 to Func.Params.Count - 1 do
     begin
       Param := TASTParam(Func.Params[I]);
+      if (Func.GenericParams.Count = 0) and (Func.GenericParam = '') then
+        Param.TypeName := NormalizeTypeName(Param.TypeName);
       if not FSymbols.ResolveType(Param.TypeName) then
         Error('E0412', Format('Type "%s" of parameter "%s" not found', [Param.TypeName, Param.Name]), Param.Line, Param.Col);
       FSymbols.Define(TSymbol.Create(Param.Name, skVariable, Param.TypeName, Param.Line, Param.Col, Param.Ownership = owMutBorrow, Param.Ownership));
@@ -3073,7 +4731,7 @@ begin
       CheckStmt(TASTStmt(Func.Body[I]));
 
     // Verify guaranteed return on all paths for functions (not procedures / templates)
-    if (not Func.IsProcedure) and (Func.GenericParam = '') and (not StmtListAlwaysReturns(Func.Body)) then
+    if (not Func.IsProcedure) and (Func.GenericParams.Count = 0) and (Func.GenericParam = '') and (not StmtListAlwaysReturns(Func.Body)) then
       Error('E0308', Format('Not all code paths in function "%s" return a value of type "%s"',
         [Func.Name, Func.ReturnType]), Func.Line, Func.Col);
   finally
@@ -3287,45 +4945,335 @@ begin
   Result := '';
 end;
 
-function TAetherTypeChecker.MonomorphizeFunction(OriginalFunc: TASTFunction; const ConcreteType: string): TASTFunction;
+procedure TAetherTypeChecker.SubstituteGenericInExpr(Expr: TASTExpr; GenericParams, ConcreteArgs: TStringList);
+var
+  I: Integer;
+  CallE: TASTCallExpr;
+  ME: TASTMatchExpr;
+  CaseN: TASTMatchCase;
+begin
+  if not Assigned(Expr) then Exit;
+  if Expr is TASTMemberAccessExpr then
+    SubstituteGenericInExpr(TASTMemberAccessExpr(Expr).Target, GenericParams, ConcreteArgs)
+  else if Expr is TASTBinaryExpr then
+  begin
+    SubstituteGenericInExpr(TASTBinaryExpr(Expr).Left, GenericParams, ConcreteArgs);
+    SubstituteGenericInExpr(TASTBinaryExpr(Expr).Right, GenericParams, ConcreteArgs);
+  end
+  else if Expr is TASTUnaryExpr then
+    SubstituteGenericInExpr(TASTUnaryExpr(Expr).Expr, GenericParams, ConcreteArgs)
+  else if Expr is TASTAwaitExpr then
+    SubstituteGenericInExpr(TASTAwaitExpr(Expr).Expr, GenericParams, ConcreteArgs)
+  else if Expr is TASTSpawnExpr then
+    SubstituteGenericInExpr(TASTSpawnExpr(Expr).CallExpr, GenericParams, ConcreteArgs)
+  else if Expr is TASTCallExpr then
+  begin
+    CallE := TASTCallExpr(Expr);
+    if Assigned(CallE.CalleeExpr) then
+      SubstituteGenericInExpr(CallE.CalleeExpr, GenericParams, ConcreteArgs);
+    for I := 0 to CallE.GenericArgs.Count - 1 do
+      CallE.GenericArgs[I] := NormalizeTypeName(SubstituteGenericType(CallE.GenericArgs[I], GenericParams, ConcreteArgs));
+    if (SameText(CallE.Callee, 'Default') or SameText(CallE.Callee, 'SizeOf')) and
+       (CallE.Args.Count > 0) and (TASTCallArg(CallE.Args[0]).Expr is TASTIdentifierExpr) then
+    begin
+      TASTIdentifierExpr(TASTCallArg(CallE.Args[0]).Expr).Name :=
+        NormalizeTypeName(SubstituteGenericType(TASTIdentifierExpr(TASTCallArg(CallE.Args[0]).Expr).Name, GenericParams, ConcreteArgs));
+    end;
+    for I := 0 to CallE.Args.Count - 1 do
+      SubstituteGenericInExpr(TASTCallArg(CallE.Args[I]).Expr, GenericParams, ConcreteArgs);
+  end
+  else if Expr is TASTIndexExpr then
+  begin
+    SubstituteGenericInExpr(TASTIndexExpr(Expr).Target, GenericParams, ConcreteArgs);
+    for I := 0 to TASTIndexExpr(Expr).Indices.Count - 1 do
+      SubstituteGenericInExpr(TASTExpr(TASTIndexExpr(Expr).Indices[I]), GenericParams, ConcreteArgs);
+  end
+  else if Expr is TASTSetLiteralExpr then
+  begin
+    for I := 0 to TASTSetLiteralExpr(Expr).Elements.Count - 1 do
+      SubstituteGenericInExpr(TASTExpr(TASTSetLiteralExpr(Expr).Elements[I]), GenericParams, ConcreteArgs);
+  end
+  else if Expr is TASTMapLiteralExpr then
+  begin
+    for I := 0 to TASTMapLiteralExpr(Expr).Keys.Count - 1 do
+    begin
+      SubstituteGenericInExpr(TASTExpr(TASTMapLiteralExpr(Expr).Keys[I]), GenericParams, ConcreteArgs);
+      SubstituteGenericInExpr(TASTExpr(TASTMapLiteralExpr(Expr).Values[I]), GenericParams, ConcreteArgs);
+    end;
+  end
+  else if Expr is TASTIfExpr then
+  begin
+    SubstituteGenericInExpr(TASTIfExpr(Expr).Condition, GenericParams, ConcreteArgs);
+    SubstituteGenericInExpr(TASTIfExpr(Expr).ThenExpr, GenericParams, ConcreteArgs);
+    SubstituteGenericInExpr(TASTIfExpr(Expr).ElseExpr, GenericParams, ConcreteArgs);
+  end
+  else if Expr is TASTMatchExpr then
+  begin
+    ME := TASTMatchExpr(Expr);
+    SubstituteGenericInExpr(ME.Expr, GenericParams, ConcreteArgs);
+    for I := 0 to ME.Cases.Count - 1 do
+    begin
+      CaseN := TASTMatchCase(ME.Cases[I]);
+      SubstituteGenericInExpr(CaseN.Guard, GenericParams, ConcreteArgs);
+      SubstituteGenericInExpr(CaseN.ValueExpr, GenericParams, ConcreteArgs);
+    end;
+  end
+  else if Expr is TASTTupleLiteralExpr then
+  begin
+    for I := 0 to TASTTupleLiteralExpr(Expr).Elements.Count - 1 do
+      SubstituteGenericInExpr(TASTExpr(TASTTupleLiteralExpr(Expr).Elements[I]), GenericParams, ConcreteArgs);
+  end
+  else if Expr is TASTLambdaExpr then
+  begin
+    with TASTLambdaExpr(Expr) do
+    begin
+      for I := 0 to Params.Count - 1 do
+        if TASTParam(Params[I]).TypeName <> '' then
+          TASTParam(Params[I]).TypeName := NormalizeTypeName(SubstituteGenericType(TASTParam(Params[I]).TypeName, GenericParams, ConcreteArgs));
+      if ReturnType <> '' then
+        ReturnType := NormalizeTypeName(SubstituteGenericType(ReturnType, GenericParams, ConcreteArgs));
+      if Assigned(BodyExpr) then
+        SubstituteGenericInExpr(BodyExpr, GenericParams, ConcreteArgs)
+      else
+        SubstituteGenericInStmts(BodyStmts, GenericParams, ConcreteArgs);
+    end;
+  end;
+end;
+
+procedure TAetherTypeChecker.SubstituteGenericInStmts(Stmts: TASTNodeList; GenericParams, ConcreteArgs: TStringList);
+var
+  I, J: Integer;
+  S: TASTStmt;
+  VD: TASTVarDecl;
+  IfS: TASTIfStmt;
+  MS: TASTMatchStmt;
+  CN: TASTMatchCase;
+begin
+  if not Assigned(Stmts) then Exit;
+  for I := 0 to Stmts.Count - 1 do
+  begin
+    S := TASTStmt(Stmts[I]);
+    if S is TASTVarDeclStmt then
+    begin
+      for J := 0 to TASTVarDeclStmt(S).Decls.Count - 1 do
+      begin
+        VD := TASTVarDecl(TASTVarDeclStmt(S).Decls[J]);
+        if VD.TypeName <> '' then
+          VD.TypeName := NormalizeTypeName(SubstituteGenericType(VD.TypeName, GenericParams, ConcreteArgs));
+        SubstituteGenericInExpr(VD.InitialExpr, GenericParams, ConcreteArgs);
+      end;
+    end
+    else if S is TASTAssignStmt then
+    begin
+      SubstituteGenericInExpr(TASTAssignStmt(S).Target, GenericParams, ConcreteArgs);
+      SubstituteGenericInExpr(TASTAssignStmt(S).Expr, GenericParams, ConcreteArgs);
+    end
+    else if S is TASTCallStmt then
+      SubstituteGenericInExpr(TASTCallStmt(S).CallExpr, GenericParams, ConcreteArgs)
+    else if S is TASTReturnStmt then
+      SubstituteGenericInExpr(TASTReturnStmt(S).Expr, GenericParams, ConcreteArgs)
+    else if S is TASTIfStmt then
+    begin
+      IfS := TASTIfStmt(S);
+      SubstituteGenericInExpr(IfS.Condition, GenericParams, ConcreteArgs);
+      SubstituteGenericInStmts(IfS.ThenBranch, GenericParams, ConcreteArgs);
+      SubstituteGenericInStmts(IfS.ElseBranch, GenericParams, ConcreteArgs);
+    end
+    else if S is TASTWhileStmt then
+    begin
+      SubstituteGenericInExpr(TASTWhileStmt(S).Condition, GenericParams, ConcreteArgs);
+      SubstituteGenericInStmts(TASTWhileStmt(S).Body, GenericParams, ConcreteArgs);
+    end
+    else if S is TASTForStmt then
+    begin
+      SubstituteGenericInExpr(TASTForStmt(S).StartExpr, GenericParams, ConcreteArgs);
+      SubstituteGenericInExpr(TASTForStmt(S).EndExpr, GenericParams, ConcreteArgs);
+      SubstituteGenericInExpr(TASTForStmt(S).CollectionExpr, GenericParams, ConcreteArgs);
+      SubstituteGenericInStmts(TASTForStmt(S).Body, GenericParams, ConcreteArgs);
+    end
+    else if S is TASTRepeatStmt then
+    begin
+      SubstituteGenericInStmts(TASTRepeatStmt(S).Body, GenericParams, ConcreteArgs);
+      SubstituteGenericInExpr(TASTRepeatStmt(S).Condition, GenericParams, ConcreteArgs);
+    end
+    else if S is TASTMatchStmt then
+    begin
+      MS := TASTMatchStmt(S);
+      SubstituteGenericInExpr(MS.Expr, GenericParams, ConcreteArgs);
+      for J := 0 to MS.Cases.Count - 1 do
+      begin
+        CN := TASTMatchCase(MS.Cases[J]);
+        SubstituteGenericInExpr(CN.Guard, GenericParams, ConcreteArgs);
+        SubstituteGenericInStmts(CN.Body, GenericParams, ConcreteArgs);
+      end;
+    end
+    else if S is TASTUnsafeStmt then
+      SubstituteGenericInStmts(TASTUnsafeStmt(S).Body, GenericParams, ConcreteArgs)
+    else if S is TASTDeferStmt then
+    begin
+      if Assigned(TASTDeferStmt(S).Stmt) then
+      begin
+        // Defer holds a single stmt; wrap check cleanly via local handling
+        if TASTDeferStmt(S).Stmt is TASTCallStmt then
+          SubstituteGenericInExpr(TASTCallStmt(TASTDeferStmt(S).Stmt).CallExpr, GenericParams, ConcreteArgs)
+        else if TASTDeferStmt(S).Stmt is TASTAssignStmt then
+        begin
+          SubstituteGenericInExpr(TASTAssignStmt(TASTDeferStmt(S).Stmt).Target, GenericParams, ConcreteArgs);
+          SubstituteGenericInExpr(TASTAssignStmt(TASTDeferStmt(S).Stmt).Expr, GenericParams, ConcreteArgs);
+        end;
+      end;
+    end
+    else if S is TASTTryStmt then
+    begin
+      SubstituteGenericInStmts(TASTTryStmt(S).TryBody, GenericParams, ConcreteArgs);
+      SubstituteGenericInStmts(TASTTryStmt(S).ExceptBody, GenericParams, ConcreteArgs);
+    end
+    else if S is TASTRaiseStmt then
+      SubstituteGenericInExpr(TASTRaiseStmt(S).Expr, GenericParams, ConcreteArgs);
+  end;
+end;
+
+function TAetherTypeChecker.MonomorphizeFunction(OriginalFunc: TASTFunction; ConcreteArgs: TStringList): TASTFunction;
 var
   I: Integer;
   Param: TASTParam;
-  PType: string;
+  PType, MangledName: string;
   VarDecl: TASTVarDecl;
   VType: string;
+  ReqExpr, EnsExpr: TASTExpr;
 begin
-  Result := TASTFunction.Create(OriginalFunc.Line, OriginalFunc.Col, OriginalFunc.Name + '_' + ConcreteType, OriginalFunc.ReturnType);
+  if ConcreteArgs.Count = 1 then
+    MangledName := OriginalFunc.Name + '_' + MangleTypeName(ConcreteArgs[0])
+  else
+  begin
+    MangledName := OriginalFunc.Name;
+    for I := 0 to ConcreteArgs.Count - 1 do
+      MangledName := MangledName + '__' + MangleTypeName(ConcreteArgs[I]);
+  end;
+
+  Result := TASTFunction.Create(OriginalFunc.Line, OriginalFunc.Col, MangledName, OriginalFunc.ReturnType);
   Result.IsProcedure := OriginalFunc.IsProcedure;
-  if SameText(Result.ReturnType, OriginalFunc.GenericParam) then
-    Result.ReturnType := ConcreteType;
+  Result.IsPublic := OriginalFunc.IsPublic;
+  Result.SourceModule := OriginalFunc.SourceModule;
+  if not Result.IsProcedure then
+    Result.ReturnType := NormalizeTypeName(SubstituteGenericType(Result.ReturnType, OriginalFunc.GenericParams, ConcreteArgs));
 
   for I := 0 to OriginalFunc.Params.Count - 1 do
   begin
     Param := TASTParam(OriginalFunc.Params[I]);
-    PType := Param.TypeName;
-    if SameText(PType, OriginalFunc.GenericParam) then
-      PType := ConcreteType;
+    PType := NormalizeTypeName(SubstituteGenericType(Param.TypeName, OriginalFunc.GenericParams, ConcreteArgs));
     Result.Params.Add(TASTParam.Create(Param.Line, Param.Col, Param.Name, PType, Param.Ownership));
   end;
 
   for I := 0 to OriginalFunc.LocalVars.Count - 1 do
   begin
     VarDecl := TASTVarDecl(OriginalFunc.LocalVars[I]);
-    VType := VarDecl.TypeName;
-    if SameText(VType, OriginalFunc.GenericParam) then
-      VType := ConcreteType;
+    VType := '';
+    if VarDecl.TypeName <> '' then
+      VType := NormalizeTypeName(SubstituteGenericType(VarDecl.TypeName, OriginalFunc.GenericParams, ConcreteArgs));
     Result.LocalVars.Add(TASTVarDecl.Create(VarDecl.Line, VarDecl.Col, VarDecl.Name, VType, TASTExpr(CloneASTNode(VarDecl.InitialExpr)), VarDecl.IsMutable));
+    SubstituteGenericInExpr(TASTVarDecl(Result.LocalVars[Result.LocalVars.Count - 1]).InitialExpr, OriginalFunc.GenericParams, ConcreteArgs);
   end;
 
   for I := 0 to OriginalFunc.Requires.Count - 1 do
-    Result.Requires.Add(CloneASTNode(TASTExpr(OriginalFunc.Requires[I])));
+  begin
+    ReqExpr := TASTExpr(CloneASTNode(TASTExpr(OriginalFunc.Requires[I])));
+    SubstituteGenericInExpr(ReqExpr, OriginalFunc.GenericParams, ConcreteArgs);
+    Result.Requires.Add(ReqExpr);
+  end;
 
   for I := 0 to OriginalFunc.Ensures.Count - 1 do
-    Result.Ensures.Add(CloneASTNode(TASTExpr(OriginalFunc.Ensures[I])));
+  begin
+    EnsExpr := TASTExpr(CloneASTNode(TASTExpr(OriginalFunc.Ensures[I])));
+    SubstituteGenericInExpr(EnsExpr, OriginalFunc.GenericParams, ConcreteArgs);
+    Result.Ensures.Add(EnsExpr);
+  end;
 
   for I := 0 to OriginalFunc.Body.Count - 1 do
     Result.Body.Add(CloneASTNode(TASTStmt(OriginalFunc.Body[I])));
+  SubstituteGenericInStmts(Result.Body, OriginalFunc.GenericParams, ConcreteArgs);
+end;
+
+procedure TAetherTypeChecker.NormalizeModuleSignatures(AModule: TASTModule);
+var
+  I, J, K: Integer;
+  Node: TASTNode;
+  Rec: TASTRecordDecl;
+  Enm: TASTEnumDecl;
+  VarNode: TASTEnumVariant;
+  Func: TASTFunction;
+  TraitD: TASTTraitDecl;
+  ImplD: TASTImplDecl;
+begin
+  for I := 0 to AModule.Types.Count - 1 do
+  begin
+    Node := AModule.Types[I];
+    if Node is TASTRecordDecl then
+    begin
+      Rec := TASTRecordDecl(Node);
+      if Rec.GenericParams.Count = 0 then
+        for J := 0 to Rec.Fields.Count - 1 do
+          TASTRecordField(Rec.Fields[J]).TypeName := NormalizeTypeName(TASTRecordField(Rec.Fields[J]).TypeName);
+    end
+    else if Node is TASTEnumDecl then
+    begin
+      Enm := TASTEnumDecl(Node);
+      for J := 0 to Enm.Variants.Count - 1 do
+      begin
+        VarNode := TASTEnumVariant(Enm.Variants[J]);
+        for K := 0 to VarNode.Fields.Count - 1 do
+          TASTRecordField(VarNode.Fields[K]).TypeName := NormalizeTypeName(TASTRecordField(VarNode.Fields[K]).TypeName);
+      end;
+    end
+    else if Node is TASTArrayDecl then
+      TASTArrayDecl(Node).ElemType := NormalizeTypeName(TASTArrayDecl(Node).ElemType)
+    else if Node is TASTMapDecl then
+    begin
+      TASTMapDecl(Node).KeyType := NormalizeTypeName(TASTMapDecl(Node).KeyType);
+      TASTMapDecl(Node).ValType := NormalizeTypeName(TASTMapDecl(Node).ValType);
+    end
+    else if Node is TASTTypeAliasDecl then
+      TASTTypeAliasDecl(Node).TargetType := NormalizeTypeName(TASTTypeAliasDecl(Node).TargetType);
+  end;
+
+  for I := 0 to AModule.Traits.Count - 1 do
+  begin
+    TraitD := TASTTraitDecl(AModule.Traits[I]);
+    for J := 0 to TraitD.Methods.Count - 1 do
+    begin
+      Func := TASTFunction(TraitD.Methods[J]);
+      if not Func.IsProcedure then
+        Func.ReturnType := NormalizeTypeName(Func.ReturnType);
+      for K := 0 to Func.Params.Count - 1 do
+        TASTParam(Func.Params[K]).TypeName := NormalizeTypeName(TASTParam(Func.Params[K]).TypeName);
+    end;
+  end;
+
+  for I := 0 to AModule.Impls.Count - 1 do
+  begin
+    ImplD := TASTImplDecl(AModule.Impls[I]);
+    ImplD.TargetTypeName := NormalizeTypeName(ImplD.TargetTypeName);
+    for J := 0 to ImplD.Methods.Count - 1 do
+    begin
+      Func := TASTFunction(ImplD.Methods[J]);
+      if not Func.IsProcedure then
+        Func.ReturnType := NormalizeTypeName(Func.ReturnType);
+      for K := 0 to Func.Params.Count - 1 do
+        TASTParam(Func.Params[K]).TypeName := NormalizeTypeName(TASTParam(Func.Params[K]).TypeName);
+    end;
+  end;
+
+  for I := 0 to AModule.Functions.Count - 1 do
+  begin
+    Func := TASTFunction(AModule.Functions[I]);
+    if (Func.GenericParams.Count = 0) and (Func.GenericParam = '') then
+    begin
+      if not Func.IsProcedure then
+        Func.ReturnType := NormalizeTypeName(Func.ReturnType);
+      for K := 0 to Func.Params.Count - 1 do
+        TASTParam(Func.Params[K]).TypeName := NormalizeTypeName(TASTParam(Func.Params[K]).TypeName);
+    end;
+  end;
 end;
 
 procedure TAetherTypeChecker.CheckModule(AModule: TASTModule);
@@ -3338,6 +5286,7 @@ begin
   FCurrentSourceModule := '';
   RegisterConstants(AModule);
   RegisterTypes(AModule);
+  NormalizeModuleSignatures(AModule);
   RegisterTraits(AModule);
   RegisterImpls(AModule);
   RegisterFunctions(AModule);
@@ -3354,7 +5303,7 @@ begin
   while I < AModule.Functions.Count do
   begin
     Func := TASTFunction(AModule.Functions[I]);
-    if (Func.GenericParam = '') and (not Func.IsInterfaceDecl) then
+    if (Func.GenericParams.Count = 0) and (Func.GenericParam = '') and (not Func.IsInterfaceDecl) then
       CheckFunction(Func);
     Inc(I);
   end;

@@ -8,6 +8,14 @@ uses
   SysUtils, Classes, uAetherTokens;
 
 type
+  TLexerState = record
+    Pos: Integer;
+    Line: Integer;
+    Col: Integer;
+    LastTokenKind: TTokenKind;
+    CurrentDocComment: string;
+  end;
+
   EAetherLexerError = class(Exception)
   public
     Line: Integer;
@@ -40,6 +48,8 @@ type
     constructor Create(const ASource: string);
     function NextToken: TToken;
     function ConsumeDocComment: string;
+    function SaveState: TLexerState;
+    procedure RestoreState(const AState: TLexerState);
     property Line: Integer read FLine;
     property Col: Integer read FCol;
   end;
@@ -714,6 +724,24 @@ begin
     ReadChar;
     Result := CreateToken(tokUnknown, C, StartLine, StartCol);
   end;
+end;
+
+function TAetherLexer.SaveState: TLexerState;
+begin
+  Result.Pos := FPos;
+  Result.Line := FLine;
+  Result.Col := FCol;
+  Result.LastTokenKind := FLastTokenKind;
+  Result.CurrentDocComment := FCurrentDocComment;
+end;
+
+procedure TAetherLexer.RestoreState(const AState: TLexerState);
+begin
+  FPos := AState.Pos;
+  FLine := AState.Line;
+  FCol := AState.Col;
+  FLastTokenKind := AState.LastTokenKind;
+  FCurrentDocComment := AState.CurrentDocComment;
 end;
 
 function TAetherLexer.NextToken: TToken;

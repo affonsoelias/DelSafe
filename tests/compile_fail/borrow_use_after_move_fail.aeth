@@ -1,0 +1,22 @@
+// expect-error: E0382
+module borrow_use_after_move_fail;
+
+type
+    Buffer = record
+        id: Int32;
+        label: String;
+    end record;
+
+procedure ConsumeBuffer(take b: Buffer) is
+begin
+    PrintLn("Consumed: %s", b.label);
+end ConsumeBuffer;
+
+program Main;
+var
+    buf: Buffer;
+begin
+    buf := Buffer(1, "payload");
+    ConsumeBuffer(take buf);
+    PrintLn("%d", buf.id);
+end borrow_use_after_move_fail.

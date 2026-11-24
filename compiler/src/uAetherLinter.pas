@@ -107,7 +107,10 @@ begin
   else if Expr is TASTCallExpr then
   begin
     CallExpr := TASTCallExpr(Expr);
-    IdentList.Add(CallExpr.Callee);
+    if Assigned(CallExpr.CalleeExpr) then
+      CollectIdentifiersInExpr(CallExpr.CalleeExpr, IdentList)
+    else if CallExpr.Callee <> '' then
+      IdentList.Add(CallExpr.Callee);
     for I := 0 to CallExpr.Args.Count - 1 do
       CollectIdentifiersInExpr(TASTCallArg(CallExpr.Args[I]).Expr, IdentList);
   end
@@ -172,6 +175,16 @@ begin
         CollectIdentifiersInExpr(TASTMatchCase(TASTMatchExpr(Expr).Cases[I]).Guard, IdentList);
       CollectIdentifiersInExpr(TASTMatchCase(TASTMatchExpr(Expr).Cases[I]).ValueExpr, IdentList);
     end;
+  end
+  else if Expr is TASTTupleLiteralExpr then
+  begin
+    for I := 0 to TASTTupleLiteralExpr(Expr).Elements.Count - 1 do
+      CollectIdentifiersInExpr(TASTExpr(TASTTupleLiteralExpr(Expr).Elements[I]), IdentList);
+  end
+  else if Expr is TASTLambdaExpr then
+  begin
+    CollectIdentifiersInExpr(TASTLambdaExpr(Expr).BodyExpr, IdentList);
+    CollectIdentifiersInNodeList(TASTLambdaExpr(Expr).BodyStmts, IdentList);
   end;
 end;
 

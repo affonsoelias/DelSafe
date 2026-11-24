@@ -1,0 +1,10 @@
+// expect-error: E0301
+module comptime_div_zero_fail;
+
+program Main;
+var
+    x: Int32;
+begin
+    x := 10 / 0;
+    PrintLn(IntToStr(x));
+end comptime_div_zero_fail.

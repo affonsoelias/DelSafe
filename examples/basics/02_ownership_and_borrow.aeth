@@ -1,0 +1,37 @@
+module ownership_and_borrow;
+
+type
+    DataBuffer = record
+        id: UInt32;
+        size: UInt64;
+    end record;
+
+// 'borrow' only borrows immutably (read-only)
+procedure Inspect(borrow buf: DataBuffer) is
+begin
+    PrintLn("Inspecting buffer id: %d, size: %d", buf.id, buf.size);
+end Inspect;
+
+// 'take' consumes the buffer (transfers ownership)
+procedure Consume(take buf: DataBuffer) is
+begin
+    PrintLn("Buffer %d consumed successfully!", buf.id);
+    // When leaving this scope, the buffer memory is freed automatically!
+end Consume;
+
+program Main;
+var
+    my_buffer: DataBuffer;
+begin
+    my_buffer := DataBuffer(id: 101, size: 2048);
+
+    // Allowed: borrows for read-only inspection
+    Inspect(borrow my_buffer);
+
+    // Allowed: transfers ownership to Consume
+    Consume(take my_buffer);
+
+    // Intentional COMPILE ERROR (Borrow Checker):
+    // Uncommenting the line below triggers error E0382: 'my_buffer' has already been moved!
+    // Inspect(borrow my_buffer);
+end ownership_and_borrow.

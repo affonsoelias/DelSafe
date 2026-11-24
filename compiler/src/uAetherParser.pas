@@ -27,6 +27,12 @@ procedure FreeAttributes(var Attrs: TParsedAttributes);
 procedure CopyAttributes(const Src: TParsedAttributes; var Dst: TParsedAttributes);
 
 type
+  TParserState = record
+    LexState: TLexerState;
+    CurTok: TToken;
+    PeekTok: TToken;
+  end;
+
   EAetherParserError = class(Exception)
   public
     Line: Integer;
@@ -39,13 +45,19 @@ type
     FLexer: TAetherLexer;
     FCurTok: TToken;
     FPeekTok: TToken;
+    FTupleTempCounter: Integer;
 
     procedure Advance;
     function Check(Kind: TTokenKind): Boolean;
     function Match(Kind: TTokenKind): Boolean;
     function Expect(Kind: TTokenKind; const Msg: string = ''): TToken;
+    function SaveParserState: TParserState;
+    procedure RestoreParserState(const AState: TParserState);
 
     function ParseTypeRef: string;
+    function LookaheadIsTupleTypeDecl(AModule: TASTModule): Boolean;
+    procedure ParseTupleDestruct(IsMut: Boolean; DestList: TASTNodeList; ForcePublic: Boolean = True; HasExplicitVis: Boolean = False);
+    procedure ParseCallArgs(CallExpr: TASTCallExpr);
     procedure ParseAttribute(var Attrs: TParsedAttributes);
     procedure ParseImport(AModule: TASTModule);
     procedure ParseConstSection(AModule: TASTModule; var SectionAttrs: TParsedAttributes); overload;
@@ -107,6 +119,7 @@ constructor TAetherParser.Create(ALexer: TAetherLexer);
 begin
   inherited Create;
   FLexer := ALexer;
+  FTupleTempCounter := 0;
   Advance;
   Advance;
 end;
@@ -115,6 +128,20 @@ procedure TAetherParser.Advance;
 begin
   FCurTok := FPeekTok;
   FPeekTok := FLexer.NextToken;
+end;
+
+function TAetherParser.SaveParserState: TParserState;
+begin
+  Result.LexState := FLexer.SaveState;
+  Result.CurTok := FCurTok;
+  Result.PeekTok := FPeekTok;
+end;
+
+procedure TAetherParser.RestoreParserState(const AState: TParserState);
+begin
+  FLexer.RestoreState(AState.LexState);
+  FCurTok := AState.CurTok;
+  FPeekTok := AState.PeekTok;
 end;
 
 function TAetherParser.Check(Kind: TTokenKind): Boolean;
@@ -154,7 +181,8 @@ end;
 
 function TAetherParser.ParseTypeRef: string;
 var
-  BaseType: string;
+  BaseType, ParamsStr, RetT: string;
+  ElemCount: Integer;
 
   function ConsumeGenericClose: Boolean;
   begin
@@ -167,7 +195,75 @@ var
     end;
     Result := False;
   end;
+
+  function ParseFnTypeParamList: string;
+  var
+    PType: string;
+  begin
+    Result := '';
+    if Check(tokRParen) then Exit;
+    repeat
+      if Match(tokTake) or Match(tokBorrow) then
+        // consume ownership modifier if present
+      else if Match(tokMut) then
+        Expect(tokBorrow, 'Expected "borrow" after "mut"');
+
+      if Check(tokIdentifier) and (FPeekTok.Kind = tokColon) then
+      begin
+        Advance; // param name
+        Advance; // ':'
+      end;
+      PType := ParseTypeRef();
+      if Result <> '' then Result := Result + ', ';
+      Result := Result + PType;
+    until (not Match(tokComma)) and (not Match(tokSemicolon));
+  end;
 begin
+  if Match(tokLParen) then
+  begin
+    BaseType := ParseTypeRef();
+    ElemCount := 1;
+    if Match(tokComma) then
+    begin
+      BaseType := '(' + BaseType + ', ' + ParseTypeRef();
+      Inc(ElemCount);
+      while Match(tokComma) do
+      begin
+        BaseType := BaseType + ', ' + ParseTypeRef();
+        Inc(ElemCount);
+      end;
+      Expect(tokRParen, 'Expected ")" to close tuple type');
+      Result := BaseType + ')';
+    end
+    else
+    begin
+      Expect(tokRParen, 'Expected ")" to close parenthesized type');
+      Result := BaseType;
+    end;
+    Exit;
+  end;
+  if Match(tokFunction) then
+  begin
+    Expect(tokLParen, 'Expected "(" after "function" in function type');
+    ParamsStr := ParseFnTypeParamList;
+    Expect(tokRParen, 'Expected ")" to close function type parameters');
+    if (not Match(tokReturn)) and (not Match(tokColon)) then
+      raise EAetherParserError.Create('Expected "return <Type>" or ": <Type>" in function type', FCurTok.Line, FCurTok.Col);
+    RetT := ParseTypeRef();
+    Result := 'fn(' + ParamsStr + ') -> ' + RetT;
+    Exit;
+  end;
+  if Match(tokProcedure) then
+  begin
+    ParamsStr := '';
+    if Match(tokLParen) then
+    begin
+      ParamsStr := ParseFnTypeParamList;
+      Expect(tokRParen, 'Expected ")" to close procedure type parameters');
+    end;
+    Result := 'fn(' + ParamsStr + ') -> Void';
+    Exit;
+  end;
   if Match(tokCaret) then
   begin
     Result := '^' + ParseTypeRef();
@@ -598,6 +694,72 @@ begin
   end;
 end;
 
+function TAetherParser.LookaheadIsTupleTypeDecl(AModule: TASTModule): Boolean;
+var
+  Saved: TParserState;
+  Id: string;
+  ItemCount: Integer;
+  Node: TASTNode;
+
+  function IsKnownTypeIdent(const N: string): Boolean;
+  var
+    K: Integer;
+    Nd: TASTNode;
+  begin
+    if SameText(N, 'Int8') or SameText(N, 'Int16') or SameText(N, 'Int32') or SameText(N, 'Int64') or
+       SameText(N, 'UInt8') or SameText(N, 'UInt16') or SameText(N, 'UInt32') or SameText(N, 'UInt64') or
+       SameText(N, 'Float32') or SameText(N, 'Float64') or SameText(N, 'Bool') or SameText(N, 'Char') or
+       SameText(N, 'String') or SameText(N, 'Pointer') or SameText(N, 'Option') or SameText(N, 'Result') or
+       SameText(N, 'Box') or SameText(N, 'Task') then
+      Exit(True);
+    if Assigned(AModule) then
+      for K := 0 to AModule.Types.Count - 1 do
+      begin
+        Nd := TASTNode(AModule.Types[K]);
+        if (Nd is TASTRecordDecl) and SameText(TASTRecordDecl(Nd).Name, N) then Exit(True);
+        if (Nd is TASTEnumDecl) and SameText(TASTEnumDecl(Nd).Name, N) then Exit(True);
+        if (Nd is TASTArrayDecl) and SameText(TASTArrayDecl(Nd).Name, N) then Exit(True);
+        if (Nd is TASTSetDecl) and SameText(TASTSetDecl(Nd).Name, N) then Exit(True);
+        if (Nd is TASTSubrangeDecl) and SameText(TASTSubrangeDecl(Nd).Name, N) then Exit(True);
+        if (Nd is TASTMapDecl) and SameText(TASTMapDecl(Nd).Name, N) then Exit(True);
+        if (Nd is TASTTypeAliasDecl) and SameText(TASTTypeAliasDecl(Nd).Name, N) then Exit(True);
+      end;
+    Result := False;
+  end;
+begin
+  Result := False;
+  Saved := SaveParserState;
+  try
+    if not Match(tokLParen) then Exit;
+    ItemCount := 0;
+    while not Check(tokRParen) and not Check(tokEOF) do
+    begin
+      Inc(ItemCount);
+      if not Check(tokIdentifier) then
+      begin
+        Result := True;
+        Exit;
+      end;
+      Id := Expect(tokIdentifier).Value;
+      if Check(tokLess) or Check(tokDot) or IsKnownTypeIdent(Id) then
+      begin
+        Result := True;
+        Exit;
+      end;
+      if not Match(tokComma) then
+      begin
+        if not Check(tokRParen) then
+          Result := True;
+        Exit;
+      end;
+    end;
+    Node := nil;
+    if Assigned(Node) then;
+  finally
+    RestoreParserState(Saved);
+  end;
+end;
+
 procedure TAetherParser.ParseTypeSection(AModule: TASTModule; var SectionAttrs: TParsedAttributes);
 var
   TypeName, TypeDoc, EffectiveCfg, LowBound, HighBound, BaseType, KeyType, ValType, AliasTarget: string;
@@ -612,15 +774,18 @@ var
   AliasDecl: TASTTypeAliasDecl;
   CurrentAttrs: TParsedAttributes;
   SecHasVis, SecIsPub, ItemHasVis, ItemIsPub: Boolean;
+  GenParams: TStringList;
 begin
   Expect(tokType);
   SecHasVis := SectionAttrs.HasVis;
   SecIsPub := SectionAttrs.IsPublic;
   InitAttributes(CurrentAttrs);
+  GenParams := TStringList.Create;
   try
     while not Check(tokEOF) do
     begin
       ClearAttributes(CurrentAttrs);
+      GenParams.Clear;
       while Check(tokLBracket) or Check(tokAt) do
         ParseAttribute(CurrentAttrs);
 
@@ -642,12 +807,19 @@ begin
         end;
       end;
 
-      if Check(tokIdentifier) and (FPeekTok.Kind = tokEqual) then
+      if Check(tokIdentifier) and (FPeekTok.Kind in [tokEqual, tokLess]) then
       begin
         TLine := FCurTok.Line;
         TCol := FCurTok.Col;
         TypeDoc := FCurTok.DocComment;
         TypeName := Expect(tokIdentifier).Value;
+        if Match(tokLess) then
+        begin
+          repeat
+            GenParams.Add(Expect(tokIdentifier, 'Expected generic type parameter').Value);
+          until not Match(tokComma);
+          Expect(tokGreater, 'Expected ">" after record generic parameters');
+        end;
         Expect(tokEqual, 'Expected "=" in type declaration');
 
         EffectiveCfg := CurrentAttrs.CfgCondition;
@@ -660,6 +832,7 @@ begin
           RecDecl.DocComment := TypeDoc;
           RecDecl.Derives.AddStrings(CurrentAttrs.Derives);
           RecDecl.Derives.AddStrings(SectionAttrs.Derives);
+          RecDecl.GenericParams.AddStrings(GenParams);
           RecDecl.CfgCondition := EffectiveCfg;
           RecDecl.HasExplicitVis := ItemHasVis;
           RecDecl.IsPublic := ItemIsPub;
@@ -767,7 +940,7 @@ begin
           SubDecl.IsPublic := ItemIsPub;
           AModule.Types.Add(SubDecl);
         end
-        else if Check(tokLParen) then
+        else if Check(tokLParen) and (not LookaheadIsTupleTypeDecl(AModule)) then
         begin
           Advance; // consume '('
           EnumDecl := TASTEnumDecl.Create(TLine, TCol, TypeName);
@@ -811,6 +984,7 @@ begin
       end;
     end;
   finally
+    GenParams.Free;
     FreeAttributes(CurrentAttrs);
   end;
 end;
@@ -928,6 +1102,63 @@ begin
   end;
 end;
 
+procedure TAetherParser.ParseTupleDestruct(IsMut: Boolean; DestList: TASTNodeList; ForcePublic, HasExplicitVis: Boolean);
+var
+  Names: TStringList;
+  VarType, TempName: string;
+  InitExpr, ItemExpr: TASTExpr;
+  VLine, VCol, I: Integer;
+  TempVD, ElemVD: TASTVarDecl;
+begin
+  VLine := FCurTok.Line;
+  VCol := FCurTok.Col;
+  Expect(tokLParen, 'Expected "(" in tuple destructuring');
+  Names := TStringList.Create;
+  try
+    if not Check(tokRParen) then
+    begin
+      repeat
+        if Match(tokUnderscore) then
+          Names.Add('_')
+        else
+          Names.Add(Expect(tokIdentifier, 'Expected identifier or "_" in tuple destructuring').Value);
+      until not Match(tokComma);
+    end;
+    if Names.Count < 1 then
+      raise EAetherParserError.Create('Tuple destructuring pattern cannot be empty', VLine, VCol);
+    Expect(tokRParen, 'Expected ")" to close tuple destructuring pattern');
+
+    VarType := '';
+    if Match(tokColon) then
+      VarType := ParseTypeRef();
+
+    if (not Match(tokAssign)) and (not Match(tokEqual)) then
+      raise EAetherParserError.Create('Expected ":=" or "=" in tuple destructuring declaration', FCurTok.Line, FCurTok.Col);
+    InitExpr := ParseExpr;
+
+    Inc(FTupleTempCounter);
+    TempName := '__aether_tup_' + IntToStr(FTupleTempCounter);
+    TempVD := TASTVarDecl.Create(VLine, VCol, TempName, VarType, InitExpr, False);
+    TempVD.ExpectedTupleArity := Names.Count;
+    TempVD.HasExplicitVis := HasExplicitVis;
+    TempVD.IsPublic := ForcePublic;
+    DestList.Add(TempVD);
+
+    for I := 0 to Names.Count - 1 do
+    begin
+      if Names[I] = '_' then Continue;
+      ItemExpr := TASTMemberAccessExpr.Create(VLine, VCol,
+        TASTIdentifierExpr.Create(VLine, VCol, TempName), 'item' + IntToStr(I));
+      ElemVD := TASTVarDecl.Create(VLine, VCol, Names[I], '', ItemExpr, IsMut);
+      ElemVD.HasExplicitVis := HasExplicitVis;
+      ElemVD.IsPublic := ForcePublic;
+      DestList.Add(ElemVD);
+    end;
+  finally
+    Names.Free;
+  end;
+end;
+
 procedure TAetherParser.ParseVarSection(ALocalVars: TASTNodeList; ForcePublic: Boolean; HasExplicitVis: Boolean);
 var
   VarNames: TStringList;
@@ -942,8 +1173,15 @@ begin
 
   VarNames := TStringList.Create;
   try
-    while Check(tokIdentifier) do
+    while Check(tokIdentifier) or Check(tokLParen) do
     begin
+      if Check(tokLParen) then
+      begin
+        ParseTupleDestruct(IsMut, ALocalVars, ForcePublic, HasExplicitVis);
+        Expect(tokSemicolon, 'Expected ";" after tuple destructuring');
+        Continue;
+      end;
+
       VarNames.Clear;
       VLine := FCurTok.Line;
       VCol := FCurTok.Col;
@@ -1117,13 +1355,22 @@ begin
   Result.IsPublic := FIsPub;
   ParamNames := TStringList.Create;
   try
-    // Generic parameter with optional bound: function Print<T: Printable>(...)
+    // Generic parameters with optional trait bounds: function F<T, U: Printable>(...)
     if Match(tokLess) then
     begin
-      Result.GenericParam := Expect(tokIdentifier, 'Expected generic parameter name').Value;
-      if Match(tokColon) then
-        Result.TraitBound := Expect(tokIdentifier, 'Expected trait name in bound').Value;
-      Expect(tokGreater, 'Expected ">" to close generic parameter');
+      repeat
+        Result.GenericParams.Add(Expect(tokIdentifier, 'Expected generic parameter name').Value);
+        if Match(tokColon) then
+          Result.TraitBounds.Add(Expect(tokIdentifier, 'Expected trait name in bound').Value)
+        else
+          Result.TraitBounds.Add('');
+      until not Match(tokComma);
+      Expect(tokGreater, 'Expected ">" to close generic parameters');
+      if Result.GenericParams.Count > 0 then
+      begin
+        Result.GenericParam := Result.GenericParams[0];
+        Result.TraitBound := Result.TraitBounds[0];
+      end;
     end;
 
     // Optional parentheses when there are no parameters
@@ -1559,7 +1806,7 @@ end;
 function TAetherParser.ParseMatchCaseHead: TASTMatchCase;
 var
   PatternNode: TASTPattern;
-  PatVal, SubVal: string;
+  PatVal, SubVal, ArgBind: string;
   IsLet: Boolean;
   PLine, PCol: Integer;
 begin
@@ -1578,27 +1825,41 @@ begin
   else
   begin
     PatVal := ParseSingleMatchPatternItem;
+    PatternNode := TASTPattern.Create(PLine, PCol, PatVal, '', False);
     if Match(tokLParen) then
     begin
-      if Match(tokLet) then
-        IsLet := True;
-      if Check(tokIdentifier) then
-        SubVal := Expect(tokIdentifier).Value
-      else if Match(tokUnderscore) then
-        SubVal := '_'
-      else if Check(tokIntLiteral) or Check(tokStringLiteral) then
+      if not Check(tokRParen) then
       begin
-        SubVal := FCurTok.Value;
-        Advance;
+        repeat
+          ArgBind := '';
+          if Match(tokLet) then
+            IsLet := True;
+          if Check(tokIdentifier) then
+            ArgBind := Expect(tokIdentifier).Value
+          else if Match(tokUnderscore) then
+            ArgBind := '_'
+          else if Check(tokIntLiteral) or Check(tokStringLiteral) or Check(tokCharLiteral) then
+          begin
+            ArgBind := FCurTok.Value;
+            Advance;
+          end
+          else if Match(tokTrue) then
+            ArgBind := 'true'
+          else if Match(tokFalse) then
+            ArgBind := 'false';
+
+          if Match(tokDot) then
+            ArgBind := ArgBind + '.' + Expect(tokIdentifier).Value;
+
+          PatternNode.Bindings.Add(ArgBind);
+        until not Match(tokComma);
       end;
-
-      if Match(tokDot) then
-        SubVal := SubVal + '.' + Expect(tokIdentifier).Value;
-
+      PatternNode.IsLet := IsLet;
+      if PatternNode.Bindings.Count > 0 then
+        PatternNode.SubPattern := PatternNode.Bindings[0];
       Expect(tokRParen, 'Expected ")" after pattern argument');
     end;
 
-    PatternNode := TASTPattern.Create(PLine, PCol, PatVal, SubVal, IsLet);
     while Match(tokComma) do
       PatternNode.Items.Add(ParseSingleMatchPatternItem);
   end;
@@ -1803,6 +2064,17 @@ begin
   Advance; // consume 'var' or 'let'
 
   Result := TASTVarDeclStmt.Create(VLine, VCol);
+  if Check(tokLParen) then
+  begin
+    try
+      ParseTupleDestruct(IsMut, Result.Decls, True, False);
+    except
+      Result.Free;
+      raise;
+    end;
+    Exit;
+  end;
+
   VarNames := TStringList.Create;
   try
     try
@@ -2008,15 +2280,57 @@ begin
     Result := TASTLiteralExpr.Create(ALine, ACol, lkString, '');
 end;
 
+procedure TAetherParser.ParseCallArgs(CallExpr: TASTCallExpr);
+var
+  ArgLine, ArgCol: Integer;
+  ArgOwn: TOwnershipKind;
+  ArgFieldName: string;
+  ArgExpr: TASTExpr;
+  CallArg: TASTCallArg;
+begin
+  if Check(tokRParen) then Exit;
+  repeat
+    ArgLine := FCurTok.Line;
+    ArgCol := FCurTok.Col;
+    ArgOwn := owNone;
+    if Match(tokTake) then
+      ArgOwn := owTake
+    else if Match(tokBorrow) then
+      ArgOwn := owBorrow
+    else if Match(tokMut) then
+    begin
+      Expect(tokBorrow);
+      ArgOwn := owMutBorrow;
+    end;
+
+    ArgFieldName := '';
+    if Check(tokIdentifier) and (FPeekTok.Kind = tokColon) then
+    begin
+      ArgFieldName := FCurTok.Value;
+      Advance; // consume field name
+      Advance; // consume ':'
+    end;
+
+    ArgExpr := ParseExpr;
+    CallArg := TASTCallArg.Create(ArgLine, ArgCol, ArgOwn, ArgExpr);
+    CallArg.FieldName := ArgFieldName;
+    CallExpr.Args.Add(CallArg);
+  until not Match(tokComma);
+end;
+
 function TAetherParser.ParsePrimaryExpr: TASTExpr;
 var
-  Id, ArgFieldName: string;
-  Line, Col: Integer;
+  Id, PartA, PartB, FloatVal, PName, PType, CloseKw: string;
+  Line, Col, DotPos, I, PLine, PCol: Integer;
   CallExpr: TASTCallExpr;
   ArgExpr, CondExpr, ThenExpr, ElseExpr: TASTExpr;
-  ArgOwn: TOwnershipKind;
   IdxExpr: TASTIndexExpr;
-  CallArg: TASTCallArg;
+  TupExpr: TASTTupleLiteralExpr;
+  LambdaExpr: TASTLambdaExpr;
+  POwn: TOwnershipKind;
+  ParamNames, GenArgs: TStringList;
+  SavedState: TParserState;
+  TryGenOk: Boolean;
 begin
   Line := FCurTok.Line;
   Col := FCurTok.Col;
@@ -2035,8 +2349,81 @@ begin
   if Check(tokMatch) then
     Exit(ParseMatchExpr);
 
-  // Literals, arrays/sets, parenthesized grouping, or identifiers/calls
-  if Check(tokIntLiteral) then
+  // Lambda / closure expression: fn(params) [return Type | : Type] => expr  OR  begin ... end fn
+  if Check(tokIdentifier) and SameText(FCurTok.Value, 'fn') and (FPeekTok.Kind = tokLParen) then
+  begin
+    Advance; // consume 'fn'
+    Expect(tokLParen, 'Expected "(" after "fn"');
+    LambdaExpr := TASTLambdaExpr.Create(Line, Col);
+    ParamNames := TStringList.Create;
+    try
+      if not Check(tokRParen) then
+      begin
+        repeat
+          POwn := owNone;
+          if Match(tokTake) then POwn := owTake
+          else if Match(tokBorrow) then POwn := owBorrow
+          else if Match(tokMut) then
+          begin
+            Expect(tokBorrow, 'Expected "borrow" after "mut"');
+            POwn := owMutBorrow;
+          end;
+
+          ParamNames.Clear;
+          PLine := FCurTok.Line;
+          PCol := FCurTok.Col;
+          PName := Expect(tokIdentifier, 'Expected lambda parameter name').Value;
+          ParamNames.Add(PName);
+          while Match(tokComma) do
+          begin
+            // Peek ahead: if next looks like another bare param in a group (e.g. a, b: Int32), group it; else break if annotated/different
+            if Check(tokIdentifier) and ((FPeekTok.Kind = tokComma) or (FPeekTok.Kind = tokColon) or (FPeekTok.Kind = tokRParen)) then
+              ParamNames.Add(Expect(tokIdentifier).Value)
+            else
+              Break;
+          end;
+
+          PType := '';
+          if Match(tokColon) then
+            PType := ParseTypeRef();
+
+          for I := 0 to ParamNames.Count - 1 do
+            LambdaExpr.Params.Add(TASTParam.Create(PLine, PCol, ParamNames[I], PType, POwn));
+        until (not Match(tokSemicolon)) and (not Match(tokComma));
+      end;
+      Expect(tokRParen, 'Expected ")" to close lambda parameters');
+
+      if Match(tokReturn) or Match(tokColon) then
+        LambdaExpr.ReturnType := ParseTypeRef();
+
+      if Match(tokFatArrow) then
+      begin
+        LambdaExpr.BodyExpr := ParseExpr;
+      end
+      else
+      begin
+        Match(tokIs);
+        Expect(tokBegin, 'Expected "=>" or "begin" in lambda body');
+        while not Check(tokEnd) and not Check(tokEOF) do
+        begin
+          LambdaExpr.BodyStmts.Add(ParseStatement);
+          Expect(tokSemicolon, 'Expected ";" after statement in lambda body');
+        end;
+        Expect(tokEnd, 'Expected "end fn" to close lambda block');
+        CloseKw := Expect(tokIdentifier, 'Expected "fn" after "end" to close lambda block').Value;
+        if not SameText(CloseKw, 'fn') then
+          raise EAetherParserError.Create(Format('Expected "end fn" to close lambda block, found "end %s"', [CloseKw]), FCurTok.Line, FCurTok.Col);
+      end;
+      Result := LambdaExpr;
+    except
+      ParamNames.Free;
+      LambdaExpr.Free;
+      raise;
+    end;
+    ParamNames.Free;
+  end
+  // Literals, arrays/sets, parenthesized grouping / tuple literals, or identifiers/calls
+  else if Check(tokIntLiteral) then
   begin
     Result := TASTLiteralExpr.Create(Line, Col, lkInt, FCurTok.Value);
     Advance;
@@ -2112,60 +2499,86 @@ begin
   end
   else if Match(tokLParen) then
   begin
-    // Parentheses (Expr)
-    Result := ParseExpr;
-    Expect(tokRParen, 'Expected ")" to close expression');
+    // Parenthesized expression (Expr) or Tuple Literal (e0, e1, ...)
+    ArgExpr := ParseExpr;
+    if Match(tokComma) then
+    begin
+      TupExpr := TASTTupleLiteralExpr.Create(Line, Col);
+      try
+        TupExpr.Elements.Add(ArgExpr);
+        if not Check(tokRParen) then
+        begin
+          TupExpr.Elements.Add(ParseExpr);
+          while Match(tokComma) do
+          begin
+            if Check(tokRParen) then Break;
+            TupExpr.Elements.Add(ParseExpr);
+          end;
+        end;
+        Expect(tokRParen, 'Expected ")" to close tuple literal');
+      except
+        TupExpr.Free;
+        raise;
+      end;
+      Result := TupExpr;
+    end
+    else
+    begin
+      Expect(tokRParen, 'Expected ")" to close expression');
+      Result := ArgExpr;
+    end;
   end
   else if Check(tokIdentifier) then
   begin
     Id := Expect(tokIdentifier).Value;
-
-    // Function Call or Record Constructor
-    if Match(tokLParen) then
-    begin
-      CallExpr := TASTCallExpr.Create(Line, Col, Id);
-      if not Check(tokRParen) then
+    GenArgs := TStringList.Create;
+    try
+      TryGenOk := False;
+      if Check(tokLess) then
       begin
-        repeat
-          ArgOwn := owNone;
-          if Match(tokTake) then
-            ArgOwn := owTake
-          else if Match(tokBorrow) then
-            ArgOwn := owBorrow
-          else if Match(tokMut) then
+        SavedState := SaveParserState;
+        try
+          Advance; // consume '<'
+          repeat
+            GenArgs.Add(ParseTypeRef);
+          until not Match(tokComma);
+          if Match(tokGreater) and Check(tokLParen) then
+            TryGenOk := True
+          else
           begin
-            Expect(tokBorrow);
-            ArgOwn := owMutBorrow;
+            GenArgs.Clear;
+            RestoreParserState(SavedState);
           end;
-
-          // Support for named arguments like DataBuffer(id: 101, size: 2048)
-          ArgFieldName := '';
-          if Check(tokIdentifier) and (FPeekTok.Kind = tokColon) then
-          begin
-            ArgFieldName := FCurTok.Value;
-            Advance; // consume field name
-            Advance; // consume ':'
-          end;
-
-          ArgExpr := ParseExpr;
-          CallArg := TASTCallArg.Create(Line, Col, ArgOwn, ArgExpr);
-          CallArg.FieldName := ArgFieldName;
-          CallExpr.Args.Add(CallArg);
-        until not Match(tokComma);
+        except
+          GenArgs.Clear;
+          RestoreParserState(SavedState);
+          TryGenOk := False;
+        end;
       end;
-      Expect(tokRParen, 'Expected ")" to close arguments');
-      Result := CallExpr;
-    end
-    else
-    begin
-      Result := TASTIdentifierExpr.Create(Line, Col, Id);
+
+      // Function Call or Record Constructor (with optional <TypeArgs>)
+      if Match(tokLParen) then
+      begin
+        CallExpr := TASTCallExpr.Create(Line, Col, Id);
+        if TryGenOk then
+          CallExpr.GenericArgs.AddStrings(GenArgs);
+        ParseCallArgs(CallExpr);
+        Expect(tokRParen, 'Expected ")" to close arguments');
+        Result := CallExpr;
+      end
+      else
+      begin
+        Result := TASTIdentifierExpr.Create(Line, Col, Id);
+      end;
+    finally
+      GenArgs.Free;
     end;
   end
   else
     raise EAetherParserError.Create(Format('Unexpected expression: "%s"', [FCurTok.Value]), Line, Col);
 
-  // Postfix access on any primary expression: member (obj.field / UFCS), indexing (arr[i]), dereference (ptr^), or propagation (?)
-  while Check(tokDot) or Check(tokLBracket) or Check(tokCaret) or Check(tokQuestion) do
+  // Postfix access on any primary expression: member, tuple .N, UFCS, indexing [i], dereference ^, propagation ?, or chained call (args)
+  while Check(tokDot) or Check(tokLBracket) or Check(tokCaret) or Check(tokQuestion) or Check(tokLParen) do
   begin
     if Check(tokQuestion) then
     begin
@@ -2176,38 +2589,49 @@ begin
     begin
       Result := TASTUnaryExpr.Create(Line, Col, '^', Result);
     end
+    else if Match(tokLParen) then
+    begin
+      CallExpr := TASTCallExpr.Create(Line, Col, '');
+      CallExpr.CalleeExpr := Result;
+      CallExpr.IsIndirectCall := True;
+      ParseCallArgs(CallExpr);
+      Expect(tokRParen, 'Expected ")" to close arguments');
+      Result := CallExpr;
+    end
     else if Match(tokDot) then
     begin
-      Id := Expect(tokIdentifier, 'Expected identifier after "."').Value;
-      if Match(tokLParen) then
+      if Check(tokIntLiteral) then
       begin
-        // UFCS: expr.Method(args...) is transparently lowered to Method(borrow expr, args...)
-        CallExpr := TASTCallExpr.Create(Line, Col, Id);
-        CallExpr.IsQualified := True;
-        CallExpr.Args.Add(TASTCallArg.Create(Line, Col, owBorrow, Result));
-
-        if not Check(tokRParen) then
-        begin
-          repeat
-            ArgOwn := owNone;
-            if Match(tokTake) then ArgOwn := owTake
-            else if Match(tokBorrow) then ArgOwn := owBorrow
-            else if Match(tokMut) then
-            begin
-              Expect(tokBorrow);
-              ArgOwn := owMutBorrow;
-            end;
-
-            ArgExpr := ParseExpr;
-            CallExpr.Args.Add(TASTCallArg.Create(Line, Col, ArgOwn, ArgExpr));
-          until not Match(tokComma);
-        end;
-        Expect(tokRParen, 'Expected ")" to close arguments');
-        Result := CallExpr;
+        Result := TASTMemberAccessExpr.Create(Line, Col, Result, 'item' + FCurTok.Value);
+        Advance;
+      end
+      else if Check(tokFloatLiteral) and (Pos('.', FCurTok.Value) > 0) then
+      begin
+        FloatVal := FCurTok.Value;
+        DotPos := Pos('.', FloatVal);
+        PartA := Copy(FloatVal, 1, DotPos - 1);
+        PartB := Copy(FloatVal, DotPos + 1, Length(FloatVal));
+        Advance;
+        Result := TASTMemberAccessExpr.Create(Line, Col, Result, 'item' + PartA);
+        Result := TASTMemberAccessExpr.Create(Line, Col, Result, 'item' + PartB);
       end
       else
       begin
-        Result := TASTMemberAccessExpr.Create(Line, Col, Result, Id);
+        Id := Expect(tokIdentifier, 'Expected identifier after "."').Value;
+        if Match(tokLParen) then
+        begin
+          // UFCS: expr.Method(args...) is transparently lowered to Method(borrow expr, args...)
+          CallExpr := TASTCallExpr.Create(Line, Col, Id);
+          CallExpr.IsQualified := True;
+          CallExpr.Args.Add(TASTCallArg.Create(Line, Col, owBorrow, Result));
+          ParseCallArgs(CallExpr);
+          Expect(tokRParen, 'Expected ")" to close arguments');
+          Result := CallExpr;
+        end
+        else
+        begin
+          Result := TASTMemberAccessExpr.Create(Line, Col, Result, Id);
+        end;
       end;
     end
     else if Match(tokLBracket) then
@@ -2492,7 +2916,8 @@ begin
             StubFunc := TASTFunction(Result.Functions[StubIdx]);
             if StubFunc.IsProcedure <> ImplFunc.IsProcedure then
               raise EAetherParserError.Create(Format('Mismatched signature in implementation for "%s" (function/procedure)', [ImplFunc.Name]), ImplFunc.Line, ImplFunc.Col);
-            if (not SameText(StubFunc.GenericParam, ImplFunc.GenericParam)) or (not SameText(StubFunc.TraitBound, ImplFunc.TraitBound)) then
+            if (not SameText(StubFunc.GenericParams.CommaText, ImplFunc.GenericParams.CommaText)) or
+               (not SameText(StubFunc.TraitBounds.CommaText, ImplFunc.TraitBounds.CommaText)) then
               raise EAetherParserError.Create(Format('Mismatched generic parameter in implementation for "%s"', [ImplFunc.Name]), ImplFunc.Line, ImplFunc.Col);
             if not SameText(StubFunc.ReturnType, ImplFunc.ReturnType) then
               raise EAetherParserError.Create(Format('Mismatched return type in implementation for "%s": expected "%s", found "%s"',
