@@ -1,7 +1,7 @@
 {
   "name": "calc_web_multitarget",
   "version": "0.1.0",
-  "description": "Exemplo da Fase 30: Multiplos targets (Wasm via Clang, JS via Pas2JS, Nativo C com Clang e GCC)",
+  "description": "Phase 30 Example: Multiple targets (Wasm via Clang, JS via Pas2JS, Native C with Clang and GCC)",
   "backend": "clang",
   "c_compiler": "clang",
   "entry": "calc_web.aeth",

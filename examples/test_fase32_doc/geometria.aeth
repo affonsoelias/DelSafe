@@ -1,38 +1,38 @@
-/// Módulo de cálculos geométricos e estatísticos de alta precisão.
-/// Fornece estruturas, contratos formais e funções com semântica estrita de posse.
+/// High-precision geometric and statistical calculations module.
+/// Provides data structures, formal contracts, and functions with strict ownership semantics.
 module geometria;
 
 type
-    /// Representa um Ponto 2D no plano cartesiano.
-    Ponto = record
-        /// Coordenada horizontal X.
+    /// Represents a 2D Point on the Cartesian plane.
+    Point = record
+        /// Horizontal X coordinate.
         x: Float64;
-        /// Coordenada vertical Y.
+        /// Vertical Y coordinate.
         y: Float64;
-    end;
+    end record;
 
-    /// Modo de renderização de formas geométricas.
-    ModoRender = enum
+    /// Rendering mode for geometric shapes.
+    RenderMode = enum
         Wireframe,
         Solid,
         Textured
-    end;
+    end enum;
 
-/// Contrato para formas geométricas com cálculo de área.
-trait FormaGeometrica
-    function CalcularArea(borrow self: Ponto) return Float64;
-end;
+/// Contract for geometric shapes supporting area calculation.
+trait GeometricShape
+    function ComputeArea(borrow self: Point) return Float64;
+end trait;
 
-/// Cria um novo ponto no plano cartesiano.
-/// @param x Coordenada X
-/// @param y Coordenada Y
-/// @return Uma nova instância de Ponto com posse transferida
+/// Creates a new point on the Cartesian plane.
+/// @param x X coordinate
+/// @param y Y coordinate
+/// @return A new Point instance with transferred ownership
 ///
 /// ```aether
-/// var p: Ponto := CriarPonto(10.0, 20.0);
+/// var p: Point := CreatePoint(10.0, 20.0);
 /// Assert(p.x > 0.0);
 /// ```
-function CriarPonto(x, y: Float64) return Ponto is
+function CreatePoint(x, y: Float64) return Point is
 contract
     require
         x >= 0.0;
@@ -40,42 +40,42 @@ contract
     ensure
         result.x >= 0.0;
 var
-    res: Ponto;
+    res: Point;
 begin
     res.x := x;
     res.y := y;
     return res;
-end CriarPonto;
+end CreatePoint;
 
-/// Desloca as coordenadas de um ponto diretamente na memória.
-/// @param p Referência mutável do ponto a ser modificado
-/// @param dx Deslocamento horizontal
-/// @param dy Deslocamento vertical
-procedure DeslocarPonto(mut borrow p: Ponto; dx, dy: Float64) is
+/// Translates the coordinates of a point directly in memory.
+/// @param p Mutable reference to the point to modify
+/// @param dx Horizontal offset
+/// @param dy Vertical offset
+procedure ShiftPoint(mut borrow p: Point; dx, dy: Float64) is
 begin
     p.x := p.x + dx;
     p.y := p.y + dy;
-end DeslocarPonto;
+end ShiftPoint;
 
-/// Computa a área assíncrona de um retângulo delimitador.
-/// @param largura Largura total do retângulo
-/// @param altura Altura total do retângulo
-/// @return Tarefa contendo a área calculada
-async function CalcularAreaAsync(largura, altura: Float64) return Float64 is
+/// Asynchronously computes the area of a bounding rectangle.
+/// @param width Total width of the rectangle
+/// @param height Total height of the rectangle
+/// @return Task containing the computed area
+async function ComputeAreaAsync(width, height: Float64) return Float64 is
 contract
     require
-        largura > 0.0;
-        altura > 0.0;
+        width > 0.0;
+        height > 0.0;
 begin
-    return largura * altura;
-end CalcularAreaAsync;
+    return width * height;
+end ComputeAreaAsync;
 
 program Main;
 var
-    p: Ponto;
+    p: Point;
 begin
-    p := CriarPonto(5.0, 10.0);
-    DeslocarPonto(mut borrow p, 2.0, 3.0);
-    PrintLn("Ponto X: " + FloatToStr(p.x));
-    PrintLn("Ponto Y: " + FloatToStr(p.y));
+    p := CreatePoint(5.0, 10.0);
+    ShiftPoint(mut borrow p, 2.0, 3.0);
+    PrintLn("Point X: " + FloatToStr(p.x));
+    PrintLn("Point Y: " + FloatToStr(p.y));
 end geometria.

@@ -54,7 +54,7 @@ begin
     Exit(IsPureExpr(TASTUnaryExpr(Expr).Expr));
   if Expr is TASTBinaryExpr then
     Exit(IsPureExpr(TASTBinaryExpr(Expr).Left) and IsPureExpr(TASTBinaryExpr(Expr).Right));
-  Result := False; // Chamadas de funções ou outras expressões podem ter efeitos colaterais
+  Result := False; // Function calls or other expressions may have side effects
 end;
 
 function TAetherOptimizer.OptimizeUnaryExpr(Unary: TASTUnaryExpr; var NewExpr: TASTExpr): Boolean;
@@ -69,24 +69,24 @@ begin
   NewExpr := nil;
   if Unary = nil then Exit;
 
-  // Primeiro otimiza o filho recursivamente
+  // Optimize child recursively first
   OptimizeExpr(Unary.Expr);
   Child := Unary.Expr;
 
-  // 1. Simplificação de dupla negação: not (not X) -> X
+  // 1. Double-negation simplification: not (not X) -> X
   if ((Unary.Op = 'not') or (Unary.Op = '!')) and (Child is TASTUnaryExpr) then
   begin
     SubUnary := TASTUnaryExpr(Child);
     if (SubUnary.Op = 'not') or (SubUnary.Op = '!') then
     begin
       NewExpr := SubUnary.Expr;
-      SubUnary.Expr := nil; // Desconecta para não liberar na destruição
+      SubUnary.Expr := nil; // Detach to prevent freeing on destruction
       Inc(FStats.SimplifiedIdentities);
       Exit(True);
     end;
   end;
 
-  // 2. Dobra de constantes com literais
+  // 2. Constant folding with literals
   if Child is TASTLiteralExpr then
   begin
     Lit := TASTLiteralExpr(Child);
@@ -137,19 +137,19 @@ begin
   NewExpr := nil;
   if Bin = nil then Exit;
 
-  // Otimiza ambos os lados recursivamente
+  // Optimize both sides recursively
   OptimizeExpr(Bin.Left);
   OptimizeExpr(Bin.Right);
 
   Op := LowerCase(Trim(Bin.Op));
 
-  // --- CASO 1: AMBOS OS LADOS SÃO LITERAIS (Constant Folding Completo) ---
+  // --- CASE 1: BOTH SIDES ARE LITERALS (Full Constant Folding) ---
   if (Bin.Left is TASTLiteralExpr) and (Bin.Right is TASTLiteralExpr) then
   begin
     LeftLit := TASTLiteralExpr(Bin.Left);
     RightLit := TASTLiteralExpr(Bin.Right);
 
-    // Inteiros
+    // Integers
     if (LeftLit.Kind = lkInt) and (RightLit.Kind = lkInt) then
     begin
       LVal := StrToInt64Def(LeftLit.Value, 0);
@@ -267,7 +267,7 @@ begin
       end;
     end;
 
-    // Booleanos
+    // Booleans
     if (LeftLit.Kind = lkBool) and (RightLit.Kind = lkBool) then
     begin
       LBool := SameText(LeftLit.Value, 'true');
@@ -307,7 +307,7 @@ begin
       end;
     end;
 
-    // Concatenação de Strings
+    // String Concatenation
     if (LeftLit.Kind = lkString) and (RightLit.Kind = lkString) and (Op = '+') then
     begin
       NewExpr := TASTLiteralExpr.Create(Bin.Line, Bin.Col, lkString, LeftLit.Value + RightLit.Value);
@@ -316,8 +316,8 @@ begin
     end;
   end;
 
-  // --- CASO 2: IDENTIDADES ALGÉBRICAS E CURTO-CIRCUITO ---
-  // Identidades com Inteiro 0 e 1
+  // --- CASE 2: ALGEBRAIC IDENTITIES AND SHORT-CIRCUITING ---
+  // Identities with Integer 0 and 1
   if Op = '+' then
   begin
     // 0 + X -> X
@@ -366,14 +366,14 @@ begin
       Inc(FStats.SimplifiedIdentities);
       Exit(True);
     end;
-    // 0 * X -> 0 (se X for puro)
+    // 0 * X -> 0 (if X is pure)
     if (Bin.Left is TASTLiteralExpr) and (TASTLiteralExpr(Bin.Left).Kind = lkInt) and (TASTLiteralExpr(Bin.Left).Value = '0') and IsPureExpr(Bin.Right) then
     begin
       NewExpr := TASTLiteralExpr.Create(Bin.Line, Bin.Col, lkInt, '0');
       Inc(FStats.SimplifiedIdentities);
       Exit(True);
     end;
-    // X * 0 -> 0 (se X for puro)
+    // X * 0 -> 0 (if X is pure)
     if (Bin.Right is TASTLiteralExpr) and (TASTLiteralExpr(Bin.Right).Kind = lkInt) and (TASTLiteralExpr(Bin.Right).Value = '0') and IsPureExpr(Bin.Left) then
     begin
       NewExpr := TASTLiteralExpr.Create(Bin.Line, Bin.Col, lkInt, '0');
@@ -394,7 +394,7 @@ begin
   end
   else if Op = 'and' then
   begin
-    // false and X -> false (curto-circuito puro)
+    // false and X -> false (pure short-circuit)
     if (Bin.Left is TASTLiteralExpr) and (TASTLiteralExpr(Bin.Left).Kind = lkBool) and (SameText(TASTLiteralExpr(Bin.Left).Value, 'false')) then
     begin
       NewExpr := TASTLiteralExpr.Create(Bin.Line, Bin.Col, lkBool, 'false');
@@ -420,7 +420,7 @@ begin
   end
   else if Op = 'or' then
   begin
-    // true or X -> true (curto-circuito)
+    // true or X -> true (short-circuit)
     if (Bin.Left is TASTLiteralExpr) and (TASTLiteralExpr(Bin.Left).Kind = lkBool) and (SameText(TASTLiteralExpr(Bin.Left).Value, 'true')) then
     begin
       NewExpr := TASTLiteralExpr.Create(Bin.Line, Bin.Col, lkBool, 'true');
@@ -463,7 +463,7 @@ begin
       Expr.Free;
       Expr := NewExpr;
       Result := True;
-      // Tenta otimizar a nova expressao resultante
+      // Try optimizing the newly resulting expression
       OptimizeExpr(Expr);
     end;
   end
@@ -474,7 +474,7 @@ begin
       Expr.Free;
       Expr := NewExpr;
       Result := True;
-      // Tenta otimizar a nova expressao resultante
+      // Try optimizing the newly resulting expression
       OptimizeExpr(Expr);
     end;
   end
@@ -558,7 +558,7 @@ begin
     CallStmt := TASTCallStmt(Stmt);
     if Assigned(CallStmt.CallExpr) then
     begin
-      // Otimiza o TASTCallExpr
+      // Optimize TASTCallExpr
       OptimizeExpr(TASTExpr(CallStmt.CallExpr));
     end;
   end
@@ -635,21 +635,21 @@ var
 begin
   if Statements = nil then Exit;
 
-  // 1. Otimiza cada instrução individualmente (expressões e sub-blocos)
+  // 1. Optimize each statement individually (expressions and sub-blocks)
   for I := 0 to Statements.Count - 1 do
   begin
     Stmt := TASTStmt(Statements[I]);
     OptimizeStmt(Stmt);
   end;
 
-  // 2. Dead Code Elimination (DCE) em nível de bloco
+  // 2. Block-level Dead Code Elimination (DCE)
   I := 0;
   HasReturn := False;
   while I < Statements.Count do
   begin
     Stmt := TASTStmt(Statements[I]);
 
-    // A. Instruções inalcançáveis após return incondicional
+    // A. Unreachable statements after unconditional return
     if HasReturn then
     begin
       Statements.Delete(I);
@@ -664,7 +664,7 @@ begin
       Continue;
     end;
 
-    // B. IfStmt com condição constante dobrada (true/false)
+    // B. IfStmt with constant-folded condition (true/false)
     if Stmt is TASTIfStmt then
     begin
       IfStmt := TASTIfStmt(Stmt);
@@ -673,8 +673,8 @@ begin
         CondLit := TASTLiteralExpr(IfStmt.Condition);
         if SameText(CondLit.Value, 'true') then
         begin
-          // O ramo then sempre executa! Promove o ThenBranch e descarta o ElseBranch
-          Statements.ExtractIndex(I); // Remove o IfStmt da lista sem desalocar seus ramos ainda
+          // The then branch always executes; promote ThenBranch and discard ElseBranch
+          Statements.ExtractIndex(I); // Remove IfStmt from list without freeing its branches yet
           if Assigned(IfStmt.ThenBranch) then
           begin
             for J := 0 to IfStmt.ThenBranch.Count - 1 do
@@ -688,7 +688,7 @@ begin
         end
         else if SameText(CondLit.Value, 'false') then
         begin
-          // O ramo then nunca executa! Promove o ElseBranch se existir, ou apenas remove
+          // The then branch never executes; promote ElseBranch if present, or just remove
           Statements.ExtractIndex(I);
           if Assigned(IfStmt.ElseBranch) then
           begin
@@ -704,7 +704,7 @@ begin
       end;
     end;
 
-    // C. WhileStmt com condição false (loop inalcançável)
+    // C. WhileStmt with false condition (unreachable loop)
     if Stmt is TASTWhileStmt then
     begin
       WhileStmt := TASTWhileStmt(Stmt);
@@ -731,7 +731,7 @@ var
 begin
   if Func = nil then Exit;
 
-  // Otimiza expressões iniciais de variáveis locais
+  // Optimize initializers of local variables
   if Assigned(Func.LocalVars) then
   begin
     for I := 0 to Func.LocalVars.Count - 1 do
@@ -742,7 +742,7 @@ begin
     end;
   end;
 
-  // Otimiza o corpo da função
+  // Optimize function body
   if Assigned(Func.Body) then
     OptimizeBlock(Func.Body);
 end;
@@ -777,7 +777,7 @@ begin
   Result := False;
   if ModuleNode = nil then Exit;
 
-  // 1. Otimiza funções e blocos no módulo
+  // 1. Optimize module functions and blocks
   if Assigned(ModuleNode.Functions) then
   begin
     for I := 0 to ModuleNode.Functions.Count - 1 do
@@ -800,7 +800,7 @@ begin
     end;
   end;
 
-  // 2. Otimiza o bloco principal do programa
+  // 2. Optimize main program block
   if Assigned(ModuleNode.ProgramBlock) then
     OptimizeProgramBlock(ModuleNode.ProgramBlock);
 

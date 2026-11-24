@@ -2,19 +2,19 @@ module calc_web;
 
 interface
 
-function Somar(a, b: Int32) return Int32;
-function Multiplicar(a, b: Int32) return Int32;
+function Add(a, b: Int32) return Int32;
+function Multiply(a, b: Int32) return Int32;
 
 implementation
 
-function Somar(a, b: Int32) return Int32 is
+function Add(a, b: Int32) return Int32 is
 begin
     return a + b;
-end Somar;
+end Add;
 
-function Multiplicar(a, b: Int32) return Int32 is
+function Multiply(a, b: Int32) return Int32 is
 begin
     return a * b;
-end Multiplicar;
+end Multiply;
 
 end calc_web.

@@ -1,36 +1,36 @@
 module self_hosted_functions_and_structs;
 
 type
-    Ponto = record
+    Point = record
         x: Int32;
         y: Int32;
-    end;
+    end record;
 
-function Dobro(val: Int32) return Int32 is
+function DoubleVal(val: Int32) return Int32 is
 begin
     return val * 2;
-end Dobro;
+end DoubleVal;
 
-function Somar(a, b: Int32) return Int32 is
+function AddVals(a, b: Int32) return Int32 is
 begin
     return a + b;
-end Somar;
+end AddVals;
 
 program Main;
 var
     n1: Int32;
     n2: Int32;
-    resultado: Int32;
+    result_val: Int32;
 begin
-    PrintLn("--- Demonstracao Fase 23: Funcoes e Structs Auto-Hospedadas ---");
+    PrintLn("--- Phase 23 Demonstration: Self-Hosted Functions and Structs ---");
     n1 := 15;
     n2 := 25;
-    resultado := Somar(n1, n2);
-    PrintLn("Resultado da soma de 15 e 25:");
-    if resultado = 40 then
-        PrintLn("Soma calculada com sucesso: 40!");
-    end;
-    resultado := Dobro(resultado);
-    PrintLn("Dobro do resultado calculado com sucesso!");
-    PrintLn("--- Fim da Execucao! ---");
+    result_val := AddVals(n1, n2);
+    PrintLn("Sum result of 15 and 25:");
+    if result_val = 40 then
+        PrintLn("Sum computed successfully: 40!");
+    end if;
+    result_val := DoubleVal(result_val);
+    PrintLn("Double of result computed successfully!");
+    PrintLn("--- End of Execution! ---");
 end self_hosted_functions_and_structs.

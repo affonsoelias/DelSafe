@@ -3,11 +3,11 @@ module math_bench;
 interface
 
 function Fibonacci(n: Int32) return Int32;
-function SomaIterativa() return Float64;
+function IterativeSum() return Float64;
 /// @bench
 procedure BenchFibonacci;
 /// @bench
-procedure BenchSoma;
+procedure BenchSum;
 
 implementation
 
@@ -17,7 +17,7 @@ var
 begin
     if n <= 1 then
         return n;
-    end;
+    end if;
     a := 0;
     b := 1;
     i := 2;
@@ -26,11 +26,11 @@ begin
         a := b;
         b := temp;
         i := i + 1;
-    end;
+    end while;
     return b;
 end Fibonacci;
 
-function SomaIterativa() return Float64 is
+function IterativeSum() return Float64 is
 var
     total: Float64;
     i: Int32;
@@ -40,9 +40,9 @@ begin
     while i <= 500 do
         total := total + (Float64(i) * 0.5);
         i := i + 1;
-    end;
+    end while;
     return total;
-end SomaIterativa;
+end IterativeSum;
 
 /// @bench
 procedure BenchFibonacci is
@@ -53,11 +53,11 @@ begin
 end BenchFibonacci;
 
 /// @bench
-procedure BenchSoma is
+procedure BenchSum is
 var
     s: Float64;
 begin
-    s := SomaIterativa();
-end BenchSoma;
+    s := IterativeSum();
+end BenchSum;
 
 end math_bench.

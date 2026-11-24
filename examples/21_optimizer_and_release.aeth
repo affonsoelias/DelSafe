@@ -1,80 +1,80 @@
 module OptimizerAndRelease;
 
-function CalcularDiasEmSegundos(borrow dias: Int32) return Int32 is
+function DaysToSeconds(borrow days: Int32) return Int32 is
 var
-    segundosPorDia: Int32;
-    resultado: Int32;
+    secondsPerDay: Int32;
+    outcome: Int32;
 begin
-    // Constant folding em tempo de compilação: 24 * 60 * 60 -> 86400
-    segundosPorDia := 24 * 60 * 60;
-    resultado := dias * segundosPorDia;
-    return resultado;
-end CalcularDiasEmSegundos;
+    // Compile-time constant folding: 24 * 60 * 60 -> 86400
+    secondsPerDay := 24 * 60 * 60;
+    outcome := days * secondsPerDay;
+    return outcome;
+end DaysToSeconds;
 
-function TesteDeadCode() return Int32 is
+function TestDeadCode() return Int32 is
 begin
     return 777;
-    // Dead Code Elimination: código após return incondicional é eliminado na AST
-    PrintLn("ERRO: Codigo morto executado!");
-end TesteDeadCode;
+    // Dead Code Elimination: code after unconditional return is eliminated in AST
+    PrintLn("ERROR: Dead code executed!");
+end TestDeadCode;
 
 program Main;
 var
-    dias: Int32;
-    segundos: Int32;
+    days: Int32;
+    seconds: Int32;
     x: Int32;
     y: Int32;
     z: Int32;
     statusMsg: String;
-    condicao: Bool;
-    morto: Int32;
+    condition: Bool;
+    dead_res: Int32;
 begin
-    PrintLn("=== Aether: Teste de Otimizacoes de AST & Modo Release ===");
+    PrintLn("=== Aether: AST Optimizations & Release Mode Test ===");
 
-    // 1. Constant folding de inteiros e strings
-    dias := 7;
-    segundos := CalcularDiasEmSegundos(borrow dias);
-    PrintLn("7 dias em segundos (24*60*60):");
-    PrintLn(segundos);
-    Assert(segundos = 604800, "7 dias devem totalizar 604800 segundos");
+    // 1. Integer and string constant folding
+    days := 7;
+    seconds := DaysToSeconds(borrow days);
+    PrintLn("7 days in seconds (24*60*60):");
+    PrintLn(seconds);
+    Assert(seconds = 604800, "7 days must total 604800 seconds");
 
     statusMsg := "Aether " + "Engine " + "Release";
     PrintLn(statusMsg);
-    Assert(statusMsg = "Aether Engine Release", "Strings devem ser concatenadas");
+    Assert(statusMsg = "Aether Engine Release", "Strings must be concatenated");
 
-    // 2. Simplificações algébricas (x + 0 -> x, y * 1 -> y)
+    // 2. Algebraic simplifications (x + 0 -> x, y * 1 -> y)
     x := 50;
     y := x + 0;
     z := y * 1;
-    PrintLn("Valor simplificado (x + 0) * 1:");
+    PrintLn("Simplified value (x + 0) * 1:");
     PrintLn(z);
-    Assert(z = 50, "Simplificacao de identidades algebricas deve manter valor 50");
+    Assert(z = 50, "Algebraic identity simplification must preserve value 50");
 
-    // 3. Constant folding booleano
-    condicao := (100 > 50) and (20 = 20);
-    if condicao then
-        PrintLn("Condicao dobrada com sucesso (true)!");
-    end;
-    Assert(condicao = true, "Condicao booleana deve ser dobrada para true");
+    // 3. Boolean constant folding
+    condition := (100 > 50) and (20 = 20);
+    if condition then
+        PrintLn("Condition folded successfully (true)!");
+    end if;
+    Assert(condition = true, "Boolean condition must fold to true");
 
-    // 4. Dead Code Elimination: if false e while false
+    // 4. Dead Code Elimination: if false and while false
     if false then
-        PrintLn("ERRO: Ramo morto if-false executou!");
-        Assert(false, "Ramo morto nao deve executar");
+        PrintLn("ERROR: Dead branch if-false executed!");
+        Assert(false, "Dead branch must not execute");
     else
-        PrintLn("Ramo else de if-false promovido com sucesso!");
-    end;
+        PrintLn("Else branch of if-false promoted successfully!");
+    end if;
 
     while false do
-        PrintLn("ERRO: Loop morto while-false executou!");
-        Assert(false, "Loop morto nao deve executar");
-    end;
+        PrintLn("ERROR: Dead loop while-false executed!");
+        Assert(false, "Dead loop must not execute");
+    end while;
 
-    // 5. Chamada de função com retorno e código inalcançável eliminado
-    morto := TesteDeadCode();
-    PrintLn("Funcao com dead code testada, retorno:");
-    PrintLn(morto);
-    Assert(morto = 777, "Retorno de TesteDeadCode deve ser 777");
+    // 5. Function call with return and unreachable code eliminated
+    dead_res := TestDeadCode();
+    PrintLn("Function with dead code tested, return:");
+    PrintLn(dead_res);
+    Assert(dead_res = 777, "TestDeadCode return must be 777");
 
-    PrintLn("=== SUCESSO: Todas as otimizacoes de AST validadas! ===");
+    PrintLn("=== SUCCESS: All AST optimizations validated! ===");
 end OptimizerAndRelease.

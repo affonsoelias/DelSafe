@@ -36,104 +36,104 @@ uAetherUpgrade;
 Procedure PrintBanner;
 Begin
   WriteLn('========================================================');
-  WriteLn('  AetherLang Compiler (aetherc) - Versao 0.5.0 (Alpha)  ');
+  WriteLn('  AetherLang Compiler (aetherc) - Version 0.5.0 (Alpha) ');
   WriteLn('  Pascal Structure + Pascal Safety + AI-Native Design   ');
   WriteLn('========================================================');
 End;
 
 Procedure PrintUsage;
 Begin
-  WriteLn('Uso: aetherc <comando | arquivo.aeth> [opcoes]');
+  WriteLn('Usage: aetherc <command | file.aeth> [options]');
   WriteLn('');
-  WriteLn('Comandos de Construcao e Execucao:');
-  WriteLn('  build             Compila o projeto atual baseado no manifesto aether.json');
-  WriteLn('  run               Compila e executa imediatamente o binario do projeto');
-  WriteLn('  test [filtro]     Executa testes unitarios (arquivos individuais ou pasta tests/)');
-  WriteLn('  bench [filtro]    Executa suite de benchmarks (--compare para comparar backends)');
-  WriteLn('  profile <arq>     Executa profiling e auditoria de memoria (--runs=N, --json)');
-  WriteLn('  lint [caminho]    Executa analise estatica de qualidade de codigo (--fix para auto-correcao)');
-  WriteLn('  fmt [caminho]     Formata codigo Aether segundo as normas canonicas (--check para CI/CD)');
-  WriteLn('  doc [caminho]     Gera documentacao canonica do projeto (HTML, Markdown e Doctests)');
-  WriteLn('  emit-header <arq> Gera cabecalho C (.h) compativel com ANSI C/C++');
-  WriteLn('  upgrade           Atualiza a toolchain do compilador Aether (--check, --from-source, --binary, --rollback)');
-  WriteLn('  clean             Limpa artefatos de build (bin/ e generated/) do projeto');
-  WriteLn('  bootstrap         Executa ciclo completo de auto-hospedagem (Stage 1, 2 e 3)');
+  WriteLn('Build and Execution Commands:');
+  WriteLn('  build             Compile the current project based on the aether.json manifest');
+  WriteLn('  run               Compile and immediately run the project binary');
+  WriteLn('  test [filter]     Run unit tests (individual files or tests/ directory)');
+  WriteLn('  bench [filter]    Run benchmark suite (--compare to compare backends)');
+  WriteLn('  profile <file>    Run profiling and memory audit (--runs=N, --json)');
+  WriteLn('  lint [path]       Run static code quality analysis (--fix for auto-fix)');
+  WriteLn('  fmt [path]        Format Aether code according to canonical rules (--check for CI/CD)');
+  WriteLn('  doc [path]        Generate canonical project documentation (HTML, Markdown, and Doctests)');
+  WriteLn('  emit-header <file> Generate ANSI C/C++-compatible C header (.h)');
+  WriteLn('  upgrade           Upgrade the Aether compiler toolchain (--check, --from-source, --binary, --rollback)');
+  WriteLn('  clean             Clean project build artifacts (bin/ and generated/)');
+  WriteLn('  bootstrap         Run full self-hosting cycle (Stage 1, 2, and 3)');
   WriteLn('');
-  WriteLn('Comandos de Emissao e Inspecao de Codigo (Integracao BlaiseVue):');
-  WriteLn('  emit <pascal|c> [arquivo] [opcoes]');
-  WriteLn('                    Emite codigo transpilado em generated/ ou diretorio customizado');
-  WriteLn('    --unit          Gera no formato Unit do Free Pascal (unit/interface/implementation)');
-  WriteLn('    --out-dir=<dir> Especifica o diretorio de destino para os arquivos gerados (-d)');
-  WriteLn('    --stdout        Exibe o codigo diretamente no console sem salvar em disco');
-  WriteLn('    --silent, -s    Modo headless silencioso para toolings e pipelines externas');
-  WriteLn('    --watch, -w     Monitora alteracoes no arquivo fonte e regera automaticamente');
-  WriteLn('    -o <arquivo>    Especifica o nome exato do arquivo gerado');
+  WriteLn('Code Emission and Inspection Commands (BlaiseVue Integration):');
+  WriteLn('  emit <pascal|c> [file] [options]');
+  WriteLn('                    Emit transpiled code into generated/ or a custom directory');
+  WriteLn('    --unit          Generate in Free Pascal Unit format (unit/interface/implementation)');
+  WriteLn('    --out-dir=<dir> Specify the destination directory for generated files (-d)');
+  WriteLn('    --stdout        Print the code directly to the console without saving to disk');
+  WriteLn('    --silent, -s    Silent headless mode for external tooling and pipelines');
+  WriteLn('    --watch, -w     Watch source file for changes and regenerate automatically');
+  WriteLn('    -o <file>       Specify the exact output file name');
   WriteLn('');
-  WriteLn('Comandos de Gerenciamento de Projetos e Pacotes:');
+  WriteLn('Project and Package Management Commands:');
   WriteLn(
-      '  new [nome | .]    Cria um novo projeto (em uma nova pasta ou no diretorio atual)'
+      '  new [name | .]    Create a new project (in a new folder or the current directory)'
   );
   WriteLn(
-      '  pkg <subcomando>  Gerenciador de pacotes (add, remove, update, publish, search, audit, list, clean)'
+      '  pkg <subcommand>  Package manager (add, remove, update, publish, search, audit, list, clean)'
   );
-  WriteLn('  publish           Publica o pacote atual no Registry oficial do Aether (--dry-run)');
-  WriteLn('  search <termo>    Pesquisa pacotes comunitarios disponiveis no Registry');
-  WriteLn('  test [filtro]     Executa testes unitarios da pasta tests/');
+  WriteLn('  publish           Publish the current package to the official Aether Registry (--dry-run)');
+  WriteLn('  search <query>    Search community packages available in the Registry');
+  WriteLn('  test [filter]     Run unit tests from the tests/ directory');
   WriteLn(
-      '  build             Compila o projeto atual baseado no manifesto aether.json'
-  );
-  WriteLn(
-      '  run               Compila e executa imediatamente o binario do projeto'
+      '  build             Compile the current project based on the aether.json manifest'
   );
   WriteLn(
-      '  lsp               Inicia o servidor de linguagem (Language Server Protocol)'
+      '  run               Compile and immediately run the project binary'
+  );
+  WriteLn(
+      '  lsp               Start the language server (Language Server Protocol)'
   );
   WriteLn('');
-  WriteLn('Subcomandos de "aetherc pkg":');
-  WriteLn('  pkg add <pacote>     Adiciona uma dependencia ao projeto (Git, Local ou Registry)');
-  WriteLn('  pkg remove <pacote>  Remove uma dependencia de aether.json e limpa caches (rm)');
-  WriteLn('  pkg update [pacote]  Atualiza dependencias Git e sincroniza o lockfile (upgrade)');
-  WriteLn('  pkg audit            Inspeciona a integridade criptografica e seguranca TLS');
-  WriteLn('  pkg list             Exibe a lista de dependencias declaradas no projeto (ls)');
-  WriteLn('  pkg clean            Limpa o cache global de pacotes (~/.aether/cache)');
+  WriteLn('Subcommands of "aetherc pkg":');
+  WriteLn('  pkg add <package>    Add a dependency to the project (Git, Local, or Registry)');
+  WriteLn('  pkg remove <package> Remove a dependency from aether.json and clean caches (rm)');
+  WriteLn('  pkg update [package] Update Git dependencies and synchronize the lockfile (upgrade)');
+  WriteLn('  pkg audit            Inspect cryptographic integrity and TLS security');
+  WriteLn('  pkg list             Display the list of declared project dependencies (ls)');
+  WriteLn('  pkg clean            Clean the global package cache (~/.aether/cache)');
   WriteLn('');
-  WriteLn('Opcoes Principais:');
-  WriteLn('  --doctor          Verifica e diagnostica o ambiente (FPC, GCC, Clang e Pas2JS)');
-  WriteLn('  --target=pascal   Compila gerando Object Pascal e invoca FPC (Padrao)');
-  WriteLn('  --target=c        Compila gerando C99 e invoca GCC ou Clang');
-  WriteLn('  --target=wasm     Compila gerando binario WebAssembly (.wasm) via Clang');
-  WriteLn('  --target=js       Compila gerando JavaScript (.js) via Pas2JS');
-  WriteLn('  --cc=<gcc|clang>  Seleciona o compilador C nativo (padrao: gcc)');
-  WriteLn('  --backend=<nome>  Sobrescreve a toolchain do target (ex: clang, pas2js)');
-  WriteLn('  --html            Gera wrapper HTML minimo para testar .wasm ou .js no navegador');
-  WriteLn('  --check-only      Executa apenas analise sintatica, tipos e borrow checker');
-  WriteLn('  --incremental     Habilita compilacao incremental baseada em hashes SHA-256');
-  WriteLn('  --force           Forca recompilacao total ignorando cache de objetos');
-  WriteLn('  --release         Modo release: otimiza AST e ativa -O3, DCE e strip de simbolos');
-  WriteLn('  --opt, -O         Ativa otimizador de AST (Constant Folding e Dead Code Elimination)');
-  WriteLn('  --dump-tokens     Exibe a lista de tokens do Lexer');
-  WriteLn('  --dump-ast        Exibe a Arvore Sintatica Abstrata (AST)');
+  WriteLn('Main Options:');
+  WriteLn('  --doctor          Verify and diagnose the environment (FPC, GCC, Clang, and Pas2JS)');
+  WriteLn('  --target=pascal   Compile generating Object Pascal and invoke FPC (Default)');
+  WriteLn('  --target=c        Compile generating C99 and invoke GCC or Clang');
+  WriteLn('  --target=wasm     Compile generating WebAssembly binary (.wasm) via Clang');
+  WriteLn('  --target=js       Compile generating JavaScript (.js) via Pas2JS');
+  WriteLn('  --cc=<gcc|clang>  Select the native C compiler (default: gcc)');
+  WriteLn('  --backend=<name>  Override the target toolchain (e.g., clang, pas2js)');
+  WriteLn('  --html            Generate minimal HTML wrapper to test .wasm or .js in the browser');
+  WriteLn('  --check-only      Run syntax, type, and borrow checker analysis only');
+  WriteLn('  --incremental     Enable incremental compilation based on SHA-256 hashes');
+  WriteLn('  --force           Force full recompilation ignoring the object cache');
+  WriteLn('  --release         Release mode: optimize AST and enable -O3, DCE, and symbol stripping');
+  WriteLn('  --opt, -O         Enable AST optimizer (Constant Folding and Dead Code Elimination)');
+  WriteLn('  --dump-tokens     Display the Lexer token list');
+  WriteLn('  --dump-ast        Display the Abstract Syntax Tree (AST)');
   WriteLn(
 
-'  --emit-json-diag  Gera relatorio de diagnostico de erros em formato JSON para IA'
+'  --emit-json-diag  Generate error diagnostic report in JSON format for AI'
   );
   WriteLn(
 
- '  --lsp             Inicia o servidor de linguagem (Language Server Protocol)'
+ '  --lsp             Start the language server (Language Server Protocol)'
   );
-  WriteLn('  -o <arquivo.exe>  Especifica o nome do executavel de saida');
-  WriteLn('  -FE <dir>         Define o diretorio de saida dos executaveis finais');
-  WriteLn('  -FU <dir>         Define o diretorio de saida das units compiladas FPC (.ppu/.o)');
-  WriteLn('  --out-pascal <dir> Define o diretorio onde os fontes .pas gerados sao gravados');
-  WriteLn('  --out-c <dir>     Define o diretorio onde os fontes .c gerados sao gravados');
-  WriteLn('  --unit            Emite/compila codigo como Unit Pascal (unit... interface... implementation... end.)');
-  WriteLn('  -I <dir>          Adiciona diretorio de busca para modulos Aether e headers C');
-  WriteLn('  -Fu <dir>         Adiciona diretorio de busca para units do Free Pascal (.pas/.ppu)');
-  WriteLn('  -L <dir>          Adiciona diretorio de busca de bibliotecas nativas (.a/.lib)');
-  WriteLn('  -l <lib>          Linka com biblioteca C/sistema (ex: -lraylib, -lsqlite3)');
-  WriteLn('  --c-source <.c>   Compila arquivo C adicional junto ao executavel final');
-  WriteLn('  --shared-lib <.dll> Copia biblioteca compartilhada (.dll/.so) para a pasta do executavel');
-  WriteLn('  -h, --help        Exibe esta mensagem de ajuda');
+  WriteLn('  -o <file.exe>     Specify the output executable file name');
+  WriteLn('  -FE <dir>         Set output directory for final executables');
+  WriteLn('  -FU <dir>         Set output directory for compiled FPC units (.ppu/.o)');
+  WriteLn('  --out-pascal <dir> Set directory where generated .pas sources are written');
+  WriteLn('  --out-c <dir>     Set directory where generated .c sources are written');
+  WriteLn('  --unit            Emit/compile code as a Pascal Unit (unit... interface... implementation... end.)');
+  WriteLn('  -I <dir>          Add search directory for Aether modules and C headers');
+  WriteLn('  -Fu <dir>         Add search directory for Free Pascal units (.pas/.ppu)');
+  WriteLn('  -L <dir>          Add search directory for native libraries (.a/.lib)');
+  WriteLn('  -l <lib>          Link with a C/system library (e.g., -lraylib, -lsqlite3)');
+  WriteLn('  --c-source <.c>   Compile an additional C file into the final executable');
+  WriteLn('  --shared-lib <.dll> Copy shared library (.dll/.so) to the executable directory');
+  WriteLn('  -h, --help        Display this help message');
 End;
 
 Function LoadFileContent(Const FileName: String): string;
@@ -143,7 +143,7 @@ Var
   StringStream: TStringStream;
 Begin
   If Not FileExists(FileName) Then
-    raise Exception.CreateFmt('Arquivo nao encontrado: "%s"', [FileName]);
+    raise Exception.CreateFmt('File not found: "%s"', [FileName]);
 
   FileStream := TFileStream.Create(FileName, fmOpenRead Or fmShareDenyWrite);
   StringStream := TStringStream.Create('');
@@ -167,15 +167,15 @@ Begin
   Source := LoadFileContent(SourceFile);
   Lexer := TAetherLexer.Create(Source);
   Try
-    WriteLn(Format('--- Analise Lexica (Tokens) de: %s ---', [SourceFile]));
+    WriteLn(Format('--- Lexical Analysis (Tokens) of: %s ---', [SourceFile]));
     Count := 0;
     Repeat
       Tok := Lexer.NextToken;
       Inc(Count);
-      WriteLn(Format('[Linha %3d, Col %3d] %-16s : "%s"',
+      WriteLn(Format('[Line %3d, Col %3d] %-16s : "%s"',
               [Tok.Line, Tok.Col, TokenKindToString(Tok.Kind), Tok.Value]));
     Until Tok.Kind = tokEOF;
-    WriteLn(Format('Total de tokens analisados: %d', [Count]));
+    WriteLn(Format('Total tokens analyzed: %d', [Count]));
   Finally
     Lexer.Free;
 End;
@@ -421,7 +421,7 @@ Begin
     CleanRelPathSnake := Copy(RelPathSnake, 5, Length(RelPathSnake) - 4);
   end;
 
-  // 1. Diretório do arquivo fonte
+  // 1. Source file directory
   Candidate := BaseDir + RelPath + '.aeth';
   If FileExists(Candidate) Then Exit(Candidate);
   Candidate := BaseDir + RelPathLower + '.aeth';
@@ -429,7 +429,7 @@ Begin
   Candidate := BaseDir + RelPathSnake + '.aeth';
   If FileExists(Candidate) Then Exit(Candidate);
 
-  // 1b. Diretórios customizados de include (-I e paths.aether)
+  // 1b. Custom include directories (-I and paths.aether)
   If Assigned(GlobalIncludePaths) Then
   Begin
     For I := 0 To GlobalIncludePaths.Count - 1 Do
@@ -443,7 +443,7 @@ Begin
     End;
   End;
 
-  // 2. Subpasta std/ relativa ao diretório do arquivo fonte
+  // 2. std/ subfolder relative to source file directory
   Candidate := BaseDir + 'std' + PathDelim + CleanRelPath + '.aeth';
   If FileExists(Candidate) Then Exit(Candidate);
   Candidate := BaseDir + 'std' + PathDelim + CleanRelPathLower + '.aeth';
@@ -451,7 +451,7 @@ Begin
   Candidate := BaseDir + 'std' + PathDelim + CleanRelPathSnake + '.aeth';
   If FileExists(Candidate) Then Exit(Candidate);
 
-  // 3. Subpasta std/ relativa ao compilador (bin/../std)
+  // 3. std/ subfolder relative to compiler (bin/../std)
   ExeDir := ExtractFilePath(ParamStr(0));
   StdDir := ExpandFileName(ExeDir + '..' + PathDelim + 'std');
   Candidate := StdDir + PathDelim + CleanRelPath + '.aeth';
@@ -461,7 +461,7 @@ Begin
   Candidate := StdDir + PathDelim + CleanRelPathSnake + '.aeth';
   If FileExists(Candidate) Then Exit(Candidate);
 
-  // 4. Diretório de trabalho atual (cwd)
+  // 4. Current working directory (cwd)
   Candidate := GetCurrentDir + PathDelim + RelPath + '.aeth';
   If FileExists(Candidate) Then Exit(Candidate);
   Candidate := GetCurrentDir + PathDelim + RelPathLower + '.aeth';
@@ -477,7 +477,7 @@ Begin
 
 
 
-// 5. Dependências do projeto atual (aether.json) e Cache Global (~/.aether/cache)
+// 5. Current project dependencies (aether.json) and Global Cache (~/.aether/cache)
   If LoadProjectConfig(ProjConfig) Then
     Begin
       For I := 0 To High(ProjConfig.Dependencies) Do
@@ -506,7 +506,7 @@ Begin
                        '.aeth';
           If FileExists(Candidate) Then Exit(Candidate);
 
-          // Cache global (~/.aether/cache/<pkg>)
+          // Global cache (~/.aether/cache/<pkg>)
           CacheDir := GetAetherCacheDir + PathDelim + ProjConfig.Dependencies[I]
                       .Name;
           Candidate := CacheDir + PathDelim + RelPath + '.aeth';
@@ -557,7 +557,7 @@ Begin
       If ModPath = '' Then
         raise Exception.CreateFmt(
 
-'Modulo Aether "%s" nao encontrado. Verifique se o arquivo existe ou se esta em "std/".'
+'Aether module "%s" not found. Check if the file exists or is located in "std/".'
                                   , [ModName]);
 
       If Assigned(DependencyFiles) And (DependencyFiles.IndexOf(ExpandFileName(ModPath)) < 0) Then
@@ -579,14 +579,14 @@ Begin
           AllTypes, AllTraits, AllImpls, AllFuncs, PascalImports, DependencyFiles,
           AllConsts, AllModVars, InitProcs, FiniProcs);
 
-          // Validação Estrita 1:1 de Módulos Importados (Fase 13)
+          // Strict 1:1 Validation of Imported Modules (Phase 13)
           ExpectedName := ModName;
           LastSegment := ExtractLastSegment(ExpectedName);
           If Not SameText(SubMod.Name, ExpectedName) And Not SameText(SubMod.
              Name, LastSegment) Then
             raise Exception.CreateFmt(
 
-'[Erro de Modulo E0005 em %s]: Nome do modulo declarado "%s" difere do esperado "%s". Em Aether, o nome do modulo deve corresponder ao nome do arquivo.'
+'[Module Error E0005 at %s]: Declared module name "%s" differs from expected "%s". In Aether, the module name must match the file name.'
                                       , [ExtractFileName(ModPath), SubMod.Name,
             ExpectedName]);
 
@@ -600,8 +600,8 @@ Begin
             If TargetMod.LinkDirectives.IndexOf(SubMod.LinkDirectives[J]) < 0 Then
               TargetMod.LinkDirectives.Add(SubMod.LinkDirectives[J]);
 
-          // Visibilidade (Fase 54.1 / 57.2): se o modulo usa pub/priv explicitamente (ou e Unit),
-          // declaracoes sem modificador sao privadas ao modulo.
+          // Visibility (Phase 54.1 / 57.2): if the module uses pub/priv explicitly (or is a Unit),
+          // declarations without a modifier are private to the module.
           If SubMod.HasExplicitPub Then
           Begin
             For J := 0 To SubMod.Constants.Count - 1 Do
@@ -808,7 +808,7 @@ Begin
   Else
     EffectiveBackend := LowerCase(GlobalBackendOverride);
 
-  // Determina BaseProjDir e FinalExe antecipadamente para checagem incremental
+  // Determine BaseProjDir and FinalExe upfront for incremental check
   If Not FindProjectRoot(BaseProjDir, Dummy) Then
     BaseProjDir := GetCurrentDir;
   BaseProjDir := ExcludeTrailingPathDelimiter(BaseProjDir);
@@ -850,7 +850,7 @@ Begin
     {$ENDIF}
   End;
 
-  // Checagem antecipada de cache incremental (0 ms rebuild)
+  // Early incremental cache check (0 ms rebuild)
   If Incremental And (Not ForceRebuild) And (Not CheckOnly) And (Not DumpASTOnly) And FileExists(FinalExe) Then
   Begin
     CachePath := GetBuildCachePath(BaseProjDir, SourceFile, TargetBackendStr);
@@ -876,8 +876,8 @@ Begin
             CopySharedLibraries(BaseProjDir, FinalExe, GlobalSharedLibs);
             If Not SilentBanner Then
             Begin
-              WriteLn(Format('[INCREMENTAL] Nenhuma alteracao detectada em "%s" ou em suas %d dependencias.', [ExtractFileName(SourceFile), BuildCache.Files.Count - 1]));
-              WriteLn(Format('[INCREMENTAL] Reutilizando executavel em cache: "%s"', [FinalExe]));
+              WriteLn(Format('[INCREMENTAL] No changes detected in "%s" or its %d dependencies.', [ExtractFileName(SourceFile), BuildCache.Files.Count - 1]));
+              WriteLn(Format('[INCREMENTAL] Reusing cached executable: "%s"', [FinalExe]));
             End;
             Exit;
           End;
@@ -893,10 +893,10 @@ Begin
   Parser := TAetherParser.Create(Lexer);
   Try
     ModuleNode := Parser.ParseModule;
-    // Compilacao Condicional Multiplataforma (@cfg) - Fase 40
+    // Cross-Platform Conditional Compilation (@cfg) - Phase 40
     ApplyCfgToModule(ModuleNode, GetCurrentOSName, EffectiveTarget, ReleaseMode);
 
-    // Validação Estrita 1:1 de Módulo no arquivo raiz (Fase 13)
+    // Strict 1:1 Module Validation in root file (Phase 13)
     FileBase := ChangeFileExt(ExtractFileName(SourceFile), '');
     CleanBase := FileBase;
     P := 1;
@@ -911,7 +911,7 @@ Begin
        CleanMod) Then
       raise Exception.CreateFmt(
 
-'[Erro de Modulo E0005 em %s]: Nome do modulo declarado "%s" difere do nome do arquivo "%s.aeth". Em Aether, o nome do modulo deve corresponder ao nome do arquivo.'
+'[Module Error E0005 at %s]: Declared module name "%s" differs from file name "%s.aeth". In Aether, the module name must match the file name.'
                                 , [ExtractFileName(SourceFile), ModuleNode.Name,
       FileBase]);
 
@@ -926,29 +926,29 @@ Begin
     End;
 If DumpASTOnly Then
   Begin
-    WriteLn(Format('--- Arvore Sintatica Abstrata (AST) de: %s ---', [SourceFile
+    WriteLn(Format('--- Abstract Syntax Tree (AST) of: %s ---', [SourceFile
             ]));
     WriteLn(ModuleNode.Dump(0));
     Exit;
   End;
 
 If Not SilentBanner Then
-  WriteLn(Format('[1/4] Analise Sintatica de "%s": OK', [ExtractFileName(
+  WriteLn(Format('[1/4] Syntax Analysis of "%s": OK', [ExtractFileName(
           SourceFile)]));
 
-// 2. Verificacao de Tipos e Semantica
+// 2. Type Checking and Semantics
 TypeChecker := TAetherTypeChecker.Create;
 Try
   TypeChecker.CheckModule(ModuleNode);
   If Not SilentBanner Then
-    WriteLn('[2/4] Verificacao de Tipos: OK (0 erros)');
+    WriteLn('[2/4] Type Checking: OK (0 errors)');
 
-  // 3. Verificacao de Posse (Borrow Checker)
+  // 3. Ownership Verification (Borrow Checker)
   BorrowChecker := TAetherBorrowChecker.Create(TypeChecker.Symbols);
   Try
     BorrowChecker.CheckModule(ModuleNode);
     If Not SilentBanner Then
-      WriteLn('[3/4] Verificacao de Posse (Borrow Checker): OK (0 erros)');
+      WriteLn('[3/4] Ownership Check (Borrow Checker): OK (0 errors)');
   Finally
     BorrowChecker.Free;
 End;
@@ -959,18 +959,18 @@ End;
 If CheckOnly Then
   Begin
     If Not SilentBanner Then
-      WriteLn('Modo --check-only finalizado com sucesso.');
+      WriteLn('--check-only mode completed successfully.');
     Exit;
   End;
 
-// 3.5 Otimizacoes de AST (Constant Folding & Dead Code Elimination)
+// 3.5 AST Optimizations (Constant Folding & Dead Code Elimination)
 If RunOptimizer Or ReleaseMode Then
 Begin
   Optimizer := TAetherOptimizer.Create;
   Try
     If Optimizer.OptimizeModule(ModuleNode) And (Not SilentBanner) Then
     Begin
-      WriteLn(Format('      [OPTIMIZER] AST otimizada: %d constantes dobradas, %d identidades simplificadas, %d ramos mortos e %d instrucoes inalcancaveis eliminadas.',
+      WriteLn(Format('      [OPTIMIZER] AST optimized: %d constants folded, %d identities simplified, %d dead branches, and %d unreachable statements eliminated.',
         [Optimizer.Stats.FoldedConstants, Optimizer.Stats.SimplifiedIdentities,
          Optimizer.Stats.EliminatedDeadBranches, Optimizer.Stats.EliminatedUnreachableStmts]));
     End;
@@ -979,7 +979,7 @@ Begin
   End;
 End;
 
-// 4. Emissao de Codigo e Geracao do Executavel / Binario
+// 4. Code Emission and Executable / Binary Generation
 If Not FindProjectRoot(BaseProjDir, Dummy) Then
   BaseProjDir := GetCurrentDir;
 BaseProjDir := ExcludeTrailingPathDelimiter(BaseProjDir);
@@ -1023,11 +1023,11 @@ Begin
 
   If Not SilentBanner Then
   Begin
-    WriteLn(Format('[4/4] Transpilando para C99 -> "%s"', [ExtractFileName(IntermediateFile)]));
+    WriteLn(Format('[4/4] Transpiling to C99 -> "%s"', [ExtractFileName(IntermediateFile)]));
     If ReleaseMode Then
-      WriteLn('      Invocando Clang WebAssembly (wasm32) [Modo RELEASE: -O3 -flto]...')
+      WriteLn('      Invoking Clang WebAssembly (wasm32) [RELEASE Mode: -O3 -flto]...')
     Else
-      WriteLn('      Invocando Clang WebAssembly (wasm32)...');
+      WriteLn('      Invoking Clang WebAssembly (wasm32)...');
   End;
 
   CompileLog := '';
@@ -1039,7 +1039,7 @@ Begin
     If Not SilentBanner Then
     Begin
       WriteLn('');
-      WriteLn('SUCESSO! Modulo WebAssembly (.wasm) gerado via Clang:');
+      WriteLn('SUCCESS! WebAssembly module (.wasm) generated via Clang:');
       WriteLn('  --> ' + FinalExe);
       If GlobalEmitHtmlWrapper Then
       Begin
@@ -1050,7 +1050,7 @@ Begin
   End
   Else
   Begin
-    WriteLn(ErrOutput, 'Falha na compilacao WebAssembly com Clang:');
+    WriteLn(ErrOutput, 'WebAssembly compilation failed with Clang:');
     WriteLn(ErrOutput, CompileLog);
     Halt(1);
   End;
@@ -1076,11 +1076,11 @@ Begin
 
   If Not SilentBanner Then
   Begin
-    WriteLn(Format('[4/4] Transpilando para Object Pascal -> "%s"', [ExtractFileName(IntermediateFile)]));
+    WriteLn(Format('[4/4] Transpiling to Object Pascal -> "%s"', [ExtractFileName(IntermediateFile)]));
     If ReleaseMode Then
-      WriteLn('      Invocando Pas2JS [Modo RELEASE: -O1 -Jc]...')
+      WriteLn('      Invoking Pas2JS [RELEASE Mode: -O1 -Jc]...')
     Else
-      WriteLn('      Invocando Pas2JS...');
+      WriteLn('      Invoking Pas2JS...');
   End;
 
   CompileLog := '';
@@ -1092,7 +1092,7 @@ Begin
     If Not SilentBanner Then
     Begin
       WriteLn('');
-      WriteLn('SUCESSO! Script JavaScript (.js) gerado via Pas2JS:');
+      WriteLn('SUCCESS! JavaScript script (.js) generated via Pas2JS:');
       WriteLn('  --> ' + FinalExe);
       If GlobalEmitHtmlWrapper Then
       Begin
@@ -1103,14 +1103,14 @@ Begin
   End
   Else
   Begin
-    WriteLn(ErrOutput, 'Falha na compilacao JavaScript com Pas2JS:');
+    WriteLn(ErrOutput, 'JavaScript compilation failed with Pas2JS:');
     WriteLn(ErrOutput, CompileLog);
     Halt(1);
   End;
 End
 Else If EffectiveTarget = 'c' Then
 Begin
-  // Target C (GCC ou Clang)
+  // Target C (GCC or Clang)
   IntermediateFile := GenDir + PathDelim + ChangeFileExt(ExtractFileName(SourceFile), '.c');
   EmitterC := TAetherEmitterC.Create;
   Try
@@ -1129,20 +1129,20 @@ Begin
 
   If Not SilentBanner Then
   Begin
-    WriteLn(Format('[4/4] Transpilando para C99 -> "%s"', [ExtractFileName(IntermediateFile)]));
+    WriteLn(Format('[4/4] Transpiling to C99 -> "%s"', [ExtractFileName(IntermediateFile)]));
     If EffectiveCComp = 'clang' Then
     Begin
       If ReleaseMode Then
-        WriteLn('      Invocando Clang [Modo RELEASE: -O3 -flto -s]...')
+        WriteLn('      Invoking Clang [RELEASE Mode: -O3 -flto -s]...')
       Else
-        WriteLn('      Invocando Clang...');
+        WriteLn('      Invoking Clang...');
     End
     Else
     Begin
       If ReleaseMode Then
-        WriteLn('      Invocando GCC [Modo RELEASE: -O3 -flto -s]...')
+        WriteLn('      Invoking GCC [RELEASE Mode: -O3 -flto -s]...')
       Else
-        WriteLn('      Invocando GCC...');
+        WriteLn('      Invoking GCC...');
     End;
   End;
 
@@ -1169,23 +1169,23 @@ Begin
       If AsLibrary Or GlobalOptionSharedLib Or (LowerCase(ExtractFileExt(FinalExe)) = '.dll') Or (LowerCase(ExtractFileExt(FinalExe)) = '.so') Or (LowerCase(ExtractFileExt(FinalExe)) = '.dylib') Then
       Begin
         If EffectiveCComp = 'clang' Then
-          WriteLn('SUCESSO! Shared Library nativa gerada via Clang:')
+          WriteLn('SUCCESS! Native Shared Library generated via Clang:')
         Else
-          WriteLn('SUCESSO! Shared Library nativa gerada via GCC:');
+          WriteLn('SUCCESS! Native Shared Library generated via GCC:');
       End
       Else If EffectiveCComp = 'clang' Then
-        WriteLn('SUCESSO! Executavel nativo gerado via Clang:')
+        WriteLn('SUCCESS! Native executable generated via Clang:')
       Else
-        WriteLn('SUCESSO! Executavel nativo gerado via GCC:');
+        WriteLn('SUCCESS! Native executable generated via GCC:');
       WriteLn('  --> ' + FinalExe);
     End;
   End
   Else
   Begin
     If EffectiveCComp = 'clang' Then
-      WriteLn(ErrOutput, 'Falha na compilacao com Clang:')
+      WriteLn(ErrOutput, 'Compilation failed with Clang:')
     Else
-      WriteLn(ErrOutput, 'Falha na compilacao com GCC:');
+      WriteLn(ErrOutput, 'Compilation failed with GCC:');
     WriteLn(ErrOutput, CompileLog);
     Halt(1);
   End;
@@ -1211,11 +1211,11 @@ Begin
 
   If Not SilentBanner Then
   Begin
-    WriteLn(Format('[4/4] Transpilando para Object Pascal -> "%s"', [ExtractFileName(IntermediateFile)]));
+    WriteLn(Format('[4/4] Transpiling to Object Pascal -> "%s"', [ExtractFileName(IntermediateFile)]));
     If ReleaseMode Then
-      WriteLn('      Invocando Free Pascal (fpc) [Modo RELEASE: -O3 -XX -Xs]...')
+      WriteLn('      Invoking Free Pascal (fpc) [RELEASE Mode: -O3 -XX -Xs]...')
     Else
-      WriteLn('      Invocando Free Pascal (fpc)...');
+      WriteLn('      Invoking Free Pascal (fpc)...');
   End;
 
   CompileLog := '';
@@ -1227,9 +1227,9 @@ Begin
       If Not SilentBanner Then
       Begin
         WriteLn('');
-        WriteLn('SUCESSO! Unit Object Pascal compilada com sucesso:');
+        WriteLn('SUCCESS! Object Pascal Unit compiled successfully:');
         If GlobalOutPascalUnitDir <> '' Then
-          WriteLn('  --> Diretorio de units (.ppu/.o): ' + GlobalOutPascalUnitDir)
+          WriteLn('  --> Units directory (.ppu/.o): ' + GlobalOutPascalUnitDir)
         Else
           WriteLn('  --> ' + IntermediateFile);
       End;
@@ -1249,16 +1249,16 @@ Begin
       Begin
         WriteLn('');
         If AsLibrary Or GlobalOptionSharedLib Or (LowerCase(ExtractFileExt(FinalExe)) = '.dll') Or (LowerCase(ExtractFileExt(FinalExe)) = '.so') Or (LowerCase(ExtractFileExt(FinalExe)) = '.dylib') Then
-          WriteLn('SUCESSO! Shared Library nativa gerada via Free Pascal:')
+          WriteLn('SUCCESS! Native Shared Library generated via Free Pascal:')
         Else
-          WriteLn('SUCESSO! Executavel nativo gerado:');
+          WriteLn('SUCCESS! Native executable generated:');
         WriteLn('  --> ' + FinalExe);
       End;
     End;
   End
   Else
   Begin
-    WriteLn(ErrOutput, 'Falha na compilacao com FPC:');
+    WriteLn(ErrOutput, 'Compilation failed with FPC:');
     WriteLn(ErrOutput, CompileLog);
     Halt(1);
   End;
@@ -1325,7 +1325,7 @@ Begin
 
     If Not SameText(FileBase, ModuleNode.Name) And Not SameText(CleanBase, CleanMod) Then
       raise Exception.CreateFmt(
-        '[Erro de Modulo E0005 em %s]: Nome do modulo declarado "%s" difere do nome do arquivo "%s.aeth". Em Aether, o nome do modulo deve corresponder ao nome do arquivo.',
+        '[Module Error E0005 at %s]: Declared module name "%s" differs from file name "%s.aeth". In Aether, the module name must match the file name.',
         [ExtractFileName(SourceFile), ModuleNode.Name, FileBase]);
 
     Visited := TStringList.Create;
@@ -1421,17 +1421,17 @@ Begin
 
     If Not Silent Then
     Begin
-      WriteLn(Format('[1/3] Analise Sintatica de "%s": OK', [ExtractFileName(SourceFile)]));
-      WriteLn('[2/3] Verificacao de Tipos e Posse: OK');
+      WriteLn(Format('[1/3] Syntax Analysis of "%s": OK', [ExtractFileName(SourceFile)]));
+      WriteLn('[2/3] Type and Ownership Check: OK');
       If TargetPascal Then
       Begin
         If AsUnit Then
-          WriteLn('[3/3] Unit Object Pascal (BlaiseVue) emitida com sucesso:')
+          WriteLn('[3/3] Object Pascal Unit (BlaiseVue) emitted successfully:')
         Else
-          WriteLn('[3/3] Codigo Object Pascal emitido com sucesso:');
+          WriteLn('[3/3] Object Pascal code emitted successfully:');
       End
       Else
-        WriteLn('[3/3] Codigo C99 emitido com sucesso:');
+        WriteLn('[3/3] C99 code emitted successfully:');
       WriteLn('  --> ' + FinalTargetFile);
     End;
   Finally
@@ -1450,16 +1450,16 @@ Begin
   WriteLn('========================================================');
   WriteLn('  Aether File Watcher (Hot-Reload / BlaiseVue Ready)    ');
   WriteLn('========================================================');
-  WriteLn(Format('Observando alteracoes em: "%s"', [SourceFile]));
-  WriteLn('Pressione Ctrl+C para interromper.');
+  WriteLn(Format('Watching for changes in: "%s"', [SourceFile]));
+  WriteLn('Press Ctrl+C to stop.');
   WriteLn('');
 
-  // 1. Execucao inicial
+  // 1. Initial execution
   Try
     EmitFile(SourceFile, TargetPascal, CustomOutput, CustomOutDir, AsUnit, False, Silent);
   Except
     on E: Exception Do
-      WriteLn(ErrOutput, 'Erro na compilacao inicial: ', E.Message);
+      WriteLn(ErrOutput, 'Initial compilation error: ', E.Message);
   End;
 
   LastAge := FileAge(SourceFile);
@@ -1471,13 +1471,13 @@ Begin
     Begin
       LastAge := NewAge;
       DateTimeToString(TimeStr, 'hh:nn:ss', Now);
-      WriteLn(Format('[%s] [WATCH] Alteracao detectada em "%s"...', [TimeStr, ExtractFileName(SourceFile)]));
+      WriteLn(Format('[%s] [WATCH] Change detected in "%s"...', [TimeStr, ExtractFileName(SourceFile)]));
       Try
         EmitFile(SourceFile, TargetPascal, CustomOutput, CustomOutDir, AsUnit, False, Silent);
-        WriteLn('      [OK] Arquivo regenerado com sucesso!');
+        WriteLn('      [OK] File regenerated successfully!');
       Except
         on E: Exception Do
-          WriteLn(ErrOutput, Format('      [ERRO] %s', [E.Message]));
+          WriteLn(ErrOutput, Format('      [ERROR] %s', [E.Message]));
       End;
       WriteLn('');
     End;
@@ -1530,7 +1530,7 @@ Begin
 
   TestFiles := TStringList.Create;
   Try
-    // 1. Se o filtro for um arquivo que existe diretamente
+    // 1. If the filter is a directly existing file
     If FileExists(Filter) Then
     Begin
       TestFiles.Add(ExpandFileName(Filter));
@@ -1572,9 +1572,9 @@ Begin
     If TestFiles.Count = 0 Then
     Begin
       If Filter <> '' Then
-        WriteLn(Format('Nenhum teste encontrado correspondendo ao filtro "%s".', [Filter]))
+        WriteLn(Format('No tests found matching filter "%s".', [Filter]))
       Else
-        WriteLn('Nenhum arquivo de teste (*.aeth) encontrado no diretorio "tests/".');
+        WriteLn('No test files (*.aeth) found in the "tests/" directory.');
       Exit;
     End;
 
@@ -1584,7 +1584,7 @@ Begin
       BackendName := 'GCC C99';
 
     WriteLn('========================================================');
-    WriteLn('  Aether Test Runner - Suite de Testes Unitarios        ');
+    WriteLn('  Aether Test Runner - Unit Test Suite                  ');
     WriteLn('  Backend: ' + BackendName);
     WriteLn('========================================================');
 
@@ -1622,13 +1622,13 @@ Begin
         on E: Exception Do
         Begin
           Inc(FailedCount);
-          WriteLn('ERRO DE COMPILACAO: ' + E.Message);
+          WriteLn('COMPILATION ERROR: ' + E.Message);
         End;
       End;
     End;
 
     WriteLn('--------------------------------------------------------');
-    WriteLn(Format('  Resultados: %d executados | %d passaram | %d falharam', [
+    WriteLn(Format('  Results: %d run | %d passed | %d failed', [
             TestFiles.Count, PassedCount, FailedCount]));
     WriteLn('========================================================');
 
@@ -1665,9 +1665,9 @@ Begin
   WriteLn('========================================================');
   WriteLn('  Aether Code Formatter (aetherc fmt)                   ');
   If CheckOnly Then
-    WriteLn('  Modo: Verificacao (--check)')
+    WriteLn('  Mode: Check (--check)')
   Else
-    WriteLn('  Modo: Formatacao automatica');
+    WriteLn('  Mode: Auto-format');
   WriteLn('========================================================');
 
   TotalFiles := 0;
@@ -1681,12 +1681,12 @@ Begin
     Begin
       FormattedFiles := 1;
       If CheckOnly Then
-        WriteLn(Format('  [DESFORMATADO] %s precisa ser formatado.', [TargetPath]))
+        WriteLn(Format('  [UNFORMATTED] %s needs formatting.', [TargetPath]))
       Else
-        WriteLn(Format('  [FORMATADO] %s', [TargetPath]));
+        WriteLn(Format('  [FORMATTED] %s', [TargetPath]));
     End
     Else
-      WriteLn(Format('  [OK] %s ja esta devidamente formatado.', [TargetPath]));
+      WriteLn(Format('  [OK] %s is already properly formatted.', [TargetPath]));
   End
   Else If DirectoryExists(TargetPath) Then
   Begin
@@ -1694,7 +1694,7 @@ Begin
   End
   Else
   Begin
-    WriteLn(ErrOutput, Format('Erro: Arquivo ou diretorio "%s" nao encontrado.', [TargetPath]));
+    WriteLn(ErrOutput, Format('Error: File or directory "%s" not found.', [TargetPath]));
     Halt(1);
   End;
 
@@ -1703,21 +1703,21 @@ Begin
   Begin
     If FormattedFiles > 0 Then
     Begin
-      WriteLn(Format('  FALHA: %d de %d arquivos precisam de formatacao.', [FormattedFiles, TotalFiles]));
-      WriteLn('  Execute "aetherc fmt" para formata-los automaticamente.');
+      WriteLn(Format('  FAIL: %d of %d files need formatting.', [FormattedFiles, TotalFiles]));
+      WriteLn('  Run "aetherc fmt" to format them automatically.');
       WriteLn('========================================================');
       Halt(1);
     End
     Else
     Begin
-      WriteLn(Format('  SUCESSO: Todos os %d arquivos estao devidamente formatados!', [TotalFiles]));
+      WriteLn(Format('  SUCCESS: All %d files are properly formatted!', [TotalFiles]));
       WriteLn('========================================================');
       Halt(0);
     End;
   End
   Else
   Begin
-    WriteLn(Format('  Concluido: %d arquivos verificados | %d formatados.', [TotalFiles, FormattedFiles]));
+    WriteLn(Format('  Done: %d files checked | %d formatted.', [TotalFiles, FormattedFiles]));
     WriteLn('========================================================');
     Halt(0);
   End;
@@ -1753,9 +1753,9 @@ Begin
     WriteLn('========================================================');
     WriteLn('  Aether Linter & Code Quality (aetherc lint)           ');
     If OptionFix Then
-      WriteLn('  Modo: Analise com correcao automatica (--fix)')
+      WriteLn('  Mode: Analysis with auto-fix (--fix)')
     Else
-      WriteLn('  Modo: Analise estatica de qualidade');
+      WriteLn('  Mode: Static quality analysis');
     WriteLn('========================================================');
   End;
 
@@ -1782,7 +1782,7 @@ Begin
   End
   Else
   Begin
-    WriteLn(ErrOutput, Format('Erro: Arquivo ou diretorio "%s" nao encontrado.', [TargetPath]));
+    WriteLn(ErrOutput, Format('Error: File or directory "%s" not found.', [TargetPath]));
     Halt(1);
   End;
 
@@ -1792,7 +1792,7 @@ Begin
     If TotalIssues > 0 Then Halt(1) Else Halt(0);
   End;
 
-  // Saida formatada no terminal
+  // Formatted terminal output
   For I := 0 To High(ResArray) Do
   Begin
     For J := 0 To ResArray[I].IssueCount - 1 Do
@@ -1802,20 +1802,20 @@ Begin
   End;
 
   WriteLn('--------------------------------------------------------');
-  WriteLn(Format('  Resultados: %d arquivo(s) analisado(s) | %d com apontamentos | %d limpo(s)',
+  WriteLn(Format('  Results: %d file(s) analyzed | %d with issues | %d clean',
     [TotalFiles, IssueFiles, CleanFiles]));
   If OptionFix Then
-    WriteLn(Format('  Correcoes aplicadas: %d ocorrencia(s) resolvida(s).', [TotalFixed]));
+    WriteLn(Format('  Fixes applied: %d occurrence(s) resolved.', [TotalFixed]));
 
   If TotalIssues = 0 Then
   Begin
-    WriteLn('  [SUCESSO] Nenhum problema de qualidade ou code smell encontrado!');
+    WriteLn('  [SUCCESS] No quality issues or code smells found!');
     WriteLn('========================================================');
     Halt(0);
   End
   Else
   Begin
-    WriteLn(Format('  Total: %d apontamento(s) de qualidade encontrado(s).', [TotalIssues]));
+    WriteLn(Format('  Total: %d quality issue(s) found.', [TotalIssues]));
     WriteLn('========================================================');
     Halt(1);
   End;
@@ -1841,7 +1841,7 @@ Begin
     ApplyCfgToModule(ModuleNode, GetCurrentOSName, 'c', False);
     SaveCHeaderToFile(ModuleNode, DestPath);
     PrintBanner;
-    WriteLn('Cabecalho C (C99/C++) gerado com sucesso:');
+    WriteLn('C header (C99/C++) generated successfully:');
     WriteLn('  --> ' + DestPath);
   Finally
     ModuleNode.Free;
@@ -1893,7 +1893,7 @@ Begin
   OptionEmitHeader := False;
   IsRunCommand := False;
 
-  // Checa comando de lint: lint [caminho] [--fix] [--json]
+  // Check lint command: lint [path] [--fix] [--json]
   If (ParamCount >= 1) And (LowerCase(ParamStr(1)) = 'lint') Then
     Begin
       Try
@@ -1901,13 +1901,13 @@ Begin
       Except
         on E: Exception Do
           Begin
-            WriteLn(ErrOutput, 'Erro ao executar linter: ', E.Message);
+            WriteLn(ErrOutput, 'Error running linter: ', E.Message);
             Halt(1);
           End;
       End;
     End;
 
-  // Checa comando de formatacao: fmt [caminho] [--check]
+  // Check format command: fmt [path] [--check]
   If (ParamCount >= 1) And (LowerCase(ParamStr(1)) = 'fmt') Then
     Begin
       PrintBanner;
@@ -1917,13 +1917,13 @@ Begin
       Except
         on E: Exception Do
           Begin
-            WriteLn(ErrOutput, 'Erro ao formatar: ', E.Message);
+            WriteLn(ErrOutput, 'Error formatting: ', E.Message);
             Halt(1);
           End;
       End;
     End;
 
-  // Checa comando de documentacao: doc [caminho] [opcoes]
+  // Check documentation command: doc [path] [options]
   If (ParamCount >= 1) And (LowerCase(ParamStr(1)) = 'doc') Then
     Begin
       PrintBanner;
@@ -1933,13 +1933,13 @@ Begin
       Except
         on E: Exception Do
           Begin
-            WriteLn(ErrOutput, 'Erro ao gerar documentacao: ', E.Message);
+            WriteLn(ErrOutput, 'Error generating documentation: ', E.Message);
             Halt(1);
           End;
       End;
     End;
 
-  // Checa comando de limpeza: clean
+  // Check clean command: clean
   If (ParamCount >= 1) And (LowerCase(ParamStr(1)) = 'clean') Then
     Begin
       PrintBanner;
@@ -1949,13 +1949,13 @@ Begin
       Except
         on E: Exception Do
           Begin
-            WriteLn(ErrOutput, 'Erro ao limpar projeto: ', E.Message);
+            WriteLn(ErrOutput, 'Error cleaning project: ', E.Message);
             Halt(1);
           End;
       End;
     End;
 
-  // Checa comando de auto-hospedagem: bootstrap
+  // Check self-hosting command: bootstrap
   If (ParamCount >= 1) And (LowerCase(ParamStr(1)) = 'bootstrap') Then
     Begin
       PrintBanner;
@@ -1965,13 +1965,13 @@ Begin
       Except
         on E: Exception Do
           Begin
-            WriteLn(ErrOutput, 'Erro durante o processo de bootstrap: ', E.Message);
+            WriteLn(ErrOutput, 'Error during bootstrap process: ', E.Message);
             Halt(1);
           End;
       End;
     End;
 
-  // Checa comando de emissao de cabecalho C: emit-header <arquivo> [opcoes]
+  // Check C header emission command: emit-header <file> [options]
   If (ParamCount >= 1) And ((LowerCase(ParamStr(1)) = 'emit-header') Or ((LowerCase(ParamStr(1)) = 'emit') And (ParamCount >= 2) And (LowerCase(ParamStr(2)) = 'header'))) Then
     Begin
       EmitSource := '';
@@ -1996,8 +1996,8 @@ Begin
       If EmitSource = '' Then
         Begin
           PrintBanner;
-          WriteLn(ErrOutput, 'Erro: Nenhum arquivo fonte .aeth especificado.');
-          WriteLn('Uso: aetherc emit-header <arquivo.aeth> [-o <saida.h>]');
+          WriteLn(ErrOutput, 'Error: No .aeth source file specified.');
+          WriteLn('Usage: aetherc emit-header <file.aeth> [-o <output.h>]');
           Halt(1);
         End;
 
@@ -2010,13 +2010,13 @@ Begin
       Except
         on E: Exception Do
           Begin
-            WriteLn(ErrOutput, 'Erro ao gerar cabecalho C: ', E.Message);
+            WriteLn(ErrOutput, 'Error generating C header: ', E.Message);
             Halt(1);
           End;
       End;
     End;
 
-  // Checa comando de emissao: emit <pascal|c> [arquivo] [opcoes]
+  // Check emit command: emit <pascal|c> [file] [options]
   If (ParamCount >= 1) And (LowerCase(ParamStr(1)) = 'emit') Then
     Begin
       EmitTargetPascal := True;
@@ -2103,8 +2103,8 @@ Begin
         End
       Else If EmitSource = '' Then
         Begin
-          WriteLn(ErrOutput, 'Erro: Nenhum arquivo fonte especificado e nenhum "aether.json" encontrado.');
-          WriteLn(ErrOutput, 'Uso: aetherc emit <pascal|c> [arquivo.aeth] [--unit] [--out-dir=dir] [--stdout]');
+          WriteLn(ErrOutput, 'Error: No source file specified and no "aether.json" found.');
+          WriteLn(ErrOutput, 'Usage: aetherc emit <pascal|c> [file.aeth] [--unit] [--out-dir=dir] [--stdout]');
           Halt(1);
         End;
 
@@ -2123,13 +2123,13 @@ Begin
       Except
         on E: Exception Do
           Begin
-            WriteLn(ErrOutput, 'Erro na geracao de codigo: ', E.Message);
+            WriteLn(ErrOutput, 'Code generation error: ', E.Message);
             Halt(1);
           End;
       End;
     End;
 
-  // 1. Checa comandos de projeto: init / new
+  // 1. Check project commands: init / new
   If (ParamCount >= 1) And ((LowerCase(ParamStr(1)) = 'init') Or (LowerCase(
      ParamStr(1)) = 'new')) Then
     Begin
@@ -2142,13 +2142,13 @@ Begin
       Except
         on E: Exception Do
               Begin
-                WriteLn(ErrOutput, 'Erro ao inicializar projeto: ', E.Message);
+                WriteLn(ErrOutput, 'Error initializing project: ', E.Message);
                 Halt(1);
               End;
     End;
 End;
 
-// Checa comando unificado de gerenciamento de pacotes: pkg
+// Check unified package management command: pkg
 If (ParamCount >= 1) And (LowerCase(ParamStr(1)) = 'pkg') Then
   Begin
     PrintBanner;
@@ -2180,7 +2180,7 @@ If (ParamCount >= 1) And (LowerCase(ParamStr(1)) = 'pkg') Then
       Except
         on E: Exception Do
         Begin
-          WriteLn(ErrOutput, 'Erro ao adicionar pacote: ', E.Message);
+          WriteLn(ErrOutput, 'Error adding package: ', E.Message);
           Halt(1);
         End;
       End;
@@ -2195,7 +2195,7 @@ If (ParamCount >= 1) And (LowerCase(ParamStr(1)) = 'pkg') Then
       Except
         on E: Exception Do
         Begin
-          WriteLn(ErrOutput, 'Erro ao remover pacote: ', E.Message);
+          WriteLn(ErrOutput, 'Error removing package: ', E.Message);
           Halt(1);
         End;
       End;
@@ -2210,7 +2210,7 @@ If (ParamCount >= 1) And (LowerCase(ParamStr(1)) = 'pkg') Then
       Except
         on E: Exception Do
         Begin
-          WriteLn(ErrOutput, 'Erro ao atualizar pacotes: ', E.Message);
+          WriteLn(ErrOutput, 'Error updating packages: ', E.Message);
           Halt(1);
         End;
       End;
@@ -2223,7 +2223,7 @@ If (ParamCount >= 1) And (LowerCase(ParamStr(1)) = 'pkg') Then
       Except
         on E: Exception Do
         Begin
-          WriteLn(ErrOutput, 'Erro durante auditoria de seguranca: ', E.Message);
+          WriteLn(ErrOutput, 'Error during security audit: ', E.Message);
           Halt(1);
         End;
       End;
@@ -2236,7 +2236,7 @@ If (ParamCount >= 1) And (LowerCase(ParamStr(1)) = 'pkg') Then
       Except
         on E: Exception Do
         Begin
-          WriteLn(ErrOutput, 'Erro ao listar dependencias: ', E.Message);
+          WriteLn(ErrOutput, 'Error listing dependencies: ', E.Message);
           Halt(1);
         End;
       End;
@@ -2249,7 +2249,7 @@ If (ParamCount >= 1) And (LowerCase(ParamStr(1)) = 'pkg') Then
       Except
         on E: Exception Do
         Begin
-          WriteLn(ErrOutput, 'Erro ao limpar cache: ', E.Message);
+          WriteLn(ErrOutput, 'Error cleaning cache: ', E.Message);
           Halt(1);
         End;
       End;
@@ -2272,7 +2272,7 @@ If (ParamCount >= 1) And (LowerCase(ParamStr(1)) = 'pkg') Then
       Except
         on E: Exception Do
         Begin
-          WriteLn(ErrOutput, 'Erro ao publicar pacote: ', E.Message);
+          WriteLn(ErrOutput, 'Error publishing package: ', E.Message);
           Halt(1);
         End;
       End;
@@ -2295,29 +2295,29 @@ If (ParamCount >= 1) And (LowerCase(ParamStr(1)) = 'pkg') Then
       Except
         on E: Exception Do
         Begin
-          WriteLn(ErrOutput, 'Erro ao buscar pacotes: ', E.Message);
+          WriteLn(ErrOutput, 'Error searching packages: ', E.Message);
           Halt(1);
         End;
       End;
     End
     Else
     Begin
-      WriteLn('Uso: aetherc pkg <subcomando> [opcoes]');
+      WriteLn('Usage: aetherc pkg <subcommand> [options]');
       WriteLn('');
-      WriteLn('Subcomandos Disponiveis:');
-      WriteLn('  add <pacote>     Adiciona uma dependencia ao projeto (Git, Local ou Registry)');
-      WriteLn('  remove <pacote>  Remove uma dependencia de aether.json e limpa caches (rm)');
-      WriteLn('  update [pacote]  Atualiza dependencias Git e sincroniza o lockfile (upgrade)');
-      WriteLn('  publish          Publica o pacote atual no Registry oficial do Aether (--dry-run)');
-      WriteLn('  search <termo>   Pesquisa pacotes comunitarios disponiveis no Registry');
-      WriteLn('  audit            Inspeciona a integridade criptografica e seguranca TLS');
-      WriteLn('  list             Exibe a lista de todas as dependencias do projeto (ls)');
-      WriteLn('  clean            Limpa o cache global de pacotes (~/.aether/cache)');
+      WriteLn('Available Subcommands:');
+      WriteLn('  add <package>    Add a dependency to the project (Git, Local, or Registry)');
+      WriteLn('  remove <package> Remove a dependency from aether.json and clean caches (rm)');
+      WriteLn('  update [package] Update Git dependencies and synchronize the lockfile (upgrade)');
+      WriteLn('  publish          Publish the current package to the official Aether Registry (--dry-run)');
+      WriteLn('  search <query>   Search community packages available in the Registry');
+      WriteLn('  audit            Inspect cryptographic integrity and TLS security');
+      WriteLn('  list             Display the list of all project dependencies (ls)');
+      WriteLn('  clean            Clean the global package cache (~/.aether/cache)');
       Halt(0);
     End;
   End;
 
-// 2. Checa comando de pacotes: add
+// 2. Check package command: add
 If (ParamCount >= 1) And (LowerCase(ParamStr(1)) = 'add') Then
   Begin
     PrintBanner;
@@ -2351,13 +2351,13 @@ If (ParamCount >= 1) And (LowerCase(ParamStr(1)) = 'add') Then
     Except
       on E: Exception Do
             Begin
-              WriteLn(ErrOutput, 'Erro ao adicionar pacote: ', E.Message);
+              WriteLn(ErrOutput, 'Error adding package: ', E.Message);
               Halt(1);
             End;
   End;
 End;
 
-// Checa comando de pacotes: remove / rm
+// Check package command: remove / rm
 If (ParamCount >= 1) And ((LowerCase(ParamStr(1)) = 'remove') Or (LowerCase(ParamStr(1)) = 'rm')) Then
   Begin
     PrintBanner;
@@ -2369,13 +2369,13 @@ If (ParamCount >= 1) And ((LowerCase(ParamStr(1)) = 'remove') Or (LowerCase(Para
     Except
       on E: Exception Do
             Begin
-              WriteLn(ErrOutput, 'Erro ao remover pacote: ', E.Message);
+              WriteLn(ErrOutput, 'Error removing package: ', E.Message);
               Halt(1);
             End;
   End;
 End;
 
-// Checa comando de pacotes: update (atalho para "aetherc pkg update")
+// Check package command: update (shortcut for "aetherc pkg update")
 If (ParamCount >= 1) And (LowerCase(ParamStr(1)) = 'update') Then
   Begin
     PrintBanner;
@@ -2387,13 +2387,13 @@ If (ParamCount >= 1) And (LowerCase(ParamStr(1)) = 'update') Then
     Except
       on E: Exception Do
             Begin
-              WriteLn(ErrOutput, 'Erro ao atualizar pacotes: ', E.Message);
+              WriteLn(ErrOutput, 'Error updating packages: ', E.Message);
               Halt(1);
             End;
   End;
 End;
 
-// Checa comando de auto-atualizacao da toolchain: upgrade
+// Check toolchain self-update command: upgrade
 If (ParamCount >= 1) And (LowerCase(ParamStr(1)) = 'upgrade') Then
   Begin
     PrintBanner;
@@ -2430,16 +2430,16 @@ If (ParamCount >= 1) And (LowerCase(ParamStr(1)) = 'upgrade') Then
           UpgradeOpts.CustomUrl := Copy(Arg, 7, Length(Arg))
         Else If (Arg = '-h') Or (Arg = '--help') Then
           Begin
-            WriteLn('Uso: aetherc upgrade [opcoes]');
+            WriteLn('Usage: aetherc upgrade [options]');
             WriteLn('');
-            WriteLn('Opcoes de Atualizacao da Toolchain:');
-            WriteLn('  --check, -c         Apenas verifica se ha versoes mais recentes disponiveis');
-            WriteLn('  --from-source, -s   Atualiza compilando a partir do repositorio Git local');
-            WriteLn('  --binary, -b        Forca download e instalacao do binario pre-compilado oficial');
-            WriteLn('  --rollback, -r      Restaura o backup da versao anterior do executavel (.bak)');
-            WriteLn('  --dry-run, -d       Simula todas as etapas do processo sem alterar arquivos');
-            WriteLn('  --version=<tag>     Instala uma versao ou tag especifica (ex: --version=v0.6.0)');
-            WriteLn('  --nightly           Busca pela build de desenvolvimento nightly mais recente');
+            WriteLn('Toolchain Upgrade Options:');
+            WriteLn('  --check, -c         Only check if newer versions are available');
+            WriteLn('  --from-source, -s   Upgrade by compiling from the local Git repository');
+            WriteLn('  --binary, -b        Force download and installation of the official pre-built binary');
+            WriteLn('  --rollback, -r      Restore backup of the previous executable version (.bak)');
+            WriteLn('  --dry-run, -d       Simulate all steps of the process without modifying files');
+            WriteLn('  --version=<tag>     Install a specific version or tag (e.g., --version=v0.6.0)');
+            WriteLn('  --nightly           Fetch the latest nightly development build');
             Halt(0);
           End
         Else If (Length(Arg) > 0) And (Arg[1] <> '-') And (UpgradeOpts.TargetVersion = '') Then
@@ -2453,13 +2453,13 @@ If (ParamCount >= 1) And (LowerCase(ParamStr(1)) = 'upgrade') Then
     Except
       on E: Exception Do
             Begin
-              WriteLn(ErrOutput, 'Erro durante atualizacao da toolchain: ', E.Message);
+              WriteLn(ErrOutput, 'Error during toolchain upgrade: ', E.Message);
               Halt(1);
             End;
     End;
   End;
 
-// Checa comando de seguranca: audit
+// Check security command: audit
 If (ParamCount >= 1) And (LowerCase(ParamStr(1)) = 'audit') Then
   Begin
     PrintBanner;
@@ -2469,13 +2469,13 @@ If (ParamCount >= 1) And (LowerCase(ParamStr(1)) = 'audit') Then
     Except
       on E: Exception Do
             Begin
-              WriteLn(ErrOutput, 'Erro durante auditoria de seguranca: ', E.Message);
+              WriteLn(ErrOutput, 'Error during security audit: ', E.Message);
               Halt(1);
             End;
   End;
 End;
 
-// Checa comando de publicacao no Registry: publish
+// Check Registry publish command: publish
 If (ParamCount >= 1) And (LowerCase(ParamStr(1)) = 'publish') Then
   Begin
     PrintBanner;
@@ -2495,13 +2495,13 @@ If (ParamCount >= 1) And (LowerCase(ParamStr(1)) = 'publish') Then
     Except
       on E: Exception Do
         Begin
-          WriteLn(ErrOutput, 'Erro ao publicar pacote: ', E.Message);
+          WriteLn(ErrOutput, 'Error publishing package: ', E.Message);
           Halt(1);
         End;
     End;
   End;
 
-// Checa comando de busca no Registry: search / find
+// Check Registry search command: search / find
 If (ParamCount >= 1) And ((LowerCase(ParamStr(1)) = 'search') Or (LowerCase(ParamStr(1)) = 'find')) Then
   Begin
     PrintBanner;
@@ -2521,13 +2521,13 @@ If (ParamCount >= 1) And ((LowerCase(ParamStr(1)) = 'search') Or (LowerCase(Para
     Except
       on E: Exception Do
         Begin
-          WriteLn(ErrOutput, 'Erro ao buscar pacotes: ', E.Message);
+          WriteLn(ErrOutput, 'Error searching packages: ', E.Message);
           Halt(1);
         End;
     End;
   End;
 
-// 3. Checa comando de testes: test
+// 3. Check test command: test
 If (ParamCount >= 1) And (LowerCase(ParamStr(1)) = 'test') Then
   Begin
     PrintBanner;
@@ -2547,14 +2547,14 @@ If (ParamCount >= 1) And (LowerCase(ParamStr(1)) = 'test') Then
     Except
       on E: Exception Do
             Begin
-              WriteLn(ErrOutput, 'Erro durante execucao dos testes: ', E.Message
+              WriteLn(ErrOutput, 'Error during test execution: ', E.Message
               );
               Halt(1);
             End;
   End;
 End;
 
-// Checa comando de benchmarks: bench [caminho_ou_filtro] [filtro_funcao] [--compare] [--json|--format=json] [--iters=N] [--target=pascal|c]
+// Check benchmark command: bench [path_or_filter] [func_filter] [--compare] [--json|--format=json] [--iters=N] [--target=pascal|c]
 If (ParamCount >= 1) And (LowerCase(ParamStr(1)) = 'bench') Then
   Begin
     FilterName := '';
@@ -2584,13 +2584,13 @@ If (ParamCount >= 1) And (LowerCase(ParamStr(1)) = 'bench') Then
     Except
       on E: Exception Do
         Begin
-          WriteLn(ErrOutput, 'Erro durante execucao dos benchmarks: ', E.Message);
+          WriteLn(ErrOutput, 'Error during benchmark execution: ', E.Message);
           Halt(1);
         End;
     End;
   End;
 
-// Checa comando de profiling: profile <arquivo.aeth> [--runs=N] [--target=pascal|c] [--json]
+// Check profiling command: profile <file.aeth> [--runs=N] [--target=pascal|c] [--json]
 If (ParamCount >= 1) And (LowerCase(ParamStr(1)) = 'profile') Then
   Begin
     FilterName := '';
@@ -2611,8 +2611,8 @@ If (ParamCount >= 1) And (LowerCase(ParamStr(1)) = 'profile') Then
 
     If FilterName = '' Then
       Begin
-        WriteLn(ErrOutput, 'Erro: Nenhum arquivo fonte especificado para profiling.');
-        WriteLn(ErrOutput, 'Uso: aetherc profile <arquivo.aeth> [--runs=N] [--target=pascal|c] [--json]');
+        WriteLn(ErrOutput, 'Error: No source file specified for profiling.');
+        WriteLn(ErrOutput, 'Usage: aetherc profile <file.aeth> [--runs=N] [--target=pascal|c] [--json]');
         Halt(1);
       End;
 
@@ -2622,13 +2622,13 @@ If (ParamCount >= 1) And (LowerCase(ParamStr(1)) = 'profile') Then
     Except
       on E: Exception Do
         Begin
-          WriteLn(ErrOutput, 'Erro durante execucao do profiling: ', E.Message);
+          WriteLn(ErrOutput, 'Error during profiling execution: ', E.Message);
           Halt(1);
         End;
     End;
   End;
 
-// 2. Checa comandos de projeto: build / run
+// 2. Check project commands: build / run
 If (ParamCount >= 1) And ((LowerCase(ParamStr(1)) = 'build') Or (LowerCase(
    ParamStr(1)) = 'run')) Then
   Begin
@@ -2638,11 +2638,11 @@ If (ParamCount >= 1) And ((LowerCase(ParamStr(1)) = 'build') Or (LowerCase(
         PrintBanner;
         WriteLn(ErrOutput,
 
-'Erro: Nenhum arquivo "aether.json" foi encontrado no diretorio atual ou pastas superiores.'
+'Error: No "aether.json" file found in the current directory or parent folders.'
         );
         WriteLn(ErrOutput,
 
-         'Dica: Execute "aetherc init" para inicializar um novo projeto Aether.'
+         'Hint: Run "aetherc init" to initialize a new Aether project.'
         );
         Halt(1);
       End;
@@ -2656,11 +2656,11 @@ If (ParamCount >= 1) And ((LowerCase(ParamStr(1)) = 'build') Or (LowerCase(
     Else
       GlobalTargetKind := 'pascal';
     OptionTargetPascal := GlobalTargetKind <> 'c';
-    OptionIncremental := True; // Habilitado por padrão para projetos aether.json
+    OptionIncremental := True; // Enabled by default for aether.json projects
     InitGlobalPaths;
     RestoreProjectDependencies(ProjConfig);
 
-    // Carrega caminhos declarados na secao 'paths' do aether.json
+    // Load paths declared in the 'paths' section of aether.json
     For J := 0 To High(ProjConfig.PathsAether) Do
       If ProjConfig.PathsAether[J] <> '' Then
         GlobalIncludePaths.Add(ExpandFileName(ProjConfig.RootDir + PathDelim + ProjConfig.PathsAether[J]));
@@ -2683,7 +2683,7 @@ If (ParamCount >= 1) And ((LowerCase(ParamStr(1)) = 'build') Or (LowerCase(
       If ProjConfig.PathsSharedLibs[J] <> '' Then
         GlobalSharedLibs.Add(ExpandFileName(ProjConfig.RootDir + PathDelim + ProjConfig.PathsSharedLibs[J]));
 
-    // Carrega configuracoes de saida declaradas na secao 'outputs' do aether.json
+    // Load output settings declared in the 'outputs' section of aether.json
     If (GlobalOutBinDir = '') And (ProjConfig.Outputs.BinDir <> '') Then
       GlobalOutBinDir := ExpandFileName(ProjConfig.RootDir + PathDelim + ProjConfig.Outputs.BinDir);
     If (GlobalOutPascalSrcDir = '') And (ProjConfig.Outputs.PascalSrcDir <> '') Then
@@ -2695,13 +2695,13 @@ If (ParamCount >= 1) And ((LowerCase(ParamStr(1)) = 'build') Or (LowerCase(
     If ProjConfig.Outputs.AsUnit Then
       GlobalAsUnit := True;
 
-    // Permite sobrescrever flags como --target=c, -o, -I, -Fu, etc. na linha de comando
+    // Allow overriding flags such as --target=c, -o, -I, -Fu, etc. on the command line
     I := 2;
     While I <= ParamCount Do
       Begin
         Arg := ParamStr(I);
         If ParsePathFlag(Arg, I) Then
-          // Consumido pela flag de path
+          // Consumed by the path flag
         Else If Arg = '--target=pascal' Then OptionTargetPascal := True
         Else If Arg = '--target=c' Then OptionTargetPascal := False
         Else If Arg = '--check-only' Then OptionCheckOnly := True
@@ -2745,7 +2745,7 @@ If (ParamCount >= 1) And ((LowerCase(ParamStr(1)) = 'build') Or (LowerCase(
           If Not OptionJSONDiag Then
           Begin
             WriteLn('');
-            WriteLn(Format('==> Compilando Target [%s] (%s): "%s"', [ProjConfig.Targets[J].Name, ProjConfig.Targets[J].Target, ProjConfig.Targets[J].Entry]));
+            WriteLn(Format('==> Compiling Target [%s] (%s): "%s"', [ProjConfig.Targets[J].Name, ProjConfig.Targets[J].Target, ProjConfig.Targets[J].Entry]));
           End;
           TargetBackend := LowerCase(ProjConfig.Targets[J].Backend);
           If (TargetBackend = 'gcc') Or (TargetBackend = 'clang') Then
@@ -2774,14 +2774,14 @@ If (ParamCount >= 1) And ((LowerCase(ParamStr(1)) = 'build') Or (LowerCase(
           If OptionSharedLib Or (LowerCase(ExtractFileExt(OutputExe)) = '.dll') Or (LowerCase(ExtractFileExt(OutputExe)) = '.so') Or (LowerCase(ExtractFileExt(OutputExe)) = '.dylib') Or GlobalAsUnit Or (GlobalTargetKind = 'wasm') Or (GlobalTargetKind = 'js') Then
             Begin
               WriteLn('');
-              WriteLn('Aviso: Projeto compilado para biblioteca compartilhada, unit ou modulo Web.');
-              WriteLn('Bibliotecas compartilhadas nao possuem ponto de entrada executavel nativo direto para "run".');
+              WriteLn('Warning: Project compiled as a shared library, unit, or Web module.');
+              WriteLn('Shared libraries do not have a direct native executable entry point for "run".');
             End
           Else
             Begin
               WriteLn('');
               WriteLn('--------------------------------------------------------');
-              WriteLn(' Executando: ' + ExtractFileName(OutputExe));
+              WriteLn(' Running: ' + ExtractFileName(OutputExe));
               WriteLn('--------------------------------------------------------');
               ExecuteProcess(OutputExe, '');
             End;
@@ -2795,10 +2795,10 @@ If (ParamCount >= 1) And ((LowerCase(ParamStr(1)) = 'build') Or (LowerCase(
                         Message, E.Line, E.Col, E.MovedLine, E.MovedCol,
                         'borrow_instead_of_move',
 
-'Altere a chamada para "borrow" se a transferencia de posse nao for necessaria.'
+'Change the call to "borrow" if ownership transfer is not required.'
                         , 'borrow'))
               Else
-                WriteLn(ErrOutput, 'Erro de Compilacao: ', E.Message);
+                WriteLn(ErrOutput, 'Compilation Error: ', E.Message);
               Halt(1);
             End;
       on E: EAetherTypeError Do
@@ -2807,7 +2807,7 @@ If (ParamCount >= 1) And ((LowerCase(ParamStr(1)) = 'build') Or (LowerCase(
                 WriteLn(GenerateJSONDiagnostic(InputFile, 'Error', E.Code, E.
                         Message, E.Line, E.Col))
               Else
-                WriteLn(ErrOutput, 'Erro de Compilacao: ', E.Message);
+                WriteLn(ErrOutput, 'Compilation Error: ', E.Message);
               Halt(1);
             End;
       on E: EAetherParserError Do
@@ -2816,7 +2816,7 @@ If (ParamCount >= 1) And ((LowerCase(ParamStr(1)) = 'build') Or (LowerCase(
                 WriteLn(GenerateJSONDiagnostic(InputFile, 'Error', 'E0001', E.
                         Message, E.Line, E.Col))
               Else
-                WriteLn(ErrOutput, 'Erro de Compilacao: ', E.Message);
+                WriteLn(ErrOutput, 'Compilation Error: ', E.Message);
               Halt(1);
             End;
       on E: EAetherLexerError Do
@@ -2825,7 +2825,7 @@ If (ParamCount >= 1) And ((LowerCase(ParamStr(1)) = 'build') Or (LowerCase(
                 WriteLn(GenerateJSONDiagnostic(InputFile, 'Error', 'E0000', E.
                         Message, E.Line, E.Col))
               Else
-                WriteLn(ErrOutput, 'Erro de Compilacao: ', E.Message);
+                WriteLn(ErrOutput, 'Compilation Error: ', E.Message);
               Halt(1);
             End;
       on E: Exception Do
@@ -2834,7 +2834,7 @@ If (ParamCount >= 1) And ((LowerCase(ParamStr(1)) = 'build') Or (LowerCase(
                 WriteLn(GenerateJSONDiagnostic(InputFile, 'Error', 'E9999', E.
                         Message, 1, 1))
               Else
-                WriteLn(ErrOutput, 'Erro de Compilacao: ', E.Message);
+                WriteLn(ErrOutput, 'Compilation Error: ', E.Message);
               Halt(1);
             End;
   End;
@@ -2845,7 +2845,7 @@ While I <= ParamCount Do
   Begin
     Arg := ParamStr(I);
     If ParsePathFlag(Arg, I) Then
-      // Consumido pela flag de path (-I, -Fu, -L, -l, --c-source, --shared-lib)
+      // Consumed by path flag (-I, -Fu, -L, -l, --c-source, --shared-lib)
     Else If (Arg = '-h') Or (Arg = '--help') Then
       Begin
         PrintBanner;
@@ -2911,10 +2911,10 @@ If InputFile = '' Then
   Begin
     If OptionJSONDiag Then
       WriteLn(GenerateJSONDiagnostic('', 'Error', 'E0001',
-              'Nenhum arquivo fonte .aeth especificado.', 0, 0))
+              'No .aeth source file specified.', 0, 0))
     Else
       Begin
-        WriteLn('Erro: Nenhum arquivo fonte .aeth foi especificado.');
+        WriteLn('Error: No .aeth source file specified.');
         WriteLn('');
         PrintUsage;
       End;
@@ -2937,10 +2937,10 @@ Except
                     , E.Line, E.Col, E.MovedLine, E.MovedCol,
                     'borrow_instead_of_move',
 
-'Altere a chamada para "borrow" se a transferencia de posse nao for necessaria.'
+'Change the call to "borrow" if ownership transfer is not required.'
                     , 'borrow'))
           Else
-            WriteLn(ErrOutput, 'Erro de Compilacao: ', E.Message);
+            WriteLn(ErrOutput, 'Compilation Error: ', E.Message);
           Halt(1);
         End;
   on E: EAetherTypeError Do
@@ -2949,7 +2949,7 @@ Except
             WriteLn(GenerateJSONDiagnostic(InputFile, 'Error', E.Code, E.Message
                     , E.Line, E.Col))
           Else
-            WriteLn(ErrOutput, 'Erro de Compilacao: ', E.Message);
+            WriteLn(ErrOutput, 'Compilation Error: ', E.Message);
           Halt(1);
         End;
   on E: EAetherParserError Do
@@ -2958,7 +2958,7 @@ Except
             WriteLn(GenerateJSONDiagnostic(InputFile, 'Error', 'E0001', E.
                     Message, E.Line, E.Col))
           Else
-            WriteLn(ErrOutput, 'Erro de Compilacao: ', E.Message);
+            WriteLn(ErrOutput, 'Compilation Error: ', E.Message);
           Halt(1);
         End;
   on E: EAetherLexerError Do
@@ -2967,7 +2967,7 @@ Except
             WriteLn(GenerateJSONDiagnostic(InputFile, 'Error', 'E0000', E.
                     Message, E.Line, E.Col))
           Else
-            WriteLn(ErrOutput, 'Erro de Compilacao: ', E.Message);
+            WriteLn(ErrOutput, 'Compilation Error: ', E.Message);
           Halt(1);
         End;
   on E: Exception Do
@@ -2976,7 +2976,7 @@ Except
             WriteLn(GenerateJSONDiagnostic(InputFile, 'Error', 'E9999', E.
                     Message, 1, 1))
           Else
-            WriteLn(ErrOutput, 'Erro de Compilacao: ', E.Message);
+            WriteLn(ErrOutput, 'Compilation Error: ', E.Message);
           Halt(1);
         End;
 End;

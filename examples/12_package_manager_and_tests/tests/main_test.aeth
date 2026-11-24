@@ -6,9 +6,9 @@ program Main;
 var
     d: Int32;
 begin
-    PrintLn("[TEST] Executando teste principal...");
-    d := Dobro(borrow 50);
+    PrintLn("[TEST] Running main test...");
+    d := DoubleVal(borrow 50);
     if d = 100 then
-        PrintLn("  [PASS] Dobro(50) = 100");
-    end;
+        PrintLn("  [PASS] DoubleVal(50) = 100");
+    end if;
 end MainTest.

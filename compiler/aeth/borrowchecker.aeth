@@ -51,12 +51,12 @@ begin
     while curr.is_some do
         if curr.value.entry.name = var_name then
             if curr.value.entry.state = OwnershipState.osMoved then
-                PrintLn("[Erro de Posse E0382]: Uso de valor movido \"%s\" (valor foi movido anteriormente).", var_name);
+                PrintLn("[Ownership Error E0382]: Use of moved value \"%s\" (value was moved earlier).", var_name);
                 err_count := err_count + 1;
                 return false;
             end;
             if curr.value.entry.state = OwnershipState.osMutBorrowed then
-                PrintLn("[Erro de Posse E0502]: Variavel \"%s\" nao pode ser lida enquanto houver um emprestimo mutavel ativo.", var_name);
+                PrintLn("[Ownership Error E0502]: Variable \"%s\" cannot be read while an active mutable borrow exists.", var_name);
                 err_count := err_count + 1;
                 return false;
             end;
@@ -75,7 +75,7 @@ begin
     while curr.is_some do
         if curr.value.entry.name = var_name then
             if curr.value.entry.state = OwnershipState.osMoved then
-                PrintLn("[Erro de Posse E0382]: Tentativa de mover valor ja movido \"%s\".", var_name);
+                PrintLn("[Ownership Error E0382]: Attempt to move already-moved value \"%s\".", var_name);
                 err_count := err_count + 1;
             else
                 curr.value.entry.state := OwnershipState.osMoved;

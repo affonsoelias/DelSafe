@@ -2,13 +2,13 @@ module Dragao;
 
 interface
 
-procedure Rugir;
+procedure Roar;
 
 implementation
 
-procedure Rugir is
+procedure Roar is
 begin
-    PrintLn("O dragao da caverna acordou com sucesso!");
-end Rugir;
+    PrintLn("The cave dragon woke up successfully!");
+end Roar;
 
 end Dragao.

@@ -8,21 +8,21 @@ extern function MultiplicarC(a, b: Int32) return Int32;
 
 program Main;
 var
-    minha_arvore: Arvore;
+    my_tree: Tree;
     res_c: Int32;
 begin
-    PrintLn("=== Teste de Paths, Subpastas e Interop C (Aether / C / DLLs) ===");
-    
-    // 1. Testa subpasta arvores/
-    minha_arvore := CriarCarvalho(15, 60);
-    PrintLn("Carvalho criado: altura = %d m, idade = %d anos", minha_arvore.altura, minha_arvore.idade);
+    PrintLn("=== Paths, Subfolders, and C Interop Test (Aether / C / DLLs) ===");
 
-    // 2. Testa subpasta caverna/
-    Rugir();
+    // 1. Test arvores/ subfolder
+    my_tree := CreateOak(15, 60);
+    PrintLn("Oak created: height = %d m, age = %d years", my_tree.height, my_tree.age);
 
-    // 3. Testa interop C (c_sources e c_includes via paths)
+    // 2. Test caverna/ subfolder
+    Roar();
+
+    // 3. Test C interop (c_sources and c_includes via paths)
     res_c := MultiplicarC(6, 7);
-    PrintLn("MultiplicarC(6, 7) retornou: %d", res_c);
+    PrintLn("MultiplicarC(6, 7) returned: %d", res_c);
 
-    PrintLn("=== SUCESSO: Todos os modulos, subpastas e interop operacionais! ===");
+    PrintLn("=== SUCCESS: All modules, subfolders, and interop operational! ===");
 end Main.

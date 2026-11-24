@@ -3,32 +3,32 @@ module Fase43ArraysRepeatSetSubrangeTest;
 import IO;
 
 type
-    Vetor = array[5] of Int32;
-    Matriz = array[3, 3] of Int32;
-    Cubo = array[2, 2, 2] of Int32;
-    Hipercubo = array[2, 2, 2, 2] of Int32;
+    Vector5 = array[5] of Int32;
+    Matrix3 = array[3, 3] of Int32;
+    Cube2 = array[2, 2, 2] of Int32;
+    Hypercube2 = array[2, 2, 2, 2] of Int32;
 
-    Permissoes = set of (Leitura, Escrita, Execucao);
-    DiaDoMes = 1..31;
+    Permissions = set of (ReadPerm, WritePerm, ExecPerm);
+    DayOfMonth = 1..31;
 
 program Main;
 var
-    v: Vetor;
-    m: Matriz;
-    c: Cubo;
-    h: Hipercubo;
+    v: Vector5;
+    m: Matrix3;
+    c: Cube2;
+    h: Hypercube2;
     i: Int32;
-    soma: Int32;
+    sum_val: Int32;
     repCount: Int32;
-    p: Permissoes;
-    p2: Permissoes;
-    pUnion: Permissoes;
-    pInter: Permissoes;
-    dia: DiaDoMes;
+    p: Permissions;
+    p2: Permissions;
+    pUnion: Permissions;
+    pInter: Permissions;
+    day: DayOfMonth;
 begin
-    PrintLn("=== TESTE DA FASE 43: ARRAYS, REPEAT-UNTIL, SETS E SUBFAIXAS ===");
+    PrintLn("=== PHASE 43 TEST: ARRAYS, REPEAT-UNTIL, SETS AND SUBRANGES ===");
 
-    // 1. Teste de Vetor 1D
+    // 1. 1D Vector test
     v[0] := 10;
     v[1] := 20;
     v[2] := 30;
@@ -38,7 +38,7 @@ begin
     assert(v[2] = 30);
     assert(v[4] = 50);
 
-    // 2. Teste de Matriz 2D
+    // 2. 2D Matrix test
     m[0, 0] := 1;
     m[0, 1] := 2;
     m[1, 1] := 5;
@@ -48,7 +48,7 @@ begin
     assert(m[1, 1] = 5);
     assert(m[2, 2] = 9);
 
-    // 3. Teste de Cubo 3D
+    // 3. 3D Cube test
     c[0, 0, 0] := 11;
     c[1, 0, 1] := 77;
     c[1, 1, 1] := 99;
@@ -56,52 +56,52 @@ begin
     assert(c[1, 0, 1] = 77);
     assert(c[1, 1, 1] = 99);
 
-    // 4. Teste de Hipercubo 4D
+    // 4. 4D Hypercube test
     h[0, 1, 0, 1] := 1234;
     h[1, 1, 1, 1] := 5678;
     assert(h[0, 1, 0, 1] = 1234);
     assert(h[1, 1, 1, 1] = 5678);
 
-    // 5. Teste de repeat ... until
+    // 5. repeat ... until test
     repCount := 0;
-    soma := 0;
+    sum_val := 0;
     repeat
         repCount := repCount + 1;
-        soma := soma + repCount;
+        sum_val := sum_val + repCount;
     until repCount >= 5;
     assert(repCount = 5);
-    assert(soma = 15);
+    assert(sum_val = 15);
 
-    // Teste de execucao garantida de pelo menos 1 vez
+    // Guaranteed at-least-once execution test
     repCount := 100;
     repeat
         repCount := repCount + 1;
     until repCount > 50;
     assert(repCount = 101);
 
-    // 6. Teste de Conjuntos (set of) e operador 'in'
-    p := [Leitura, Execucao];
-    assert(Leitura in p);
-    assert(Execucao in p);
-    assert(not (Escrita in p));
+    // 6. Sets (set of) and 'in' operator test
+    p := [ReadPerm, ExecPerm];
+    assert(ReadPerm in p);
+    assert(ExecPerm in p);
+    assert(not (WritePerm in p));
 
-    p2 := [Escrita, Execucao];
-    assert(Escrita in p2);
+    p2 := [WritePerm, ExecPerm];
+    assert(WritePerm in p2);
 
-    // Operacoes de conjunto: uniao (+) e intersecao (*)
+    // Set operations: union (+) and intersection (*)
     pUnion := p + p2;
-    assert(Leitura in pUnion);
-    assert(Escrita in pUnion);
-    assert(Execucao in pUnion);
+    assert(ReadPerm in pUnion);
+    assert(WritePerm in pUnion);
+    assert(ExecPerm in pUnion);
 
     pInter := p * p2;
-    assert(Execucao in pInter);
-    assert(not (Leitura in pInter));
-    assert(not (Escrita in pInter));
+    assert(ExecPerm in pInter);
+    assert(not (ReadPerm in pInter));
+    assert(not (WritePerm in pInter));
 
-    // 7. Teste de Subfaixa
-    dia := 22;
-    assert(dia = 22);
+    // 7. Subrange test
+    day := 22;
+    assert(day = 22);
 
-    PrintLn("Fase 43: Todos os testes de Arrays N-D, repeat-until, sets e subfaixas passaram com sucesso!");
+    PrintLn("Phase 43: All N-D Arrays, repeat-until, sets and subranges tests passed!");
 end Fase43ArraysRepeatSetSubrangeTest.

@@ -27,7 +27,7 @@ begin
         return true;
     else
         return false;
-    end;
+    end if;
 end IsEmpty;
 
 function Equals(borrow a, b: String) return Bool is
@@ -36,7 +36,7 @@ begin
         return true;
     else
         return false;
-    end;
+    end if;
 end Equals;
 
 procedure PrintMessage(borrow prefix, msg: String) is

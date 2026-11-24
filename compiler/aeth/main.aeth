@@ -13,9 +13,9 @@ import Emitter;
 
 program Main;
 var
-    caminho_entrada: String;
-    caminho_saida: String;
-    codigo_fonte: String;
+    input_path: String;
+    output_path: String;
+    source_code: String;
     parser: ParserState;
     sb: StringBuilder;
     structs_opt: Option<Box<ASTStructNode>>;
@@ -23,52 +23,52 @@ var
     var_decls: ASTStmtNode;
     body_stmts: ASTStmtNode;
     root_stmt: ASTStmtNode;
-    codigo_c: String;
-    ok_escrita: Bool;
-    erros_tipo: UInt32;
-    erros_posse: UInt32;
+    c_code: String;
+    write_ok: Bool;
+    type_errors: UInt32;
+    borrow_errors: UInt32;
 begin
     PrintLn("====================================================================");
-    PrintLn("  AetherLang Self-Hosted Compiler (aetherc-core) - Fase 23          ");
-    PrintLn("  Compilador Aether 100% Autônomo escrito na linguagem Aether!      ");
+    PrintLn("  AetherLang Self-Hosted Compiler (aetherc-core) - Phase 23         ");
+    PrintLn("  100% Autonomous Aether Compiler written in the Aether language!     ");
     PrintLn("====================================================================");
     PrintLn("");
 
     if ParamCount() >= 1 then
-        caminho_entrada := ParamStr(1);
+        input_path := ParamStr(1);
         if ParamCount() >= 3 then
             if ParamStr(2) = "-o" then
-                caminho_saida := ParamStr(3);
+                output_path := ParamStr(3);
             else
-                caminho_saida := ParamStr(2);
+                output_path := ParamStr(2);
             end;
         else
             if ParamCount() >= 2 then
-                caminho_saida := ParamStr(2);
+                output_path := ParamStr(2);
             else
-                caminho_saida := "bin/self_hosted_output.c";
+                output_path := "bin/self_hosted_output.c";
             end;
         end;
     else
-        PrintLn("Uso: aetherc-core <arquivo.aeth> [-o saida.c]");
-        PrintLn("Nenhum arquivo informado. Executando demonstracao padrao...");
+        PrintLn("Usage: aetherc-core <file.aeth> [-o output.c]");
+        PrintLn("No file specified. Running default demonstration...");
         PrintLn("");
-        caminho_entrada := "examples/13_self_hosted_compiler_demo.aeth";
-        caminho_saida := "bin/self_hosted_output.c";
+        input_path := "examples/13_self_hosted_compiler_demo.aeth";
+        output_path := "bin/self_hosted_output.c";
     end;
 
-    PrintLn("[1/4] Analise Lexica e Sintatica de \"%s\"...", caminho_entrada);
-    codigo_fonte := ReadFile(borrow caminho_entrada);
+    PrintLn("[1/4] Lexical and Syntax Analysis of \"%s\"...", input_path);
+    source_code := ReadFile(borrow input_path);
 
-    if Length(borrow codigo_fonte) > 0 then
-        PrintLn("      Fonte lido com sucesso (%d bytes).", Length(borrow codigo_fonte));
+    if Length(borrow source_code) > 0 then
+        PrintLn("      Source read successfully (%d bytes).", Length(borrow source_code));
 
-        parser := NewParser(borrow codigo_fonte);
+        parser := NewParser(borrow source_code);
         structs_opt := None;
         funcs_opt := None;
         var_decls := NewVarDeclStmt(borrow "", borrow "");
 
-        // 1. Procura secao 'type' para structs
+        // 1. Search for 'type' section for structs
         while (not IsAtEnd(borrow parser.lexer)) and (parser.current.kind <> TokenKind.tkType) and (parser.current.kind <> TokenKind.tkFunction) and (parser.current.kind <> TokenKind.tkVar) and (parser.current.kind <> TokenKind.tkBegin) do
             AdvanceParser(mut borrow parser);
         end;
@@ -77,7 +77,7 @@ begin
             structs_opt := ParseStructs(mut borrow parser);
         end;
 
-        // 2. Procura secao 'function' para funcoes de topo
+        // 2. Search for 'function' section for top-level functions
         while (not IsAtEnd(borrow parser.lexer)) and (parser.current.kind <> TokenKind.tkFunction) and (parser.current.kind <> TokenKind.tkVar) and (parser.current.kind <> TokenKind.tkBegin) do
             AdvanceParser(mut borrow parser);
         end;
@@ -86,52 +86,52 @@ begin
             funcs_opt := ParseFunctions(mut borrow parser);
         end;
 
-        // 3. Procura secao 'var' ou 'begin' do programa
+        // 3. Search for 'var' or 'begin' section of program
         while (not IsAtEnd(borrow parser.lexer)) and (parser.current.kind <> TokenKind.tkVar) and (parser.current.kind <> TokenKind.tkBegin) do
             AdvanceParser(mut borrow parser);
         end;
 
         if parser.current.kind = TokenKind.tkVar then
-            AdvanceParser(mut borrow parser); // consome 'var'
+            AdvanceParser(mut borrow parser); // consume 'var'
             var_decls := ParseVarSection(mut borrow parser);
         end;
 
-        // 4. Procura 'begin' do programa
+        // 4. Search for program 'begin'
         while (not IsAtEnd(borrow parser.lexer)) and (parser.current.kind <> TokenKind.tkBegin) do
             AdvanceParser(mut borrow parser);
         end;
 
         if parser.current.kind = TokenKind.tkBegin then
-            AdvanceParser(mut borrow parser); // Consome 'begin'
+            AdvanceParser(mut borrow parser); // Consume 'begin'
         end;
 
         body_stmts := ParseBlock(mut borrow parser);
         root_stmt := AppendStmt(take var_decls, take body_stmts);
-        PrintLn("      Analise Sintatica concluida com exito.");
+        PrintLn("      Syntax Analysis completed successfully.");
 
-        // [2/4] Verificacao de Tipos (Type Checker Nativo)
-        PrintLn("[2/4] Verificacao de Tipos: Executando Type Checker nativo...");
-        erros_tipo := TypeCheckProgram(borrow funcs_opt, borrow root_stmt);
-        if erros_tipo = 0 then
-            PrintLn("      Verificacao de Tipos: OK (0 erros)");
+        // [2/4] Type Checking (Native Type Checker)
+        PrintLn("[2/4] Type Checking: Running native Type Checker...");
+        type_errors := TypeCheckProgram(borrow funcs_opt, borrow root_stmt);
+        if type_errors = 0 then
+            PrintLn("      Type Checking: OK (0 errors)");
         else
-            PrintLn("      [ERRO] Verificacao de Tipos falhou com %d erros.", erros_tipo);
+            PrintLn("      [ERROR] Type Checking failed with %d errors.", type_errors);
         end;
 
-        // [3/4] Verificacao de Posse (Borrow Checker Nativo)
-        PrintLn("[3/4] Verificacao de Posse: Executando Borrow Checker nativo...");
-        erros_posse := BorrowCheckAST(borrow root_stmt);
-        if erros_posse = 0 then
-            PrintLn("      Verificacao de Posse: OK (0 erros)");
+        // [3/4] Ownership Checking (Native Borrow Checker)
+        PrintLn("[3/4] Ownership Checking: Running native Borrow Checker...");
+        borrow_errors := BorrowCheckAST(borrow root_stmt);
+        if borrow_errors = 0 then
+            PrintLn("      Ownership Checking: OK (0 errors)");
         else
-            PrintLn("      [ERRO] Verificacao de Posse falhou com %d erros.", erros_posse);
+            PrintLn("      [ERROR] Ownership Checking failed with %d errors.", borrow_errors);
         end;
 
-        if (erros_tipo = 0) and (erros_posse = 0) then
-            // [4/4] Emissao de Codigo C99
-            PrintLn("[4/4] Emissao de Codigo C99...");
+        if (type_errors = 0) and (borrow_errors = 0) then
+            // [4/4] C99 Code Emission
+            PrintLn("[4/4] C99 Code Emission...");
             sb := NewStringBuilder();
-            sb.Append(borrow "// Gerado pelo Compilador Auto-Hospedado Aether (aetherc-core) - Fase 23\n");
+            sb.Append(borrow "// Generated by the Aether Self-Hosted Compiler (aetherc-core) - Phase 23\n");
             sb.Append(borrow "#include <stdio.h>\n");
             sb.Append(borrow "#include <stdint.h>\n");
             sb.Append(borrow "#include <stdbool.h>\n\n");
@@ -146,28 +146,28 @@ begin
 
             sb.Append(borrow "int main(void) {\n");
 
-            codigo_c := EmitBlockC(borrow root_stmt);
-            sb.Append(borrow codigo_c);
+            c_code := EmitBlockC(borrow root_stmt);
+            sb.Append(borrow c_code);
 
             sb.Append(borrow "    return 0;\n");
             sb.Append(borrow "}\n");
 
-            PrintLn("      Gravando codigo C gerado em \"%s\"...", caminho_saida);
-            ok_escrita := WriteFile(borrow caminho_saida, borrow sb.ToString());
+            PrintLn("      Writing generated C code to \"%s\"...", output_path);
+            write_ok := WriteFile(borrow output_path, borrow sb.ToString());
 
-            if ok_escrita then
-                PrintLn("[SUCESSO] Codigo gerado pelo compilador auto-hospedado com exito!");
+            if write_ok then
+                PrintLn("[SUCCESS] Code generated by self-hosted compiler!");
                 PrintLn("");
-                PrintLn("--- Codigo C99 Gerado: ---");
+                PrintLn("--- Generated C99 Code: ---");
                 PrintLn("%s", sb.ToString());
                 PrintLn("--------------------------");
             else
-                PrintLn("[ERRO] Falha ao salvar arquivo de saida.");
+                PrintLn("[ERROR] Failed to save output file.");
             end;
         else
-            PrintLn("[FALHA] Compilacao abortada devido a erros semanticos ou de posse.");
+            PrintLn("[FAIL] Compilation aborted due to semantic or ownership errors.");
         end;
     else
-        PrintLn("[ERRO] Nao foi possivel ler o arquivo de entrada.");
+        PrintLn("[ERROR] Could not read input file.");
     end;
 end.

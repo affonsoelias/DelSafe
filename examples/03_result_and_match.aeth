@@ -2,11 +2,11 @@ module ResultAndMatch;
 
 type
     MathError = enum
-        DivisaoPorZero,
-        NumeroNegativo
-    end;
+        DivisionByZero,
+        NegativeNumber
+    end enum;
 
-function Dividir(borrow dividendo, divisor: Float64) return Result<Float64, MathError> is
+function Divide(borrow dividend, divisor: Float64) return Result<Float64, MathError> is
 contract
     require
         true;
@@ -14,24 +14,24 @@ contract
         result.is_ok implies divisor <> 0.0;
 begin
     if divisor = 0.0 then
-        return Err(MathError.DivisaoPorZero);
+        return Err(MathError.DivisionByZero);
     else
-        return Ok(dividendo / divisor);
-    end;
-end Dividir;
+        return Ok(dividend / divisor);
+    end if;
+end Divide;
 
 program Main;
 var
-    resultado: Result<Float64, MathError>;
+    outcome: Result<Float64, MathError>;
 begin
-    resultado := Dividir(borrow 100.0, borrow 0.0);
+    outcome := Divide(borrow 100.0, borrow 0.0);
 
-    match resultado do
-        case Ok(let valor):
-            PrintLn("Resultado da divisao: %f", valor);
-        case Err(MathError.DivisaoPorZero):
-            PrintLn("Erro detectado: Divisao por zero impedida!");
-        case Err(MathError.NumeroNegativo):
-            PrintLn("Erro detectado: Numero negativo invalido.");
-    end;
+    match outcome do
+        case Ok(let val):
+            PrintLn("Division result: %f", val);
+        case Err(MathError.DivisionByZero):
+            PrintLn("Error detected: Division by zero prevented!");
+        case Err(MathError.NegativeNumber):
+            PrintLn("Error detected: Invalid negative number.");
+    end match;
 end ResultAndMatch.

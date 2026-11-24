@@ -20,6 +20,7 @@ end.
 ```
 
 ### Key Rules:
+
 1. **Module Header:** `module <Name>;` must be the first active statement.
 2. **Program Block:** The entry point is enclosed in `program <Name>; begin ... end.` (with a trailing dot `.` marking the end of the program).
 3. **Semicolons:** Like Pascal, statements terminate with semicolons `;`.
@@ -39,6 +40,7 @@ aetherc hello.aeth -o bin/hello.exe
 ```
 
 ### Multi-Backend Support Out of the Box:
+
 Aether supports native transpilation to both **Object Pascal (Free Pascal)** and **C99 (GCC/Clang)**:
 
 ```bash
@@ -58,15 +60,15 @@ aetherc hello.aeth --target=wasm -o bin/hello.wasm
 
 The `aetherc` compiler comes equipped with built-in developer tools:
 
-| Command | Purpose |
-| :--- | :--- |
-| `aetherc check <file.aeth>` | Runs parsing, semantic analysis, and borrow checking without emitting binaries (sub-10ms validation). |
-| `aetherc test` | Automatically discovers and executes unit tests in `tests/`. |
-| `aetherc lint [path] --fix` | Runs static analysis and automatically cleans unused imports. |
-| `aetherc fmt [path]` | Canonical code formatter according to official style guidelines. |
-| `aetherc profile <file.aeth>` | Compiles with heap instrumentation, profiling memory allocations and certifying zero leaks. |
-| `aetherc emit-header <file.aeth>` | Generates ANSI C/C++ header files (`.h`) for libraries. |
-| `aetherc upgrade` | Self-updates the Aether compiler toolchain with SHA-256 verification and atomic rollback. |
+| Command                           | Purpose                                                                                               |
+|:--------------------------------- |:----------------------------------------------------------------------------------------------------- |
+| `aetherc check <file.aeth>`       | Runs parsing, semantic analysis, and borrow checking without emitting binaries (sub-10ms validation). |
+| `aetherc test`                    | Automatically discovers and executes unit tests in `tests/`.                                          |
+| `aetherc lint [path] --fix`       | Runs static analysis and automatically cleans unused imports.                                         |
+| `aetherc fmt [path]`              | Canonical code formatter according to official style guidelines.                                      |
+| `aetherc profile <file.aeth>`     | Compiles with heap instrumentation, profiling memory allocations and certifying zero leaks.           |
+| `aetherc emit-header <file.aeth>` | Generates ANSI C/C++ header files (`.h`) for libraries.                                               |
+| `aetherc upgrade`                 | Self-updates the Aether compiler toolchain with SHA-256 verification and atomic rollback.             |
 
 ---
 
@@ -74,7 +76,7 @@ The `aetherc` compiler comes equipped with built-in developer tools:
 
 Let's split code into a reusable module and an application program.
 
-Create `math_utils.aeth`:
+Create ``:
 
 ```aether
 module math_utils;
@@ -104,12 +106,14 @@ end.
 ```
 
 Compile and run:
+
 ```bash
 aetherc app.aeth -o bin/app.exe
 ./bin/app.exe
 ```
 
 Output:
+
 ```text
 Double of 21 is: 42
 ```

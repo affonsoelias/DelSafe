@@ -8,7 +8,7 @@ type
     JsonBuilder = record
         buffer: String;
         count: UInt32;
-    end;
+    end record;
 
 function NewJsonBuilder() return JsonBuilder;
 procedure AddString(mut borrow jb: JsonBuilder; borrow key, val: String);
@@ -46,9 +46,9 @@ end IsDigitChar;
 
 function IsHexDigitChar(borrow ch: String) return Bool is
 begin
-    if (ch >= "0") and (ch <= "9") then return true; end;
-    if (ch >= "a") and (ch <= "f") then return true; end;
-    if (ch >= "A") and (ch <= "F") then return true; end;
+    if (ch >= "0") and (ch <= "9") then return true; end if;
+    if (ch >= "a") and (ch <= "f") then return true; end if;
+    if (ch >= "A") and (ch <= "F") then return true; end if;
     return false;
 end IsHexDigitChar;
 
@@ -59,7 +59,7 @@ begin
     n := Length(borrow s);
     while (pos < n) and IsWsChar(CharAt(borrow s, pos)) do
         pos := pos + 1;
-    end;
+    end while;
 end SkipWs;
 
 function EscapeJsonString(borrow s: String) return String is
@@ -84,13 +84,9 @@ begin
             out_s := out_s + "\\r";
         else
             out_s := out_s + ch;
-        end;
-        end;
-        end;
-        end;
-        end;
+        end if;
         i := i + 1;
-    end;
+    end while;
     return out_s;
 end EscapeJsonString;
 
@@ -102,10 +98,10 @@ begin
     n := Length(borrow raw);
     if n < 2 then
         return "";
-    end;
+    end if;
     if (CharAt(borrow raw, 0) <> "\"") or (CharAt(borrow raw, n - 1) <> "\"") then
         return "";
-    end;
+    end if;
     out_s := "";
     i := 1;
     while i < (n - 1) do
@@ -126,18 +122,13 @@ begin
                 out_s := out_s + "\r";
             else
                 out_s := out_s + nxt;
-            end;
-            end;
-            end;
-            end;
-            end;
-            end;
+            end if;
             i := i + 2;
         else
             out_s := out_s + ch;
             i := i + 1;
-        end;
-    end;
+        end if;
+    end while;
     return out_s;
 end UnescapeJsonRawString;
 
@@ -150,22 +141,22 @@ begin
     n := Length(borrow s);
     if (pos >= n) or (CharAt(borrow s, pos) <> "\"") then
         return false;
-    end;
+    end if;
     pos := pos + 1;
     while pos < n do
         ch := CharAt(borrow s, pos);
         if ch = "\"" then
             pos := pos + 1;
             return true;
-        end;
+        end if;
         if (ch = "\n") or (ch = "\r") or (ch = "\t") then
             return false;
-        end;
+        end if;
         if ch = "\\" then
             pos := pos + 1;
             if pos >= n then
                 return false;
-            end;
+            end if;
             esc := CharAt(borrow s, pos);
             if esc = "u" then
                 pos := pos + 1;
@@ -173,22 +164,22 @@ begin
                 while k < 4 do
                     if (pos >= n) or (not IsHexDigitChar(CharAt(borrow s, pos))) then
                         return false;
-                    end;
+                    end if;
                     pos := pos + 1;
                     k := k + 1;
-                end;
+                end while;
             else
                 if (esc = "\"") or (esc = "\\") or (esc = "/") or (esc = "b") or
                    (esc = "f") or (esc = "n") or (esc = "r") or (esc = "t") then
                     pos := pos + 1;
                 else
                     return false;
-                end;
-            end;
+                end if;
+            end if;
         else
             pos := pos + 1;
-        end;
-    end;
+        end if;
+    end while;
     return false;
 end ParseStringSpan;
 
@@ -200,29 +191,29 @@ begin
     n := Length(borrow s);
     if (pos < n) and (CharAt(borrow s, pos) = "-") then
         pos := pos + 1;
-    end;
+    end if;
     if (pos >= n) or (not IsDigitChar(CharAt(borrow s, pos))) then
         return false;
-    end;
+    end if;
     if CharAt(borrow s, pos) = "0" then
         pos := pos + 1;
         if (pos < n) and IsDigitChar(CharAt(borrow s, pos)) then
             return false;
-        end;
+        end if;
     else
         while (pos < n) and IsDigitChar(CharAt(borrow s, pos)) do
             pos := pos + 1;
-        end;
-    end;
+        end while;
+    end if;
     if (pos < n) and (CharAt(borrow s, pos) = ".") then
         pos := pos + 1;
         if (pos >= n) or (not IsDigitChar(CharAt(borrow s, pos))) then
             return false;
-        end;
+        end if;
         while (pos < n) and IsDigitChar(CharAt(borrow s, pos)) do
             pos := pos + 1;
-        end;
-    end;
+        end while;
+    end if;
     if pos < n then
         ch := CharAt(borrow s, pos);
         if (ch = "e") or (ch = "E") then
@@ -231,16 +222,16 @@ begin
                 ch := CharAt(borrow s, pos);
                 if (ch = "+") or (ch = "-") then
                     pos := pos + 1;
-                end;
-            end;
+                end if;
+            end if;
             if (pos >= n) or (not IsDigitChar(CharAt(borrow s, pos))) then
                 return false;
-            end;
+            end if;
             while (pos < n) and IsDigitChar(CharAt(borrow s, pos)) do
                 pos := pos + 1;
-            end;
-        end;
-    end;
+            end while;
+        end if;
+    end if;
     return true;
 end ParseNumberSpan;
 
@@ -252,12 +243,12 @@ var
 begin
     if depth > 64 then
         return false;
-    end;
+    end if;
     n := Length(borrow s);
     SkipWs(borrow s, mut borrow pos);
     if pos >= n then
         return false;
-    end;
+    end if;
 
     ch := CharAt(borrow s, pos);
     if ch = "{" then
@@ -266,37 +257,37 @@ begin
         if (pos < n) and (CharAt(borrow s, pos) = "}") then
             pos := pos + 1;
             return true;
-        end;
+        end if;
         first_item := true;
         while true do
             if not first_item then
                 SkipWs(borrow s, mut borrow pos);
                 if (pos >= n) or (CharAt(borrow s, pos) <> ",") then
                     break;
-                end;
+                end if;
                 pos := pos + 1;
-            end;
+            end if;
             first_item := false;
             SkipWs(borrow s, mut borrow pos);
             if not ParseStringSpan(borrow s, mut borrow pos) then
                 return false;
-            end;
+            end if;
             SkipWs(borrow s, mut borrow pos);
             if (pos >= n) or (CharAt(borrow s, pos) <> ":") then
                 return false;
-            end;
+            end if;
             pos := pos + 1;
             if not ParseValueSpan(borrow s, mut borrow pos, depth + 1) then
                 return false;
-            end;
-        end;
+            end if;
+        end while;
         SkipWs(borrow s, mut borrow pos);
         if (pos < n) and (CharAt(borrow s, pos) = "}") then
             pos := pos + 1;
             return true;
-        end;
+        end if;
         return false;
-    end;
+    end if;
 
     if ch = "[" then
         pos := pos + 1;
@@ -304,52 +295,52 @@ begin
         if (pos < n) and (CharAt(borrow s, pos) = "]") then
             pos := pos + 1;
             return true;
-        end;
+        end if;
         first_item := true;
         while true do
             if not first_item then
                 SkipWs(borrow s, mut borrow pos);
                 if (pos >= n) or (CharAt(borrow s, pos) <> ",") then
                     break;
-                end;
+                end if;
                 pos := pos + 1;
-            end;
+            end if;
             first_item := false;
             if not ParseValueSpan(borrow s, mut borrow pos, depth + 1) then
                 return false;
-            end;
-        end;
+            end if;
+        end while;
         SkipWs(borrow s, mut borrow pos);
         if (pos < n) and (CharAt(borrow s, pos) = "]") then
             pos := pos + 1;
             return true;
-        end;
+        end if;
         return false;
-    end;
+    end if;
 
     if ch = "\"" then
         return ParseStringSpan(borrow s, mut borrow pos);
-    end;
+    end if;
 
     if (ch = "-") or IsDigitChar(ch) then
         return ParseNumberSpan(borrow s, mut borrow pos);
-    end;
+    end if;
 
     if (pos + 4 <= n) and (Substring(borrow s, pos, 4) = "true") then
         pos := pos + 4;
         return true;
-    end;
+    end if;
     if (pos + 5 <= n) then
         kw := Substring(borrow s, pos, 5);
         if kw = "false" then
             pos := pos + 5;
             return true;
-        end;
-    end;
+        end if;
+    end if;
     if (pos + 4 <= n) and (Substring(borrow s, pos, 4) = "null") then
         pos := pos + 4;
         return true;
-    end;
+    end if;
 
     return false;
 end ParseValueSpan;
@@ -366,12 +357,12 @@ begin
     SkipWs(borrow json, mut borrow pos);
     if (pos >= n) or (CharAt(borrow json, pos) <> "{") then
         return false;
-    end;
+    end if;
     pos := pos + 1;
     SkipWs(borrow json, mut borrow pos);
     if (pos < n) and (CharAt(borrow json, pos) = "}") then
         return false;
-    end;
+    end if;
 
     first_item := true;
     while pos < n do
@@ -379,36 +370,36 @@ begin
             SkipWs(borrow json, mut borrow pos);
             if (pos >= n) or (CharAt(borrow json, pos) <> ",") then
                 return false;
-            end;
+            end if;
             pos := pos + 1;
-        end;
+        end if;
         first_item := false;
 
         SkipWs(borrow json, mut borrow pos);
         key_start := pos;
         if not ParseStringSpan(borrow json, mut borrow pos) then
             return false;
-        end;
+        end if;
         key_raw := Substring(borrow json, key_start, pos - key_start);
         key_un := UnescapeJsonRawString(borrow key_raw);
 
         SkipWs(borrow json, mut borrow pos);
         if (pos >= n) or (CharAt(borrow json, pos) <> ":") then
             return false;
-        end;
+        end if;
         pos := pos + 1;
 
         SkipWs(borrow json, mut borrow pos);
         val_start := pos;
         if not ParseValueSpan(borrow json, mut borrow pos, 1) then
             return false;
-        end;
+        end if;
 
         if key_un = target_key then
             out_raw := Substring(borrow json, val_start, pos - val_start);
             return true;
-        end;
-    end;
+        end if;
+    end while;
     return false;
 end FindTopLevelKeyValue;
 
@@ -423,7 +414,7 @@ begin
         jb.buffer := jb.buffer + ", ";
     else
         jb.buffer := jb.buffer + " ";
-    end;
+    end if;
     jb.buffer := jb.buffer + "\"" + EscapeJsonString(borrow key) + "\": \"" + EscapeJsonString(borrow val) + "\"";
     jb.count := jb.count + 1;
 end AddString;
@@ -434,7 +425,7 @@ begin
         jb.buffer := jb.buffer + ", ";
     else
         jb.buffer := jb.buffer + " ";
-    end;
+    end if;
     jb.buffer := jb.buffer + "\"" + EscapeJsonString(borrow key) + "\": " + IntToStr(borrow val);
     jb.count := jb.count + 1;
 end AddInt;
@@ -445,7 +436,7 @@ begin
         jb.buffer := jb.buffer + ", ";
     else
         jb.buffer := jb.buffer + " ";
-    end;
+    end if;
     jb.buffer := jb.buffer + "\"" + EscapeJsonString(borrow key) + "\": " + FloatToStr(borrow val);
     jb.count := jb.count + 1;
 end AddFloat;
@@ -458,13 +449,13 @@ begin
         b_str := "true";
     else
         b_str := "false";
-    end;
+    end if;
 
     if jb.count > 0 then
         jb.buffer := jb.buffer + ", ";
     else
         jb.buffer := jb.buffer + " ";
-    end;
+    end if;
     jb.buffer := jb.buffer + "\"" + EscapeJsonString(borrow key) + "\": " + b_str;
     jb.count := jb.count + 1;
 end AddBool;
@@ -475,7 +466,7 @@ begin
         jb.buffer := jb.buffer + ", ";
     else
         jb.buffer := jb.buffer + " ";
-    end;
+    end if;
     jb.buffer := jb.buffer + "\"" + EscapeJsonString(borrow key) + "\": " + raw_json;
     jb.count := jb.count + 1;
 end AddRaw;
@@ -486,7 +477,7 @@ begin
         return jb.buffer + " }";
     else
         return "{}";
-    end;
+    end if;
 end Build;
 
 function FindSubstr(borrow haystack, needle: String) return Int32 is
@@ -498,16 +489,16 @@ begin
     n_len := Length(borrow needle);
     if (n_len = 0) or (n_len > h_len) then
         return -1;
-    end;
+    end if;
 
     i := 0;
     while i <= (h_len - n_len) do
         sub := Substring(borrow haystack, i, n_len);
         if sub = needle then
             return Int32(i);
-        end;
+        end if;
         i := i + 1;
-    end;
+    end while;
 
     return -1;
 end FindSubstr;
@@ -525,10 +516,10 @@ var
 begin
     if not FindTopLevelKeyValue(borrow json, borrow key, mut borrow raw) then
         return false;
-    end;
+    end if;
     if (Length(borrow raw) < 2) or (CharAt(borrow raw, 0) <> "\"") then
         return false;
-    end;
+    end if;
     out_val := UnescapeJsonRawString(borrow raw);
     return true;
 end ExtractString;
@@ -540,12 +531,12 @@ var
 begin
     if not FindTopLevelKeyValue(borrow json, borrow key, mut borrow raw) then
         return false;
-    end;
+    end if;
     parsed := TryStrToInt(raw);
     if parsed.is_some then
         out_val := Int32(parsed.value);
         return true;
-    end;
+    end if;
     return false;
 end ExtractInt;
 
@@ -556,12 +547,12 @@ var
 begin
     if not FindTopLevelKeyValue(borrow json, borrow key, mut borrow raw) then
         return false;
-    end;
+    end if;
     parsed := TryStrToFloat(raw);
     if parsed.is_some then
         out_val := parsed.value;
         return true;
-    end;
+    end if;
     return false;
 end ExtractFloat;
 
@@ -571,15 +562,15 @@ var
 begin
     if not FindTopLevelKeyValue(borrow json, borrow key, mut borrow raw) then
         return false;
-    end;
+    end if;
     if raw = "true" then
         out_val := true;
         return true;
-    end;
+    end if;
     if raw = "false" then
         out_val := false;
         return true;
-    end;
+    end if;
     return false;
 end ExtractBool;
 
@@ -589,11 +580,11 @@ var
 begin
     if not FindTopLevelKeyValue(borrow json, borrow key, mut borrow raw) then
         return false;
-    end;
+    end if;
     if (Length(borrow raw) >= 2) and (CharAt(borrow raw, 0) = "{") then
         out_json := raw;
         return true;
-    end;
+    end if;
     return false;
 end ExtractObject;
 
@@ -603,11 +594,11 @@ var
 begin
     if not FindTopLevelKeyValue(borrow json, borrow key, mut borrow raw) then
         return false;
-    end;
+    end if;
     if (Length(borrow raw) >= 2) and (CharAt(borrow raw, 0) = "[") then
         out_json := raw;
         return true;
-    end;
+    end if;
     return false;
 end ExtractArray;
 
@@ -622,12 +613,12 @@ begin
     SkipWs(borrow json_array, mut borrow pos);
     if (pos >= n) or (CharAt(borrow json_array, pos) <> "[") then
         return -1;
-    end;
+    end if;
     pos := pos + 1;
     SkipWs(borrow json_array, mut borrow pos);
     if (pos < n) and (CharAt(borrow json_array, pos) = "]") then
         return 0;
-    end;
+    end if;
 
     cnt := 0;
     first_item := true;
@@ -636,19 +627,19 @@ begin
             SkipWs(borrow json_array, mut borrow pos);
             if (pos >= n) or (CharAt(borrow json_array, pos) <> ",") then
                 break;
-            end;
+            end if;
             pos := pos + 1;
-        end;
+        end if;
         first_item := false;
         if not ParseValueSpan(borrow json_array, mut borrow pos, 1) then
             return -1;
-        end;
+        end if;
         cnt := cnt + 1;
-    end;
+    end while;
     SkipWs(borrow json_array, mut borrow pos);
     if (pos < n) and (CharAt(borrow json_array, pos) = "]") then
         return cnt;
-    end;
+    end if;
     return -1;
 end ArrayLength;
 
@@ -661,18 +652,18 @@ begin
     out_elem := "";
     if index < 0 then
         return false;
-    end;
+    end if;
     n := Length(borrow json_array);
     pos := 0;
     SkipWs(borrow json_array, mut borrow pos);
     if (pos >= n) or (CharAt(borrow json_array, pos) <> "[") then
         return false;
-    end;
+    end if;
     pos := pos + 1;
     SkipWs(borrow json_array, mut borrow pos);
     if (pos < n) and (CharAt(borrow json_array, pos) = "]") then
         return false;
-    end;
+    end if;
 
     cur := 0;
     first_item := true;
@@ -681,21 +672,21 @@ begin
             SkipWs(borrow json_array, mut borrow pos);
             if (pos >= n) or (CharAt(borrow json_array, pos) <> ",") then
                 return false;
-            end;
+            end if;
             pos := pos + 1;
-        end;
+        end if;
         first_item := false;
         SkipWs(borrow json_array, mut borrow pos);
         el_start := pos;
         if not ParseValueSpan(borrow json_array, mut borrow pos, 1) then
             return false;
-        end;
+        end if;
         if cur = index then
             out_elem := Substring(borrow json_array, el_start, pos - el_start);
             return true;
-        end;
+        end if;
         cur := cur + 1;
-    end;
+    end while;
     return false;
 end ArrayGet;
 
@@ -705,10 +696,10 @@ var
 begin
     if not ArrayGet(borrow json_array, index, mut borrow raw) then
         return false;
-    end;
+    end if;
     if (Length(borrow raw) < 2) or (CharAt(borrow raw, 0) <> "\"") then
         return false;
-    end;
+    end if;
     out_val := UnescapeJsonRawString(borrow raw);
     return true;
 end ArrayGetString;
@@ -720,12 +711,12 @@ var
 begin
     if not ArrayGet(borrow json_array, index, mut borrow raw) then
         return false;
-    end;
+    end if;
     parsed := TryStrToInt(raw);
     if parsed.is_some then
         out_val := Int32(parsed.value);
         return true;
-    end;
+    end if;
     return false;
 end ArrayGetInt;
 
@@ -736,12 +727,12 @@ var
 begin
     if not ArrayGet(borrow json_array, index, mut borrow raw) then
         return false;
-    end;
+    end if;
     parsed := TryStrToFloat(raw);
     if parsed.is_some then
         out_val := parsed.value;
         return true;
-    end;
+    end if;
     return false;
 end ArrayGetFloat;
 
@@ -753,7 +744,7 @@ begin
     pos := 0;
     if not ParseValueSpan(borrow json, mut borrow pos, 0) then
         return false;
-    end;
+    end if;
     SkipWs(borrow json, mut borrow pos);
     return pos = n;
 end Validate;

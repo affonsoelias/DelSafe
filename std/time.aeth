@@ -7,7 +7,7 @@ type
         start_ns: UInt64;
         stop_ns: UInt64;
         is_running: Bool;
-    end;
+    end record;
 
 function NowNs() return UInt64;
 procedure Sleep(ms: UInt32);
@@ -54,7 +54,7 @@ begin
         return GetNanoseconds() - t.start_ns;
     else
         return t.stop_ns - t.start_ns;
-    end;
+    end if;
 end ElapsedNs;
 
 function ElapsedMs(borrow t: Timer) return UInt64 is

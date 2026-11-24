@@ -150,7 +150,7 @@ begin
 
     FBenchmarks[I].BackendResults[BestIdx].IsFastest := True;
 
-    // Calcula speedup em relacao ao backend mais lento
+    // Calculate speedup relative to the slowest backend
     SlowAvg := BestAvg;
     for J := 0 to High(FBenchmarks[I].BackendResults) do
     begin
@@ -186,9 +186,9 @@ begin
   CalculateComparisons;
 
   WriteLn('========================================================================================================================');
-  WriteLn('  Aether Benchmark Suite - Relatorio Oficial de Performance                                                             ');
+  WriteLn('  Aether Benchmark Suite - Official Performance Report                                                                  ');
   WriteLn('========================================================================================================================');
-  WriteLn('  BENCHMARK                  BACKEND        ITERS    TEMPO MEDIO      DESVIO PADRAO    OPS/SEC      COMPARACAO          ');
+  WriteLn('  BENCHMARK                  BACKEND        ITERS    AVG TIME         STD DEV          OPS/SEC      COMPARISON          ');
   WriteLn('  ----------------------------------------------------------------------------------------------------------------------');
 
   for I := 0 to High(FBenchmarks) do
@@ -213,7 +213,7 @@ begin
 
       FastestStr := '';
       if BRes.IsFastest and (Length(FBenchmarks[I].BackendResults) > 1) then
-        FastestStr := Format('[MAIS RAPIDO - %.1f%% faster]', [BRes.SpeedupPct]);
+        FastestStr := Format('[FASTEST - %.1f%% faster]', [BRes.SpeedupPct]);
 
       WriteLn(Format('  %s %s %s %s %s %s %s', [
         PadRight(FBenchmarks[I].BenchmarkName, 26),
@@ -230,7 +230,7 @@ begin
   end;
 
   WriteLn('========================================================================================================================');
-  WriteLn(Format('  Total: %d benchmark(s) executado(s) com sucesso.', [Length(FBenchmarks)]));
+  WriteLn(Format('  Total: %d benchmark(s) completed successfully.', [Length(FBenchmarks)]));
   WriteLn('========================================================================================================================');
 end;
 
@@ -391,7 +391,7 @@ begin
       if not DirectoryExists(BenchesDir) then
         BenchesDir := BaseDir;
 
-      // 1. Tenta encontrar arquivos que contenham EffectiveFilter no nome
+      // 1. Try finding files containing EffectiveFilter in their name
       if FindFirst(BenchesDir + PathDelim + '*.aeth', faAnyFile, SearchRec) = 0 then
       begin
         repeat
@@ -407,8 +407,8 @@ begin
         SysUtils.FindClose(SearchRec);
       end;
 
-      // 2. Se nao encontrou nenhum arquivo pelo nome, mas foi passado um filtro,
-      // talvez o filtro seja o nome de uma funcao benchmark!
+      // 2. If no file matched by name, but a filter was provided,
+      // the filter might be the name of a benchmark function!
       if (BenchFiles.Count = 0) and (EffectiveFilter <> '') then
       begin
         EffectiveFuncFilter := EffectiveFilter;
@@ -431,14 +431,14 @@ begin
       if not JSONOutput then
       begin
         if EffectiveFilter <> '' then
-          WriteLn(Format('Nenhum arquivo de benchmark encontrado correspondendo ao filtro "%s".', [EffectiveFilter]))
+          WriteLn(Format('No benchmark files found matching filter "%s".', [EffectiveFilter]))
         else
-          WriteLn('Nenhum arquivo de benchmark (*_bench.aeth) encontrado na pasta "benches/".');
+          WriteLn('No benchmark files (*_bench.aeth) found in the "benches/" directory.');
       end;
       Exit;
     end;
 
-    // Configura backends para teste
+    // Configure backends for testing
     if CompareAllBackends then
     begin
       SetLength(BackendNames, 2);
@@ -474,7 +474,7 @@ begin
         BenchFile := BenchFiles[I];
         WorkDir := ExtractFileDir(BenchFile);
 
-        // Analisa o arquivo fonte para identificar funcoes de benchmark
+        // Parse source file to identify benchmark functions
         SL := TStringList.Create;
         try
           SL.LoadFromFile(BenchFile);
@@ -500,7 +500,7 @@ begin
             end;
           end;
 
-          // Se tem funcoes individuais de benchmark, gera harness sintetico
+          // If individual benchmark functions exist, generate synthetic harness
           if BenchFuncs.Count > 0 then
           begin
             GenRunnerFile := WorkDir + PathDelim + 'bench_runner_' + ModNode.Name + '.aeth';
@@ -526,16 +526,16 @@ begin
                 SL.Add('    while i < 5 do');
                 SL.Add(Format('        %s();', [BenchFuncs[J]]));
                 SL.Add('        i := i + 1;');
-                SL.Add('    end;');
+                SL.Add('    end while;');
                 SL.Add('');
-                // Medicao
-                SL.Add(Format('    // Medicao %s', [BenchFuncs[J]]));
+                // Measurement
+                SL.Add(Format('    // Measure %s', [BenchFuncs[J]]));
                 SL.Add('    t0 := GetNanoseconds();');
                 SL.Add('    i := 0;');
                 SL.Add(Format('    while i < %d do', [CustomIters]));
                 SL.Add(Format('        %s();', [BenchFuncs[J]]));
                 SL.Add('        i := i + 1;');
-                SL.Add('    end;');
+                SL.Add('    end while;');
                 SL.Add('    t1 := GetNanoseconds();');
                 SL.Add('    diff_ms := (Float64(t1 - t0) / 1000000.0);');
                 SL.Add(Format('    PrintLn("[BENCH]:%s:%d:%%f", diff_ms);', [BenchFuncs[J], CustomIters]));
@@ -548,11 +548,11 @@ begin
               SL.Free;
             end;
 
-            // Compila e executa o runner para cada backend
+            // Compile and run the harness for each backend
             for K := 0 to BackendsCount - 1 do
             begin
               RunnerExe := WorkDir + PathDelim + 'bench_runner_' + ModNode.Name + '.exe';
-              // Compila com aetherc --release
+              // Compile with aetherc --release
               CompileLog := '';
               ExitCode := RunProcessCaptureOutput(CompilerExe,
                 Format('"%s" %s --release --opt -o "%s" -I "%s"', [GenRunnerFile, BackendTargetFlags[K], RunnerExe, WorkDir]),
@@ -582,7 +582,7 @@ begin
                           ElapsedMs := SafeStrToFloat(Parts[3], 1.0);
                           if ElapsedMs <= 0.0 then ElapsedMs := 0.0001;
                           AvgMs := ElapsedMs / ItersRan;
-                          StdDevMs := AvgMs * 0.02; // Variancia tipica
+                          StdDevMs := AvgMs * 0.02; // Typical variance
                           OpsPerSec := (ItersRan / ElapsedMs) * 1000.0;
                           Suite.AddResult(BenchName, BackendNames[K], ItersRan, ElapsedMs, AvgMs, StdDevMs, OpsPerSec);
                         end;
@@ -595,7 +595,7 @@ begin
                 end
                 else if not JSONOutput then
                 begin
-                  WriteLn(ErrOutput, 'Erro na execucao do runner: ', RunLog);
+                  WriteLn(ErrOutput, 'Error running benchmark harness: ', RunLog);
                 end;
 
                 SysUtils.DeleteFile(RunnerExe);
@@ -606,7 +606,7 @@ begin
               end
               else if not JSONOutput then
               begin
-                WriteLn(ErrOutput, Format('Erro ao compilar benchmark "%s" com backend %s:', [ModNode.Name, BackendNames[K]]));
+                WriteLn(ErrOutput, Format('Error compiling benchmark "%s" with backend %s:', [ModNode.Name, BackendNames[K]]));
                 WriteLn(ErrOutput, CompileLog);
               end;
             end;
@@ -614,7 +614,7 @@ begin
           end
           else
           begin
-            // Caso 2: O arquivo e um executavel completo (program Main;)
+            // Case 2: The file is a full executable (program Main;)
             for K := 0 to BackendsCount - 1 do
             begin
               RunnerExe := WorkDir + PathDelim + 'bench_prog_' + ModNode.Name + '.exe';
@@ -628,7 +628,7 @@ begin
                 // Warmup
                 RunProcessCaptureOutput(RunnerExe, '', WorkDir, RunLog);
 
-                // Executa medindo tempo de alta precisao
+                // Execute while measuring high-precision timing
                 T0 := GetHighResolutionMicroseconds;
                 RunProcessCaptureOutput(RunnerExe, '', WorkDir, RunLog);
                 T1 := GetHighResolutionMicroseconds;
@@ -646,7 +646,7 @@ begin
               end
               else if not JSONOutput then
               begin
-                WriteLn(ErrOutput, Format('Erro ao compilar programa benchmark "%s" com backend %s:', [ModNode.Name, BackendNames[K]]));
+                WriteLn(ErrOutput, Format('Error compiling benchmark program "%s" with backend %s:', [ModNode.Name, BackendNames[K]]));
                 WriteLn(ErrOutput, CompileLog);
               end;
             end;

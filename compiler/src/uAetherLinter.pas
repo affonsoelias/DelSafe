@@ -35,7 +35,7 @@ type
 
   TLintArrayResult = array of TLintResult;
 
-  { TAetherLinter: Analisador Estático Oficial de Qualidade de Código do Aether }
+  { TAetherLinter: Official Static Code Quality Analyzer for Aether }
   TAetherLinter = class
   private
     class procedure CollectIdentifiersInExpr(Expr: TASTExpr; IdentList: TStringList);
@@ -362,16 +362,16 @@ var
     if Expr is TASTBinaryExpr then
     begin
       BinExpr := TASTBinaryExpr(Expr);
-      // Checa comparacoes redundantes com booleano: x = true, x = false, etc.
+      // Check redundant boolean comparisons: x = true, x = false, etc.
       if (BinExpr.Op = '=') or (BinExpr.Op = '<>') then
       begin
         if (BinExpr.Left is TASTLiteralExpr) and (TASTLiteralExpr(BinExpr.Left).Kind = lkBool) then
           AddIssue(Result, 'redundant-boolean', 'L005',
-            Format('Comparacao booleana redundante com literal "%s". Simplifique a condicao.', [TASTLiteralExpr(BinExpr.Left).Value]),
+            Format('Redundant boolean comparison with literal "%s". Simplify the condition.', [TASTLiteralExpr(BinExpr.Left).Value]),
             FilePath, BinExpr.Line, BinExpr.Col, lsHint)
         else if (BinExpr.Right is TASTLiteralExpr) and (TASTLiteralExpr(BinExpr.Right).Kind = lkBool) then
           AddIssue(Result, 'redundant-boolean', 'L005',
-            Format('Comparacao booleana redundante com literal "%s". Simplifique a condicao.', [TASTLiteralExpr(BinExpr.Right).Value]),
+            Format('Redundant boolean comparison with literal "%s". Simplify the condition.', [TASTLiteralExpr(BinExpr.Right).Value]),
             FilePath, BinExpr.Line, BinExpr.Col, lsHint);
       end;
       CheckExprForRedundancies(BinExpr.Left);
@@ -433,7 +433,7 @@ var
       if LocalReturnFound then
       begin
         AddIssue(Result, 'unreachable-code', 'L003',
-          Format('Instrucao inalcancavel (dead code) apos comando de return na linha %d:%d.', [LocRetLine, LocRetCol]),
+          Format('Unreachable statement (dead code) after return statement at line %d:%d.', [LocRetLine, LocRetCol]),
           FilePath, CurStmt.Line, CurStmt.Col, lsWarning);
       end
       else if CurStmt is TASTReturnStmt then
@@ -443,7 +443,7 @@ var
         LocRetCol := CurStmt.Col;
       end;
 
-      // Inspeciona sub-blocos
+      // Inspect sub-blocks
       if CurStmt is TASTIfStmt then
       begin
         CheckExprForRedundancies(TASTIfStmt(CurStmt).Condition);
@@ -517,7 +517,7 @@ begin
     AllModuleIdents.Duplicates := dupIgnore;
     AllModuleIdents.Sorted := True;
 
-    // 1. Coleta todos os identificadores globais referenciados no módulo
+    // 1. Collect all global identifiers referenced in the module
     for I := 0 to AModule.ModuleVars.Count - 1 do
       CollectIdentifiersInExpr(TASTVarDecl(AModule.ModuleVars[I]).InitialExpr, AllModuleIdents);
 
@@ -535,11 +535,11 @@ begin
     if Assigned(AModule.ProgramBlock) then
       CollectIdentifiersInNodeList(AModule.ProgramBlock.Body, AllModuleIdents);
 
-    // 2. Regra L002: Verificação de Imports Não Utilizados
+    // 2. Rule L002: Unused Imports Check
     for I := 0 to AModule.Imports.Count - 1 do
     begin
       ImpName := AModule.Imports[I];
-      // Para imports como 'std.math', pega o segmento final 'math'
+      // For imports like 'std.math', extract trailing segment 'math'
       SubName := ImpName;
       if Pos('.', SubName) > 0 then
         SubName := Copy(SubName, LastDelimiter('.', SubName) + 1, Length(SubName));
@@ -562,12 +562,12 @@ begin
       begin
         UnusedImports.Add(ImpName);
         AddIssue(Result, 'unused-import', 'L002',
-          Format('Modulo importado "%s" nunca e referenciado no codigo.', [ImpName]),
+          Format('Imported module "%s" is never referenced in code.', [ImpName]),
           FilePath, 1, 1, lsWarning, True, ImpName);
       end;
     end;
 
-    // 3. Regra L006: Verificação de Nomenclatura de Tipos (PascalCase)
+    // 3. Rule L006: Type Naming Convention Check (PascalCase)
     for I := 0 to AModule.Types.Count - 1 do
     begin
       TypeNode := AModule.Types[I];
@@ -575,19 +575,19 @@ begin
       begin
         if not IsPascalCase(TASTRecordDecl(TypeNode).Name) then
           AddIssue(Result, 'naming-convention', 'L006',
-            Format('Tipo record "%s" deve seguir PascalCase (iniciar com letra maiuscula).', [TASTRecordDecl(TypeNode).Name]),
+            Format('Record type "%s" should follow PascalCase (start with an uppercase letter).', [TASTRecordDecl(TypeNode).Name]),
             FilePath, TypeNode.Line, TypeNode.Col, lsHint);
       end
       else if TypeNode is TASTEnumDecl then
       begin
         if not IsPascalCase(TASTEnumDecl(TypeNode).Name) then
           AddIssue(Result, 'naming-convention', 'L006',
-            Format('Tipo enum "%s" deve seguir PascalCase (iniciar com letra maiuscula).', [TASTEnumDecl(TypeNode).Name]),
+            Format('Enum type "%s" should follow PascalCase (start with an uppercase letter).', [TASTEnumDecl(TypeNode).Name]),
             FilePath, TypeNode.Line, TypeNode.Col, lsHint);
       end;
     end;
 
-    // 4. Regras L001 (Unused Variables), L004 (Unused Params), L003 (Dead Code) em Funções
+    // 4. Rules L001 (Unused Variables), L004 (Unused Params), L003 (Dead Code) in Functions
     for I := 0 to AModule.Functions.Count - 1 do
     begin
       Func := TASTFunction(AModule.Functions[I]);
@@ -597,7 +597,7 @@ begin
       CollectIdentifiersInNodeList(Func.Requires, BodyIdents);
       CollectIdentifiersInNodeList(Func.Ensures, BodyIdents);
 
-      // L004: Parametros nunca usados
+      // L004: Unused parameters
       for J := 0 to Func.Params.Count - 1 do
       begin
         ParamNode := TASTParam(Func.Params[J]);
@@ -605,12 +605,12 @@ begin
         begin
           if BodyIdents.IndexOf(ParamNode.Name) < 0 then
             AddIssue(Result, 'unused-param', 'L004',
-              Format('Parametro "%s" nunca e utilizado na funcao "%s". (Dica: use prefixo "_" se descartado).', [ParamNode.Name, Func.Name]),
+              Format('Parameter "%s" is never used in function "%s". (Hint: prefix with "_" if intentional).', [ParamNode.Name, Func.Name]),
               FilePath, ParamNode.Line, ParamNode.Col, lsWarning);
         end;
       end;
 
-      // L001: Variaveis locais nunca usadas
+      // L001: Unused local variables
       for J := 0 to Func.LocalVars.Count - 1 do
       begin
         VarNode := TASTVarDecl(Func.LocalVars[J]);
@@ -618,16 +618,16 @@ begin
         begin
           if BodyIdents.IndexOf(VarNode.Name) < 0 then
             AddIssue(Result, 'unused-variable', 'L001',
-              Format('Variavel local "%s" nunca e utilizada na funcao "%s". (Dica: use prefixo "_" se intencional).', [VarNode.Name, Func.Name]),
+              Format('Local variable "%s" is never used in function "%s". (Hint: prefix with "_" if intentional).', [VarNode.Name, Func.Name]),
               FilePath, VarNode.Line, VarNode.Col, lsWarning);
         end;
       end;
 
-      // L003: Dead code e Redundancias
+      // L003: Dead code and Redundancies
       CheckStmtListForDeadCode(Func.Body);
     end;
 
-    // 5. Inspeciona ProgramBlock
+    // 5. Inspect ProgramBlock
     if Assigned(AModule.ProgramBlock) then
     begin
       BodyIdents.Clear;
@@ -641,7 +641,7 @@ begin
         begin
           if BodyIdents.IndexOf(VarNode.Name) < 0 then
             AddIssue(Result, 'unused-variable', 'L001',
-              Format('Variavel global "%s" nunca e utilizada no bloco principal. (Dica: use prefixo "_" se intencional).', [VarNode.Name]),
+              Format('Global variable "%s" is never used in main program block. (Hint: prefix with "_" if intentional).', [VarNode.Name]),
               FilePath, VarNode.Line, VarNode.Col, lsWarning);
         end;
       end;
@@ -649,7 +649,7 @@ begin
       CheckStmtListForDeadCode(AModule.ProgramBlock.Body);
     end;
 
-    // Se a flag Fix foi requisitada, aplica correcoes seguras
+    // If Fix flag was requested, apply safe fixes
     if Fix and (UnusedImports.Count > 0) then
     begin
       Result.FixedCount := FixUnusedImports(FilePath, UnusedImports);
@@ -699,7 +699,7 @@ begin
     Result.HasWarnings := False;
     Result.FixedCount := 0;
     SetLength(Result.Issues, 0);
-    AddIssue(Result, 'file-not-found', 'E0001', 'Arquivo fonte nao encontrado: ' + FilePath, FilePath, 1, 1, lsError);
+    AddIssue(Result, 'file-not-found', 'E0001', 'Source file not found: ' + FilePath, FilePath, 1, 1, lsError);
     Exit;
   end;
 
@@ -755,7 +755,7 @@ begin
   case Issue.Severity of
     lsHint:    SevStr := '[HINT]';
     lsWarning: SevStr := '[WARN]';
-    lsError:   SevStr := '[ERRO]';
+    lsError:   SevStr := '[ERROR]';
   end;
 
   Result := Format('  %s %s:%d:%d (%s - %s)' + LineEnding + '         %s',

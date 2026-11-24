@@ -4,9 +4,9 @@ Control flow in Aether is designed to eliminate the classic "dangling else" ambi
 
 ---
 
-## 1. Clean Conditionals: `if...then...else...end;`
+## 1. Clean Conditionals: `if...then...else...end if;`
 
-In Aether, an `if` statement opens with `if <condition> then`, contains statements directly, and closes with `end;`:
+In Aether, an `if` statement opens with `if <condition> then`, contains statements directly (with optional flat `else if <condition> then` chains), and closes with a single `end if;`:
 
 ```aether
 module conditionals_demo;
@@ -26,7 +26,7 @@ begin
         grade := "C";
     else
         grade := "F";
-    end;
+    end if;
 
     PrintLn("Final grade: " + grade);
 end conditionals_demo.
@@ -35,11 +35,11 @@ end conditionals_demo.
 Notice:
 - No parentheses `(...)` required around conditions.
 - No `begin` keyword required after `then`.
-- Clean closing `end;`.
+- Clean closing `end if;` (closing the entire `if / else if / else` chain).
 
 ### 1.1 Inline Conditional Expressions (`if ... then ... else ...`)
 
-Aether also supports single-expression `if <cond> then <exprA> else <exprB>` directly inside assignments, initializers, arithmetic, and function calls (without `end;`), requiring compatible types on both branches:
+Aether also supports single-expression `if <cond> then <exprA> else <exprB>` directly inside assignments, initializers, arithmetic, and function calls (without `end if;`), requiring compatible types on both branches:
 
 ```aether
 let limit := if score >= 90 then 100 else 50;
@@ -67,7 +67,7 @@ begin
     while i <= 10 do
         total := total + i;
         i := i + 1;
-    end;
+    end while;
 
     PrintLn("Sum of 1 to 10 is: " + IntToStr(total));
 end loop_demo.
@@ -79,8 +79,8 @@ end loop_demo.
 
 For deterministic iteration across numeric ranges, Aether provides canonical `for` loops in the Pascal tradition:
 
-- **Ascending (`to`):** `for i := start to end do ... end;`
-- **Descending (`downto`):** `for i := start downto end do ... end;`
+- **Ascending (`to`):** `for i := start to end do ... end for;`
+- **Descending (`downto`):** `for i := start downto end do ... end for;`
 
 ```aether
 module for_demo;
@@ -96,39 +96,39 @@ begin
     // Ascending loop: 1 through 10
     for i := 1 to 10 do
         sum := sum + i;
-    end;
+    end for;
     PrintLn("Ascending sum (1..10): " + IntToStr(sum)); // 55
 
     // Descending countdown loop: 5 down to 1
     PrintLn("Countdown:");
     for k := 5 downto 1 do
         PrintLn("  T-minus: " + IntToStr(k));
-    end;
+    end for;
     PrintLn("Blast off!");
 end for_demo.
 ```
 
-You can also iterate directly over fixed arrays, dynamic arrays (`array of T`), and `String` values (`Char` elements) using `for item in collection do ... end;`:
+You can also iterate directly over fixed arrays, dynamic arrays (`array of T`), and `String` values (`Char` elements) using `for item in collection do ... end for;`:
 
 ```aether
 for n in numbers do
     total := total + n;
-end;
+end for;
 
 for ch in "Aether" do
     if ch = 'A' then
         PrintLn("Found A!");
-    end;
-end;
+    end if;
+end for;
 
 // Iterating keys or key-value pairs in associative maps
 for keyOnly in scores do
     PrintLn(keyOnly);
-end;
+end for;
 
 for key, val in scores do
     total += val;
-end;
+end for;
 ```
 
 You can also update numeric targets using `div` (integer division) and compound assignment operators (`+=`, `-=`, `*=`, `/=`, `mod=`, `%=`, `&=`, `|=`, `^=`, `<<=`, `>>=`) or `Inc(x)` / `Dec(x)` on variables, record fields, array elements, and maps. You can also declare local `var` / `let` variables inline anywhere inside `begin...end`, `if`, `while`, or `for` blocks, and initialize associative maps with literals such as `var scores := ["alice": 100, "bob": 85];` or empty `[:]` alongside escaped `Char`/`String` literals (`'\n'`, `'\t'`, `'\0'`, `'\r'`, `'\\'`, `'\"'`, `'\''`).
@@ -155,7 +155,7 @@ begin
         PrintLn("Attempt #" + IntToStr(attempts));
         if attempts >= 3 then
             success := true;
-        end;
+        end if;
     until success;
 
     PrintLn("Finished with " + IntToStr(attempts) + " attempts.");
@@ -187,17 +187,17 @@ begin
     for i := 1 to 100 do
         if i = 5 then
             break; // Stop iterating immediately
-        end;
-    end;
+        end if;
+    end for;
 
     // 2. Continue: skip even numbers, summing only odd numbers (1..10)
     sum := 0;
     for i := 1 to 10 do
         if (i mod 2) = 0 then
             continue; // Skip even numbers
-        end;
+        end if;
         sum := sum + i;
-    end;
+    end for;
 
     PrintLn("Sum of odd numbers: " + IntToStr(sum)); // 25
 end loop_control_demo.
@@ -221,7 +221,7 @@ begin
 
     if exitEarly then
         return 0; // Automatically runs log.Push(2), then log.Push(1) before returning
-    end;
+    end if;
 
     return 1;
 end ProcessData;
@@ -231,7 +231,7 @@ end ProcessData;
 
 ## 2.5 System Exception Handling (`try ... except` & `raise`)
 
-While Aether uses `Result<T, E>` and `Option<T>` for expected domain errors, low-level runtime faults and unrecoverable panics can be raised with `raise` and caught cleanly with `try ... except ... end;`:
+While Aether uses `Result<T, E>` and `Option<T>` for expected domain errors, low-level runtime faults and unrecoverable panics can be raised with `raise` and caught cleanly with `try ... except ... end try;`:
 
 ```aether
 module exceptions_demo;
@@ -248,7 +248,7 @@ begin
     except
         recovered := true;
         PrintLn("Fault safely intercepted!");
-    end;
+    end try;
     assert(recovered = true);
 end exceptions_demo.
 ```
@@ -285,13 +285,13 @@ type
         Pending,
         Success,
         Failed
-    end;
+    end enum;
 
     WebEvent = enum
         Click,
         KeyPress,
         Submit
-    end;
+    end enum;
 ```
 
 ---
@@ -310,7 +310,7 @@ type
         Shipped,
         Delivered,
         Cancelled
-    end;
+    end enum;
 
 function GetStatusDescription(st: OrderStatus) return String is
 begin
@@ -325,7 +325,7 @@ begin
             return "Package received by customer.";
         OrderStatus.Cancelled =>
             return "Order was cancelled.";
-    end;
+    end match;
 end GetStatusDescription;
 
 program Main;
@@ -355,7 +355,7 @@ match statusCode do
         PrintLn("Error");
     _ =>
         PrintLn("Other");
-end;
+end match;
 
 match command with
     "start":
@@ -364,14 +364,14 @@ match command with
         HaltWork();
     _:
         PrintLn("Unknown command");
-end;
+end match;
 
 match optVal with
     case Some(let v):
         total += v;
     case None:
         total += 0;
-end;
+end match;
 ```
 
 ### 4.2 Multi-Value & Inclusive Range Patterns (`a, b, c` and `low..high`)
@@ -388,7 +388,7 @@ match httpCode do
         category := "non-positive";
     _ =>
         category := "other";
-end;
+end match;
 
 match ch do
     'a'..'z' =>
@@ -399,14 +399,14 @@ match ch do
         kind := "small-digit";
     _ =>
         kind := "symbol";
-end;
+end match;
 
 match st with
     case OrderStatus.Draft, OrderStatus.Paid:
         group := 1;
     case OrderStatus.Shipped, OrderStatus.Delivered, OrderStatus.Cancelled:
         group := 2;
-end;
+end match;
 ```
 
 ### 4.3 `match` Expressions & Conditional Pattern Guards (`if` / `when`)
@@ -419,7 +419,7 @@ let statusLabel := match code do
     case let c if c >= 500 => "SERVER_ERR";
     case let c when c >= 400 => "CLIENT_ERR";
     case _ => "OTHER";
-end;
+end match;
 
 function ScoreResultExpr(res: Result<Int32, String>) return Int32 is
 begin
@@ -427,7 +427,7 @@ begin
         case Ok(let v) if v > 50 => v * 2;
         case Ok(let v) => v + 1;
         case Err(let _msg) => -1;
-    end;
+    end match;
 end ScoreResultExpr;
 ```
 
@@ -436,8 +436,8 @@ Guarded patterns do not act as unconditional wildcards during exhaustiveness che
 ---
 
 ## 5. Summary
-1. `if...then...else...end;` provides unambiguous nesting without `begin`, and inline `if <cond> then <exprA> else <exprB>` evaluates conditional expressions cleanly inside initializers and arguments.
-2. Loops use `while <cond> do ... end;`, `for` (`to` / `downto` / `in` over arrays, `String`, and `map[K]V`), and `repeat ... until` with `break` and `continue`, plus `div`, `+=`/`-=`/`*=`/`/=`/`mod=`/`&=`/`|=`/`^=`/`<<=`/`>>=`, inline `var`/`let` blocks, and `Inc`/`Dec`.
+1. `if...then...else...end if;` provides unambiguous nesting without `begin` (including flat `else if` chains), and inline `if <cond> then <exprA> else <exprB>` evaluates conditional expressions cleanly inside initializers and arguments.
+2. Loops use `while <cond> do ... end while;`, `for` (`to` / `downto` / `in` over arrays, `String`, and `map[K]V`) closing with `end for;`, and `repeat ... until` with `break` and `continue`, plus `div`, `+=`/`-=`/`*=`/`/=`/`mod=`/`&=`/`|=`/`^=`/`<<=`/`>>=`, inline `var`/`let` blocks, and `Inc`/`Dec`.
 3. `defer` ensures deterministic LIFO cleanup, `try ... except` and `raise` handle system faults, and `?` / `try` propagates `Result<T, E>` and `Option<T>` errors ergonomically.
 4. Enums are algebraic types, and `match` (statement or expression) handles `Enum`, value `Option<T>`, typed `Result<T, E>`, primitives, multi-value comma lists, inclusive `low..high` ranges, `if`/`when` guards, and `_` wildcards with compile-time exhaustiveness checking.
 

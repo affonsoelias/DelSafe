@@ -1,40 +1,40 @@
 module async_demo;
 
-async function CalcularSoma(a, b: Int32) return Int32 is
+async function ComputeSum(a, b: Int32) return Int32 is
 begin
     return a + b;
-end CalcularSoma;
+end ComputeSum;
 
-async function MultiplicarLento(x, y: Int32) return Int32 is
+async function SlowMultiply(x, y: Int32) return Int32 is
 begin
     return x * y;
-end MultiplicarLento;
+end SlowMultiply;
 
-async function ObterMensagem(nome: String) return String is
+async function GetMessage(name: String) return String is
 begin
-    return "Ola assincrono, " + nome;
-end ObterMensagem;
+    return "Hello async, " + name;
+end GetMessage;
 
 program Main;
 var
-    soma: Int32;
+    sum_val: Int32;
     t1: Task<Int32>;
     t2: Task<Int32>;
     res1: Int32;
     res2: Int32;
     msg: String;
 begin
-    PrintLn("=== TESTE CONCORRENCIA & ASYNC/AWAIT AETHER ===");
+    PrintLn("=== AETHER CONCURRENCY & ASYNC/AWAIT TEST ===");
 
-    // 1. Chamada direta com await
-    soma := await CalcularSoma(15, 27);
-    PrintLn("1. await CalcularSoma(15, 27) =");
-    PrintLn(soma);
-    Assert(soma = 42, "Falha na soma assincrona!");
+    // 1. Direct call with await
+    sum_val := await ComputeSum(15, 27);
+    PrintLn("1. await ComputeSum(15, 27) =");
+    PrintLn(sum_val);
+    Assert(sum_val = 42, "Async sum failure!");
 
-    // 2. Disparo concorrente com spawn e await posterior
-    t1 := spawn MultiplicarLento(6, 7);
-    t2 := spawn MultiplicarLento(10, 5);
+    // 2. Concurrent dispatch with spawn and later await
+    t1 := spawn SlowMultiply(6, 7);
+    t2 := spawn SlowMultiply(10, 5);
 
     res1 := await t1;
     res2 := await t2;
@@ -42,13 +42,13 @@ begin
     PrintLn(res1);
     PrintLn("3. await t2 (10*5) =");
     PrintLn(res2);
-    Assert(res1 = 42, "Falha no res1!");
-    Assert(res2 = 50, "Falha no res2!");
+    Assert(res1 = 42, "Failure in res1!");
+    Assert(res2 = 50, "Failure in res2!");
 
-    // 3. String assincrona
-    msg := await ObterMensagem("Aether");
-    PrintLn("4. Mensagem assincrona:");
+    // 3. Async string
+    msg := await GetMessage("Aether");
+    PrintLn("4. Async message:");
     PrintLn(msg);
 
-    PrintLn("SUCESSO: Todos os testes de async/await passaram com perfeicao!");
+    PrintLn("SUCCESS: All async/await tests passed!");
 end async_demo.

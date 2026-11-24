@@ -2,33 +2,33 @@ module derives_test;
 
 type
     [derive(Debug, JSON, Clone, Equals)]
-    Ponto = record
+    Point = record
         x: Float64;
         y: Float64;
-    end;
+    end record;
 
     [derive(Debug, JSON, Clone, Equals)]
-    Usuario = record
+    User = record
         id: Int32;
-        nome: String;
-        ativo: Bool;
-        posicao: Ponto;
-    end;
+        name: String;
+        active: Bool;
+        position: Point;
+    end record;
 
     [derive(Debug, JSON, Clone, Equals)]
     Status = enum
-        Pendente,
-        Processando,
-        Concluido
-    end;
+        Pending,
+        Processing,
+        Completed
+    end enum;
 
 program Main;
 var
-    p1: Ponto;
-    p2: Ponto;
-    p3: Ponto;
-    u1: Usuario;
-    u2: Usuario;
+    p1: Point;
+    p2: Point;
+    p3: Point;
+    u1: User;
+    u2: User;
     s1: Status;
     s2: Status;
     debug_p: String;
@@ -38,34 +38,34 @@ var
     debug_s: String;
     json_s: String;
 begin
-    p1 := Ponto(10.5, 20.25);
+    p1 := Point(10.5, 20.25);
     debug_p := p1.ToString();
     json_p := p1.ToJSON();
-    Assert(debug_p = "Ponto { x: 10.5, y: 20.25 }", "ToString de Ponto incorreto");
-    Assert(json_p = "{\"x\": 10.5, \"y\": 20.25}", "ToJSON de Ponto incorreto");
+    Assert(debug_p = "Point { x: 10.5, y: 20.25 }", "Incorrect Point ToString");
+    Assert(json_p = "{\"x\": 10.5, \"y\": 20.25}", "Incorrect Point ToJSON");
 
     p2 := p1.Clone();
-    p3 := Ponto(99.0, 99.0);
-    Assert(p1.Equals(borrow p2), "p1 deve ser igual a p2 (clone)");
-    Assert(not p1.Equals(borrow p3), "p1 deve ser diferente de p3");
+    p3 := Point(99.0, 99.0);
+    Assert(p1.Equals(borrow p2), "p1 must equal p2 (clone)");
+    Assert(not p1.Equals(borrow p3), "p1 must differ from p3");
 
-    u1 := Usuario(101, "Alice", true, p1);
+    u1 := User(101, "Alice", true, p1);
     debug_u := u1.ToString();
     json_u := u1.ToJSON();
-    Assert(debug_u = "Usuario { id: 101, nome: \"Alice\", ativo: true, posicao: Ponto { x: 10.5, y: 20.25 } }", "ToString de Usuario incorreto");
-    Assert(json_u = "{\"id\": 101, \"nome\": \"Alice\", \"ativo\": true, \"posicao\": {\"x\": 10.5, \"y\": 20.25}}", "ToJSON de Usuario incorreto");
+    Assert(debug_u = "User { id: 101, name: \"Alice\", active: true, position: Point { x: 10.5, y: 20.25 } }", "Incorrect User ToString");
+    Assert(json_u = "{\"id\": 101, \"name\": \"Alice\", \"active\": true, \"position\": {\"x\": 10.5, \"y\": 20.25}}", "Incorrect User ToJSON");
 
     u2 := u1.Clone();
-    Assert(u1.Equals(borrow u2), "u1 deve ser igual ao clone u2");
+    Assert(u1.Equals(borrow u2), "u1 must equal clone u2");
 
-    s1 := Status.Concluido;
+    s1 := Status.Completed;
     debug_s := s1.ToString();
     json_s := s1.ToJSON();
-    Assert(debug_s = "Status.Concluido", "ToString de Status incorreto");
-    Assert(json_s = "\"Concluido\"", "ToJSON de Status incorreto");
+    Assert(debug_s = "Status.Completed", "Incorrect Status ToString");
+    Assert(json_s = "\"Completed\"", "Incorrect Status ToJSON");
 
     s2 := s1.Clone();
-    Assert(s1.Equals(borrow s2), "s1 deve ser igual a s2");
+    Assert(s1.Equals(borrow s2), "s1 must equal s2");
 
-    PrintLn("Derives Test: Todos os testes de derive passaram com sucesso!");
+    PrintLn("Derives Test: All derive tests passed successfully!");
 end derives_test.

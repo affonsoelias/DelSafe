@@ -14,7 +14,7 @@ const pendingRequests = new Map();
 let incomingBuffer = Buffer.alloc(0);
 
 /**
- * Encontra o caminho do executável aetherc
+ * Finds the path to the aetherc compiler executable.
  */
 function getCompilerPath() {
     const config = vscode.workspace.getConfiguration('aether');
@@ -36,7 +36,7 @@ function getCompilerPath() {
 }
 
 /**
- * Envia mensagem JSON-RPC formatada pelo protocolo LSP
+ * Sends a JSON-RPC message formatted per the LSP protocol.
  */
 function sendLSP(msg) {
     if (!lspProcess || !lspProcess.stdin || !lspProcess.stdin.writable) return;
@@ -46,7 +46,7 @@ function sendLSP(msg) {
 }
 
 /**
- * Envia uma requisição LSP e aguarda a resposta
+ * Sends an LSP request and awaits the response.
  */
 function requestLSP(method, params) {
     return new Promise(resolve => {
@@ -69,7 +69,7 @@ function requestLSP(method, params) {
 }
 
 /**
- * Trata o stream de bytes recebido do servidor LSP
+ * Handles the byte stream received from the LSP server.
  */
 function handleIncomingData(chunk) {
     incomingBuffer = Buffer.concat([incomingBuffer, chunk]);
@@ -88,7 +88,7 @@ function handleIncomingData(chunk) {
         const length = parseInt(match[1], 10);
         const bodyStart = headerEnd + 4;
         if (incomingBuffer.length < bodyStart + length) {
-            break; // Aguarda pacote completo
+            break; // Wait for full payload
         }
 
         const bodyBuf = incomingBuffer.subarray(bodyStart, bodyStart + length);
@@ -104,13 +104,13 @@ function handleIncomingData(chunk) {
                 handlePublishDiagnostics(msg.params);
             }
         } catch (e) {
-            console.error('[Aether LSP] Falha ao processar payload JSON:', e);
+            console.error('[Aether LSP] Failed to parse JSON payload:', e);
         }
     }
 }
 
 /**
- * Publica os diagnósticos em tempo real no VS Code / Antigravity IDE
+ * Publishes real-time diagnostics in VS Code / Antigravity IDE.
  */
 function handlePublishDiagnostics(params) {
     if (!diagnosticCollection || !params || !params.uri) return;
@@ -135,7 +135,7 @@ function handlePublishDiagnostics(params) {
 }
 
 /**
- * Inicia o processo do servidor LSP nativo do Aether (aetherc --lsp)
+ * Spawns the native Aether LSP server process (aetherc --lsp).
  */
 function startLSPServer(context) {
     const compiler = getCompilerPath();
@@ -155,15 +155,15 @@ function startLSPServer(context) {
         });
 
         lspProcess.on('error', err => {
-            console.error('[Aether LSP] Erro no processo:', err);
+            console.error('[Aether LSP] Process error:', err);
         });
 
         lspProcess.on('exit', code => {
-            console.log(`[Aether LSP] Servidor encerrou com código ${code}`);
+            console.log(`[Aether LSP] Server exited with code ${code}`);
             lspProcess = null;
         });
 
-        // Envia requisição 'initialize'
+        // Send 'initialize' request
         sendLSP({
             jsonrpc: '2.0',
             id: reqId++,
@@ -180,7 +180,7 @@ function startLSPServer(context) {
             }
         });
 
-        // Se houver documentos abertos no editor, envia didOpen imediatamente
+        // Send didOpen immediately for any already-open Aether documents
         vscode.workspace.textDocuments.forEach(doc => {
             if (doc.languageId === 'aether') {
                 sendLSP({
@@ -198,22 +198,22 @@ function startLSPServer(context) {
         });
 
     } catch (e) {
-        console.error('[Aether LSP] Falha ao iniciar processo do servidor:', e);
+        console.error('[Aether LSP] Failed to start server process:', e);
     }
 }
 
 /**
- * Ativação da extensão
+ * Extension activation
  * @param {vscode.ExtensionContext} context 
  */
 function activate(context) {
     diagnosticCollection = vscode.languages.createDiagnosticCollection('aether');
     context.subscriptions.push(diagnosticCollection);
 
-    // Inicializa o servidor LSP nativo do Aether
+    // Start native Aether LSP server
     startLSPServer(context);
 
-    // Sincronização de documentos em tempo real (didOpen, didChange, didClose)
+    // Real-time document synchronization (didOpen, didChange, didClose)
     context.subscriptions.push(
         vscode.workspace.onDidOpenTextDocument(doc => {
             if (doc.languageId === 'aether') {
@@ -265,7 +265,7 @@ function activate(context) {
         })
     );
 
-    // Provedor de Auto-completar inteligente (CompletionItemProvider)
+    // Smart Autocompletion provider (CompletionItemProvider)
     context.subscriptions.push(
         vscode.languages.registerCompletionItemProvider('aether', {
             async provideCompletionItems(document, position) {
@@ -290,7 +290,7 @@ function activate(context) {
         }, '.', ':')
     );
 
-    // Provedor de Informações ao Passar o Cursor (HoverProvider)
+    // Hover Documentation provider (HoverProvider)
     context.subscriptions.push(
         vscode.languages.registerHoverProvider('aether', {
             async provideHover(document, position) {
@@ -305,7 +305,7 @@ function activate(context) {
         })
     );
 
-    // Provedor de Ir para Definição (DefinitionProvider)
+    // Go-to-Definition provider (DefinitionProvider)
     context.subscriptions.push(
         vscode.languages.registerDefinitionProvider('aether', {
             async provideDefinition(document, position) {
@@ -327,7 +327,7 @@ function activate(context) {
             }
         }),
 
-        // Provedor de Formatação de Documento (Shift+Alt+F / formatOnSave)
+        // Document Formatting provider (Shift+Alt+F / formatOnSave)
         vscode.languages.registerDocumentFormattingEditProvider('aether', {
             async provideDocumentFormattingEdits(document) {
                 const res = await requestLSP('textDocument/formatting', {
@@ -348,7 +348,7 @@ function activate(context) {
             }
         }),
 
-        // Provedor de Refatoração Segura (Rename / F2)
+        // Safe Refactoring provider (Rename / F2)
         vscode.languages.registerRenameProvider('aether', {
             async provideRenameEdits(document, position, newName) {
                 const res = await requestLSP('textDocument/rename', {
@@ -378,7 +378,7 @@ function activate(context) {
             }
         }),
 
-        // Provedor de Ações Rápidas de Correção (CodeActions / QuickFix / Ctrl+.)
+        // Quick-Fix Code Actions provider (Ctrl+.)
         vscode.languages.registerCodeActionsProvider('aether', {
             async provideCodeActions(document, range, context) {
                 const res = await requestLSP('textDocument/codeAction', {
@@ -427,14 +427,14 @@ function activate(context) {
         })
     );
 
-    // Comando: Inicializar Projeto Aether
+    // Command: Initialize Aether Project
     context.subscriptions.push(
         vscode.commands.registerCommand('aether.initProject', async () => {
             const name = await vscode.window.showInputBox({
-                prompt: 'Nome do novo projeto Aether (deixe em branco para inicializar na pasta atual):',
-                placeHolder: 'meu_projeto'
+                prompt: 'Name of the new Aether project (leave blank to initialize in the current folder):',
+                placeHolder: 'my_project'
             });
-            if (name === undefined) return; // Cancelado
+            if (name === undefined) return; // Cancelled
 
             const compiler = getCompilerPath();
             const term = vscode.window.createTerminal('Aether (Init)');
@@ -443,7 +443,7 @@ function activate(context) {
         })
     );
 
-    // Comando: Compilar Projeto (Build)
+    // Command: Build Project
     context.subscriptions.push(
         vscode.commands.registerCommand('aether.buildProject', () => {
             const compiler = getCompilerPath();
@@ -453,7 +453,7 @@ function activate(context) {
         })
     );
 
-    // Comando: Executar Projeto (Run)
+    // Command: Run Project
     context.subscriptions.push(
         vscode.commands.registerCommand('aether.runProject', () => {
             const compiler = getCompilerPath();
@@ -463,12 +463,12 @@ function activate(context) {
         })
     );
 
-    // Comando: Compilar via Pascal
+    // Command: Compile via Pascal
     context.subscriptions.push(
         vscode.commands.registerCommand('aether.compilePascal', () => {
             const editor = vscode.window.activeTextEditor;
             if (!editor) {
-                vscode.window.showWarningMessage('Nenhum arquivo Aether aberto no editor.');
+                vscode.window.showWarningMessage('No Aether file is currently open in the editor.');
                 return;
             }
             const compiler = getCompilerPath();
@@ -478,12 +478,12 @@ function activate(context) {
         })
     );
 
-    // Comando: Compilar via C99 / GCC
+    // Command: Compile via C99 / GCC
     context.subscriptions.push(
         vscode.commands.registerCommand('aether.compileC', () => {
             const editor = vscode.window.activeTextEditor;
             if (!editor) {
-                vscode.window.showWarningMessage('Nenhum arquivo Aether aberto no editor.');
+                vscode.window.showWarningMessage('No Aether file is currently open in the editor.');
                 return;
             }
             const compiler = getCompilerPath();
@@ -492,7 +492,7 @@ function activate(context) {
             term.sendText(`"${compiler}" "${editor.document.uri.fsPath}" --target=c`);
         }),
 
-        // Comando: Formatar Documento
+        // Command: Format Document
         vscode.commands.registerCommand('aether.formatDocument', () => {
             vscode.commands.executeCommand('editor.action.formatDocument');
         })

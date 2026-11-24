@@ -4,31 +4,31 @@ import std.math;
 import std.io;
 
 type
-    ponto = record
+    point = record
         x: Float64;
         y: Float64;
-    end;
+    end record;
 
-function Calcular(a, b: Int32) return Int32 is
+function Compute(a, b: Int32) return Int32 is
 var
     unused_local: Int32;
 begin
     if a = true then
         return a;
-    end;
+    end if;
 
     return a + 10;
 
-    // Dead code apos return:
-    PrintLn("Isto nunca sera executado!");
-end Calcular;
+    // Dead code after return:
+    PrintLn("This will never be executed!");
+end Compute;
 
 program Main;
 var
     temp: Int32;
-    p: ponto;
+    p: point;
 begin
-    p := ponto(1.0, 2.0);
+    p := point(1.0, 2.0);
     PrintLn("X: %f", p.x);
-    PrintLn("Resultado: %d", Calcular(5, 10));
+    PrintLn("Result: %d", Compute(5, 10));
 end dirty_test.

@@ -7,7 +7,7 @@ type
         FileNotFound,
         PermissionDenied,
         DiskError
-    end;
+    end enum;
 
 procedure LogInfo(borrow message: String);
 procedure WriteOut(borrow text: String);

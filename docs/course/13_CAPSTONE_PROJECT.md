@@ -29,7 +29,7 @@ type
         payload: String;
         created_at: UInt64;
         access_count: Int32;
-    end;
+    end record;
 
 // 2. Algebraic Return Type for Robust Error Handling
 type
@@ -37,7 +37,7 @@ type
         Hit(CacheItem),
         Miss,
         Expired
-    end;
+    end enum;
 
 // 3. Main Cache Storage Structure
 type
@@ -45,7 +45,7 @@ type
         name: String;
         ttl_seconds: UInt64;
         total_queries: Int32;
-    end;
+    end record;
 
 // 4. Inlined Calculation for Hash/Key Normalization
 @inline(always)
@@ -93,7 +93,7 @@ begin
         return CacheLookupResult.Expired;
     else
         return CacheLookupResult.Miss;
-    end;
+    end if;
 end QueryItem;
 
 program Main;
@@ -119,12 +119,12 @@ begin
             item_clone := item.Clone();
             if item.Equals(borrow item_clone) then
                 PrintLn("[INTEGRITY] Cloned item matches original perfectly!");
-            end;
+            end if;
         CacheLookupResult.Miss =>
             PrintLn("[CACHE MISS] Key not found.");
         CacheLookupResult.Expired =>
             PrintLn("[CACHE EXPIRED] Item TTL exceeded.");
-    end;
+    end match;
 
     PrintLn("");
 
@@ -137,7 +137,7 @@ begin
             PrintLn("[CACHE MISS] Key 'user:session:9999' not found in cache.");
         CacheLookupResult.Expired =>
             PrintLn("[CACHE EXPIRED] Key expired.");
-    end;
+    end match;
 
     PrintLn("");
 

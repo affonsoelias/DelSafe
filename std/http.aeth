@@ -9,13 +9,13 @@ type
     Client = record
         host: String;
         port: UInt32;
-    end;
+    end record;
 
     Server = record
         port: UInt32;
         sock: Socket;
         is_running: Bool;
-    end;
+    end record;
 
 function NewClient(borrow h: String; p: UInt32) return Client;
 function Get(borrow client: Client; borrow path: String) return HttpResponse;
@@ -42,7 +42,7 @@ begin
     s := SocketConnectClient(client.host, client.port);
     if not s.is_open then
         return HttpResponse(status_code: 500, content_type: "text/plain", body: "Connection Failed");
-    end;
+    end if;
     raw_req := BuildHttpRequest("GET", client.host, path);
     SocketSendString(borrow s, borrow raw_req);
     raw_res := SocketRecvString(borrow s, 4096);
@@ -61,7 +61,7 @@ begin
     s := SocketConnectClient(client.host, client.port);
     if not s.is_open then
         return HttpResponse(status_code: 500, content_type: "text/plain", body: "Connection Failed");
-    end;
+    end if;
     raw_req := "POST " + path + " HTTP/1.1\r\n" +
         "Host: " + client.host + "\r\n" +
         "Content-Type: " + content_type + "\r\n" +
@@ -89,11 +89,11 @@ var
 begin
     if not server.is_running then
         return false;
-    end;
+    end if;
     out_client := SocketAcceptClient(borrow server.sock);
     if not out_client.is_open then
         return false;
-    end;
+    end if;
     raw_req := SocketRecvString(borrow out_client, 2048);
     return ParseHttpRequest(borrow raw_req, mut borrow out_req);
 end AcceptRequest;
@@ -112,7 +112,7 @@ begin
     if server.is_running then
         SocketCloseHandle(mut borrow server.sock);
         server.is_running := false;
-    end;
+    end if;
 end StopServer;
 
 end HTTP.

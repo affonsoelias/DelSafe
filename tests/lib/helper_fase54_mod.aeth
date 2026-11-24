@@ -6,46 +6,46 @@ const
     PUBLIC_FACTOR = 3;
 
 type
-    Nivel = enum
-        Baixo,
-        Medio,
-        Alto
-    end;
+    Level = enum
+        Low,
+        Medium,
+        High
+    end enum;
 
 type
     [derive(Debug, JSON, Clone, Equals)]
-    Caixa = record
-        pub titulo: String;
+    BoxItem = record
+        pub title: String;
         priv secret: Int32;
-    end;
+    end record;
 
-function Escalar(n: Int32) return Int32;
+function ScaleVal(n: Int32) return Int32;
 
 implementation
 
 const
     SECRET_SALT = 999;
 
-impl Caixa
+impl BoxItem
     pub function Create(lbl: String; sec: Int32) return Self is
     begin
-        return Caixa(lbl, sec);
+        return BoxItem(lbl, sec);
     end Create;
 
     pub function ReadSecret(borrow self) return Int32 is
     begin
         return self.secret;
     end ReadSecret;
-end;
+end impl;
 
-function HelperInterno(n: Int32) return Int32 is
+function InternalHelper(n: Int32) return Int32 is
 begin
     return n + SECRET_SALT;
-end HelperInterno;
+end InternalHelper;
 
-function Escalar(n: Int32) return Int32 is
+function ScaleVal(n: Int32) return Int32 is
 begin
-    return (n * PUBLIC_FACTOR) + HelperInterno(0) - SECRET_SALT;
-end Escalar;
+    return (n * PUBLIC_FACTOR) + InternalHelper(0) - SECRET_SALT;
+end ScaleVal;
 
 end helper_fase54_mod.

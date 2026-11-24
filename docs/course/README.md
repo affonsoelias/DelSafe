@@ -19,7 +19,7 @@ Aether combines the structural elegance and readability of Pascal with modern sy
 | :--- | :--- | :--- |
 | **[01. Getting Started](01_GETTING_STARTED.md)** | Toolchain & Workflow | Hello World, module hierarchy, 1-click build scripts, CLI targets (`fpc`, `gcc`, `wasm`). |
 | **[02. Variables, Types & Mutability](02_VARIABLES_TYPES_MUTABILITY.md)** | Type Foundations | `let` vs `var`, integer/float hierarchies, string semantics, type inference, immutability by default. |
-| **[03. Control Flow & Pattern Matching](03_CONTROL_FLOW_AND_MATCH.md)** | Deterministic Execution | Unambiguous `if...then...else...end;`, loops, algebraic enums, and compile-time exhaustive `match`. |
+| **[03. Control Flow & Pattern Matching](03_CONTROL_FLOW_AND_MATCH.md)** | Deterministic Execution | Unambiguous `if...then...else...end if;`, loops, algebraic enums, and compile-time exhaustive `match`. |
 | **[04. Functions & Contracts](04_FUNCTIONS_AND_CONTRACTS.md)** | Design by Contract (DbC) | Signatures, pre-conditions (`require`), post-conditions (`ensure`), debug vs release assertion modes. |
 | **[05. The Borrow Checker](05_THE_BORROW_CHECKER.md)** | Memory Safety | Ownership semantics, move semantics (`take`), immutable borrows (`borrow`), mutable borrows (`mut borrow`), aliasing XOR mutability. |
 | **[06. Object-Oriented Programming (Records & UFCS)](06_RECORDS_AND_UFCS.md)** | Modern OOP Architecture | Object-Oriented design in Aether, encapsulation with records, UFCS method syntax (`val.method()`), composition over inheritance, and derivations. |

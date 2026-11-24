@@ -1,15 +1,15 @@
 module BoxAndRecursion;
 
 type
-    // No de arvore de expressao binaria recursiva
+    // Recursive binary expression tree node
     ExprNode = record
-        kind: UInt32;        // 1 = Valor literal, 2 = Adicao
+        kind: UInt32;        // 1 = Literal value, 2 = Addition
         val: Int64;
         left: Option<Box<ExprNode>>;
         right: Option<Box<ExprNode>>;
-    end;
+    end record;
 
-function CriarValor(borrow v: Int64) return ExprNode is
+function CreateValue(borrow v: Int64) return ExprNode is
 begin
     return ExprNode(
         kind: 1,
@@ -17,9 +17,9 @@ begin
         left: None,
         right: None
     );
-end CriarValor;
+end CreateValue;
 
-function CriarSoma(take l, r: ExprNode) return ExprNode is
+function CreateAdd(take l, r: ExprNode) return ExprNode is
 begin
     return ExprNode(
         kind: 2,
@@ -27,52 +27,52 @@ begin
         left: Some(Box(l)),
         right: Some(Box(r))
     );
-end CriarSoma;
+end CreateAdd;
 
-function Avaliar(borrow no: ExprNode) return Int64 is
+function Evaluate(borrow node: ExprNode) return Int64 is
 var
-    val_esq: Int64;
-    val_dir: Int64;
+    left_val: Int64;
+    right_val: Int64;
 begin
-    if no.kind = 1 then
-        return no.val;
+    if node.kind = 1 then
+        return node.val;
     else
-        val_esq := 0;
-        val_dir := 0;
+        left_val := 0;
+        right_val := 0;
 
-        if no.left.is_some then
-            val_esq := Avaliar(borrow no.left.value);
-        end;
+        if node.left.is_some then
+            left_val := Evaluate(borrow node.left.value);
+        end if;
 
-        if no.right.is_some then
-            val_dir := Avaliar(borrow no.right.value);
-        end;
+        if node.right.is_some then
+            right_val := Evaluate(borrow node.right.value);
+        end if;
 
-        return val_esq + val_dir;
-    end;
-end Avaliar;
+        return left_val + right_val;
+    end if;
+end Evaluate;
 
 program Main;
 var
     n1: ExprNode;
     n2: ExprNode;
-    arvore: ExprNode;
-    resultado: Int64;
+    tree: ExprNode;
+    outcome: Int64;
 begin
-    PrintLn("=== TESTE DE ESTRUTURA RECURSIVA COM BOX E OPTION (FASE 11) ===");
+    PrintLn("=== RECURSIVE STRUCTURE TEST WITH BOX AND OPTION (PHASE 11) ===");
 
-    n1 := CriarValor(borrow 25);
-    n2 := CriarValor(borrow 17);
+    n1 := CreateValue(borrow 25);
+    n2 := CreateValue(borrow 17);
 
-    // Cria a arvore binaria combinando os dois nos no heap via Box
-    arvore := CriarSoma(take n1, take n2);
+    // Builds the binary tree combining both nodes on the heap via Box
+    tree := CreateAdd(take n1, take n2);
 
-    resultado := Avaliar(borrow arvore);
-    PrintLn("Avaliacao da Arvore de Expressao (25 + 17): %d", resultado);
+    outcome := Evaluate(borrow tree);
+    PrintLn("Expression Tree Evaluation (25 + 17): %d", outcome);
 
-    if resultado = 42 then
-        PrintLn("SUCESSO! Arvore recursiva com Box avaliada perfeitamente!");
+    if outcome = 42 then
+        PrintLn("SUCCESS! Recursive tree with Box evaluated properly!");
     else
-        PrintLn("FALHA na avaliacao da arvore.");
-    end;
+        PrintLn("FAIL evaluating tree.");
+    end if;
 end BoxAndRecursion.

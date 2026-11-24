@@ -7,57 +7,57 @@ import Collections;
 program Main;
 var
     sb: StringBuilder;
-    str_final: String;
-    caminho: String;
-    conteudo_lido: String;
-    ok_escrita: Bool;
-    existe: Bool;
-    tam: UInt32;
-    primeiro_char: String;
-    pedaco: String;
+    final_str: String;
+    file_path: String;
+    read_content: String;
+    write_ok: Bool;
+    exists_flag: Bool;
+    str_len: UInt32;
+    first_char: String;
+    slice_str: String;
 begin
-    PrintLn("=== TESTE DE STD I/O, STRINGS E COLLECTIONS (FASE 11) ===");
+    PrintLn("=== STD I/O, STRINGS AND COLLECTIONS TEST (PHASE 11) ===");
 
-    // 1. Teste de StringBuilder
+    // 1. StringBuilder test
     sb := NewStringBuilder();
     sb.Append(borrow "Aether ");
     sb.Append(borrow "Self-Hosting ");
     sb.Append(borrow "Ready!");
 
-    str_final := sb.ToString();
-    PrintLn("Texto montado pelo StringBuilder: \"%s\"", str_final);
-    PrintLn("Comprimento rastreado pelo StringBuilder: %d", sb.length);
+    final_str := sb.ToString();
+    PrintLn("Text built by StringBuilder: \"%s\"", final_str);
+    PrintLn("Length tracked by StringBuilder: %d", sb.length);
 
-    // 2. Teste de operacoes com Strings
-    tam := Length(borrow str_final);
-    PrintLn("Comprimento medido via Length(): %d", tam);
+    // 2. String operations test
+    str_len := Length(borrow final_str);
+    PrintLn("Length measured via Length(): %d", str_len);
 
-    primeiro_char := CharAt(borrow str_final, 0);
-    PrintLn("Primeiro caractere via CharAt(0): \"%s\"", primeiro_char);
+    first_char := CharAt(borrow final_str, 0);
+    PrintLn("First character via CharAt(0): \"%s\"", first_char);
 
-    pedaco := Substring(borrow str_final, 7, 12);
-    PrintLn("Fatia via Substring(7, 12): \"%s\"", pedaco);
+    slice_str := Substring(borrow final_str, 7, 12);
+    PrintLn("Slice via Substring(7, 12): \"%s\"", slice_str);
 
-    // 3. Teste de I/O de Arquivo
-    caminho := "bin/teste_fase11.txt";
-    PrintLn("\nGravando arquivo \"%s\"...", caminho);
-    ok_escrita := WriteFile(borrow caminho, borrow str_final);
+    // 3. File I/O test
+    file_path := "bin/test_phase11.txt";
+    PrintLn("\nWriting file \"%s\"...", file_path);
+    write_ok := WriteFile(borrow file_path, borrow final_str);
 
-    if ok_escrita then
-        PrintLn("[PASS] Arquivo gravado com sucesso!");
+    if write_ok then
+        PrintLn("[PASS] File written successfully!");
     else
-        PrintLn("[FAIL] Falha ao gravar arquivo.");
-    end;
+        PrintLn("[FAIL] Failed to write file.");
+    end if;
 
-    existe := FileExists(borrow caminho);
-    if existe then
-        PrintLn("[PASS] FileExists() confirmou que o arquivo existe!");
+    exists_flag := FileExists(borrow file_path);
+    if exists_flag then
+        PrintLn("[PASS] FileExists() confirmed the file exists!");
     else
-        PrintLn("[FAIL] FileExists() informou que o arquivo nao existe.");
-    end;
+        PrintLn("[FAIL] FileExists() reported the file does not exist.");
+    end if;
 
-    conteudo_lido := ReadFile(borrow caminho);
-    PrintLn("Conteudo lido do arquivo:\n--> %s", conteudo_lido);
+    read_content := ReadFile(borrow file_path);
+    PrintLn("Content read from file:\n--> %s", read_content);
 
-    PrintLn("\nSUCESSO! Fase 11 - I/O, Strings e Collections validados com exito!");
+    PrintLn("\nSUCCESS! Phase 11 - I/O, Strings and Collections validated successfully!");
 end StdIoAndCollections.

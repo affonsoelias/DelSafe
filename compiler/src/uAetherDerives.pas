@@ -1043,7 +1043,7 @@ begin
 
   EnsureStandardTraits(AModule);
 
-  // Primeiro processa Enums (para que Record com campo Enum possa chamar ToString/ToJSON/FromJSON)
+  // Process Enums first so Records with Enum fields can call ToString/ToJSON/FromJSON
   for I := 0 to AModule.Types.Count - 1 do
   begin
     Node := AModule.Types[I];
@@ -1064,7 +1064,7 @@ begin
     end;
   end;
 
-  // Depois processa Records
+  // Then process Records
   for I := 0 to AModule.Types.Count - 1 do
   begin
     Node := AModule.Types[I];

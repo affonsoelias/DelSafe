@@ -4,11 +4,11 @@ module app_profile;
 type
     Item = record
         id: Int32;
-        nome: String;
-        valor: Float64;
-    end;
+        name: String;
+        price: Float64;
+    end record;
 
-function ProcessarLista(qtd: Int32) return Float64 is
+function ProcessList(qty: Int32) return Float64 is
 var
     i: Int32;
     total: Float64;
@@ -16,18 +16,18 @@ var
 begin
     total := 0.0;
     i := 0;
-    while i < qtd do
-        it := Item(i, "Produto", 10.5);
-        total := total + it.valor;
+    while i < qty do
+        it := Item(i, "Product", 10.5);
+        total := total + it.price;
         i := i + 1;
-    end;
+    end while;
     return total;
-end ProcessarLista;
+end ProcessList;
 
 program Main;
 var
     res: Float64;
 begin
-    res := ProcessarLista(1000);
-    PrintLn("Processamento concluido. Total: %f", res);
+    res := ProcessList(1000);
+    PrintLn("Processing finished. Total: %f", res);
 end app_profile.

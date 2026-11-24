@@ -46,15 +46,15 @@ type
     property CompilerVersion: string read FCompilerVersion write FCompilerVersion;
   end;
 
-// Versao oficial da toolchain Aether
+// Official Aether toolchain version
 const
   AETHER_COMPILER_VERSION = '0.5.0';
 
-// Funções criptográficas SHA-256 autônomas e de alta performance
+// Standalone high-performance SHA-256 cryptographic functions
 function SHA256String(const S: string): string;
 function SHA256File(const AFilePath: string): string;
 
-// Gerenciamento do Cache de Compilação Incremental
+// Incremental Build Cache Management
 function GetBuildCacheDir(const BaseDir: string): string;
 function GetBuildCachePath(const BaseDir, SourceFile, TargetBackend: string): string;
 function CheckIncrementalBuild(const BaseDir, SourceFile, TargetBackend, OutputExe: string;
@@ -455,24 +455,24 @@ var
 begin
   Reason := '';
 
-  // 1. O executável final precisa existir
+  // 1. Final executable must exist
   if not FileExists(CurrentOutputExe) then
   begin
-    Reason := 'Executavel ausente no disco';
+    Reason := 'Executable missing on disk';
     Exit(False);
   end;
 
-  // 2. Versão do compilador
+  // 2. Compiler version
   if FCompilerVersion <> AETHER_COMPILER_VERSION then
   begin
-    Reason := 'Versao do compilador foi atualizada';
+    Reason := 'Compiler version was updated';
     Exit(False);
   end;
 
-  // 3. Todos os arquivos atuais devem estar no cache com o mesmo hash
+  // 3. All current files must exist in cache with matching hashes
   if AllFiles.Count = 0 then
   begin
-    Reason := 'Lista de dependencias vazia';
+    Reason := 'Dependency list is empty';
     Exit(False);
   end;
 
@@ -481,38 +481,38 @@ begin
     FilePath := AllFiles[I];
     if not FileExists(FilePath) then
     begin
-      Reason := Format('Arquivo de dependencia nao encontrado: "%s"', [ExtractFileName(FilePath)]);
+      Reason := Format('Dependency file not found: "%s"', [ExtractFileName(FilePath)]);
       Exit(False);
     end;
 
     Item := FindItem(FilePath);
     if not Assigned(Item) then
     begin
-      Reason := Format('Nova dependencia adicionada: "%s"', [ExtractFileName(FilePath)]);
+      Reason := Format('New dependency added: "%s"', [ExtractFileName(FilePath)]);
       Exit(False);
     end;
 
-    // Checagem rápida de timestamp antes do hash completo
+    // Quick timestamp check before computing full hash
     AgeVal := FileAge(FilePath);
     if (AgeVal <> Item^.LastModified) or (Item^.Hash = '') then
     begin
       CurrentHash := SHA256File(FilePath);
       if CurrentHash <> Item^.Hash then
       begin
-        Reason := Format('Conteudo modificado: "%s"', [ExtractFileName(FilePath)]);
+        Reason := Format('Content modified: "%s"', [ExtractFileName(FilePath)]);
         Exit(False);
       end;
     end;
   end;
 
-  // 4. O número de dependências deve ser exatamente o mesmo
+  // 4. Dependency count must match exactly
   if FFiles.Count <> AllFiles.Count then
   begin
-    Reason := 'Grafo de dependencias foi modificado';
+    Reason := 'Dependency graph was modified';
     Exit(False);
   end;
 
-  Reason := 'Todos os arquivos estao em cache e inalterados';
+  Reason := 'All files are cached and unchanged';
   Result := True;
 end;
 
@@ -539,14 +539,14 @@ begin
   Reason := '';
   if ForceRebuild then
   begin
-    Reason := 'Recompilacao total forcada (--force)';
+    Reason := 'Full rebuild forced (--force)';
     Exit(False);
   end;
 
   CachePath := GetBuildCachePath(BaseDir, SourceFile, TargetBackend);
   if not FileExists(CachePath) then
   begin
-    Reason := 'Nenhum cache de build anterior encontrado';
+    Reason := 'No previous build cache found';
     Exit(False);
   end;
 
@@ -554,7 +554,7 @@ begin
   try
     if not Cache.LoadFromFile(CachePath) then
     begin
-      Reason := 'Cache de build corrompido ou invalido';
+      Reason := 'Corrupted or invalid build cache';
       Exit(False);
     end;
 

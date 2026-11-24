@@ -188,13 +188,13 @@ begin
     // Membership test with `in`
     if Read in userPerms then
         PrintLn("User has Read access.");
-    end;
+    end if;
 
     // Set operations: union (+), intersection (*), difference (-)
     combined := userPerms + adminPerms;
     if Execute in combined then
         PrintLn("Combined set has Execute permission.");
-    end;
+    end if;
 end sets_demo.
 ```
 
@@ -267,7 +267,7 @@ end interp_demo.
 
 ### 5.6 Raw Pointers (`^T`, `@var`, `nil`) and `unsafe` Blocks
 
-Safe Aether code forbids null dereferences and dangling pointers at compile time. When writing low-level hardware drivers or C FFI code that requires raw pointers, pointers are declared with `^T`, addresses are obtained with `@var`, and pointer dereferencing (`ptr^`) is explicitly gated behind an `unsafe ... end;` block:
+Safe Aether code forbids null dereferences and dangling pointers at compile time. When writing low-level hardware drivers or C FFI code that requires raw pointers, pointers are declared with `^T`, addresses are obtained with `@var`, and pointer dereferencing (`ptr^`) is explicitly gated behind an `unsafe ... end unsafe;` block:
 
 ```aether
 module unsafe_pointers_demo;
@@ -285,7 +285,7 @@ begin
 
     unsafe
         ptr^ := 99; // Explicitly demarcated low-level boundary
-    end;
+    end unsafe;
 
     PrintLn($"Updated value: {value}"); // 99
 end unsafe_pointers_demo.
@@ -325,7 +325,7 @@ begin
 
     if scores.Contains("Alice") then
         PrintLn(scores["Alice"]); // 10
-    end;
+    end if;
 
     scores.Remove("Bob");
     PrintLn(scores.Count()); // 1 (scores.Length() is also supported)
@@ -338,6 +338,9 @@ end maps_demo.
 Integer types support both Pascal (`$FF`, `%1010`) and C-style (`0xFF`, `0b1010`) hexadecimal and binary literals alongside bitwise operators `shl`, `shr`, `xor`, `and`, `or`, and `not`:
 
 ```aether
+module BitwiseDemo;
+
+program Main;
 var
     flags, mask, nibble: UInt32;
 begin
@@ -345,7 +348,7 @@ begin
     mask := 0x0F;
     nibble := (flags shr 4) and mask; // 10
     flags := ((1 shl 3) or 0b0001) xor %0101;
-end;
+end BitwiseDemo.
 ```
 
 ### 5.10 Array Literals (`[...]`), `.Pop()`, `.Clear()`, & `String[i]`
@@ -353,6 +356,9 @@ end;
 Fixed and dynamic arrays can be initialized directly using `[e1, e2, ...]`, and dynamic arrays infer their element type when initialized with `:=`. Dynamic arrays support `.Push(v)`, `.Pop()`, and `.Clear()`, while `String` supports 0-based character indexing (`s[i]` returning `Char`) alongside `Ord`, `Chr`, `SizeOf`, and explicit numeric/pointer casts:
 
 ```aether
+module ArrayLiteralsDemo;
+
+program Main;
 var
     nums := [10, 20, 30]; // Inferred as array of Int32
     last: Int32;
@@ -361,7 +367,7 @@ begin
     last := nums.Pop();   // 30 (nums now has 2 elements)
     nums.Clear();
     ch := "Aether"[0];    // 'A' (Ord(ch) = 65, Chr(66) = 'B')
-end;
+end ArrayLiteralsDemo.
 ```
 
 ### 5.11 Simple Type Aliases & Value `Option<T>` / Typed `Result<T, E>`
@@ -387,12 +393,15 @@ var
 Dynamic arrays support inserting elements at any index (`.Insert(idx, val)`), deleting by index (`.Delete(idx)`), and non-mutating range extraction (`.Slice(start, len)`). Records also support reordered **named field constructors** (`Ponto(y: 20, x: 10)`), and any value/record/enum type can be zero-initialized using **`Default(TypeName)`**:
 
 ```aether
+module SliceAndDefaultDemo;
+
 type
     Point = record
         x: Int32;
         y: Int32;
-    end;
+    end record;
 
+program Main;
 var
     nums := [10, 20, 30, 40];
     sub: array of Int32;
@@ -404,7 +413,7 @@ begin
 
     pt := Point(y: 20, x: 10);
     zeroPt := Default(Point); // { x = 0, y = 0 }
-end;
+end SliceAndDefaultDemo.
 ```
 
 ---
@@ -415,6 +424,6 @@ end;
 3. Strings are UTF-8, support 0-based `s[i]` (`Char`) indexing, zero-overhead `$"..."` interpolation, and `Trim`, `UpperCase`, `LowerCase`, `StartsWith`, `EndsWith`, `Contains`, `IndexOf`, `Replace`.
 4. Dynamic arrays support `[...]` literals, `.Push()`, `.Pop()`, `.Clear()`, `.Insert()`, `.Delete()`, and `.Slice()`, while `map[K]V` provides `Contains`, `Remove`, `Clear`, `Count`/`Length`, and `for k, v in map` iteration.
 5. Value `Option<T>`, `Result<T, E>`, sets (`set of`), subranges (`1..31`), simple type aliases, named record constructors, and `Default(T)` express rich domain invariants statically.
-6. Raw pointers (`^T`, `@var`, `nil`) require an explicit `unsafe ... end;` block for dereferencing (`ptr^`).
+6. Raw pointers (`^T`, `@var`, `nil`) require an explicit `unsafe ... end unsafe;` block for dereferencing (`ptr^`).
 
 ➡️ **Next:** **[Chapter 03: Control Flow & Pattern Matching](03_CONTROL_FLOW_AND_MATCH.md)**

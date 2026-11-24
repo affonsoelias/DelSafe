@@ -1,53 +1,53 @@
 module for_loop_test;
 
-function SomarIntervalo(inicio, fim: Int32) return Int32 is
+function SumRange(start_val, end_val: Int32) return Int32 is
 var
     total: Int32;
     i: Int32;
 begin
     total := 0;
-    for i := inicio to fim do
+    for i := start_val to end_val do
         total := total + i;
-    end;
+    end for;
     return total;
-end SomarIntervalo;
+end SumRange;
 
-function ContagemRegressiva(inicio, fim: Int32) return Int32 is
+function Countdown(start_val, end_val: Int32) return Int32 is
 var
-    soma: Int32;
+    sum_val: Int32;
     k: Int32;
 begin
-    soma := 0;
-    for k := inicio downto fim do
-        soma := soma + k;
-    end;
-    return soma;
-end ContagemRegressiva;
+    sum_val := 0;
+    for k := start_val downto end_val do
+        sum_val := sum_val + k;
+    end for;
+    return sum_val;
+end Countdown;
 
 program Main;
 var
-    soma_asc: Int32;
-    soma_desc: Int32;
-    matriz_soma: Int32;
+    sum_asc: Int32;
+    sum_desc: Int32;
+    matrix_sum: Int32;
     x: Int32;
     y: Int32;
 begin
-    // 1. Teste de For crescente (1 to 10): 1+2+3+4+5+6+7+8+9+10 = 55
-    soma_asc := SomarIntervalo(1, 10);
-    Assert(soma_asc = 55, "Soma de 1 a 10 deve ser 55");
+    // 1. Ascending For test (1 to 10): 1+2+3+4+5+6+7+8+9+10 = 55
+    sum_asc := SumRange(1, 10);
+    Assert(sum_asc = 55, "Sum from 1 to 10 must be 55");
 
-    // 2. Teste de For decrescente (10 downto 1): 10+9+...+1 = 55
-    soma_desc := ContagemRegressiva(10, 1);
-    Assert(soma_desc = 55, "Contagem regressiva de 10 a 1 deve ser 55");
+    // 2. Descending For test (10 downto 1): 10+9+...+1 = 55
+    sum_desc := Countdown(10, 1);
+    Assert(sum_desc = 55, "Countdown from 10 to 1 must be 55");
 
-    // 3. Teste de For aninhado (matriz 3x3)
-    matriz_soma := 0;
+    // 3. Nested For test (3x3 matrix)
+    matrix_sum := 0;
     for x := 1 to 3 do
         for y := 1 to 3 do
-            matriz_soma := matriz_soma + 1;
-        end;
-    end;
-    Assert(matriz_soma = 9, "Laco aninhado 3x3 deve iterar 9 vezes");
+            matrix_sum := matrix_sum + 1;
+        end for;
+    end for;
+    Assert(matrix_sum = 9, "Nested 3x3 loop must iterate 9 times");
 
-    PrintLn("For Loop Test: Todos os testes do laco FOR passaram com sucesso!");
+    PrintLn("For Loop Test: All FOR loop tests passed successfully!");
 end for_loop_test.

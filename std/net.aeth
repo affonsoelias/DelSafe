@@ -10,19 +10,19 @@ type
         port: UInt32;
         host: String;
         is_open: Bool;
-    end;
+    end record;
 
     HttpRequest = record
         method: String;
         path: String;
         body: String;
-    end;
+    end record;
 
     HttpResponse = record
         status_code: UInt32;
         content_type: String;
         body: String;
-    end;
+    end record;
 
 function NewSocket(borrow h: String; borrow p: UInt32) return Socket;
 function Connect(mut borrow s: Socket) return Bool;
@@ -50,7 +50,7 @@ function Connect(mut borrow s: Socket) return Bool is
 begin
     if s.is_open then
         return false;
-    end;
+    end if;
     s.fd := SocketConnect(s.host, s.port);
     s.is_open := true;
     return true;
@@ -60,10 +60,10 @@ function SendData(borrow s: Socket; borrow payload: String) return UInt32 is
 begin
     if not s.is_open then
         return 0;
-    end;
+    end if;
     if s.fd >= 0 then
         SocketSend(s.fd, payload);
-    end;
+    end if;
     return Length(borrow payload);
 end SendData;
 
@@ -73,9 +73,9 @@ begin
         if s.fd >= 0 then
             SocketClose(s.fd);
             s.fd := -1;
-        end;
+        end if;
         s.is_open := false;
-    end;
+    end if;
 end CloseSocket;
 
 function SocketListenServer(borrow p: UInt32; borrow backlog: Int32) return Socket is
@@ -85,7 +85,7 @@ begin
     listen_fd := SocketListen(p, backlog);
     if listen_fd < 0 then
         return Socket(fd: -1, port: p, host: "0.0.0.0", is_open: false);
-    end;
+    end if;
     return Socket(fd: listen_fd, port: p, host: "0.0.0.0", is_open: true);
 end SocketListenServer;
 
@@ -95,11 +95,11 @@ var
 begin
     if not server.is_open then
         return Socket(fd: -1, port: 0, host: "", is_open: false);
-    end;
+    end if;
     client_fd := SocketAccept(server.fd);
     if client_fd < 0 then
         return Socket(fd: -1, port: 0, host: "", is_open: false);
-    end;
+    end if;
     return Socket(fd: client_fd, port: server.port, host: "client", is_open: true);
 end SocketAcceptClient;
 
@@ -110,7 +110,7 @@ begin
     conn_fd := SocketConnect(h, p);
     if conn_fd < 0 then
         return Socket(fd: -1, port: p, host: h, is_open: false);
-    end;
+    end if;
     return Socket(fd: conn_fd, port: p, host: h, is_open: true);
 end SocketConnectClient;
 
@@ -118,7 +118,7 @@ function SocketSendString(borrow s: Socket; borrow payload: String) return Int32
 begin
     if not s.is_open then
         return -1;
-    end;
+    end if;
     return SocketSend(s.fd, payload);
 end SocketSendString;
 
@@ -126,7 +126,7 @@ function SocketRecvString(borrow s: Socket; borrow max_len: Int32) return String
 begin
     if not s.is_open then
         return "";
-    end;
+    end if;
     return SocketRecv(s.fd, max_len);
 end SocketRecvString;
 
@@ -136,7 +136,7 @@ begin
         SocketClose(s.fd);
         s.is_open := false;
         s.fd := -1;
-    end;
+    end if;
 end SocketCloseHandle;
 
 function BuildHttpRequest(borrow method, host, path: String) return String is
@@ -158,10 +158,10 @@ begin
     status_text := "OK";
     if status_code = 404 then
         status_text := "Not Found";
-    end;
+    end if;
     if status_code = 500 then
         status_text := "Internal Server Error";
-    end;
+    end if;
 
     res := "HTTP/1.1 " + IntToStr(Int32(status_code)) + " " + status_text + "\r\n";
     res := res + "Content-Type: " + content_type + "\r\n";
@@ -183,7 +183,7 @@ begin
     len := Length(borrow raw_request);
     if len = 0 then
         return false;
-    end;
+    end if;
 
     first_space := -1;
     second_space := -1;
@@ -193,26 +193,24 @@ begin
         if ch = " " then
             if first_space = -1 then
                 first_space := Int32(i);
-            else
-                if second_space = -1 then
-                    second_space := Int32(i);
-                end;
-            end;
-        end;
+            else if second_space = -1 then
+                second_space := Int32(i);
+            end if;
+        end if;
         i := i + 1;
-    end;
+    end while;
 
     if first_space > 0 then
         out_req.method := Substring(borrow raw_request, 0, UInt32(first_space));
     else
         out_req.method := "GET";
-    end;
+    end if;
 
     if (first_space > 0) and (second_space > first_space) then
         out_req.path := Substring(borrow raw_request, UInt32(first_space + 1), UInt32(second_space - first_space - 1));
     else
         out_req.path := "/";
-    end;
+    end if;
 
     out_req.body := "";
     return true;
@@ -222,7 +220,7 @@ function ParseHttpResponse(borrow raw_response: String; mut borrow out_resp: Htt
 begin
     if Length(borrow raw_response) = 0 then
         return false;
-    end;
+    end if;
     out_resp.status_code := 200;
     out_resp.content_type := "text/plain";
     out_resp.body := raw_response;

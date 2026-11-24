@@ -9,7 +9,7 @@ uses
   uAetherIncremental;
 
 type
-  { Metadados de um pacote no Registry }
+  { Package metadata in the Registry }
   TAetherPackageInfo = record
     Name: string;
     Version: string;
@@ -23,12 +23,12 @@ type
     Downloads: Integer;
   end;
 
-{ Funções de SemVer (Versionamento Semântico) }
+{ SemVer (Semantic Versioning) functions }
 function ParseSemVer(const S: string; out Major, Minor, Patch: Integer): Boolean;
 function CompareSemVer(const V1, V2: string): Integer;
 function IsVersionCompatible(const Requirement, VersionStr: string): Boolean;
 
-{ Operações do Registro Central }
+{ Central Registry operations }
 function GetAetherHomeDir: string;
 function GetRegistryDir: string;
 function GetRegistryPackagesDir: string;
@@ -43,7 +43,7 @@ procedure HandlePkgSearch(const Query, OptRegistry: string);
 
 implementation
 
-{ Funções de SemVer }
+{ SemVer functions }
 
 function ParseSemVer(const S: string; out Major, Minor, Patch: Integer): Boolean;
 var
@@ -61,7 +61,7 @@ begin
   if CleanStr[1] in ['v', 'V', '^', '~'] then
     CleanStr := Copy(CleanStr, 2, Length(CleanStr));
 
-  // Remove sufixos pre-release como -alpha, -beta, +build
+  // Strip pre-release suffixes like -alpha, -beta, +build
   for I := 1 to Length(CleanStr) do
   begin
     if CleanStr[I] in ['-', '+'] then
@@ -130,12 +130,12 @@ begin
   end
   else
   begin
-    // Versão exata
+    // Exact version
     Exit(Trim(Requirement) = Trim(VersionStr));
   end;
 end;
 
-{ Operações de Diretório do Registry }
+{ Registry directory operations }
 
 function GetAetherHomeDir: string;
 var
@@ -269,7 +269,7 @@ begin
     WriteLn(F, '    {');
     WriteLn(F, '      "name": "math_extra",');
     WriteLn(F, '      "version": "1.2.0",');
-    WriteLn(F, '      "description": "Funcoes matematicas avancadas, estatistica e calculo numerico",');
+    WriteLn(F, '      "description": "Advanced math, statistics, and numerical computing functions",');
     WriteLn(F, '      "author": "Aether Core Team",');
     WriteLn(F, '      "license": "MIT",');
     WriteLn(F, '      "entry": "src/math_extra.aeth",');
@@ -280,7 +280,7 @@ begin
     WriteLn(F, '    {');
     WriteLn(F, '      "name": "http_client",');
     WriteLn(F, '      "version": "0.5.1",');
-    WriteLn(F, '      "description": "Cliente HTTP/1.1 de alta performance com suporte a JSON e streaming",');
+    WriteLn(F, '      "description": "High-performance HTTP/1.1 client with JSON and streaming support",');
     WriteLn(F, '      "author": "Aether Community",');
     WriteLn(F, '      "license": "Apache-2.0",');
     WriteLn(F, '      "entry": "src/http_client.aeth",');
@@ -313,7 +313,7 @@ begin
   CurDir := GetCurrentDir;
   ConfigFile := CurDir + PathDelim + 'aether.json';
   if not FileExists(ConfigFile) then
-    raise Exception.Create('Nenhum manifesto "aether.json" encontrado no diretorio atual para publicar.');
+    raise Exception.Create('No "aether.json" manifest found in the current directory to publish.');
 
   FS := TFileStream.Create(ConfigFile, fmOpenRead or fmShareDenyNone);
   SS := TStringStream.Create('');
@@ -328,7 +328,7 @@ begin
   JSON := GetJSON(JsonStr);
   try
     if not (JSON is TJSONObject) then
-      raise Exception.Create('Manifesto "aether.json" corrompido ou invalido.');
+      raise Exception.Create('Corrupted or invalid "aether.json" manifest.');
     Obj := TJSONObject(JSON);
 
     PkgName := LowerCase(Trim(Obj.Get('name', '')));
@@ -339,39 +339,39 @@ begin
     PkgEntry := Trim(Obj.Get('entry', 'src/' + PkgName + '.aeth'));
 
     if PkgName = '' then
-      raise Exception.Create('Campo "name" obrigatorio nao informado em aether.json.');
+      raise Exception.Create('Required field "name" missing in aether.json.');
     if PkgVer = '' then
-      raise Exception.Create('Campo "version" obrigatorio nao informado em aether.json.');
+      raise Exception.Create('Required field "version" missing in aether.json.');
 
     if not ParseSemVer(PkgVer, Major, Minor, Patch) then
-      raise Exception.CreateFmt('Versao "%s" invalida. O Aether Registry exige formato SemVer valido (ex: 1.0.0).', [PkgVer]);
+      raise Exception.CreateFmt('Invalid version "%s". Aether Registry requires valid SemVer format (e.g., 1.0.0).', [PkgVer]);
 
     WriteLn('========================================================');
-    WriteLn('  Aether Package Publisher - Publicacao no Registry     ');
+    WriteLn('  Aether Package Publisher - Registry Publishing        ');
     WriteLn('========================================================');
-    WriteLn(Format('  Pacote:        %s', [PkgName]));
-    WriteLn(Format('  Versao SemVer: %s', [PkgVer]));
-    WriteLn(Format('  Autor:         %s', [PkgAuthor]));
-    WriteLn(Format('  Licenca:       %s', [PkgLicense]));
-    WriteLn(Format('  Descricao:     %s', [PkgDesc]));
+    WriteLn(Format('  Package:       %s', [PkgName]));
+    WriteLn(Format('  SemVer Version:%s', [PkgVer]));
+    WriteLn(Format('  Author:        %s', [PkgAuthor]));
+    WriteLn(Format('  License:       %s', [PkgLicense]));
+    WriteLn(Format('  Description:   %s', [PkgDesc]));
     WriteLn('--------------------------------------------------------');
 
-    // 1. Calcula integridade criptográfica
+    // 1. Compute cryptographic integrity
     Checksum := ComputePackageChecksum(CurDir);
     Signature := SHA256String('aether-registry-pkg:' + PkgName + '@' + PkgVer + ':' + Checksum + ':' + PkgAuthor);
 
-    WriteLn(Format('  Checksum SHA-256:  %s', [Checksum]));
-    WriteLn(Format('  Assinatura Digital: %s', [Copy(Signature, 1, 32) + '...']));
+    WriteLn(Format('  SHA-256 Checksum : %s', [Checksum]));
+    WriteLn(Format('  Digital Signature: %s', [Copy(Signature, 1, 32) + '...']));
     WriteLn('--------------------------------------------------------');
 
     if DryRun then
     begin
-      WriteLn('[DRY-RUN] Validacao concluida com sucesso! O pacote esta apto para publicacao.');
-      WriteLn('[DRY-RUN] Nenhuma alteracao foi gravada no Registry.');
+      WriteLn('[DRY-RUN] Validation succeeded! Package is ready for publishing.');
+      WriteLn('[DRY-RUN] No changes were written to the Registry.');
       Exit;
     end;
 
-    // 2. Valida contra o índice do Registry
+    // 2. Validate against Registry index
     IdxFile := GetRegistryIndexFile;
     FS := TFileStream.Create(IdxFile, fmOpenRead or fmShareDenyNone);
     SS := TStringStream.Create('');
@@ -395,23 +395,23 @@ begin
         IdxObj.Add('packages', PackagesArr);
       end;
 
-      // Verifica se a mesma versão já existe
+      // Check whether the same version already exists
       for I := 0 to PackagesArr.Count - 1 do
       begin
         if (PackagesArr.Items[I] is TJSONObject) then
         begin
           if (LowerCase(TJSONObject(PackagesArr.Items[I]).Get('name', '')) = PkgName) and
              (TJSONObject(PackagesArr.Items[I]).Get('version', '') = PkgVer) then
-            raise Exception.CreateFmt('A versao "%s" do pacote "%s" ja foi publicada no Registry. Incremente a versao SemVer antes de publicar.', [PkgVer, PkgName]);
+            raise Exception.CreateFmt('Version "%s" of package "%s" is already published in the Registry. Bump the SemVer version before publishing.', [PkgVer, PkgName]);
         end;
       end;
 
-      // 3. Copia arquivos para o armazenamento do Registry
+      // 3. Copy files to Registry storage
       TargetVerDir := GetRegistryPackagesDir + PathDelim + PkgName + PathDelim + PkgVer;
       ForceDirectories(TargetVerDir);
       CopyDirRecursive(CurDir, TargetVerDir);
 
-      // 4. Registra no índice
+      // 4. Record in index
       NewPkgObj := TJSONObject.Create;
       NewPkgObj.Add('name', PkgName);
       NewPkgObj.Add('version', PkgVer);
@@ -431,14 +431,14 @@ begin
       CloseFile(F);
 
       WriteLn('');
-      WriteLn(Format('SUCESSO! Pacote "%s@%s" publicado no Aether Registry oficial!', [PkgName, PkgVer]));
-      WriteLn(Format('Outros desenvolvedores podem agora instalar executando: "aetherc add %s"', [PkgName]));
+      WriteLn(Format('SUCCESS! Package "%s@%s" published to the official Aether Registry!', [PkgName, PkgVer]));
+      WriteLn(Format('Other developers can now install it by running: "aetherc add %s"', [PkgName]));
       WriteLn('========================================================');
     finally
       JSON.Free;
     end;
   finally
-    // Obj já liberado
+    // Obj already freed
   end;
 end;
 
@@ -472,7 +472,7 @@ begin
     PkgData := IdxObj.Find('packages');
     if (PkgData = nil) or not (PkgData is TJSONArray) then
     begin
-      WriteLn('Nenhum pacote registrado no Registry.');
+      WriteLn('No packages registered in the Registry.');
       Exit;
     end;
     PackagesArr := TJSONArray(PkgData);
@@ -480,9 +480,9 @@ begin
     SearchTerm := LowerCase(Trim(Query));
 
     WriteLn('========================================================================================');
-    WriteLn('  Aether Community Package Registry - Catalogo de Pacotes                               ');
+    WriteLn('  Aether Community Package Registry - Package Catalog                                 ');
     WriteLn('========================================================================================');
-    WriteLn(Format('  %-18s %-10s %-20s %s', ['PACOTE', 'VERSAO', 'AUTOR', 'DESCRICAO']));
+    WriteLn(Format('  %-18s %-10s %-20s %s', ['PACKAGE', 'VERSION', 'AUTOR', 'DESCRICAO']));
     WriteLn('  ' + StringOfChar('-', 86));
 
     MatchCount := 0;
@@ -510,8 +510,8 @@ begin
     end;
 
     WriteLn('========================================================================================');
-    WriteLn(Format('  Total encontrado: %d pacote(s)', [MatchCount]));
-    WriteLn('  Para instalar um pacote no seu projeto: aetherc add <pacote>');
+    WriteLn(Format('  Total found: %d package(s)', [MatchCount]));
+    WriteLn('  To install a package in your project: aetherc add <package>');
     WriteLn('========================================================================================');
   finally
     JSON.Free;
@@ -581,18 +581,18 @@ begin
     end;
 
     if BestVer = '' then
-      raise Exception.CreateFmt('Nenhuma versao compativel com "%s" encontrada no Registry para o pacote "%s".', [VersionReq, PkgName]);
+      raise Exception.CreateFmt('No version compatible with "%s" found in the Registry for package "%s".', [VersionReq, PkgName]);
 
     BestDir := GetRegistryPackagesDir + PathDelim + CleanPkg + PathDelim + BestVer;
     if not DirectoryExists(BestDir) then
-      raise Exception.CreateFmt('Arquivos do pacote "%s@%s" nao encontrados no armazenamento do Registry.', [CleanPkg, BestVer]);
+      raise Exception.CreateFmt('Package files for "%s@%s" not found in Registry storage.', [CleanPkg, BestVer]);
 
-    // Validação criptográfica de integridade (Checksum SHA-256)
+    // Cryptographic integrity check (SHA-256 Checksum)
     if PChecksum <> '' then
     begin
       VerifiedChecksum := ComputePackageChecksum(BestDir);
       if VerifiedChecksum <> PChecksum then
-        raise Exception.CreateFmt('Falha de Seguranca: Checksum SHA-256 divergente para o pacote "%s@%s"! Esperado: %s, Obtido: %s',
+        raise Exception.CreateFmt('Security Failure: SHA-256 checksum mismatch for package "%s@%s"! Expected: %s, Got: %s',
           [CleanPkg, BestVer, PChecksum, VerifiedChecksum]);
     end;
 

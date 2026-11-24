@@ -6,12 +6,12 @@ type
     FixedBuffer = record
         capacity: UInt32;
         count: UInt32;
-    end;
+    end record;
 
     StringBuilder = record
         buffer: String;
         length: UInt32;
-    end;
+    end record;
 
 function NewBuffer(borrow cap: UInt32) return FixedBuffer;
 function IsFull(borrow buf: FixedBuffer) return Bool;
@@ -34,7 +34,7 @@ begin
         return true;
     else
         return false;
-    end;
+    end if;
 end IsFull;
 
 function Available(borrow buf: FixedBuffer) return UInt32 is
@@ -49,7 +49,7 @@ begin
         return true;
     else
         return false;
-    end;
+    end if;
 end PushItem;
 
 function NewStringBuilder() return StringBuilder is

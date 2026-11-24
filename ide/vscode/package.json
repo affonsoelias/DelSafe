@@ -1,7 +1,7 @@
 {
   "name": "aether-lang",
   "displayName": "Aether Programming Language",
-  "description": "Suporte oficial e inteligente para a linguagem Aether (LSP, Destaque Sintático, Borrow Checker, Snippets e Testes)",
+  "description": "Official smart support for the Aether language (LSP, Syntax Highlighting, Borrow Checker, Snippets, and Tests)",
   "version": "0.5.0",
   "publisher": "aether-lang",
   "engines": {
@@ -55,33 +55,33 @@
     "commands": [
       {
         "command": "aether.build",
-        "title": "Aether: Compilar Arquivo Atual (Backend Pascal)",
+        "title": "Aether: Compile Current File (Pascal Backend)",
         "category": "Aether"
       },
       {
         "command": "aether.buildC",
-        "title": "Aether: Compilar Arquivo Atual (Backend C99 / GCC)",
+        "title": "Aether: Compile Current File (C99 / GCC Backend)",
         "category": "Aether"
       },
       {
         "command": "aether.runTests",
-        "title": "Aether: Executar Testes Unitarios (aetherc test)",
+        "title": "Aether: Run Unit Tests (aetherc test)",
         "category": "Aether"
       },
       {
         "command": "aether.restartLSP",
-        "title": "Aether: Reiniciar Servidor de Linguagem (LSP)",
+        "title": "Aether: Restart Language Server (LSP)",
         "category": "Aether"
       }
     ],
     "configuration": {
       "type": "object",
-      "title": "Configuração da Linguagem Aether",
+      "title": "Aether Language Configuration",
       "properties": {
         "aether.compilerPath": {
           "type": "string",
           "default": "aetherc",
-          "description": "Caminho absoluto ou relativo para o executável do compilador Aether (aetherc / aetherc.exe)."
+          "description": "Absolute or relative path to the Aether compiler executable (aetherc / aetherc.exe)."
         },
         "aether.defaultBackend": {
           "type": "string",
@@ -90,7 +90,7 @@
             "c"
           ],
           "default": "pascal",
-          "description": "Backend padrão de compilação utilizado pelos comandos e testes."
+          "description": "Default compilation backend used by build commands and tests."
         },
         "aether.trace.server": {
           "type": "string",
@@ -100,7 +100,7 @@
             "verbose"
           ],
           "default": "off",
-          "description": "Nível de rastreamento e logs das mensagens do Language Server (LSP)."
+          "description": "Trace and logging verbosity level for Language Server (LSP) messages."
         }
       }
     }

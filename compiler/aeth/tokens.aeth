@@ -61,9 +61,9 @@ end;
 function TokenKindToString(borrow k: TokenKind): String
 begin
     if k = TokenKind.tkEOF then return "EOF"; end;
-    if k = TokenKind.tkIdentifier then return "Identificador"; end;
-    if k = TokenKind.tkIntLiteral then return "Literal Inteiro"; end;
-    if k = TokenKind.tkStringLiteral then return "Literal String"; end;
+    if k = TokenKind.tkIdentifier then return "Identifier"; end;
+    if k = TokenKind.tkIntLiteral then return "Integer Literal"; end;
+    if k = TokenKind.tkStringLiteral then return "String Literal"; end;
     if k = TokenKind.tkModule then return "module"; end;
     if k = TokenKind.tkProgram then return "program"; end;
     if k = TokenKind.tkBegin then return "begin"; end;

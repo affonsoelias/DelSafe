@@ -1,7 +1,7 @@
 {
   "name": "teste_paths_pascal",
   "version": "0.1.0",
-  "description": "Projeto de teste para caminhos customizados, subpastas e interop",
+  "description": "Test project for custom paths, subfolders, and interop",
   "backend": "pascal",
   "entry": "src/main_pascal.aeth",
   "output": "bin/teste_paths_pascal.exe",

@@ -8,7 +8,7 @@ uses
   SysUtils, Classes;
 
 type
-  { TAetherFormatter: Formatador Canônico Oficial de Código Aether }
+  { TAetherFormatter: Official Canonical Formatter for Aether Code }
   TAetherFormatter = class
   private
     class function IsAlphaNumChar(C: Char): Boolean;
@@ -79,14 +79,14 @@ begin
     C := Line[I];
     if I < Len then NextC := Line[I + 1] else NextC := #0;
 
-    // Detecta comentario de linha
+    // Detect line comment
     if (not InString) and (not InChar) and (C = '/') and (NextC = '/') then
     begin
       Res := Res + Copy(Line, I, Len - I + 1);
       Break;
     end;
 
-    // Detecta string literal "..."
+    // Detect string literal "..."
     if (not InChar) and (C = '"') then
     begin
       InString := not InString;
@@ -108,7 +108,7 @@ begin
       Continue;
     end;
 
-    // Detecta literal Char '...'
+    // Detect Char literal '...'
     if C = '''' then
     begin
       InChar := not InChar;
@@ -130,7 +130,7 @@ begin
       Continue;
     end;
 
-    // Colapsa espacos consecutivos fora de strings/comentarios
+    // Collapse consecutive spaces outside strings and comments
     if C in [' ', #9] then
     begin
       if (Length(Res) > 0) and (Res[Length(Res)] <> ' ') then
@@ -139,7 +139,7 @@ begin
       Continue;
     end;
 
-    // Operadores compostos de 3-4 caracteres e de 2 caracteres (prioridade sobre 1 caractere)
+    // 3-4 char and 2-char compound operators (takes priority over single chars)
     if (I + 3 <= Len) and (LowerCase(Copy(Line, I, 4)) = 'mod=') and
        ((Length(Res) = 0) or (not IsAlphaNumChar(Res[Length(Res)]))) then
     begin
@@ -245,7 +245,7 @@ begin
       if Length(Res) = 0 then LastCh := #0 else LastCh := Res[Length(Res)];
       if (LastCh = #0) or (LastCh in ['(', '[', ',', '=', ':', '<', '>', '+', '-', '*', '/', '.']) then
       begin
-        // Sinal unario ou negativo apos operador/delimitador (ex: (-42), -10..-1)
+        // Unary sign or negative after operator/delimiter (e.g., (-42), -10..-1)
         Res := Res + '-';
         Inc(I);
       end
@@ -350,9 +350,12 @@ var
   begin
     if (S = 'end') or (S = 'end;') or (S = 'end.') then
       Exit(True);
-    if StartsWithWord(S, 'end') and (Length(S) > 4) and ((S[Length(S)] = ';') or (S[Length(S)] = '.')) then
+    if StartsWithWord(S, 'end') and (Length(S) > 4) then
     begin
-      Rest := Trim(Copy(S, 4, Length(S) - 4));
+      if (S[Length(S)] = ';') or (S[Length(S)] = '.') then
+        Rest := Trim(Copy(S, 4, Length(S) - 4))
+      else
+        Rest := Trim(Copy(S, 4, Length(S) - 3));
       if Length(Rest) > 0 then
       begin
         for K := 1 to Length(Rest) do
@@ -391,10 +394,10 @@ begin
       CodeOnly := LowerCase(StripLineComment(TrimmedLine));
       LowerLine := LowerCase(TrimmedLine);
 
-      // Bloco asm preserva conteudo interno
+      // Preserve inner content of asm blocks
       if InAsmBlock then
       begin
-        if (CodeOnly = 'end;') or (CodeOnly = 'end') then
+        if (CodeOnly = 'end asm;') or (CodeOnly = 'end asm') or (CodeOnly = 'end;') or (CodeOnly = 'end') then
         begin
           InAsmBlock := False;
           if IndentLevel > 0 then Dec(IndentLevel);
@@ -409,7 +412,7 @@ begin
       end
       else
       begin
-        // Fim de secao no nivel superior antes de nova rotina, program ou outra secao de modulo
+        // End top-level section before a new routine, program, or module section
         if (Length(BlockStack) = 0) and (
              StartsWithWord(CodeOnly, 'pub') or StartsWithWord(CodeOnly, 'priv') or
              StartsWithWord(CodeOnly, 'private') or
@@ -423,13 +426,13 @@ begin
            ) then
           SectionIndent := 0;
 
-        // Secoes require/ensure alinham no nivel 1 dentro de contract antes de var/let/begin
+        // Align require/ensure sections at level 1 inside contract before var/let/begin
         if (CodeOnly = 'require') or (CodeOnly = 'ensure') then
           SectionIndent := 1
         else if (CodeOnly = 'var') or (CodeOnly = 'let') or (CodeOnly = 'begin') then
           SectionIndent := 0;
 
-        // Fechamento de blocos
+        // Block closings
         if IsEndLine(CodeOnly) then
         begin
           if TopBlock = bkMatchArm then
@@ -440,7 +443,10 @@ begin
           if Length(BlockStack) > 0 then
             PopBlock;
           if IndentLevel > 0 then Dec(IndentLevel);
-          if Length(BlockStack) = 0 then
+          if (Length(BlockStack) = 0) and
+             (not StartsWithWord(CodeOnly, 'end record')) and
+             (not StartsWithWord(CodeOnly, 'end enum')) and
+             (not StartsWithWord(CodeOnly, 'end trait')) then
             SectionIndent := 0;
           CurrentIndent := IndentLevel + SectionIndent;
         end
@@ -469,7 +475,7 @@ begin
           CurrentIndent := IndentLevel + SectionIndent;
       end;
 
-      // Normaliza operadores apenas fora de comentarios puros
+      // Normalize operators only outside full-line comments
       if (Pos('//', TrimmedLine) <> 1) and (Pos('/*', TrimmedLine) <> 1) and (Pos('{', TrimmedLine) <> 1) then
         TrimmedLine := NormalizeOperators(TrimmedLine);
 
@@ -481,8 +487,8 @@ begin
       IndentedLine := TrimRightSpaces(IndentedLine);
       OutputList.Add(IndentedLine);
 
-      // Abertura de secoes e blocos compostos para as linhas seguintes
-      if (not InAsmBlock) and (CodeOnly <> '') then
+      // Section and compound block openings for subsequent lines
+      if (not InAsmBlock) and (not IsEndLine(CodeOnly)) and (CodeOnly <> '') then
       begin
         if CodeOnly = 'asm' then
         begin
@@ -515,13 +521,13 @@ begin
           Inc(IndentLevel);
         end
         else if (CodeOnly = 'begin') or (CodeOnly = 'repeat') or (CodeOnly = 'try') or (CodeOnly = 'unsafe') or
-                (EndsWithWord(CodeOnly, 'record') and (Pos('end;', CodeOnly) = 0)) or
-                (EndsWithWord(CodeOnly, 'enum') and (Pos('end;', CodeOnly) = 0)) or
-                (StartsWithWord(CodeOnly, 'impl') and (Pos('end;', CodeOnly) = 0)) or
-                (StartsWithWord(CodeOnly, 'trait') and (Pos('end;', CodeOnly) = 0)) or
-                (StartsWithWord(CodeOnly, 'pub trait') and (Pos('end;', CodeOnly) = 0)) or
-                (StartsWithWord(CodeOnly, 'priv trait') and (Pos('end;', CodeOnly) = 0)) or
-                ((Pos('= trait', CodeOnly) > 0) and (Pos('end;', CodeOnly) = 0)) or
+                (EndsWithWord(CodeOnly, 'record') and (Pos('end;', CodeOnly) = 0) and (Pos('end record', CodeOnly) = 0)) or
+                (EndsWithWord(CodeOnly, 'enum') and (Pos('end;', CodeOnly) = 0) and (Pos('end enum', CodeOnly) = 0)) or
+                (StartsWithWord(CodeOnly, 'impl') and (Pos('end;', CodeOnly) = 0) and (Pos('end impl', CodeOnly) = 0)) or
+                (StartsWithWord(CodeOnly, 'trait') and (Pos('end;', CodeOnly) = 0) and (Pos('end trait', CodeOnly) = 0)) or
+                (StartsWithWord(CodeOnly, 'pub trait') and (Pos('end;', CodeOnly) = 0) and (Pos('end trait', CodeOnly) = 0)) or
+                (StartsWithWord(CodeOnly, 'priv trait') and (Pos('end;', CodeOnly) = 0) and (Pos('end trait', CodeOnly) = 0)) or
+                ((Pos('= trait', CodeOnly) > 0) and (Pos('end;', CodeOnly) = 0) and (Pos('end trait', CodeOnly) = 0)) or
                 (StartsWithWord(CodeOnly, 'if') and EndsWithWord(CodeOnly, 'then')) or
                 (StartsWithWord(CodeOnly, 'while') and EndsWithWord(CodeOnly, 'do')) or
                 (StartsWithWord(CodeOnly, 'for') and EndsWithWord(CodeOnly, 'do')) then
@@ -551,7 +557,7 @@ begin
   if not FileExists(FilePath) then
     Exit(False);
 
-  // Le conteudo original
+  // Read original content
   OriginalContent := '';
   AssignFile(F, FilePath);
   {$I-} Reset(F); {$I+}
@@ -565,19 +571,19 @@ begin
 
   FormattedContent := FormatSource(OriginalContent);
 
-  // Compara
+  // Compare
   if OriginalContent <> FormattedContent then
   begin
     if not CheckOnly then
     begin
-      // Grava formatado
+      // Write formatted output
       AssignFile(F, FilePath);
       {$I-} Rewrite(F); {$I+}
       if IOResult <> 0 then Exit(True);
       Write(F, FormattedContent);
       CloseFile(F);
     end;
-    Result := False; // Retorna False para indicar que precisava de formatacao
+    Result := False; // Return False to indicate formatting was needed
   end
   else
     Result := True;
@@ -608,7 +614,7 @@ begin
     FindClose(SearchRec);
   end;
 
-  // Busca recursiva em subpastas
+  // Recursive subdirectory search
   if FindFirst(DirPath + PathDelim + '*', faDirectory, SearchRec) = 0 then
   begin
     repeat

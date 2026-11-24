@@ -5,18 +5,18 @@ type
     ByteVal = UInt8;
     IntPtr = ^Int32;
     StatusFlag = (Idle, Running, Done);
-    Ponto = record
+    Point = record
         x: Int32;
         y: Int32;
-    end;
-    Vet3 = array[3] of Int32;
-    Placar = map[String]Int32;
+    end record;
+    Vec3 = array[3] of Int32;
+    ScoreMap = map[String]Int32;
 
 function FindPositive(n: Int32) return Option<Int32> is
 begin
     if n > 0 then
         return Some(n * 10);
-    end;
+    end if;
     return None;
 end FindPositive;
 
@@ -24,7 +24,7 @@ function FindLabel(flag: Bool) return Option<String> is
 begin
     if flag then
         return Some("OkTag");
-    end;
+    end if;
     return None;
 end FindLabel;
 
@@ -32,15 +32,15 @@ function ParsePort(p: Int32) return Result<Int32, String> is
 begin
     if (p > 0) and (p <= 65535) then
         return Ok(p);
-    end;
-    return Err("porta invalida");
+    end if;
+    return Err("invalid port");
 end ParsePort;
 
 function MakeTextResult(ok: Bool) return Result<String, Int32> is
 begin
     if ok then
         return Ok("Aether");
-    end;
+    end if;
     return Err(503);
 end MakeTextResult;
 
@@ -50,22 +50,22 @@ var
     rawByte: ByteVal;
     pRaw: IntPtr;
     targetVal: Int32;
-    pt: Ponto;
+    pt: Point;
     nums := [10, 20, 30];
     words := ["Alpha", "Beta"];
-    fixo: Vet3 := [1, 2, 3];
-    lastNum, poppedWordCheck, totalSum, keyCount, acc, cnt, szInt64, szPonto: Int32;
+    fixed: Vec3 := [1, 2, 3];
+    lastNum, poppedWordCheck, totalSum, keyCount, acc, cnt, szInt64, szPoint: Int32;
     poppedWord: String;
-    scores: Placar;
+    scores: ScoreMap;
     txt := "Aether";
     optInt, optNone: Option<Int32>;
     optStr, optStrNone: Option<String>;
     optSum, errCount: Int32;
     resOk, resErr: Result<Int32, String>;
     resStr: Result<String, Int32>;
-    boxOpt: Option<Box<Ponto>>;
+    boxOpt: Option<Box<Point>>;
 begin
-    // 1. Type Aliases Simples e Casts / SizeOf / Ord / Chr / String[i]
+    // 1. Simple Type Aliases and Casts / SizeOf / Ord / Chr / String[i]
     uid := UserId(123456);
     rawByte := ByteVal(250);
     Assert(uid = 123456);
@@ -76,21 +76,21 @@ begin
     Assert(Chr(66) = 'B');
     Assert(Ord(StatusFlag.Running) = 1);
     szInt64 := SizeOf(Int64);
-    szPonto := SizeOf(Ponto);
+    szPoint := SizeOf(Point);
     Assert(szInt64 = 8);
-    Assert(szPonto >= 8);
+    Assert(szPoint >= 8);
     Assert(txt[0] = 'A');
     Assert(txt[5] = 'r');
 
-    // Ponteiro via Type Alias + unsafe
+    // Pointer via Type Alias + unsafe
     targetVal := 77;
     pRaw := @targetVal;
     unsafe
         pRaw^ := 88;
-    end;
+    end unsafe;
     Assert(targetVal = 88);
 
-    // 2. Literais de Array ([...]), Pop e Clear
+    // 2. Array Literals ([...]), Pop and Clear
     Assert(nums.Length() = 3);
     Assert(nums[0] = 10);
     Assert(nums[2] = 30);
@@ -104,32 +104,32 @@ begin
     poppedWordCheck := 0;
     if poppedWord = "Beta" then
         poppedWordCheck := 1;
-    end;
+    end if;
     Assert(poppedWordCheck = 1);
     words.Clear();
     Assert(words.Length() = 0);
 
-    Assert(fixo[0] = 1);
-    Assert(fixo[2] = 3);
-    fixo := [7, 8, 9];
-    Assert(fixo[0] = 7);
-    Assert(fixo[2] = 9);
+    Assert(fixed[0] = 1);
+    Assert(fixed[2] = 3);
+    fixed := [7, 8, 9];
+    Assert(fixed[0] = 7);
+    Assert(fixed[2] = 9);
 
-    // 3. Atribuicao Composta (+=, -=, *=) e Inc/Dec
+    // 3. Compound Assignment (+=, -=, *=) and Inc/Dec
     acc := 10;
     acc += 5;
     acc -= 3;
     acc *= 4;
     Assert(acc = 48);
 
-    pt := Ponto(10, 4);
+    pt := Point(10, 4);
     pt.x += 5;
     pt.y *= 3;
     Assert(pt.x = 15);
     Assert(pt.y = 12);
 
-    fixo[1] += 10;
-    Assert(fixo[1] = 18);
+    fixed[1] += 10;
+    Assert(fixed[1] = 18);
 
     cnt := 0;
     Inc(cnt);
@@ -138,7 +138,7 @@ begin
     Dec(cnt, 2);
     Assert(cnt = 7);
 
-    // 4. Iteracao em Mapas (for k in map / for k, v in map) + Clear + += em mapas
+    // 4. Map Iteration (for k in map / for k, v in map) + Clear + += on maps
     scores["Alice"] := 10;
     scores["Bob"] := 20;
     scores["Alice"] += 5;
@@ -148,22 +148,22 @@ begin
     for kOnly in scores do
         if kOnly <> "" then
             Inc(keyCount);
-        end;
-    end;
+        end if;
+    end for;
     Assert(keyCount = 2);
 
     totalSum := 0;
     for kName, vScore in scores do
         if kName <> "" then
             totalSum += vScore;
-        end;
-    end;
+        end if;
+    end for;
     Assert(totalSum = 35);
 
     scores.Clear();
     Assert(scores.Count() = 0);
 
-    // 5. Option<T> por valor e Option<Box<T>> + Result<T, E> tipado
+    // 5. Option<T> by value and Option<Box<T>> + typed Result<T, E>
     optInt := FindPositive(5);
     optNone := FindPositive(0);
     Assert(optInt.is_some);
@@ -178,13 +178,13 @@ begin
             optSum += x;
         case None:
             optSum -= 1;
-    end;
+    end match;
     match optNone with
         case Some(let z):
             optSum += z;
         case None:
             optSum += 5;
-    end;
+    end match;
     Assert(optSum = 55);
 
     optStr := FindLabel(true);
@@ -193,7 +193,7 @@ begin
     Assert(optStr.value = "OkTag");
     Assert(optStrNone.is_none);
 
-    boxOpt := Some(Box(Ponto(3, 4)));
+    boxOpt := Some(Box(Point(3, 4)));
     Assert(boxOpt.is_some);
     Assert(boxOpt.value.x = 3);
 
@@ -206,21 +206,21 @@ begin
         case Err(let errMsg):
             if errMsg <> "" then
                 Inc(errCount);
-            end;
-    end;
+            end if;
+    end match;
     match resErr with
         case Ok(let pIgnore):
             errCount += pIgnore;
         case Err(let msg):
-            if msg = "porta invalida" then
+            if msg = "invalid port" then
                 errCount += 100;
-            end;
-    end;
+            end if;
+    end match;
     Assert(errCount = 8180);
 
     resStr := MakeTextResult(true);
     Assert(resStr.is_ok);
     Assert(resStr.value = "Aether");
 
-    PrintLn("=== FASE 47 TEST PASSOU (ARRLIT, MAPFOR, CASTS, COMPASS, OPTION/RESULT REAL, ALIAS) ===");
+    PrintLn("=== PHASE 47 TEST PASSED (ARRLIT, MAPFOR, CASTS, COMPASS, REAL OPTION/RESULT, ALIAS) ===");
 end Fase47ArrlitMapforCastsCompassignOptionAliasTest.

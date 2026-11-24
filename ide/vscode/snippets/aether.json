@@ -8,17 +8,17 @@
       "",
       "${0}",
       "",
-      "program ${1:ModuleName};",
+      "program Main;",
       "begin",
-      "    PrintLn(\"Ola do Aether!\");",
-      "end."
+      "    PrintLn(\"Hello from Aether!\");",
+      "end ${1:ModuleName}."
     ],
-    "description": "Estrutura básica de um módulo executável Aether"
+    "description": "Basic structure of an executable Aether module"
   },
   "Aether Function with Contract": {
     "prefix": "fn",
     "body": [
-      "function ${1:NomeFuncao}(${2:borrow x: Int32}): ${3:Result<Int32, String>}",
+      "function ${1:FunctionName}(${2:borrow x: Int32}) return ${3:Result<Int32, String>} is",
       "contract",
       "    require",
       "        ${4:true};",
@@ -26,73 +26,73 @@
       "        ${5:result.is_ok};",
       "begin",
       "    ${0:return Ok(x);}",
-      "end;"
+      "end ${1:FunctionName};"
     ],
-    "description": "Declaração de função Aether com contratos formais (require / ensure)"
+    "description": "Aether function declaration with formal contracts (require / ensure)"
   },
   "Aether Record": {
     "prefix": "record",
     "body": [
-      "${1:NomeRecord} = record",
-      "    ${2:campo1}: ${3:String};",
-      "    ${4:campo2}: ${5:Int32};",
-      "end;"
+      "${1:RecordName} = record",
+      "    ${2:field1}: ${3:String};",
+      "    ${4:field2}: ${5:Int32};",
+      "end record;"
     ],
-    "description": "Declaração de tipo Record no Aether"
+    "description": "Aether Record type declaration"
   },
   "Aether Enum": {
     "prefix": "enum",
     "body": [
-      "${1:NomeEnum} = enum",
-      "    ${2:Variante1},",
-      "    ${3:Variante2}",
-      "end;"
+      "${1:EnumName} = enum",
+      "    ${2:Variant1},",
+      "    ${3:Variant2}",
+      "end enum;"
     ],
-    "description": "Declaração de tipo Enum no Aether"
+    "description": "Aether Enum type declaration"
   },
   "Aether Trait": {
     "prefix": "trait",
     "body": [
-      "trait ${1:NomeTrait}",
-      "    function ${2:Metodo}(${3:borrow self: ${4:Tipo}}): ${5:Void};",
-      "end;"
+      "trait ${1:TraitName}",
+      "    procedure ${2:Method}(${3:borrow self: ${4:TypeName}});",
+      "end trait;"
     ],
-    "description": "Declaração de Trait / Interface no Aether"
+    "description": "Aether Trait / Interface declaration"
   },
   "Aether Impl": {
     "prefix": "impl",
     "body": [
-      "impl ${1:NomeTrait} for ${2:NomeTipo}",
-      "    function ${3:Metodo}(${4:borrow self: ${2:NomeTipo}}): ${5:Void}",
+      "impl ${1:TraitName} for ${2:TypeName}",
+      "    procedure ${3:Method}(${4:borrow self: ${2:TypeName}}) is",
       "    begin",
       "        ${0}",
-      "    end;",
-      "end;"
+      "    end ${3:Method};",
+      "end impl;"
     ],
-    "description": "Implementação de Trait para um Tipo Record (UFCS)"
+    "description": "Trait implementation for a Record type (UFCS)"
   },
   "Aether Match Result": {
     "prefix": "match",
     "body": [
-      "match ${1:resultado} do",
-      "    case Ok(let ${2:valor}):",
-      "        ${3:PrintLn(\"Sucesso: %s\", valor);}",
+      "match ${1:outcome} do",
+      "    case Ok(let ${2:val}):",
+      "        ${3:PrintLn(\"Success: %s\", val);}",
       "    case Err(let ${4:msg}):",
-      "        ${5:PrintLn(\"Erro: %s\", msg);}",
-      "end;"
+      "        ${5:PrintLn(\"Error: %s\", msg);}",
+      "end match;"
     ],
-    "description": "Casamento de padrões exaustivo em Result<T, E>"
+    "description": "Exhaustive pattern matching on Result<T, E>"
   },
   "Aether Unit Test": {
     "prefix": "test",
     "body": [
-      "function Test_${1:NomeCaso}(): Bool",
+      "function Test_${1:CaseName}() return Bool is",
       "begin",
-      "    PrintLn(\"[TEST] Executando teste de ${1:NomeCaso}...\");",
+      "    PrintLn(\"[TEST] Running test for ${1:CaseName}...\");",
       "    ${0}",
       "    return true;",
-      "end;"
+      "end Test_${1:CaseName};"
     ],
-    "description": "Função de teste unitário para o runner aetherc test"
+    "description": "Unit test function for the aetherc test runner"
   }
 }

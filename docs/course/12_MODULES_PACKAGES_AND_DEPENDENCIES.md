@@ -34,7 +34,7 @@ type
     DbConnection = record
         host: String;
         port: Int32;
-    end;
+    end record;
 
 function Connect(host: String; port: Int32) return DbConnection;
 
@@ -86,7 +86,7 @@ begin
 
     if is_ok then
         PrintLn("Authentication granted!");
-    end;
+    end if;
 end main.
 ```
 

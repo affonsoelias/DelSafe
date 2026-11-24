@@ -3,30 +3,30 @@ module vetores_2d;
 interface
 
 type
-    Ponto2D = record
+    Point2D = record
         x: Float64;
         y: Float64;
-    end;
+    end record;
 
-function CriarPonto(x, y: Float64) return Ponto2D;
-function SomarPontos(p1, p2: Ponto2D) return Ponto2D;
-function NormaAoQuadrado(p: Ponto2D) return Float64;
+function CreatePoint(x, y: Float64) return Point2D;
+function AddPoints(p1, p2: Point2D) return Point2D;
+function NormSquared(p: Point2D) return Float64;
 
 implementation
 
-function CriarPonto(x, y: Float64) return Ponto2D is
+function CreatePoint(x, y: Float64) return Point2D is
 begin
-    return Ponto2D(x: x, y: y);
-end CriarPonto;
+    return Point2D(x: x, y: y);
+end CreatePoint;
 
-function SomarPontos(p1, p2: Ponto2D) return Ponto2D is
+function AddPoints(p1, p2: Point2D) return Point2D is
 begin
-    return Ponto2D(x: p1.x + p2.x, y: p1.y + p2.y);
-end SomarPontos;
+    return Point2D(x: p1.x + p2.x, y: p1.y + p2.y);
+end AddPoints;
 
-function NormaAoQuadrado(p: Ponto2D) return Float64 is
+function NormSquared(p: Point2D) return Float64 is
 begin
     return (p.x * p.x) + (p.y * p.y);
-end NormaAoQuadrado;
+end NormSquared;
 
 end vetores_2d.

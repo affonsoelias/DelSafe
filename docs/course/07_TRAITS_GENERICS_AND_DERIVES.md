@@ -15,11 +15,11 @@ interface
 
 trait Printable
     procedure PrintInfo;
-end;
+end trait;
 
 trait AreaCalculable
     function GetArea() return Float64;
-end;
+end trait;
 ```
 
 ---
@@ -32,25 +32,25 @@ Types explicitly implement traits using the `impl` block:
 type
     Circle = record
         radius: Float64;
-    end;
+    end record;
 
     Square = record
         side: Float64;
-    end;
+    end record;
 
 impl AreaCalculable for Circle
     function GetArea() return Float64 is
     begin
         return 3.14159 * self.radius * self.radius;
     end GetArea;
-end;
+end impl;
 
 impl AreaCalculable for Square
     function GetArea() return Float64 is
     begin
         return self.side * self.side;
     end GetArea;
-end;
+end impl;
 ```
 
 ---
@@ -64,7 +64,7 @@ type
     Vector2D = record
         x: Int32;
         y: Int32;
-    end;
+    end record;
 
 impl Vector2D
     function New(ax, ay: Int32) return Self is
@@ -76,7 +76,7 @@ impl Vector2D
     begin
         return Vector2D(self.x + other.x, self.y + other.y);
     end Add;
-end;
+end impl;
 ```
 
 Call static associated functions with `Type.Method(...)` (`Vector2D.New(3, 4)`) and instance methods with dot notation (`v1.Add(v2)`).
@@ -107,7 +107,7 @@ type
         id: Int32;
         nickname: String;
         score: Int32;
-    end;
+    end record;
 ```
 
 When annotated with `[derive(...)]`, the compiler automatically generates:
@@ -137,7 +137,7 @@ type
     Item = record
         code: String;
         price: Float64;
-    end;
+    end record;
 
 program Main;
 var
@@ -160,7 +160,7 @@ begin
     // Equality:
     if it1.Equals(borrow it2) then
         PrintLn("it1 and it2 are structurally identical!");
-    end;
+    end if;
 end derives_example.
 ```
 

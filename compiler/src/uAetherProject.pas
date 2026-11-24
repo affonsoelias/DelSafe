@@ -42,7 +42,7 @@ type
     Description: string;
     ProjectType: string; // 'bin' (default), 'lib', 'cdylib'
     Backend: string;
-    CCompiler: string; // 'gcc' ou 'clang'
+    CCompiler: string; // 'gcc' or 'clang'
     Entry: string;
     Output: string;
     RootDir: string;
@@ -175,7 +175,7 @@ begin
               SrcStream.Free;
             end;
           except
-            // Ignora arquivos bloqueados
+            // Ignore locked files
           end;
         end;
       until FindNext(SR) <> 0;
@@ -379,15 +379,15 @@ begin
 
   try
     if Visited.IndexOf(PkgName) >= 0 then
-      Exit(True); // Previne dependencia circular
+      Exit(True); // Prevent circular dependency
     Visited.Add(PkgName);
 
-    WriteLn(Format('-> Sincronizando pacote Git "%s"...', [PkgName]));
+    WriteLn(Format('-> Syncing Git package "%s"...', [PkgName]));
 
-    // Se o repositorio ja existe no cache, tenta atualizar via checkout/pull
+    // If repository already exists in cache, try updating via checkout/pull
     if DirectoryExists(CacheDir + PathDelim + '.git') then
     begin
-      WriteLn(Format('   Cache existente em "%s"', [CacheDir]));
+      WriteLn(Format('   Existing cache at "%s"', [CacheDir]));
       if (Version <> '') and (Version <> '*') and (Version <> 'main') then
         CmdArgs := Format('-C "%s" checkout %s', [CacheDir, Version])
       else
@@ -395,12 +395,12 @@ begin
 
       ExitCode := RunGitProcess(CmdArgs, OutputLog);
       if ExitCode <> 0 then
-        WriteLn(Format('   Aviso: Nao foi possivel atualizar o repositorio local via Git (%s). Usando versao em cache.', [OutputLog]));
+        WriteLn(Format('   Warning: Could not update local repository via Git (%s). Using cached version.', [OutputLog]));
       Result := True;
     end
     else
     begin
-      // Clona o repositorio pela primeira vez
+      // Clone repository for the first time
       if not DirectoryExists(CacheDir) then
         ForceDirectories(CacheDir);
 
@@ -409,38 +409,38 @@ begin
       else
         CmdArgs := Format('clone --depth 1 %s "%s"', [GitUrl, CacheDir]);
 
-      WriteLn(Format('   Clonando de "%s"...', [GitUrl]));
+      WriteLn(Format('   Cloning from "%s"...', [GitUrl]));
       ExitCode := RunGitProcess(CmdArgs, OutputLog);
       if ExitCode = 0 then
       begin
-        WriteLn(Format('   [OK] Pacote "%s" clonado com sucesso no cache.', [PkgName]));
+        WriteLn(Format('   [OK] Package "%s" cloned into cache successfully.', [PkgName]));
         Result := True;
       end
       else
       begin
-        // Tenta clone sem --branch se falhar
+        // Retry clone without --branch on failure
         CmdArgs := Format('clone --depth 1 %s "%s"', [GitUrl, CacheDir]);
         ExitCode := RunGitProcess(CmdArgs, OutputLog);
         if ExitCode = 0 then
         begin
-          WriteLn(Format('   [OK] Pacote "%s" clonado (branch padrao).', [PkgName]));
+          WriteLn(Format('   [OK] Package "%s" cloned (default branch).', [PkgName]));
           Result := True;
         end
         else
         begin
-          WriteLn(Format('   [Erro Git]: %s', [OutputLog]));
+          WriteLn(Format('   [Git Error]: %s', [OutputLog]));
           Exit(False);
         end;
       end;
     end;
 
-    // Resolucao de dependencias aninhadas (transitiva)
+    // Transitive (nested) dependency resolution
     SubConfigFile := CacheDir + PathDelim + 'aether.json';
     if FileExists(SubConfigFile) then
     begin
-      WriteLn(Format('   Verificando dependencias aninhadas em "%s/aether.json"...', [PkgName]));
+      WriteLn(Format('   Checking nested dependencies in "%s/aether.json"...', [PkgName]));
       try
-        // Carrega o manifesto do subpacote
+        // Load subpackage manifest
         if LoadProjectConfig(SubConfig) then
         begin
           for I := 0 to High(SubConfig.Dependencies) do
@@ -455,7 +455,7 @@ begin
           end;
         end;
       except
-        // Ignora erros em aether.json de dependencias filhas
+        // Ignore errors in child dependency aether.json files
       end;
     end;
 
@@ -472,7 +472,7 @@ var
 begin
   if Length(Config.Dependencies) = 0 then Exit;
 
-  WriteLn('Restaurando dependencias do projeto ("aether.json")...');
+  WriteLn('Restoring project dependencies ("aether.json")...');
   for I := 0 to High(Config.Dependencies) do
   begin
     if Config.Dependencies[I].GitUrl <> '' then
@@ -482,18 +482,18 @@ begin
                         Config.Dependencies[I].Version,
                         CacheDir) then
       begin
-        // Copia do cache para .aether/deps/ do projeto atual
+        // Copy from cache to current project .aether/deps/
         LocalDepDir := Config.RootDir + PathDelim + '.aether' + PathDelim + 'deps' + PathDelim + Config.Dependencies[I].Name;
         if not DirectoryExists(LocalDepDir) then
         begin
-          WriteLn(Format('   Instalando "%s" em ".aether/deps/%s"...', [Config.Dependencies[I].Name, Config.Dependencies[I].Name]));
+          WriteLn(Format('   Installing "%s" into ".aether/deps/%s"...', [Config.Dependencies[I].Name, Config.Dependencies[I].Name]));
           CopyDirectoryTree(CacheDir, LocalDepDir);
         end;
       end;
     end
     else if Config.Dependencies[I].Path = '' then
     begin
-      // Dependencia via Registry Central
+      // Dependency via Central Registry
       if FetchPackageFromRegistry(Config.Dependencies[I].Name,
                                  Config.Dependencies[I].Version,
                                  CacheDir, ResolvedVer) then
@@ -501,14 +501,14 @@ begin
         LocalDepDir := Config.RootDir + PathDelim + '.aether' + PathDelim + 'deps' + PathDelim + Config.Dependencies[I].Name;
         if not DirectoryExists(LocalDepDir) then
         begin
-          WriteLn(Format('   Instalando "%s@%s" do Registry em ".aether/deps/%s"...',
+          WriteLn(Format('   Installing "%s@%s" from Registry into ".aether/deps/%s"...',
             [Config.Dependencies[I].Name, ResolvedVer, Config.Dependencies[I].Name]));
           CopyDirectoryTree(CacheDir, LocalDepDir);
         end;
       end;
     end;
   end;
-  WriteLn('Todas as dependencias estao sincronizadas e prontas.');
+  WriteLn('All dependencies are synchronized and ready.');
 end;
 
 function GetAetherCacheDir: string;
@@ -614,13 +614,13 @@ begin
       if (not FileExists(DestLib)) or (FileAge(SrcLib) > FileAge(DestLib)) then
       begin
         if SafeCopyFile(SrcLib, DestLib) then
-          WriteLn(Format('   [DEPLOY] Biblioteca compartilhada copiada: %s -> %s', [ExtractFileName(SrcLib), DestDir]))
+          WriteLn(Format('   [DEPLOY] Shared library copied: %s -> %s', [ExtractFileName(SrcLib), DestDir]))
         else
-          WriteLn(Format('   [AVISO] Falha ao copiar biblioteca compartilhada: %s', [SrcLib]));
+          WriteLn(Format('   [WARNING] Failed to copy shared library: %s', [SrcLib]));
       end;
     end
     else
-      WriteLn(Format('   [AVISO] Biblioteca em shared_libs nao encontrada: "%s"', [SharedLibs[I]]));
+      WriteLn(Format('   [WARNING] Library in shared_libs not found: "%s"', [SharedLibs[I]]));
   end;
 end;
 
@@ -781,7 +781,7 @@ begin
     end;
   except
     on E: Exception do
-      raise Exception.CreateFmt('Erro ao ler manifesto "aether.json": %s', [E.Message]);
+      raise Exception.CreateFmt('Error reading manifest "aether.json": %s', [E.Message]);
   end;
 end;
 
@@ -831,7 +831,7 @@ begin
     if not DirectoryExists(TargetDir) then
     begin
       if not ForceDirectories(TargetDir) then
-        raise Exception.CreateFmt('Nao foi possivel criar o diretorio "%s"', [TargetDir]);
+        raise Exception.CreateFmt('Could not create directory "%s"', [TargetDir]);
     end;
     EffectiveName := ExtractFileName(ExcludeTrailingPathDelimiter(TargetDir));
     if EffectiveName = '' then
@@ -849,7 +849,7 @@ begin
 
   ConfigFile := TargetDir + PathDelim + 'aether.json';
   if FileExists(ConfigFile) then
-    raise Exception.CreateFmt('O diretorio "%s" ja contem um projeto Aether ("aether.json").', [TargetDir]);
+    raise Exception.CreateFmt('Directory "%s" already contains an Aether project ("aether.json").', [TargetDir]);
 
   SrcDir := TargetDir + PathDelim + 'src';
   TestsDir := TargetDir + PathDelim + 'tests';
@@ -859,17 +859,17 @@ begin
   ForceDirectories(TestsDir);
   ForceDirectories(BinDir);
 
-  // 1. Gera aether.json
+  // 1. Generate aether.json
   ConfigObj := TJSONObject.Create;
   try
     ConfigObj.Add('name', EffectiveName);
     ConfigObj.Add('version', '0.1.0');
-    ConfigObj.Add('description', 'Projeto desenvolvido na linguagem de sistemas Aether');
+    ConfigObj.Add('description', 'Project developed in the Aether systems programming language');
     ConfigObj.Add('backend', 'pascal');
     ConfigObj.Add('entry', 'src/' + FileBase + '.aeth');
     ConfigObj.Add('output', 'bin/' + EffectiveName + '.exe');
 
-    // Seção 'paths' para organização de código e interop C / Pascal / DLLs
+    // 'paths' section for code organization and C / Pascal / DLL interop
     PathsObj := TJSONObject.Create;
     ArrAether := TJSONArray.Create;
     ArrAether.Add('src');
@@ -882,7 +882,7 @@ begin
     PathsObj.Add('shared_libs', TJSONArray.Create);
     ConfigObj.Add('paths', PathsObj);
 
-    // Seção 'outputs' para configuração de diretórios de saída do projeto
+    // 'outputs' section for project output directories configuration
     OutputsObj := TJSONObject.Create;
     OutputsObj.Add('bin_dir', 'bin');
     OutputsObj.Add('pascal_src_dir', 'build/pascal');
@@ -896,7 +896,7 @@ begin
     ConfigObj.Free;
   end;
 
-  // 2. Gera src/<FileBase>.aeth
+  // 2. Generate src/<FileBase>.aeth
   MainFile := SrcDir + PathDelim + FileBase + '.aeth';
   WriteStringToFile(MainFile,
     'module ' + ModName + ';' + LineEnding +
@@ -909,21 +909,21 @@ begin
     '    val_abs: Float64;' + LineEnding +
     'begin' + LineEnding +
     '    PrintLn("========================================");' + LineEnding +
-    '    PrintLn("  Bem-vindo ao Projeto: %s", "' + EffectiveName + '");' + LineEnding +
+    '    PrintLn("  Welcome to Project: %s", "' + EffectiveName + '");' + LineEnding +
     '    PrintLn("  Aether: Pascal Structure + Rust Safety  ");' + LineEnding +
     '    PrintLn("========================================");' + LineEnding +
     '    PrintLn("");' + LineEnding +
     '    val_max := Max(borrow 10.5, borrow 42.0);' + LineEnding +
     '    val_abs := Abs(borrow -99.0);' + LineEnding +
-    '    PrintLn("Testando calculo seguro via std/math:");' + LineEnding +
+    '    PrintLn("Testing safe math via std/math:");' + LineEnding +
     '    PrintLn("  Max(10.5, 42.0) = %f", val_max);' + LineEnding +
     '    PrintLn("  Abs(-99.0)      = %f", val_abs);' + LineEnding +
     '    PrintLn("");' + LineEnding +
-    '    PrintLn("Projeto compilado e executado com sucesso!");' + LineEnding +
+    '    PrintLn("Project compiled and executed successfully!");' + LineEnding +
     'end ' + ModName + '.' + LineEnding
   );
 
-  // 3. Gera tests/<FileBase>_test.aeth
+  // 3. Generate tests/<FileBase>_test.aeth
   TestFile := TestsDir + PathDelim + FileBase + '_test.aeth';
   WriteStringToFile(TestFile,
     'module ' + ModName + 'Test;' + LineEnding +
@@ -934,16 +934,16 @@ begin
     'var' + LineEnding +
     '    res: Float64;' + LineEnding +
     'begin' + LineEnding +
-    '    PrintLn("[TEST] Executando bateria de testes para ' + EffectiveName + '...");' + LineEnding +
+    '    PrintLn("[TEST] Running test suite for ' + EffectiveName + '...");' + LineEnding +
     '    res := Abs(borrow -50.0);' + LineEnding +
     '    if res = 50.0 then' + LineEnding +
-    '        PrintLn("  [PASS] Teste Abs passou com sucesso!");' + LineEnding +
-    '    end;' + LineEnding +
-    '    PrintLn("[SUCESSO] Todos os testes passaram!");' + LineEnding +
+    '        PrintLn("  [PASS] Abs test passed successfully!");' + LineEnding +
+    '    end if;' + LineEnding +
+    '    PrintLn("[SUCCESS] All tests passed!");' + LineEnding +
     'end ' + ModName + 'Test.' + LineEnding
   );
 
-  // 4. Gera .gitignore
+  // 4. Generate .gitignore
   GitignoreFile := TargetDir + PathDelim + '.gitignore';
   WriteStringToFile(GitignoreFile,
     'bin/' + LineEnding +
@@ -956,45 +956,45 @@ begin
     '*.vsix' + LineEnding
   );
 
-  // 5. Gera README.md
+  // 5. Generate README.md
   ReadmeFile := TargetDir + PathDelim + 'README.md';
   WriteStringToFile(ReadmeFile,
     '# ' + EffectiveName + LineEnding +
     '' + LineEnding +
-    'Projeto desenvolvido com a **Linguagem de Programação Aether**.' + LineEnding +
+    'Project built with the **Aether Programming Language**.' + LineEnding +
     '' + LineEnding +
-    '## 🚀 Estrutura do Projeto' + LineEnding +
-    '- `aether.json`: Manifesto de configuração do projeto.' + LineEnding +
-    '- `src/' + FileBase + '.aeth`: Código-fonte principal da aplicação.' + LineEnding +
-    '- `tests/' + FileBase + '_test.aeth`: Testes unitários do projeto.' + LineEnding +
+    '## Project Structure' + LineEnding +
+    '- `aether.json`: Project configuration manifest.' + LineEnding +
+    '- `src/' + FileBase + '.aeth`: Main application source code.' + LineEnding +
+    '- `tests/' + FileBase + '_test.aeth`: Project unit tests.' + LineEnding +
     '' + LineEnding +
-    '## 🛠️ Comandos Rápidos' + LineEnding +
-    '- **Compilar o projeto:**' + LineEnding +
+    '## Quick Commands' + LineEnding +
+    '- **Build the project:**' + LineEnding +
     '  ```bash' + LineEnding +
     '  aetherc build' + LineEnding +
     '  ```' + LineEnding +
-    '- **Compilar e executar imediatamente:**' + LineEnding +
+    '- **Build and run immediately:**' + LineEnding +
     '  ```bash' + LineEnding +
     '  aetherc run' + LineEnding +
     '  ```' + LineEnding +
-    '- **Compilar utilizando o backend C99/GCC:**' + LineEnding +
+    '- **Build using the C99/GCC backend:**' + LineEnding +
     '  ```bash' + LineEnding +
     '  aetherc build --target=c' + LineEnding +
     '  ```' + LineEnding
   );
 
   WriteLn('--------------------------------------------------------');
-  WriteLn(Format(' Projeto Aether "%s" criado com sucesso!', [EffectiveName]));
+  WriteLn(Format(' Aether project "%s" created successfully!', [EffectiveName]));
   WriteLn('--------------------------------------------------------');
-  WriteLn(' Diretorio: ' + TargetDir);
-  WriteLn(' Estrutura inicializada:');
+  WriteLn(' Directory: ' + TargetDir);
+  WriteLn(' Initialized layout:');
   WriteLn('   ├── aether.json');
   WriteLn('   ├── src/' + FileBase + '.aeth');
   WriteLn('   ├── tests/' + FileBase + '_test.aeth');
   WriteLn('   ├── .gitignore');
   WriteLn('   └── README.md');
   WriteLn('');
-  WriteLn(' Proximos passos:');
+  WriteLn(' Next steps:');
   if (ProjectName <> '') and (ProjectName <> '.') then
     WriteLn(Format('   cd %s', [ProjectName]));
   WriteLn('   aetherc run');
@@ -1013,14 +1013,14 @@ var
   Idx, AtPos, HashPos, StartIdx, P: Integer;
 begin
   if PkgName = '' then
-    raise Exception.Create('Nome do pacote nao informado. Uso: aetherc pkg add <nome_pacote[@versao] | git_url[@tag]> [--version=versao]');
+    raise Exception.Create('Package name not provided. Usage: aetherc pkg add <package_name[@version] | git_url[@tag]> [--version=version]');
 
   EffectivePkg := PkgName;
   EffectiveGit := OptGit;
   EffectiveVer := OptVer;
 
-  // 1. Suporte a especificacao inline de versao via "@versao" ou "#tag"
-  // Ex: "aether-horse@1.0.0", "https://github.com/org/repo@v2.0.0", "repo#v1.0"
+  // 1. Support inline version specification via "@version" or "#tag"
+  // E.g.: "aether-horse@1.0.0", "https://github.com/org/repo@v2.0.0", "repo#v1.0"
   AtPos := 0;
   StartIdx := 1;
   if Pos('git@', EffectivePkg) = 1 then StartIdx := 5;
@@ -1046,7 +1046,7 @@ begin
     EffectivePkg := Copy(EffectivePkg, 1, HashPos - 1);
   end;
 
-  // Detecta se o primeiro argumento e uma URL Git
+  // Detect whether the first argument is a Git URL
   if (EffectiveGit = '') and
      ((Pos('http://', EffectivePkg) = 1) or (Pos('https://', EffectivePkg) = 1) or
       (Pos('git@', EffectivePkg) = 1) or (Copy(EffectivePkg, Length(EffectivePkg) - 3, 4) = '.git')) then
@@ -1056,7 +1056,7 @@ begin
   end;
 
   if not FindProjectRoot(RootDir, ConfigFile) then
-    raise Exception.Create('Nenhum projeto Aether ("aether.json") encontrado no diretorio atual. Execute "aetherc init" primeiro.');
+    raise Exception.Create('No Aether project ("aether.json") found in the current directory. Run "aetherc init" first.');
 
   FileStream := TFileStream.Create(ConfigFile, fmOpenRead or fmShareDenyWrite);
   StringStream := TStringStream.Create('');
@@ -1071,7 +1071,7 @@ begin
   JSON := GetJSON(JsonStr);
   try
     if not (JSON is TJSONObject) then
-      raise Exception.Create('Manifesto "aether.json" invalido.');
+      raise Exception.Create('Invalid "aether.json" manifest.');
 
     Obj := TJSONObject(JSON);
     DepsData := Obj.Find('dependencies');
@@ -1083,9 +1083,9 @@ begin
     else if DepsData is TJSONObject then
       DepsObj := TJSONObject(DepsData)
     else
-      raise Exception.Create('Secao "dependencies" em aether.json deve ser um objeto JSON.');
+      raise Exception.Create('"dependencies" section in aether.json must be a JSON object.');
 
-    // Remove dependencia anterior se ja existia
+    // Remove previous dependency entry if already present
     Idx := DepsObj.IndexOfName(EffectivePkg);
     if Idx >= 0 then
       DepsObj.Delete(Idx);
@@ -1094,7 +1094,7 @@ begin
     begin
       if not DirectoryExists(ExpandFileName(RootDir + PathDelim + OptPath)) and
          not DirectoryExists(ExpandFileName(OptPath)) then
-        WriteLn(Format('Aviso: Diretorio local "%s" nao foi encontrado ainda.', [OptPath]));
+        WriteLn(Format('Warning: Local directory "%s" was not found yet.', [OptPath]));
 
       SubObj := TJSONObject.Create;
       SubObj.Add('path', StringReplace(OptPath, '\', '/', [rfReplaceAll]));
@@ -1111,7 +1111,7 @@ begin
         SubObj.Add('version', 'main');
       DepsObj.Add(EffectivePkg, SubObj);
 
-      // Clona/sincroniza o repositorio imediatamente
+      // Clone/sync the repository immediately
       if SyncGitPackage(EffectivePkg, EffectiveGit, EffectiveVer, CachePkgDir) then
       begin
         LocalDepDir := RootDir + PathDelim + '.aether' + PathDelim + 'deps' + PathDelim + EffectivePkg;
@@ -1121,7 +1121,7 @@ begin
     else
     begin
       ResolvedVer := EffectiveVer;
-      // Busca e instala do Registry Central
+      // Search and install from Central Registry
       if FetchPackageFromRegistry(EffectivePkg, EffectiveVer, CachePkgDir, ResolvedVer) then
       begin
         LocalDepDir := RootDir + PathDelim + '.aether' + PathDelim + 'deps' + PathDelim + EffectivePkg;
@@ -1130,7 +1130,7 @@ begin
           DepsObj.Add(EffectivePkg, EffectiveVer)
         else
           DepsObj.Add(EffectivePkg, '^' + ResolvedVer);
-        WriteLn(Format('   Pacote "%s@%s" instalado com sucesso do Registry!', [EffectivePkg, ResolvedVer]));
+        WriteLn(Format('   Package "%s@%s" installed successfully from Registry!', [EffectivePkg, ResolvedVer]));
       end
       else
       begin
@@ -1143,7 +1143,7 @@ begin
 
     WriteStringToFile(ConfigFile, Obj.FormatJSON);
 
-    // Atualiza o Lockfile de Seguranca (aether.lock)
+    // Update security lockfile (aether.lock)
     if OptPath <> '' then
       UpdateLockfile(RootDir, EffectivePkg, 'path', OptPath, EffectiveVer, 'local-link')
     else if EffectiveGit <> '' then
@@ -1155,16 +1155,16 @@ begin
   end;
 
   WriteLn('--------------------------------------------------------');
-  WriteLn(Format(' Pacote "%s" adicionado com sucesso a "aether.json"!', [EffectivePkg]));
+  WriteLn(Format(' Package "%s" added to "aether.json" successfully!', [EffectivePkg]));
   WriteLn('--------------------------------------------------------');
   if OptPath <> '' then
-    WriteLn(' Origem: ' + OptPath)
+    WriteLn(' Source: ' + OptPath)
   else if EffectiveGit <> '' then
-    WriteLn(' Repositorio Git: ' + EffectiveGit)
+    WriteLn(' Git Repository: ' + EffectiveGit)
   else
-    WriteLn(' Versao: ' + EffectiveVer);
-  WriteLn(' [OK] Integridade registrada em "aether.lock"');
-  WriteLn(' Pronto para importacao no projeto:');
+    WriteLn(' Version: ' + EffectiveVer);
+  WriteLn(' [OK] Integrity recorded in "aether.lock"');
+  WriteLn(' Ready to import in your project:');
   WriteLn(Format('   import %s;', [UpCase(EffectivePkg[1]) + Copy(EffectivePkg, 2, Length(EffectivePkg))]));
   WriteLn('--------------------------------------------------------');
 end;
@@ -1180,10 +1180,10 @@ var
   Idx: Integer;
 begin
   if PkgName = '' then
-    raise Exception.Create('Nome do pacote nao informado. Uso: aetherc remove <nome_pacote>');
+    raise Exception.Create('Package name not provided. Usage: aetherc remove <package_name>');
 
   if not FindProjectRoot(RootDir, ConfigFile) then
-    raise Exception.Create('Nenhum projeto Aether ("aether.json") encontrado no diretorio atual.');
+    raise Exception.Create('No Aether project ("aether.json") found in the current directory.');
 
   FileStream := TFileStream.Create(ConfigFile, fmOpenRead or fmShareDenyWrite);
   StringStream := TStringStream.Create('');
@@ -1198,7 +1198,7 @@ begin
   JSON := GetJSON(JsonStr);
   try
     if not (JSON is TJSONObject) then
-      raise Exception.Create('Manifesto "aether.json" invalido.');
+      raise Exception.Create('Invalid "aether.json" manifest.');
 
     Obj := TJSONObject(JSON);
     DepsData := Obj.Find('dependencies');
@@ -1209,29 +1209,29 @@ begin
       if Idx >= 0 then
         DepsObj.Delete(Idx)
       else
-        raise Exception.CreateFmt('Pacote "%s" nao foi encontrado nas dependencias de "aether.json".', [PkgName]);
+        raise Exception.CreateFmt('Package "%s" was not found in "aether.json" dependencies.', [PkgName]);
     end
     else
-      raise Exception.Create('Nenhuma dependencia encontrada em "aether.json".');
+      raise Exception.Create('No dependencies found in "aether.json".');
 
     WriteStringToFile(ConfigFile, Obj.FormatJSON);
   finally
     JSON.Free;
   end;
 
-  // Remove pasta local em .aether/deps/<pkg>
+  // Remove local folder under .aether/deps/<pkg>
   LocalDepDir := RootDir + PathDelim + '.aether' + PathDelim + 'deps' + PathDelim + PkgName;
   if DirectoryExists(LocalDepDir) then
     DeleteDirectoryTree(LocalDepDir);
 
-  // Sincroniza aether.lock
+  // Sync aether.lock
   RemoveFromLockfile(RootDir, PkgName);
 
   WriteLn('--------------------------------------------------------');
-  WriteLn(Format(' Pacote "%s" removido com sucesso de "aether.json"!', [PkgName]));
+  WriteLn(Format(' Package "%s" removed from "aether.json" successfully!', [PkgName]));
   WriteLn('--------------------------------------------------------');
-  WriteLn(' [OK] Pasta local .aether/deps/' + PkgName + ' excluida.');
-  WriteLn(' [OK] Lockfile "aether.lock" sincronizado.');
+  WriteLn(' [OK] Local folder .aether/deps/' + PkgName + ' deleted.');
+  WriteLn(' [OK] Lockfile "aether.lock" synchronized.');
   WriteLn('--------------------------------------------------------');
 end;
 
@@ -1244,7 +1244,7 @@ var
   Dep: TAetherDependency;
 begin
   if not LoadProjectConfig(Config) then
-    raise Exception.Create('Nenhum projeto Aether ("aether.json") encontrado no diretorio atual.');
+    raise Exception.Create('No Aether project ("aether.json") found in the current directory.');
 
   WriteLn('========================================================');
   WriteLn('  Aether Package Manager (aetherc update)               ');
@@ -1258,7 +1258,7 @@ begin
       Continue;
 
     Found := True;
-    WriteLn(Format('-> Atualizando pacote "%s"...', [Dep.Name]));
+    WriteLn(Format('-> Updating package "%s"...', [Dep.Name]));
 
     if Dep.GitUrl <> '' then
     begin
@@ -1281,22 +1281,22 @@ begin
       CopyDirectoryTree(CacheDir, LocalDepDir);
 
       UpdateLockfile(Config.RootDir, Dep.Name, 'git', Dep.GitUrl, Dep.Version, CommitHash);
-      WriteLn(Format('   [OK] Atualizado para o commit: %s', [Copy(CommitHash, 1, 10)]));
+      WriteLn(Format('   [OK] Updated to commit: %s', [Copy(CommitHash, 1, 10)]));
     end
     else if Dep.Path <> '' then
     begin
       LocalDepDir := Config.RootDir + PathDelim + '.aether' + PathDelim + 'deps' + PathDelim + Dep.Name;
       UpdateLockfile(Config.RootDir, Dep.Name, 'path', Dep.Path, Dep.Version, 'local-link');
-      WriteLn('   [OK] Dependencia local re-sincronizada.');
+      WriteLn('   [OK] Local dependency re-synced.');
     end;
   end;
 
   if (PkgName <> '') and not Found then
-    raise Exception.CreateFmt('Pacote "%s" nao encontrado no manifesto "aether.json".', [PkgName]);
+    raise Exception.CreateFmt('Package "%s" not found in manifest "aether.json".', [PkgName]);
 
   WriteLn('--------------------------------------------------------');
-  WriteLn(' Todas as dependencias foram atualizadas e bloqueadas!');
-  WriteLn(' Lockfile "aether.lock" atualizado com sucesso.');
+  WriteLn(' All dependencies have been updated and locked!');
+  WriteLn(' Lockfile "aether.lock" updated successfully.');
   WriteLn('========================================================');
 end;
 
@@ -1311,11 +1311,11 @@ var
   LockCommit, CurrentCommit, CacheDir: string;
 begin
   if not LoadProjectConfig(Config) then
-    raise Exception.Create('Nenhum projeto Aether ("aether.json") encontrado no diretorio atual.');
+    raise Exception.Create('No Aether project ("aether.json") found in the current directory.');
 
   WriteLn('========================================================');
   WriteLn('  Aether Security Audit (aetherc audit)                 ');
-  WriteLn('  Protecao de Integridade e Supply Chain (Aether Guard) ');
+  WriteLn('  Integrity & Supply Chain Protection (Aether Guard)    ');
   WriteLn('========================================================');
 
   LockObj := LoadLockfile(Config.RootDir);
@@ -1329,7 +1329,7 @@ begin
     WarningsCount := 0;
     TamperCount := 0;
 
-    WriteLn(Format('[AUDIT] Analisando %d dependencia(s) do projeto "%s"...', [Length(Config.Dependencies), Config.Name]));
+    WriteLn(Format('[AUDIT] Scanning %d dependencies of project "%s"...', [Length(Config.Dependencies), Config.Name]));
     WriteLn('');
 
     for I := 0 to High(Config.Dependencies) do
@@ -1349,7 +1349,7 @@ begin
         end;
       end;
 
-      // 1. Verificacao de Protocolo TLS
+      // 1. TLS Protocol Check
       IsTls := True;
       if Dep.GitUrl <> '' then
       begin
@@ -1357,12 +1357,12 @@ begin
         begin
           IsTls := False;
           Inc(WarningsCount);
-          WriteLn(Format('  [ALERTA DE SEGURANCA] Pacote "%s" usa conexao insegura sem TLS (http://): "%s"', [Dep.Name, Dep.GitUrl]));
-          WriteLn('                        Recomendacao: Utilize "https://" ou "git@" para evitar ataques man-in-the-middle.');
+          WriteLn(Format('  [SECURITY ALERT] Package "%s" uses an insecure non-TLS connection (http://): "%s"', [Dep.Name, Dep.GitUrl]));
+          WriteLn('                   Recommendation: Use "https://" or "git@" to prevent man-in-the-middle attacks.');
         end;
       end;
 
-      // 2. Verificacao de Integridade do Lockfile e Anti-Adulteracao (Tampering)
+      // 2. Lockfile Integrity & Anti-Tampering Check
       if Dep.GitUrl <> '' then
       begin
         CacheDir := GetAetherCacheDir + PathDelim + Dep.Name;
@@ -1371,45 +1371,45 @@ begin
         if not HasLock then
         begin
           Inc(WarningsCount);
-          WriteLn(Format('  [AVISO] Pacote "%s" nao esta registrado em "aether.lock". Execute "aetherc update" para gerar.', [Dep.Name]));
+          WriteLn(Format('  [WARNING] Package "%s" is not recorded in "aether.lock". Run "aetherc update" to generate it.', [Dep.Name]));
         end
         else if (LockCommit <> '') and (CurrentCommit <> '') and (LockCommit <> CurrentCommit) then
         begin
           Inc(TamperCount);
-          WriteLn(Format('  [PERIGO - ADULTERACAO DETECTADA] Pacote "%s" foi modificado!', [Dep.Name]));
-          WriteLn(Format('    Commit registrado no lock: %s', [Copy(LockCommit, 1, 10)]));
-          WriteLn(Format('    Commit encontrado no disco: %s', [Copy(CurrentCommit, 1, 10)]));
-          WriteLn('    O codigo em cache pode ter sido adulterado!');
+          WriteLn(Format('  [DANGER - TAMPERING DETECTED] Package "%s" has been modified!', [Dep.Name]));
+          WriteLn(Format('    Commit recorded in lockfile: %s', [Copy(LockCommit, 1, 10)]));
+          WriteLn(Format('    Commit found on disk:       %s', [Copy(CurrentCommit, 1, 10)]));
+          WriteLn('    Cached code may have been tampered with!');
         end
         else
         begin
-          WriteLn(Format('  [OK] %s: Commit %s verificado e integro (TLS Seguro: %s)', [Dep.Name, Copy(CurrentCommit, 1, 10), BoolToStr(IsTls, 'Sim', 'Nao')]));
+          WriteLn(Format('  [OK] %s: Commit %s verified intact (Secure TLS: %s)', [Dep.Name, Copy(CurrentCommit, 1, 10), BoolToStr(IsTls, 'Sim', 'No')]));
         end;
       end
       else if Dep.Path <> '' then
       begin
-        WriteLn(Format('  [OK] %s: Dependencia local em "%s" (Origem interna confiavel)', [Dep.Name, Dep.Path]));
+        WriteLn(Format('  [OK] %s: Local dependency at "%s" (Trusted local source)', [Dep.Name, Dep.Path]));
       end
       else
       begin
-        WriteLn(Format('  [OK] %s: Versao especificada "%s"', [Dep.Name, Dep.Version]));
+        WriteLn(Format('  [OK] %s: Specified version "%s"', [Dep.Name, Dep.Version]));
       end;
     end;
 
     WriteLn('');
     WriteLn('--------------------------------------------------------');
-    WriteLn(Format(' Resultados: %d pacotes auditados | %d adulteracoes | %d alertas', [Length(Config.Dependencies), TamperCount, WarningsCount]));
+    WriteLn(Format(' Results: %d packages audited | %d tampering issues | %d warnings', [Length(Config.Dependencies), TamperCount, WarningsCount]));
     if (TamperCount = 0) and (WarningsCount = 0) then
     begin
-      WriteLn(' Status: AMBIENTE SEGURO (Aether Verified)');
+      WriteLn(' Status: SECURE ENVIRONMENT (Aether Verified)');
     end
     else if TamperCount > 0 then
     begin
-      WriteLn(' Status: FALHA CRITICA DE SEGURANCA - ADULTERACAO DETECTADA!');
+      WriteLn(' Status: CRITICAL SECURITY FAILURE - TAMPERING DETECTED!');
     end
     else
     begin
-      WriteLn(' Status: ATENCAO - ALERTAS DETECTADOS');
+      WriteLn(' Status: ATTENTION - WARNINGS DETECTED');
     end;
     WriteLn('========================================================');
   finally
@@ -1425,15 +1425,15 @@ var
   Origem: string;
 begin
   if not LoadProjectConfig(Config) then
-    raise Exception.Create('Nenhum projeto Aether ("aether.json") encontrado no diretorio atual.');
+    raise Exception.Create('No Aether project ("aether.json") found in the current directory.');
 
   WriteLn('========================================================');
-  WriteLn(Format('  Dependencias do Projeto: "%s" (v%s)', [Config.Name, Config.Version]));
+  WriteLn(Format('  Project Dependencies: "%s" (v%s)', [Config.Name, Config.Version]));
   WriteLn('========================================================');
   if Length(Config.Dependencies) = 0 then
   begin
-    WriteLn('  Nenhuma dependencia instalada.');
-    WriteLn('  Dica: Use "aetherc pkg add <pacote>" para adicionar.');
+    WriteLn('  No dependencies installed.');
+    WriteLn('  Tip: Use "aetherc pkg add <package>" to add one.');
   end
   else
   begin
@@ -1445,7 +1445,7 @@ begin
       else if Dep.Path <> '' then
         Origem := 'Local: ' + Dep.Path
       else
-        Origem := 'Versao: ' + Dep.Version;
+        Origem := 'Version: ' + Dep.Version;
 
       WriteLn(Format('  • %-18s -> %s', [Dep.Name, Origem]));
     end;
@@ -1461,15 +1461,15 @@ begin
   WriteLn('========================================================');
   WriteLn('  Aether Package Manager (aetherc pkg clean)            ');
   WriteLn('========================================================');
-  WriteLn('Limpando cache global de pacotes em: ' + CacheDir);
+  WriteLn('Cleaning global package cache at: ' + CacheDir);
   if DirectoryExists(CacheDir) then
   begin
     DeleteDirectoryTree(CacheDir);
     ForceDirectories(CacheDir);
-    WriteLn('[OK] Cache global limpo com sucesso.');
+    WriteLn('[OK] Global cache cleaned successfully.');
   end
   else
-    WriteLn('[OK] Cache ja estava vazio.');
+    WriteLn('[OK] Cache was already empty.');
   WriteLn('========================================================');
 end;
 
@@ -1488,25 +1488,25 @@ begin
   WriteLn('========================================================');
   WriteLn('  Aether Project Cleaner (aetherc clean)                ');
   WriteLn('========================================================');
-  WriteLn('Limpando artefatos de build em: ' + RootDir);
+  WriteLn('Cleaning build artifacts in: ' + RootDir);
 
   GenDir := RootDir + PathDelim + 'generated';
   if DirectoryExists(GenDir) then
   begin
     DeleteDirectoryTree(GenDir);
-    WriteLn('  • generated/ ... [REMOVIDO]');
+    WriteLn('  - generated/ ... [REMOVED]');
   end
   else
-    WriteLn('  • generated/ ... [JA LIMPO]');
+    WriteLn('  - generated/ ... [ALREADY CLEAN]');
 
   BinDir := RootDir + PathDelim + 'bin';
   if DirectoryExists(BinDir) then
   begin
     DeleteDirectoryTree(BinDir);
-    WriteLn('  • bin/       ... [REMOVIDO]');
+    WriteLn('  - bin/       ... [REMOVED]');
   end
   else
-    WriteLn('  • bin/       ... [JA LIMPO]');
+    WriteLn('  - bin/       ... [ALREADY CLEAN]');
 
   if HasConfig then
   begin
@@ -1516,7 +1516,7 @@ begin
       if DirectoryExists(CustomDir) then
       begin
         DeleteDirectoryTree(CustomDir);
-        WriteLn('  • ' + Config.Outputs.PascalSrcDir + ' ... [REMOVIDO]');
+        WriteLn('  • ' + Config.Outputs.PascalSrcDir + ' ... [REMOVED]');
       end;
     end;
 
@@ -1526,7 +1526,7 @@ begin
       if DirectoryExists(CustomDir) then
       begin
         DeleteDirectoryTree(CustomDir);
-        WriteLn('  • ' + Config.Outputs.PascalUnitDir + ' ... [REMOVIDO]');
+        WriteLn('  • ' + Config.Outputs.PascalUnitDir + ' ... [REMOVED]');
       end;
     end;
 
@@ -1536,7 +1536,7 @@ begin
       if DirectoryExists(CustomDir) then
       begin
         DeleteDirectoryTree(CustomDir);
-        WriteLn('  • ' + Config.Outputs.CSrcDir + ' ... [REMOVIDO]');
+        WriteLn('  • ' + Config.Outputs.CSrcDir + ' ... [REMOVED]');
       end;
     end;
 
@@ -1546,7 +1546,7 @@ begin
       if DirectoryExists(CustomDir) then
       begin
         DeleteDirectoryTree(CustomDir);
-        WriteLn('  • ' + Config.Outputs.BinDir + ' ... [REMOVIDO]');
+        WriteLn('  • ' + Config.Outputs.BinDir + ' ... [REMOVED]');
       end;
     end;
   end;
@@ -1555,11 +1555,11 @@ begin
   if DirectoryExists(BuildCacheDir) then
   begin
     DeleteDirectoryTree(BuildCacheDir);
-    WriteLn('  • .aether/cache/build/ ... [REMOVIDO]');
+    WriteLn('  - .aether/cache/build/ ... [REMOVED]');
   end;
 
   WriteLn('');
-  WriteLn('SUCESSO! O projeto foi limpo.');
+  WriteLn('SUCCESS! Project cleaned.');
   WriteLn('========================================================');
 end;
 

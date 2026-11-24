@@ -60,7 +60,7 @@ begin
     begin
       Lines[Lines.Count - 1] := Lines[Lines.Count - 1] + ',';
       Lines.Add('      "context": {');
-      Lines.Add(Format('        "moved_at": { "line": %d, "col": %d, "note": "Valor movido anteriormente via \"take\"" }', [MovedLine, MovedCol]));
+      Lines.Add(Format('        "moved_at": { "line": %d, "col": %d, "note": "Value previously moved via \"take\"" }', [MovedLine, MovedCol]));
       Lines.Add('      }');
     end;
 

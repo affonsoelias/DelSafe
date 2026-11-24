@@ -2,17 +2,17 @@ module Fase48MatchrangeIfexprStrmathArrsliceDefaultTest;
 
 type
     JobState = (Queued, Running, Done);
-    Ponto = record
+    Point = record
         x: Int32;
         y: Int32;
-    end;
-    Usuario = record
-        nome: String;
-        idade: Int32;
-        ativo: Bool;
-    end;
-    ListaInt = array of Int32;
-    ListaStr = array of String;
+    end record;
+    User = record
+        name: String;
+        age: Int32;
+        active: Bool;
+    end record;
+    IntList = array of Int32;
+    StrList = array of String;
 
 function ClassifyHttpAndInt(code: Int32) return Int32 is
 var
@@ -28,7 +28,7 @@ begin
             res := -1;
         _ =>
             res := 99;
-    end;
+    end match;
     return res;
 end ClassifyHttpAndInt;
 
@@ -46,7 +46,7 @@ begin
             res := 3;
         _ =>
             res := 9;
-    end;
+    end match;
     return res;
 end ClassifyChar;
 
@@ -60,7 +60,7 @@ begin
             outVal := 1;
         case JobState.Done:
             outVal := 2;
-    end;
+    end match;
     return outVal;
 end CheckJobExhaustive;
 
@@ -76,23 +76,23 @@ begin
             res := 2;
         _ =>
             res := 0;
-    end;
+    end match;
     return res;
 end MethodGroup;
 
 program Main;
 var
-    p1, pSel, zPonto: Ponto;
-    usr, zUsuario: Usuario;
+    p1, pSel, zPoint: Point;
+    usr, zUser: User;
     zInt, negVal, clamped1, clamped2, clamped3, inlineSum: Int32;
     zBool, hasLang: Bool;
     zStr, rawText, cleaned, tag, nestedLabel, repStr: String;
     zStatus: JobState;
     fAbs, fClamp: Float64;
-    nums: ListaInt;
-    subNums: ListaInt;
-    words: ListaStr;
-    subWords: ListaStr;
+    nums: IntList;
+    subNums: IntList;
+    words: StrList;
+    subWords: StrList;
     flagTrue, flagFalse: Bool;
     inlineNum: Int32;
 begin
@@ -127,14 +127,14 @@ begin
     Assert(MethodGroup("DELETE") = 0);
 
     // 2. Named Record Constructors & Inline if..then..else
-    p1 := Ponto(y: 20, x: 10);
+    p1 := Point(y: 20, x: 10);
     Assert(p1.x = 10);
     Assert(p1.y = 20);
 
-    usr := Usuario(ativo: true, idade: 30, nome: "Ana");
-    Assert(usr.nome = "Ana");
-    Assert(usr.idade = 30);
-    Assert(usr.ativo);
+    usr := User(active: true, age: 30, name: "Ana");
+    Assert(usr.name = "Ana");
+    Assert(usr.age = 30);
+    Assert(usr.active);
 
     inlineNum := if p1.x < p1.y then 100 else 200;
     Assert(inlineNum = 100);
@@ -148,7 +148,7 @@ begin
     inlineSum := (if flagTrue then 10 else 20) + 5;
     Assert(inlineSum = 15);
 
-    pSel := if flagTrue then Ponto(y: 8, x: 4) else Ponto(y: 0, x: 0);
+    pSel := if flagTrue then Point(y: 8, x: 4) else Point(y: 0, x: 0);
     Assert(pSel.x = 4);
     Assert(pSel.y = 8);
 
@@ -159,14 +159,14 @@ begin
     Assert(zStr = "");
     zBool := Default(Bool);
     Assert(not zBool);
-    zPonto := Default(Ponto);
-    Assert((zPonto.x = 0) and (zPonto.y = 0));
-    zUsuario := Default(Usuario);
-    Assert((zUsuario.nome = "") and (zUsuario.idade = 0) and (not zUsuario.ativo));
+    zPoint := Default(Point);
+    Assert((zPoint.x = 0) and (zPoint.y = 0));
+    zUser := Default(User);
+    Assert((zUser.name = "") and (zUser.age = 0) and (not zUser.active));
     zStatus := Default(JobState);
     Assert(Ord(zStatus) = 0);
 
-    // 4. Built-in String & Math (UFCS + Funcional)
+    // 4. Built-in String & Math (UFCS + Functional)
     rawText := "  Aether Lang  ";
     cleaned := rawText.Trim();
     Assert(cleaned = "Aether Lang");
@@ -230,5 +230,5 @@ begin
     Assert(subWords[0] = "B");
     Assert(subWords[1] = "C");
 
-    PrintLn("=== FASE 48 TEST PASSOU (MATCH RANGE/MULTI, IF EXPR, STR/MATH, SLICE/INSERT/DELETE, NAMED CTOR/DEFAULT) ===");
+    PrintLn("=== PHASE 48 TEST PASSED (MATCH RANGE/MULTI, IF EXPR, STR/MATH, SLICE/INSERT/DELETE, NAMED CTOR/DEFAULT) ===");
 end Fase48MatchrangeIfexprStrmathArrsliceDefaultTest.

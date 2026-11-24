@@ -8,7 +8,7 @@ type
         size_bytes: Int64;
         exists: Bool;
         is_dir: Bool;
-    end;
+    end record;
 
 function MakeDir(borrow path: String) return Bool;
 function DeleteDir(borrow path: String) return Bool;
@@ -74,7 +74,7 @@ begin
         sz := 0;
     else
         sz := FileSize(borrow path);
-    end;
+    end if;
     return FileInfo(path: path, size_bytes: sz, exists: ex, is_dir: is_d);
 end GetFileInfo;
 

@@ -19,7 +19,7 @@ type
   end;
 
   TDocContract = record
-    Kind: string;       // 'require' ou 'ensure'
+    Kind: string;       // 'require' or 'ensure'
     Expression: string; // Ex: 'n >= 0'
   end;
 
@@ -47,7 +47,7 @@ type
 
   TDocType = record
     Name: string;
-    Kind: string;       // 'record' ou 'enum'
+    Kind: string;       // 'record' or 'enum'
     RawDoc: string;
     Summary: string;
     Description: string;
@@ -356,7 +356,7 @@ begin
   for I := 0 to ASTMod.Imports.Count - 1 do
     ModDoc.Imports.Add(ASTMod.Imports[I]);
 
-  // Tipos (Records & Enums)
+  // Types (Records & Enums)
   for I := 0 to ASTMod.Types.Count - 1 do
   begin
     if ASTMod.Types[I] is TASTRecordDecl then
@@ -448,7 +448,7 @@ begin
     end;
   end;
 
-  // Funções
+  // Functions
   for I := 0 to ASTMod.Functions.Count - 1 do
   begin
     FuncNode := TASTFunction(ASTMod.Functions[I]);
@@ -477,7 +477,7 @@ begin
       end;
       if Assigned(ParamDocs) then ParamDocs.Free;
 
-      // Contratos
+      // Contracts
       SetLength(Contracts, FuncNode.Requires.Count + FuncNode.Ensures.Count);
       K := 0;
       for J := 0 to FuncNode.Requires.Count - 1 do
@@ -510,7 +510,7 @@ var
   ASTMod: TASTModule;
 begin
   if not FileExists(AFilePath) then
-    raise Exception.CreateFmt('Arquivo Aether nao encontrado: "%s"', [AFilePath]);
+    raise Exception.CreateFmt('Aether file not found: "%s"', [AFilePath]);
 
   FS := TFileStream.Create(AFilePath, fmOpenRead or fmShareDenyNone);
   StringStream := TStringStream.Create('');
@@ -583,7 +583,7 @@ begin
         AddFile(SourceFiles[I]);
       except
         on E: Exception do
-          WriteLn(Format('Aviso: Falha ao parsear "%s" para doc: %s', [ExtractFileName(SourceFiles[I]), E.Message]));
+          WriteLn(Format('Warning: Failed to parse "%s" for doc: %s', [ExtractFileName(SourceFiles[I]), E.Message]));
       end;
     end;
   finally
@@ -614,7 +614,7 @@ var
 begin
   ForceDirectories(OutDir);
 
-  // 1. Gera style.css
+  // 1. Generate style.css
   CSSFile := OutDir + PathDelim + 'style.css';
   AssignFile(F, CSSFile);
   Rewrite(F);
@@ -666,7 +666,7 @@ begin
   WriteLn(F, '.stat-label { color: var(--text-muted); font-size: 0.9rem; margin-top: 4px; text-transform: uppercase; }');
   CloseFile(F);
 
-  // 2. Prepara search.js
+  // 2. Prepare search.js
   SearchEntries := TStringList.Create;
   try
     TotalFuncs := 0;
@@ -713,7 +713,7 @@ begin
     WriteLn(F, '    if (q.length === 0) { results.style.display = "none"; return; }');
     WriteLn(F, '    const matches = DOC_SEARCH_INDEX.filter(item => item.name.toLowerCase().includes(q) || item.desc.toLowerCase().includes(q)).slice(0, 8);');
     WriteLn(F, '    if (matches.length === 0) {');
-    WriteLn(F, '      results.innerHTML = ''<div class="search-item" style="color: #8b949e;">Nenhum simbolo encontrado.</div>'';');
+    WriteLn(F, '      results.innerHTML = ''<div class="search-item" style="color: #8b949e;">No symbols found.</div>'';');
     WriteLn(F, '    } else {');
     WriteLn(F, '      results.innerHTML = matches.map(m => `<div class="search-item" onclick="window.location.href=''${m.link}''"><span class="badge badge-async" style="margin-right: 8px;">${m.kind}</span><strong>${m.name}</strong><br><small style="color: #8b949e;">${m.desc || ""}</small></div>`).join("");');
     WriteLn(F, '    }');
@@ -729,16 +729,16 @@ begin
     SearchEntries.Free;
   end;
 
-  // 3. Gera index.html
+  // 3. Generate index.html
   OutFile := OutDir + PathDelim + 'index.html';
   AssignFile(F, OutFile);
   Rewrite(F);
   WriteLn(F, '<!DOCTYPE html>');
-  WriteLn(F, '<html lang="pt-BR">');
+  WriteLn(F, '<html lang="en">');
   WriteLn(F, '<head>');
   WriteLn(F, '  <meta charset="UTF-8">');
   WriteLn(F, '  <meta name="viewport" content="width=device-width, initial-scale=1.0">');
-  WriteLn(F, Format('  <title>%s - Documentação da API</title>', [HTMLEscape(FProjectName)]));
+  WriteLn(F, Format('  <title>%s - API Documentation</title>', [HTMLEscape(FProjectName)]));
   WriteLn(F, '  <link rel="stylesheet" href="style.css">');
   WriteLn(F, '  <script src="search.js"></script>');
   WriteLn(F, '</head>');
@@ -746,13 +746,13 @@ begin
   WriteLn(F, '  <header>');
   WriteLn(F, Format('    <a href="index.html" class="logo">⚡ <span>Aether</span>Doc | %s</a>', [HTMLEscape(FProjectName)]));
   WriteLn(F, '    <div style="position: relative;">');
-  WriteLn(F, '      <input type="text" id="searchInput" class="search-bar" placeholder="Buscar módulos, funções, tipos... (Ctrl+K)">');
+  WriteLn(F, '      <input type="text" id="searchInput" class="search-bar" placeholder="Search modules, functions, types... (Ctrl+K)">');
   WriteLn(F, '      <div id="searchResults" class="search-results"></div>');
   WriteLn(F, '    </div>');
   WriteLn(F, '  </header>');
   WriteLn(F, '  <div class="container">');
   WriteLn(F, '    <aside class="sidebar">');
-  WriteLn(F, '      <h3>Módulos do Projeto</h3>');
+  WriteLn(F, '      <h3>Project Modules</h3>');
   WriteLn(F, '      <ul>');
   for I := 0 to FModules.Count - 1 do
   begin
@@ -768,13 +768,13 @@ begin
     WriteLn(F, Format('      <p style="font-size: 1.1rem; color: #8b949e;">%s</p>', [HTMLEscape(FProjectDesc)]));
 
   WriteLn(F, '      <div class="stats-grid">');
-  WriteLn(F, Format('        <div class="stat-card"><div class="stat-number">%d</div><div class="stat-label">Módulos</div></div>', [FModules.Count]));
-  WriteLn(F, Format('        <div class="stat-card"><div class="stat-number">%d</div><div class="stat-label">Funções & Métodos</div></div>', [TotalFuncs]));
-  WriteLn(F, Format('        <div class="stat-card"><div class="stat-number">%d</div><div class="stat-label">Estruturas & Tipos</div></div>', [TotalTypes]));
-  WriteLn(F, Format('        <div class="stat-card"><div class="stat-number">%d</div><div class="stat-label">Traits & Contratos</div></div>', [TotalTraits]));
+  WriteLn(F, Format('        <div class="stat-card"><div class="stat-number">%d</div><div class="stat-label">Modules</div></div>', [FModules.Count]));
+  WriteLn(F, Format('        <div class="stat-card"><div class="stat-number">%d</div><div class="stat-label">Functions & Methods</div></div>', [TotalFuncs]));
+  WriteLn(F, Format('        <div class="stat-card"><div class="stat-number">%d</div><div class="stat-label">Structs & Types</div></div>', [TotalTypes]));
+  WriteLn(F, Format('        <div class="stat-card"><div class="stat-number">%d</div><div class="stat-label">Traits & Contracts</div></div>', [TotalTraits]));
   WriteLn(F, '      </div>');
 
-  WriteLn(F, '      <h2>Índice Geral de Módulos</h2>');
+  WriteLn(F, '      <h2>Module Index</h2>');
   for I := 0 to FModules.Count - 1 do
   begin
     ModDoc := TDocModule(FModules[I]);
@@ -783,8 +783,8 @@ begin
     if ModDoc.Summary <> '' then
       WriteLn(F, Format('        <p>%s</p>', [HTMLEscape(ModDoc.Summary)]))
     else
-      WriteLn(F, '        <p style="color: var(--text-muted); font-style: italic;">Sem descrição disponível.</p>');
-    WriteLn(F, Format('        <small style="color: var(--text-muted);">%d funções | %d tipos | %d traits</small>',
+      WriteLn(F, '        <p style="color: var(--text-muted); font-style: italic;">No description available.</p>');
+    WriteLn(F, Format('        <small style="color: var(--text-muted);">%d functions | %d types | %d traits</small>',
       [Length(ModDoc.Functions), Length(ModDoc.Types), Length(ModDoc.Traits)]));
     WriteLn(F, '      </div>');
   end;
@@ -795,7 +795,7 @@ begin
   WriteLn(F, '</html>');
   CloseFile(F);
 
-  // 4. Gera página individual para cada módulo
+  // 4. Generate individual page for each module
   for I := 0 to FModules.Count - 1 do
   begin
     ModDoc := TDocModule(FModules[I]);
@@ -803,11 +803,11 @@ begin
     AssignFile(F, OutFile);
     Rewrite(F);
     WriteLn(F, '<!DOCTYPE html>');
-    WriteLn(F, '<html lang="pt-BR">');
+    WriteLn(F, '<html lang="en">');
     WriteLn(F, '<head>');
     WriteLn(F, '  <meta charset="UTF-8">');
     WriteLn(F, '  <meta name="viewport" content="width=device-width, initial-scale=1.0">');
-    WriteLn(F, Format('  <title>Módulo %s - %s</title>', [ModDoc.Name, HTMLEscape(FProjectName)]));
+    WriteLn(F, Format('  <title>Module %s - %s</title>', [ModDoc.Name, HTMLEscape(FProjectName)]));
     WriteLn(F, '  <link rel="stylesheet" href="style.css">');
     WriteLn(F, '  <script src="search.js"></script>');
     WriteLn(F, '</head>');
@@ -815,13 +815,13 @@ begin
     WriteLn(F, '  <header>');
     WriteLn(F, Format('    <a href="index.html" class="logo">⚡ <span>Aether</span>Doc | %s</a>', [HTMLEscape(FProjectName)]));
     WriteLn(F, '    <div style="position: relative;">');
-    WriteLn(F, '      <input type="text" id="searchInput" class="search-bar" placeholder="Buscar símbolos... (Ctrl+K)">');
+    WriteLn(F, '      <input type="text" id="searchInput" class="search-bar" placeholder="Search symbols... (Ctrl+K)">');
     WriteLn(F, '      <div id="searchResults" class="search-results"></div>');
     WriteLn(F, '    </div>');
     WriteLn(F, '  </header>');
     WriteLn(F, '  <div class="container">');
     WriteLn(F, '    <aside class="sidebar">');
-    WriteLn(F, '      <h3>Módulos</h3>');
+    WriteLn(F, '      <h3>Modules</h3>');
     WriteLn(F, '      <ul>');
     for J := 0 to FModules.Count - 1 do
     begin
@@ -831,34 +831,34 @@ begin
         WriteLn(F, Format('        <li><a href="%s.html">%s</a></li>', [TDocModule(FModules[J]).Name, TDocModule(FModules[J]).Name]));
     end;
     WriteLn(F, '      </ul>');
-    WriteLn(F, '      <h3>Neste Módulo</h3>');
+    WriteLn(F, '      <h3>In This Module</h3>');
     WriteLn(F, '      <ul>');
-    if Length(ModDoc.Types) > 0 then WriteLn(F, '        <li><a href="#types">Tipos & Estruturas</a></li>');
+    if Length(ModDoc.Types) > 0 then WriteLn(F, '        <li><a href="#types">Types & Structs</a></li>');
     if Length(ModDoc.Traits) > 0 then WriteLn(F, '        <li><a href="#traits">Traits</a></li>');
-    if Length(ModDoc.Functions) > 0 then WriteLn(F, '        <li><a href="#functions">Funções</a></li>');
+    if Length(ModDoc.Functions) > 0 then WriteLn(F, '        <li><a href="#functions">Functions</a></li>');
     WriteLn(F, '      </ul>');
     WriteLn(F, '    </aside>');
     WriteLn(F, '    <main class="main-content">');
-    WriteLn(F, Format('      <h1>Módulo <code>%s</code></h1>', [ModDoc.Name]));
+    WriteLn(F, Format('      <h1>Module <code>%s</code></h1>', [ModDoc.Name]));
     if ModDoc.Summary <> '' then
       WriteLn(F, Format('      <p style="font-size: 1.15rem; color: #e6edf3;">%s</p>', [HTMLEscape(ModDoc.Summary)]));
     if ModDoc.Description <> '' then
       WriteLn(F, Format('      <p style="color: var(--text-muted);">%s</p>', [HTMLEscape(ModDoc.Description)]));
 
-    // Imports / Grafo de Dependências
+    // Imports / Dependency Graph
     if ModDoc.Imports.Count > 0 then
     begin
-      WriteLn(F, '      <h3>Dependências Importadas</h3>');
+      WriteLn(F, '      <h3>Imported Dependencies</h3>');
       WriteLn(F, '      <div class="code-block" style="display: flex; gap: 8px; flex-wrap: wrap;">');
       for J := 0 to ModDoc.Imports.Count - 1 do
         WriteLn(F, Format('        <span class="badge badge-async">%s</span>', [ModDoc.Imports[J]]));
       WriteLn(F, '      </div>');
     end;
 
-    // Tipos
+    // Types
     if Length(ModDoc.Types) > 0 then
     begin
-      WriteLn(F, '      <h2 id="types">Tipos & Estruturas</h2>');
+      WriteLn(F, '      <h2 id="types">Types & Structs</h2>');
       for J := 0 to High(ModDoc.Types) do
       begin
         with ModDoc.Types[J] do
@@ -868,7 +868,7 @@ begin
           if Summary <> '' then WriteLn(F, Format('        <p>%s</p>', [HTMLEscape(Summary)]));
           if Length(Fields) > 0 then
           begin
-            WriteLn(F, '        <table><thead><tr><th>Campo / Variante</th><th>Tipo</th><th>Descrição</th></tr></thead><tbody>');
+            WriteLn(F, '        <table><thead><tr><th>Field / Variant</th><th>Type</th><th>Description</th></tr></thead><tbody>');
             for K := 0 to High(Fields) do
             begin
               WriteLn(F, Format('        <tr><td><code>%s</code></td><td><code>%s</code></td><td>%s</td></tr>',
@@ -884,7 +884,7 @@ begin
     // Traits
     if Length(ModDoc.Traits) > 0 then
     begin
-      WriteLn(F, '      <h2 id="traits">Traits (Contratos de Tipos)</h2>');
+      WriteLn(F, '      <h2 id="traits">Traits (Type Contracts)</h2>');
       for J := 0 to High(ModDoc.Traits) do
       begin
         with ModDoc.Traits[J] do
@@ -894,7 +894,7 @@ begin
           if Summary <> '' then WriteLn(F, Format('        <p>%s</p>', [HTMLEscape(Summary)]));
           if Length(Methods) > 0 then
           begin
-            WriteLn(F, '        <h4>Métodos Exigidos:</h4>');
+            WriteLn(F, '        <h4>Required Methods:</h4>');
             for K := 0 to High(Methods) do
             begin
               WriteLn(F, '        <div class="code-block">');
@@ -910,10 +910,10 @@ begin
       end;
     end;
 
-    // Funções
+    // Functions
     if Length(ModDoc.Functions) > 0 then
     begin
-      WriteLn(F, '      <h2 id="functions">Funções & Métodos</h2>');
+      WriteLn(F, '      <h2 id="functions">Functions & Methods</h2>');
       for J := 0 to High(ModDoc.Functions) do
       begin
         with ModDoc.Functions[J] do
@@ -924,7 +924,7 @@ begin
           WriteLn(F, Format('          <h3 style="margin: 0;">%s</h3>', [Name]));
           WriteLn(F, '        </div>');
 
-          // Assinatura de Código
+          // Code Signature
           WriteLn(F, '        <div class="code-block">');
           if IsAsync then Write(F, 'async ');
           if IsProcedure then Write(F, 'procedure ') else Write(F, 'function ');
@@ -954,7 +954,7 @@ begin
           if Summary <> '' then WriteLn(F, Format('        <p style="font-weight: 500;">%s</p>', [HTMLEscape(Summary)]));
           if Description <> '' then WriteLn(F, Format('        <p>%s</p>', [HTMLEscape(Description)]));
 
-          // Contratos Formais
+          // Formal Contracts
           if Length(Contracts) > 0 then
           begin
             WriteLn(F, '        <div style="margin: 14px 0;">');
@@ -966,11 +966,11 @@ begin
             WriteLn(F, '        </div>');
           end;
 
-          // Tabela de Parâmetros
+          // Parameters Table
           if Length(Params) > 0 then
           begin
-            WriteLn(F, '        <h4>Parâmetros</h4>');
-            WriteLn(F, '        <table><thead><tr><th>Parâmetro</th><th>Semântica de Posse</th><th>Tipo</th><th>Descrição</th></tr></thead><tbody>');
+            WriteLn(F, '        <h4>Parameters</h4>');
+            WriteLn(F, '        <table><thead><tr><th>Parameter</th><th>Ownership</th><th>Type</th><th>Description</th></tr></thead><tbody>');
             for K := 0 to High(Params) do
             begin
               WriteLn(F, Format('        <tr><td><code>%s</code></td><td>%s</td><td><code>%s</code></td><td>%s</td></tr>',
@@ -982,7 +982,7 @@ begin
           // Doctests
           if Length(Doctests) > 0 then
           begin
-            WriteLn(F, '        <h4>Exemplo Testável (Doctest)</h4>');
+            WriteLn(F, '        <h4>Testable Example (Doctest)</h4>');
             for K := 0 to High(Doctests) do
             begin
               WriteLn(F, '        <pre class="code-block"><code>' + HTMLEscape(Doctests[K]) + '</code></pre>');
@@ -1014,7 +1014,7 @@ begin
   AssignFile(F, OutFile);
   Rewrite(F);
 
-  WriteLn(F, '# ' + FProjectName + ' - Documentação da API');
+  WriteLn(F, '# ' + FProjectName + ' - API Documentation');
   WriteLn(F, '');
   if FProjectDesc <> '' then WriteLn(F, FProjectDesc + LineEnding);
 
@@ -1023,13 +1023,13 @@ begin
     ModDoc := TDocModule(FModules[I]);
     WriteLn(F, '---');
     WriteLn(F, '');
-    WriteLn(F, '## Módulo `' + ModDoc.Name + '`');
+    WriteLn(F, '## Module `' + ModDoc.Name + '`');
     WriteLn(F, '');
     if ModDoc.Summary <> '' then WriteLn(F, ModDoc.Summary + LineEnding);
 
     if Length(ModDoc.Functions) > 0 then
     begin
-      WriteLn(F, '### Funções');
+      WriteLn(F, '### Functions');
       WriteLn(F, '');
       for J := 0 to High(ModDoc.Functions) do
       begin
@@ -1085,7 +1085,7 @@ var
   Proc: TProcess;
 begin
   WriteLn('========================================================');
-  WriteLn('  Aether Doctest Runner - Validacao de Exemplos         ');
+  WriteLn('  Aether Doctest Runner - Example Validation            ');
   WriteLn('========================================================');
 
   TotalTests := 0;
@@ -1101,7 +1101,7 @@ begin
       for K := 0 to High(ModDoc.Functions[J].Doctests) do
       begin
         Inc(TotalTests);
-        Write(Format('  [DOCTEST] %s.%s (Exemplo %d)... ', [ModDoc.Name, ModDoc.Functions[J].Name, K + 1]));
+        Write(Format('  [DOCTEST] %s.%s (Example %d)... ', [ModDoc.Name, ModDoc.Functions[J].Name, K + 1]));
 
         TestFile := TempDir + PathDelim + Format('test_%s_%d.aeth', [ModDoc.Name, TotalTests]);
         ExeFile := TempDir + PathDelim + Format('test_%s_%d.exe', [ModDoc.Name, TotalTests]);
@@ -1172,7 +1172,7 @@ begin
 
         Proc := TProcess.Create(nil);
         try
-          Proc.Executable := ParamStr(0); // Invocando aetherc
+          Proc.Executable := ParamStr(0); // Invoking aetherc
           Proc.Parameters.Add(TestFile);
           if ModDoc.FilePath <> '' then
           begin
@@ -1186,7 +1186,7 @@ begin
 
           if Proc.ExitCode = 0 then
           begin
-            // Executa o teste
+            // Run test
             Proc.Executable := ExeFile;
             Proc.Parameters.Clear;
             Proc.Execute;
@@ -1196,10 +1196,10 @@ begin
               Inc(PassedTests);
             end
             else
-              WriteLn('FAIL (Falha de assercao)');
+              WriteLn('FAIL (Assertion failure)');
           end
           else
-            WriteLn('FAIL (Erro de compilacao)');
+            WriteLn('FAIL (Compilation error)');
         finally
           Proc.Free;
         end;
@@ -1208,7 +1208,7 @@ begin
   end;
 
   WriteLn('--------------------------------------------------------');
-  WriteLn(Format('  Resultados: %d doctests executados | %d passaram | %d falharam',
+  WriteLn(Format('  Results: %d doctests run | %d passed | %d failed',
     [TotalTests, PassedTests, TotalTests - PassedTests]));
   WriteLn('========================================================');
 end;
@@ -1229,9 +1229,9 @@ begin
     GenerateMarkdown(TargetDir);
 
   WriteLn('');
-  WriteLn('SUCESSO! Documentacao canonica gerada com sucesso:');
+  WriteLn('SUCCESS! Canonical documentation generated successfully:');
   if (AFormat = dfHTML) or (AFormat = dfAll) then
-    WriteLn('  --> ' + TargetDir + PathDelim + 'index.html (Site Estático Interativo)');
+    WriteLn('  --> ' + TargetDir + PathDelim + 'index.html (Interactive Static Site)');
   if (AFormat = dfMarkdown) or (AFormat = dfAll) then
     WriteLn('  --> ' + TargetDir + PathDelim + 'API.md (Markdown)');
 
@@ -1306,14 +1306,14 @@ begin
     Inc(I);
   end;
 
-  Gen := TAetherDocGenerator.Create('Aether Application', '1.0.0', 'Documentação canônica de módulos e APIs da linguagem Aether.');
+  Gen := TAetherDocGenerator.Create('Aether Application', '1.0.0', 'Canonical API and module documentation for the Aether programming language.');
   try
     if DirectoryExists(TargetPath) then
       Gen.AddProject(TargetPath)
     else if FileExists(TargetPath) then
       Gen.AddFile(TargetPath)
     else
-      raise Exception.CreateFmt('Caminho especificado nao encontrado: "%s"', [TargetPath]);
+      raise Exception.CreateFmt('Specified path not found: "%s"', [TargetPath]);
 
     Gen.Generate(OutDir, DocFormat, OptOpen, OptTest);
   finally

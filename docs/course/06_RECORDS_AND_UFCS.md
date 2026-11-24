@@ -38,14 +38,14 @@ type
     Point = record
         x: Float64;
         y: Float64;
-    end;
+    end record;
 
     // Composition: Rectangle encapsulates a Point for its origin
     Rectangle = record
         origin: Point;
         width: Float64;
         height: Float64;
-    end;
+    end record;
 ```
 
 ### Positional Constructors
@@ -83,7 +83,7 @@ module shapes;
 type
     Circle = record
         radius: Float64;
-    end;
+    end record;
 
 // Read-Only Method: Takes an immutable borrow of self
 function Area(borrow self: Circle) return Float64 is
@@ -142,19 +142,19 @@ type
     Engine = record
         horsepower: Int32;
         is_running: Bool;
-    end;
+    end record;
 
     GPS = record
         latitude: Float64;
         longitude: Float64;
-    end;
+    end record;
 
     // Car is composed of an Engine and a GPS unit
     Car = record
         model: String;
         engine: Engine;
         navigation: GPS;
-    end;
+    end record;
 
 procedure Start(mut borrow self: Engine) is
 begin
@@ -189,7 +189,7 @@ type
         id: Int64;
         owner: String;
         balance: Float64;
-    end;
+    end record;
 ```
 
 The compiler synthesizes:

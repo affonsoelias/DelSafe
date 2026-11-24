@@ -104,9 +104,9 @@ constructor EAetherBorrowError.Create(const ACode, AMsg: string; ALine, ACol: In
 var
   FullMsg: string;
 begin
-  FullMsg := Format('[Erro de Posse %s em %d:%d]: %s', [ACode, ALine, ACol, AMsg]);
+  FullMsg := Format('[Ownership Error %s at %d:%d]: %s', [ACode, ALine, ACol, AMsg]);
   if AMovedLine > 0 then
-    FullMsg := FullMsg + LineEnding + Format('  --> Nota: O valor foi movido anteriormente na linha %d:%d atraves de "take".', [AMovedLine, AMovedCol]);
+    FullMsg := FullMsg + LineEnding + Format('  --> Note: Value was previously moved at line %d:%d via "take".', [AMovedLine, AMovedCol]);
   inherited Create(FullMsg);
   Code := ACode;
   Line := ALine;
@@ -257,7 +257,7 @@ begin
   if Assigned(FCurrentScope) then
   begin
     Old := FCurrentScope;
-    // Remove quaisquer borrows pendentes pertencentes a variaveis deste escopo
+    // Remove any pending borrows belonging to variables in this scope
     NewLen := 0;
     for I := 0 to High(FBorrowOps) do
     begin
@@ -554,7 +554,7 @@ var
 begin
   if not Assigned(Expr) then Exit;
 
-  // Identificador simples (variavel)
+  // Simple identifier (variable)
   if Expr is TASTIdentifierExpr then
   begin
     Id := TASTIdentifierExpr(Expr);
@@ -562,42 +562,42 @@ begin
 
     if Assigned(VarInfo) then
     begin
-      // Se for primitivo (Copy trait), nunca e movido, mas mut/shared borrow ainda checa aliasing!
+      // Primitives (Copy trait) are never moved, but mut/shared borrow still checks aliasing
       if VarInfo.IsPrimitive then
       begin
         if Access = accBorrowMut then
         begin
           if VarInfo.State = vsBorrowedMut then
-            Error('E0499', Format('Nao e possivel emprestar "%s" como mutavel mais de uma vez ao mesmo tempo', [VarInfo.Name]), Id.Line, Id.Col);
+            Error('E0499', Format('Cannot borrow "%s" as mutable more than once at a time', [VarInfo.Name]), Id.Line, Id.Col);
           if VarInfo.SharedBorrowCount > 0 then
-            Error('E0502', Format('Nao e possivel emprestar "%s" como mutavel pois ja existem emprestimos de leitura ativos', [VarInfo.Name]), Id.Line, Id.Col);
+            Error('E0502', Format('Cannot borrow "%s" as mutable because it is already borrowed as immutable', [VarInfo.Name]), Id.Line, Id.Col);
           VarInfo.State := vsBorrowedMut;
           PushBorrowOp(VarInfo, accBorrowMut, '');
         end
         else if Access = accBorrowShared then
         begin
           if VarInfo.State = vsBorrowedMut then
-            Error('E0502', Format('Nao e possivel emprestar "%s" para leitura pois ja existe um emprestimo mutavel ativo', [VarInfo.Name]), Id.Line, Id.Col);
+            Error('E0502', Format('Cannot borrow "%s" as immutable because it is already borrowed as mutable', [VarInfo.Name]), Id.Line, Id.Col);
           Inc(VarInfo.SharedBorrowCount);
           PushBorrowOp(VarInfo, accBorrowShared, '');
         end;
         Exit;
       end;
 
-      // Se a variavel (ou algum campo nao primitivo dela) ja foi MOVIDA, acusar erro E0382!
+      // If the variable (or any non-primitive field of it) was already MOVED, report error E0382
       if (VarInfo.State = vsMoved) or (VarInfo.MovedFields.Count > 0) then
       begin
-        Error('E0382', Format('Uso de variavel movida: "%s"', [VarInfo.Name]),
+        Error('E0382', Format('Use of moved value: "%s"', [VarInfo.Name]),
           Id.Line, Id.Col, VarInfo.MovedLine, VarInfo.MovedCol);
       end;
 
-      // Executa a transicao de estado conforme o acesso
+      // Perform state transition according to access kind
       case Access of
         accMove:
           begin
             if (VarInfo.State = vsBorrowedMut) or (VarInfo.SharedBorrowCount > 0) or
                (VarInfo.SharedBorrowFields.Count > 0) or (VarInfo.MutBorrowFields.Count > 0) then
-              Error('E0505', Format('Nao e possivel mover "%s" enquanto ainda estiver emprestada', [VarInfo.Name]), Id.Line, Id.Col);
+              Error('E0505', Format('Cannot move out of "%s" because it is currently borrowed', [VarInfo.Name]), Id.Line, Id.Col);
             VarInfo.State := vsMoved;
             VarInfo.MovedLine := Id.Line;
             VarInfo.MovedCol := Id.Col;
@@ -605,29 +605,29 @@ begin
         accBorrowShared:
           begin
             if (VarInfo.State = vsBorrowedMut) or (VarInfo.MutBorrowFields.Count > 0) then
-              Error('E0502', Format('Nao e possivel emprestar "%s" para leitura pois ja existe um emprestimo mutavel ativo', [VarInfo.Name]), Id.Line, Id.Col);
+              Error('E0502', Format('Cannot borrow "%s" as immutable because it is already borrowed as mutable', [VarInfo.Name]), Id.Line, Id.Col);
             Inc(VarInfo.SharedBorrowCount);
             PushBorrowOp(VarInfo, accBorrowShared, '');
           end;
         accBorrowMut:
           begin
             if (VarInfo.State = vsBorrowedMut) or (VarInfo.MutBorrowFields.Count > 0) then
-              Error('E0499', Format('Nao e possivel emprestar "%s" como mutavel mais de uma vez ao mesmo tempo', [VarInfo.Name]), Id.Line, Id.Col);
+              Error('E0499', Format('Cannot borrow "%s" as mutable more than once at a time', [VarInfo.Name]), Id.Line, Id.Col);
             if (VarInfo.SharedBorrowCount > 0) or (VarInfo.SharedBorrowFields.Count > 0) then
-              Error('E0502', Format('Nao e possivel emprestar "%s" como mutavel pois ja existem emprestimos de leitura ativos', [VarInfo.Name]), Id.Line, Id.Col);
+              Error('E0502', Format('Cannot borrow "%s" as mutable because it is already borrowed as immutable', [VarInfo.Name]), Id.Line, Id.Col);
             VarInfo.State := vsBorrowedMut;
             PushBorrowOp(VarInfo, accBorrowMut, '');
           end;
         accRead:
           begin
-            // Leitura normal
+            // Plain read
           end;
       end;
     end;
     Exit;
   end;
 
-  // Acesso a membro: obj.campo (com rastreamento disjunto de campos)
+  // Member access: obj.field (with disjoint field tracking)
   if Expr is TASTMemberAccessExpr then
   begin
     MemAcc := TASTMemberAccessExpr(Expr);
@@ -637,10 +637,10 @@ begin
       if Assigned(VarInfo) then
       begin
         if VarInfo.State = vsMoved then
-          Error('E0382', Format('Uso de campo "%s.%s" apos movimento da variavel "%s"', [VarInfo.Name, FieldPath, VarInfo.Name]),
+          Error('E0382', Format('Use of field "%s.%s" after move of variable "%s"', [VarInfo.Name, FieldPath, VarInfo.Name]),
             MemAcc.Line, MemAcc.Col, VarInfo.MovedLine, VarInfo.MovedCol);
         if HasFieldConflict(VarInfo.MovedFields, FieldPath) then
-          Error('E0382', Format('Uso de campo ja movido: "%s.%s"', [VarInfo.Name, FieldPath]),
+          Error('E0382', Format('Use of moved field: "%s.%s"', [VarInfo.Name, FieldPath]),
             MemAcc.Line, MemAcc.Col, VarInfo.MovedLine, VarInfo.MovedCol);
 
         case Access of
@@ -649,7 +649,7 @@ begin
               if (VarInfo.State = vsBorrowedMut) or (VarInfo.SharedBorrowCount > 0) or
                  HasFieldConflict(VarInfo.MutBorrowFields, FieldPath) or
                  HasFieldConflict(VarInfo.SharedBorrowFields, FieldPath) then
-                Error('E0505', Format('Nao e possivel mover "%s.%s" enquanto houver emprestimo ativo', [VarInfo.Name, FieldPath]), MemAcc.Line, MemAcc.Col);
+                Error('E0505', Format('Cannot move out of "%s.%s" because it is currently borrowed', [VarInfo.Name, FieldPath]), MemAcc.Line, MemAcc.Col);
               FieldType := GetFieldType(VarInfo.TypeName, FieldPath);
               if (FieldType <> '') and (not IsPrimitiveType(FieldType)) then
               begin
@@ -664,23 +664,23 @@ begin
           accBorrowShared:
             begin
               if (VarInfo.State = vsBorrowedMut) or HasFieldConflict(VarInfo.MutBorrowFields, FieldPath) then
-                Error('E0502', Format('Nao e possivel emprestar "%s.%s" para leitura pois conflita com emprestimo mutavel ativo', [VarInfo.Name, FieldPath]), MemAcc.Line, MemAcc.Col);
+                Error('E0502', Format('Cannot borrow "%s.%s" as immutable because it conflicts with an active mutable borrow', [VarInfo.Name, FieldPath]), MemAcc.Line, MemAcc.Col);
               VarInfo.SharedBorrowFields.Add(FieldPath);
               PushBorrowOp(VarInfo, accBorrowShared, FieldPath);
             end;
           accBorrowMut:
             begin
               if (VarInfo.State = vsBorrowedMut) or HasFieldConflict(VarInfo.MutBorrowFields, FieldPath) then
-                Error('E0499', Format('Nao e possivel emprestar "%s.%s" como mutavel mais de uma vez ao mesmo tempo', [VarInfo.Name, FieldPath]), MemAcc.Line, MemAcc.Col);
+                Error('E0499', Format('Cannot borrow "%s.%s" as mutable more than once at a time', [VarInfo.Name, FieldPath]), MemAcc.Line, MemAcc.Col);
               if (VarInfo.SharedBorrowCount > 0) or HasFieldConflict(VarInfo.SharedBorrowFields, FieldPath) then
-                Error('E0502', Format('Nao e possivel emprestar "%s.%s" como mutavel pois ja existe emprestimo de leitura conflitante ativo', [VarInfo.Name, FieldPath]), MemAcc.Line, MemAcc.Col);
+                Error('E0502', Format('Cannot borrow "%s.%s" as mutable because it conflicts with an active immutable borrow', [VarInfo.Name, FieldPath]), MemAcc.Line, MemAcc.Col);
               VarInfo.MutBorrowFields.Add(FieldPath);
               PushBorrowOp(VarInfo, accBorrowMut, FieldPath);
             end;
           accRead:
             begin
               if (VarInfo.State = vsBorrowedMut) or HasFieldConflict(VarInfo.MutBorrowFields, FieldPath) then
-                Error('E0502', Format('Nao e possivel ler "%s.%s" enquanto houver emprestimo mutavel ativo', [VarInfo.Name, FieldPath]), MemAcc.Line, MemAcc.Col);
+                Error('E0502', Format('Cannot read "%s.%s" while a mutable borrow is active', [VarInfo.Name, FieldPath]), MemAcc.Line, MemAcc.Col);
             end;
         end;
         Exit;
@@ -690,7 +690,7 @@ begin
     Exit;
   end;
 
-  // Chamada de Funcao
+  // Function Call
   if Expr is TASTCallExpr then
   begin
     Call := TASTCallExpr(Expr);
@@ -707,7 +707,7 @@ begin
     Exit;
   end;
 
-  // Operacao Binaria
+  // Binary Operation
   if Expr is TASTBinaryExpr then
   begin
     Bin := TASTBinaryExpr(Expr);
@@ -716,7 +716,7 @@ begin
     Exit;
   end;
 
-  // Operacao Unaria
+  // Unary Operation
   if Expr is TASTUnaryExpr then
   begin
     Un := TASTUnaryExpr(Expr);
@@ -724,7 +724,7 @@ begin
     Exit;
   end;
 
-  // Await e Spawn
+  // Await and Spawn
   if Expr is TASTAwaitExpr then
   begin
     CheckExpr(TASTAwaitExpr(Expr).Expr, accRead);
@@ -736,7 +736,7 @@ begin
     Exit;
   end;
 
-  // Indexacao de Array
+  // Array Indexing
   if Expr is TASTIndexExpr then
   begin
     CheckExpr(TASTIndexExpr(Expr).Target, Access);
@@ -745,7 +745,7 @@ begin
     Exit;
   end;
 
-  // Literal de Conjunto
+  // Set Literal
   if Expr is TASTSetLiteralExpr then
   begin
     for I := 0 to TASTSetLiteralExpr(Expr).Elements.Count - 1 do
@@ -753,7 +753,7 @@ begin
     Exit;
   end;
 
-  // Literal de Mapa
+  // Map Literal
   if Expr is TASTMapLiteralExpr then
   begin
     for I := 0 to TASTMapLiteralExpr(Expr).Keys.Count - 1 do
@@ -835,7 +835,7 @@ begin
   begin
     Assign := TASTAssignStmt(Stmt);
     CheckExpr(Assign.Expr, accRead);
-    // Atribuicao a uma variavel ou campo reinicializa a posse se antes estava movida
+    // Assigning to a variable or field reinitializes ownership if previously moved
     if Assign.Target is TASTIdentifierExpr then
     begin
       VarInfo := FCurrentScope.Resolve(TASTIdentifierExpr(Assign.Target).Name);
@@ -994,7 +994,7 @@ begin
   end
   else if (Stmt is TASTBreakStmt) or (Stmt is TASTContinueStmt) then
   begin
-    // Controle de fluxo de laco: nenhuma transicao de borrow
+    // Loop control flow: no borrow state transition
   end
   else if Stmt is TASTReturnStmt then
   begin
@@ -1004,7 +1004,7 @@ begin
   end
   else if Stmt is TASTAsmStmt then
   begin
-    // Bloco assembly: instrucoes de baixo nivel aceitas sem violacao de borrow
+    // Assembly block: low-level instructions accepted without borrow violation
   end
   else if Stmt is TASTDeferStmt then
   begin
@@ -1075,18 +1075,18 @@ begin
   FCurrentGenericParam := Func.GenericParam;
   EnterScope;
   try
-    // Parametros da funcao
+    // Function parameters
     for I := 0 to Func.Params.Count - 1 do
     begin
       Param := TASTParam(Func.Params[I]);
       FCurrentScope.AddVar(Param.Name, Param.TypeName, vsOwned, Param.Line, Param.Col, IsPrimitiveType(Param.TypeName));
     end;
 
-    // Se for extern, nao possui corpo de instrucoes
+    // Extern functions have no statement body
     if Func.IsExtern then
       Exit;
 
-    // Variaveis locais
+    // Local variables
     for I := 0 to Func.LocalVars.Count - 1 do
     begin
       VarDecl := TASTVarDecl(Func.LocalVars[I]);
@@ -1095,7 +1095,7 @@ begin
       FCurrentScope.AddVar(VarDecl.Name, VarDecl.TypeName, vsOwned, VarDecl.Line, VarDecl.Col, IsPrimitiveType(VarDecl.TypeName));
     end;
 
-    // Instrucoes do corpo
+    // Body statements
     for I := 0 to Func.Body.Count - 1 do
       CheckStmt(TASTStmt(Func.Body[I]));
   finally

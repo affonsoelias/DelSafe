@@ -19,7 +19,7 @@ type
     Col: Integer;
     IsMutable: Boolean;
     Ownership: TOwnershipKind;
-    Node: TASTNode; // Referencia opcional ao no da AST (ex: TASTFunction, TASTEnumDecl)
+    Node: TASTNode; // Optional reference to AST node (e.g., TASTFunction, TASTEnumDecl)
     IsPublic: Boolean;
     SourceModule: string;
     constructor Create(const AName: string; AKind: TSymbolKind; const AType: string;
@@ -121,7 +121,7 @@ var
 begin
   Idx := FindSymbolIndex(Sym.Name);
   if Idx <> -1 then
-    raise Exception.CreateFmt('Simbolo "%s" ja definido neste escopo na linha %d', [Sym.Name, TSymbol(FSymbols[Idx]).Line]);
+    raise Exception.CreateFmt('Symbol "%s" already defined in this scope at line %d', [Sym.Name, TSymbol(FSymbols[Idx]).Line]);
   FSymbols.Add(Sym);
 end;
 
@@ -184,7 +184,7 @@ end;
 
 destructor TSymbolTable.Destroy;
 begin
-  // Como os escopos sao encadeados, desalocamos a partir do global ou atual
+  // Since scopes are chained, free from global or current scope
   while FCurrentScope <> FGlobalScope do
     LeaveScope;
   FGlobalScope.Free;
@@ -197,7 +197,7 @@ procedure TSymbolTable.InitBuiltinTypes;
     FGlobalScope.Define(TSymbol.Create(TypeName, skType, TypeName, 0, 0));
   end;
 begin
-  // Tipos Primitivos Inteiros
+  // Integer Primitive Types
   AddType('Int8');
   AddType('Int16');
   AddType('Int32');
@@ -207,18 +207,18 @@ begin
   AddType('UInt32');
   AddType('UInt64');
 
-  // Ponto Flutuante
+  // Floating-Point Types
   AddType('Float32');
   AddType('Float64');
 
-  // Booleano, Caractere, String e Ponteiro
+  // Boolean, Char, String, and Pointer
   AddType('Bool');
   AddType('Char');
   AddType('String');
   AddType('Void');
   AddType('Pointer');
 
-  // Funcoes nativas embutidas
+  // Built-in native functions
   FGlobalScope.Define(TSymbol.Create('PrintLn', skFunction, 'Void', 0, 0));
   FGlobalScope.Define(TSymbol.Create('Print', skFunction, 'Void', 0, 0));
   FGlobalScope.Define(TSymbol.Create('Ok', skFunction, 'Result', 0, 0));
@@ -309,7 +309,7 @@ begin
   FGlobalScope.Define(TSymbol.Create('ParamStr', skFunction, 'String', 0, 0));
   FGlobalScope.Define(TSymbol.Create('Assert', skFunction, 'Void', 0, 0));
 
-  // Funcoes nativas de Sockets (SO / Rede) e Liberacao de Memoria (Free / Dispose)
+  // Native OS/Network Socket functions and Memory Free/Dispose
   FGlobalScope.Define(TSymbol.Create('Free', skFunction, 'Void', 0, 0));
   FGlobalScope.Define(TSymbol.Create('Dispose', skFunction, 'Void', 0, 0));
   FGlobalScope.Define(TSymbol.Create('SocketCreate', skFunction, 'Int32', 0, 0));

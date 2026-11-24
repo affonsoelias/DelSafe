@@ -40,7 +40,7 @@ type
     Memory: TProfileMemory;
   end;
 
-  { TAetherProfiler: Motor Canônico de Profiling e Auditoria de Memória do Aether }
+  { TAetherProfiler: Canonical Profiling and Memory Audit Engine for Aether }
   TAetherProfiler = class
   private
     class function ExecuteWithCapture(const ExePath, Params: string; var OutputLog: string): Integer;
@@ -150,7 +150,7 @@ begin
     begin
       Line := Lines[I];
 
-      // Exemplo: "45 memory blocks allocated : 1234/1234"
+      // Example: "45 memory blocks allocated : 1234/1234"
       PosBlocks := Pos('memory blocks allocated', Line);
       if PosBlocks > 0 then
       begin
@@ -159,7 +159,7 @@ begin
         Result := True;
       end;
 
-      // Exemplo: "45 memory blocks freed     : 1234/1234"
+      // Example: "45 memory blocks freed     : 1234/1234"
       PosFreed := Pos('memory blocks freed', Line);
       if PosFreed > 0 then
       begin
@@ -167,7 +167,7 @@ begin
         Mem.FreedBlocks := StrToInt64Def(ValStr, 0);
       end;
 
-      // Exemplo: "0 unfreed memory blocks : 0" ou "2 unfreed memory blocks : 64"
+      // Example: "0 unfreed memory blocks : 0" or "2 unfreed memory blocks : 64"
       PosUnfreed := Pos('unfreed memory blocks', Line);
       if PosUnfreed > 0 then
       begin
@@ -180,7 +180,7 @@ begin
         end;
       end;
 
-      // Exemplo: "True heap size : 196608"
+      // Example: "True heap size : 196608"
       PosHeapSize := Pos('True heap size', Line);
       if PosHeapSize > 0 then
       begin
@@ -190,7 +190,7 @@ begin
         Mem.TrueHeapSize := StrToInt64Def(ValStr, 0);
       end;
 
-      // Exemplo: "True free heap : 196608"
+      // Example: "True free heap : 196608"
       PosFreeHeap := Pos('True free heap', Line);
       if PosFreeHeap > 0 then
       begin
@@ -198,7 +198,7 @@ begin
         Mem.TrueFreeHeap := StrToInt64Def(ValStr, 0);
       end;
 
-      // Captura de Call trace de leaks
+      // Capture leak call trace
       if Mem.HasLeaks and (Pos('Call trace', Line) > 0) then
       begin
         Mem.LeakTrace := Mem.LeakTrace + Line + LineEnding;
@@ -207,7 +207,7 @@ begin
 
     if not Result then
     begin
-      // Se nao encontrou HeapTrc explicito, valida pelo status de saida do processo
+      // If explicit HeapTrc output was not found, fall back to process exit code
       Mem.Status := 'NO_LEAKS_DETECTED';
     end;
   finally
@@ -254,7 +254,7 @@ begin
 
   if not FileExists(SourceFile) then
   begin
-    Report.ErrorMessage := 'Arquivo fonte nao encontrado: ' + SourceFile;
+    Report.ErrorMessage := 'Source file not found: ' + SourceFile;
     Exit(False);
   end;
 
@@ -263,7 +263,7 @@ begin
   GenDir := BaseDir + PathDelim + 'generated' + PathDelim + 'profile';
   ForceDirectories(GenDir);
 
-  // 1. Carrega fonte e compila AST
+  // 1. Load source and parse AST
   Lines := TStringList.Create;
   try
     Lines.LoadFromFile(SourceFile);
@@ -285,7 +285,7 @@ begin
           except
             on E: Exception do
             begin
-              Report.ErrorMessage := 'Erro na verificacao de tipos: ' + E.Message;
+              Report.ErrorMessage := 'Type checking error: ' + E.Message;
               Exit(False);
             end;
           end;
@@ -297,7 +297,7 @@ begin
             except
               on E: Exception do
               begin
-                Report.ErrorMessage := 'Erro na verificacao de posse: ' + E.Message;
+                Report.ErrorMessage := 'Ownership check error: ' + E.Message;
                 Exit(False);
               end;
             end;
@@ -308,7 +308,7 @@ begin
           TypeChecker.Free;
         end;
 
-        // 2. Transpilacao e Compilacao com Instrumentacao de Memoria
+        // 2. Transpilation and Compilation with Memory Instrumentation
         if TargetPascal then
         begin
           IntermediateFile := GenDir + PathDelim + ChangeFileExt(ExtractFileName(SourceFile), '.pas');
@@ -332,24 +332,24 @@ begin
           FPCInfo := DetectToolchain;
           if not FPCInfo.FPCFound then
           begin
-            Report.ErrorMessage := 'Compilador Free Pascal (fpc) nao encontrado.';
+            Report.ErrorMessage := 'Free Pascal compiler (fpc) not found.';
             Exit(False);
           end;
 
-          // Compilacao Free Pascal com HeapTrc (-gh) e informacoes de linha (-gl)
+          // Free Pascal compilation with HeapTrc (-gh) and line info (-gl)
           CompileParams := Format('-MObjFPC -Sc -O2 -gh -gl -FE"%s" -o"%s" "%s"',
             [ExtractFileDir(FinalExe), ExtractFileName(FinalExe), IntermediateFile]);
 
           CompileCode := RunCommandCapture(FPCInfo.FPCPath, CompileParams, '', ToolLog);
           if (CompileCode <> 0) or not FileExists(FinalExe) then
           begin
-            Report.ErrorMessage := 'Falha ao compilar com FPC e HeapTrc: ' + ToolLog;
+            Report.ErrorMessage := 'Failed to compile with FPC and HeapTrc: ' + ToolLog;
             Exit(False);
           end;
         end
         else
         begin
-          // Alvo C99
+          // C99 target
           IntermediateFile := GenDir + PathDelim + ChangeFileExt(ExtractFileName(SourceFile), '.c');
           FinalExe := GenDir + PathDelim + ChangeFileExt(ExtractFileName(SourceFile), '.exe');
 
@@ -370,7 +370,7 @@ begin
 
           if not CompileWithGCC(IntermediateFile, FinalExe, ToolLog, False) then
           begin
-            Report.ErrorMessage := 'Falha ao compilar com GCC: ' + ToolLog;
+            Report.ErrorMessage := 'Failed to compile with GCC: ' + ToolLog;
             Exit(False);
           end;
         end;
@@ -385,7 +385,7 @@ begin
     Lexer.Free;
   end;
 
-  // 3. Execucao de Profiling com Medicao de Tempo e Captura de HeapTrc
+  // 3. Execute Profiling with Timing and HeapTrc Capture
   TotalDuration := 0;
   MinDuration := 999999999.0;
   MaxDuration := 0;
@@ -408,7 +408,7 @@ begin
 
     if ExecCode <> 0 then
     begin
-      Report.ErrorMessage := Format('Executavel falhou com codigo de saida %d na execucao %d.', [ExecCode, RunIdx]);
+      Report.ErrorMessage := Format('Executable failed with exit code %d on run %d.', [ExecCode, RunIdx]);
       Exit(False);
     end;
   end;
@@ -418,7 +418,7 @@ begin
   Report.Timing.MinMs := MinDuration;
   Report.Timing.MaxMs := MaxDuration;
 
-  // 4. Analise de Memoria e Deteccao de Leaks
+  // 4. Memory Analysis and Leak Detection
   ParseHeapTrc(LastAuditOutput, Report.Memory);
 
   Report.Success := True;
@@ -431,44 +431,44 @@ var
 begin
   if not Report.Success then
   begin
-    Result := Format('ERRO NO PROFILING: %s', [Report.ErrorMessage]);
+    Result := Format('PROFILING ERROR: %s', [Report.ErrorMessage]);
     Exit;
   end;
 
   if Report.Memory.HasLeaks then
-    StatusBadge := '[FALHA - VAZAMENTO DE MEMORIA DETECTADO]'
+    StatusBadge := '[FAIL - MEMORY LEAK DETECTED]'
   else
-    StatusBadge := '[100% LIMPO - ZERO LEAKS]';
+    StatusBadge := '[100% CLEAN - ZERO LEAKS]';
 
   Result := '========================================================' + LineEnding;
   Result := Result + '  Aether Profiler & Memory Audit (aetherc profile)     ' + LineEnding;
-  Result := Result + Format('  Target: %s | Iteracoes: %d' + LineEnding, [Report.Backend, Report.Timing.Runs]);
+  Result := Result + Format('  Target: %s | Runs: %d' + LineEnding, [Report.Backend, Report.Timing.Runs]);
   Result := Result + '========================================================' + LineEnding;
-  Result := Result + Format('  Arquivo Alvo: %s' + LineEnding + LineEnding, [Report.FileName]);
+  Result := Result + Format('  Target File:  %s' + LineEnding + LineEnding, [Report.FileName]);
 
-  Result := Result + '  [TEMPO DE EXECUCAO & LATENCIA]' + LineEnding;
-  Result := Result + Format('    Tempo Total:    %.2f ms' + LineEnding, [Report.Timing.TotalMs]);
-  Result := Result + Format('    Tempo Medio:    %.2f ms' + LineEnding, [Report.Timing.AvgMs]);
+  Result := Result + '  [EXECUTION TIME & LATENCY]' + LineEnding;
+  Result := Result + Format('    Total Time:     %.2f ms' + LineEnding, [Report.Timing.TotalMs]);
+  Result := Result + Format('    Average Time:   %.2f ms' + LineEnding, [Report.Timing.AvgMs]);
   Result := Result + Format('    Min / Max:      %.2f ms / %.2f ms' + LineEnding + LineEnding, [Report.Timing.MinMs, Report.Timing.MaxMs]);
 
-  Result := Result + '  [AUDITORIA DE MEMORIA & HEAP ANALYSIS]' + LineEnding;
+  Result := Result + '  [MEMORY AUDIT & HEAP ANALYSIS]' + LineEnding;
   if Report.Memory.AllocatedBlocks > 0 then
   begin
-    Result := Result + Format('    Blocos Alocados:    %d blocos' + LineEnding, [Report.Memory.AllocatedBlocks]);
-    Result := Result + Format('    Blocos Liberados:   %d blocos' + LineEnding, [Report.Memory.FreedBlocks]);
-    Result := Result + Format('    Blocos Nao Pagos:   %d blocos' + LineEnding, [Report.Memory.UnfreedBlocks]);
-    Result := Result + Format('    Heap Total Alocado: %d bytes (%.2f KB)' + LineEnding, [Report.Memory.TrueHeapSize, Report.Memory.TrueHeapSize / 1024.0]);
+    Result := Result + Format('    Allocated Blocks:   %d blocks' + LineEnding, [Report.Memory.AllocatedBlocks]);
+    Result := Result + Format('    Freed Blocks:       %d blocks' + LineEnding, [Report.Memory.FreedBlocks]);
+    Result := Result + Format('    Unfreed Blocks:     %d blocks' + LineEnding, [Report.Memory.UnfreedBlocks]);
+    Result := Result + Format('    Total Heap Size:    %d bytes (%.2f KB)' + LineEnding, [Report.Memory.TrueHeapSize, Report.Memory.TrueHeapSize / 1024.0]);
   end
   else
   begin
-    Result := Result + '    Heap Engine:        Rastreado via Safe Stack & Runtime do Sistema' + LineEnding;
+    Result := Result + '    Heap Engine:        Tracked via Safe Stack & System Runtime' + LineEnding;
   end;
 
-  Result := Result + Format('    Status de Seguranca: %s' + LineEnding, [StatusBadge]);
+  Result := Result + Format('    Safety Status:      %s' + LineEnding, [StatusBadge]);
 
   if Report.Memory.HasLeaks and (Report.Memory.LeakTrace <> '') then
   begin
-    Result := Result + LineEnding + '  [CALL TRACE DO VAZAMENTO]:' + LineEnding;
+    Result := Result + LineEnding + '  [LEAK CALL TRACE]:' + LineEnding;
     Result := Result + '    ' + Report.Memory.LeakTrace + LineEnding;
   end;
 

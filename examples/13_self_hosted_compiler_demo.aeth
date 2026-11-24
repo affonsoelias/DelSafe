@@ -3,17 +3,17 @@ module self_hosted_compiler_demo;
 program Main;
 var
     x: Int32;
-    contador: Int32;
+    counter: Int32;
 begin
     x := 10;
-    contador := 0;
-    PrintLn("Inicio do teste do compilador auto-hospedado");
+    counter := 0;
+    PrintLn("Starting self-hosted compiler test");
     if x = 10 then
-        PrintLn("Condicional x = 10 avaliada com sucesso!");
-    end;
-    while contador < 3 do
-        PrintLn("Iteracao no laco while");
-        contador := contador + 1;
-    end;
-    PrintLn("Fim do teste!");
+        PrintLn("Conditional x = 10 evaluated successfully!");
+    end if;
+    while counter < 3 do
+        PrintLn("While loop iteration");
+        counter := counter + 1;
+    end while;
+    PrintLn("End of test!");
 end self_hosted_compiler_demo.

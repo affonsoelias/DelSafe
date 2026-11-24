@@ -1,46 +1,46 @@
-# Extensão Oficial da Linguagem Aether para VS Code
+# Official Aether Language Extension for VS Code
 
-Suporte inteligente completo para o ecossistema da linguagem de programação **Aether** (`aetherc`).
-
----
-
-## 🚀 Funcionalidades
-
-1. **Destaque Sintático Avançado**:
-   - Palavras-chave de controle de fluxo e contratos: `module`, `import`, `function`, `contract`, `require`, `ensure`, `type`, `record`, `enum`, `trait`, `impl`, `for`, `match`, `case`.
-   - Semântica de posse e concorrência: `borrow`, `take`, `mut borrow`, `mut`, `own`.
-   - Tipos nativos e mônades: `Int8`..`Int64`, `UInt8`..`UInt64`, `Float32`, `Float64`, `Bool`, `String`, `Void`, `Result<T, E>`, `Option<T>`, `Box<T>`.
-
-2. **Language Server Protocol (LSP Integrado)**:
-   - Conexão nativa com `aetherc lsp`.
-   - **Autocompletion**: Palavras-chave, tipos primitivos, mônades, funções com assinaturas e métodos de traits/UFCS.
-   - **Hover**: Tipagem deduzida, exibição de contratos e documentação de semântica de memória.
-   - **Go-to-Definition**: Navegação rápida para declarações de funções, records, enums e traits.
-   - **Diagnósticos em Tempo Real**: Erros de sintaxe e violações do Borrow Checker publicados instantaneamente.
-
-3. **Snippets Úteis**:
-   - `module`: Estrutura de módulo executável.
-   - `fn`: Função com cláusulas contratuais (`require` / `ensure`).
-   - `trait`: Interface trait.
-   - `impl`: Implementação de trait para tipo.
-   - `record`: Declaração de struct record.
-   - `enum`: Tipo algébrico enum.
-   - `match`: Casamento de padrão em Result.
-   - `test`: Função de teste unitário.
-
-4. **Comandos de Build e Testes**:
-   - `Aether: Compilar Arquivo Atual (Backend Pascal)`
-   - `Aether: Compilar Arquivo Atual (Backend C99 / GCC)`
-   - `Aether: Executar Testes Unitarios (aetherc test)`
-   - `Aether: Reiniciar Servidor de Linguagem (LSP)`
+Full smart language support for the **Aether** programming language (`aetherc`).
 
 ---
 
-## 🛠️ Instalação Local
+## Features
 
-Para testar e usar no VS Code local:
+1. **Rich Syntax Highlighting**:
+   - Control flow and contract keywords: `module`, `import`, `function`, `procedure`, `contract`, `require`, `ensure`, `type`, `record`, `enum`, `trait`, `impl`, `for`, `match`, `case`.
+   - Ownership & concurrency semantics: `borrow`, `take`, `mut borrow`, `mut`, `own`, `async`, `await`, `spawn`.
+   - Built-in types and monads: `Int8`..`Int64`, `UInt8`..`UInt64`, `Float32`, `Float64`, `Bool`, `String`, `Void`, `Result<T, E>`, `Option<T>`, `Box<T>`.
 
-1. Copie a pasta `ide/vscode` para a pasta de extensões do seu VS Code:
-   - No Windows: `%USERPROFILE%\.vscode\extensions\aether-lang`
-2. Reinicie ou recarregue o Visual Studio Code (`Ctrl+Shift+P` -> `Developer: Reload Window`).
-3. Abra qualquer arquivo com extensão `.aeth`.
+2. **Language Server Protocol (Integrated LSP)**:
+   - Native connection to `aetherc lsp`.
+   - **Autocompletion**: Keywords, primitive types, monads, function signatures, and trait/UFCS methods.
+   - **Hover**: Inferred types, contracts, and ownership documentation.
+   - **Go-to-Definition**: Quick navigation to functions, records, enums, and traits.
+   - **Real-Time Diagnostics**: Syntax, type, and Borrow Checker errors reported live.
+
+3. **Useful Snippets**:
+   - `module`: Executable module scaffold.
+   - `fn`: Function with formal contracts (`require` / `ensure`).
+   - `trait`: Trait interface definition.
+   - `impl`: Trait implementation for a type.
+   - `record`: Record struct declaration.
+   - `enum`: Algebraic enum declaration.
+   - `match`: Exhaustive `Result` pattern matching.
+   - `test`: Unit test function.
+
+4. **Build and Test Commands**:
+   - `Aether: Compile Current File (Pascal Backend)`
+   - `Aether: Compile Current File (C99 / GCC Backend)`
+   - `Aether: Run Unit Tests (aetherc test)`
+   - `Aether: Restart Language Server (LSP)`
+
+---
+
+## Local Installation
+
+To test and use locally in VS Code:
+
+1. Copy the `ide/vscode` folder into your VS Code extensions directory:
+   - On Windows: `%USERPROFILE%\.vscode\extensions\aether-lang`
+2. Restart or reload Visual Studio Code (`Ctrl+Shift+P` -> `Developer: Reload Window`).
+3. Open any file with the `.aeth` extension.

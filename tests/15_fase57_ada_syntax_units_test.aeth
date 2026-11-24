@@ -2,30 +2,30 @@ module Fase57AdaSyntaxUnitsTest;
 
 import lib.helper_fase57_unit as h57;
 
-procedure MarcarFlag(mut borrow flag: Int32) is
+procedure SetFlag(mut borrow flag: Int32) is
 begin
     if flag < 0 then
         return;
-    end;
+    end if;
     flag := flag + 1;
-end MarcarFlag;
+end SetFlag;
 
-procedure SemParens is
+procedure NoParens is
 begin
     return;
-end SemParens;
+end NoParens;
 
-procedure SomarEmOut(a, b: Int32; mut borrow saida: Int32) is
+procedure SumIntoOut(a, b: Int32; mut borrow out_val: Int32) is
 begin
-    saida := a + b;
-end SomarEmOut;
+    out_val := a + b;
+end SumIntoOut;
 
-function CalcularDobro(numero: Int32) return Int32 is
+function ComputeDouble(number: Int32) return Int32 is
 begin
-    return numero * 2;
-end CalcularDobro;
+    return number * 2;
+end ComputeDouble;
 
-function DividirSeguro(num, den: Int32) return Int32 is
+function SafeDivide(num, den: Int32) return Int32 is
 contract
     require
         den <> 0;
@@ -33,47 +33,47 @@ contract
         (result * den) <= num;
 begin
     return num / den;
-end DividirSeguro;
+end SafeDivide;
 
 program Main;
 var
-    p1, p2: h57.Ponto;
-    saida, flagVal: Int32;
+    p1, p2: h57.Point;
+    out_val, flagVal: Int32;
 begin
-    // 1. Initialization da Unit deve ter inicializado PublicCounter=100 e PrivateAccum=7
+    // 1. Unit initialization must have set PublicCounter=100 and PrivateAccum=7
     Assert(h57.BASE_MULTIPLIER = 10);
     Assert(h57.PublicCounter = 100);
-    Assert(h57.ObterEstado() = 107);
+    Assert(h57.GetState() = 107);
 
-    // 2. Procedures e mutacao de estado encapsulado na Unit
-    h57.IncrementarEstado(5);
+    // 2. Procedures and encapsulated state mutation in the Unit
+    h57.IncrementState(5);
     Assert(h57.PublicCounter = 105);
-    Assert(h57.ObterEstado() = 122);
+    Assert(h57.GetState() = 122);
 
-    h57.ResetarEstado();
+    h57.ResetState();
     Assert(h57.PublicCounter = 0);
-    Assert(h57.ObterEstado() = 0);
+    Assert(h57.GetState() = 0);
 
-    // 3. Contrato na interface (executado na implementacao) e parametros agrupados com borrow
-    Assert(h57.SomarIntervaloContrato(10, 15) = 25);
-    p1 := h57.Ponto(1, 2);
-    p2 := h57.Ponto(3, 4);
-    Assert(h57.SomaPontos(borrow p1, borrow p2) = 10);
+    // 3. Interface contract (executed in implementation) and grouped borrow parameters
+    Assert(h57.SumRangeContract(10, 15) = 25);
+    p1 := h57.Point(1, 2);
+    p2 := h57.Point(3, 4);
+    Assert(h57.SumPoints(borrow p1, borrow p2) = 10);
 
-    // 4. Procedures/Functions locais no estilo Ada (sem (), mut borrow agrupado, return vazio, contrato)
-    SemParens();
+    // 4. Local Ada-style Procedures/Functions (no (), grouped mut borrow, empty return, contract)
+    NoParens();
     flagVal := -3;
-    MarcarFlag(mut borrow flagVal);
+    SetFlag(mut borrow flagVal);
     Assert(flagVal = -3);
     flagVal := 4;
-    MarcarFlag(mut borrow flagVal);
+    SetFlag(mut borrow flagVal);
     Assert(flagVal = 5);
 
-    saida := 0;
-    SomarEmOut(17, 25, mut borrow saida);
-    Assert(saida = 42);
-    Assert(CalcularDobro(21) = 42);
-    Assert(DividirSeguro(42, 6) = 7);
+    out_val := 0;
+    SumIntoOut(17, 25, mut borrow out_val);
+    Assert(out_val = 42);
+    Assert(ComputeDouble(21) = 42);
+    Assert(SafeDivide(42, 6) = 7);
 
-    PrintLn("=== FASE 57 TEST PASSOU (SINTAXE ADA, OBJECT PASCAL UNITS, MODULE VARS, INIT/FINI) ===");
+    PrintLn("=== PHASE 57 TEST PASSED (ADA SYNTAX, OBJECT PASCAL UNITS, MODULE VARS, INIT/FINI) ===");
 end Fase57AdaSyntaxUnitsTest.

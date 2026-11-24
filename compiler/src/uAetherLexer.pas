@@ -23,6 +23,7 @@ type
     FLine: Integer;
     FCol: Integer;
     FCurrentDocComment: string;
+    FLastTokenKind: TTokenKind;
 
     function PeekChar(Offset: Integer = 0): Char;
     function ReadChar: Char;
@@ -47,7 +48,7 @@ implementation
 
 constructor EAetherLexerError.Create(const Msg: string; ALine, ACol: Integer);
 begin
-  inherited Create(Format('[Erro Lexico em %d:%d]: %s', [ALine, ACol, Msg]));
+  inherited Create(Format('[Lexical Error at %d:%d]: %s', [ALine, ACol, Msg]));
   Line := ALine;
   Col := ACol;
 end;
@@ -61,6 +62,7 @@ begin
   FLine := 1;
   FCol := 1;
   FCurrentDocComment := '';
+  FLastTokenKind := tokEOF;
 end;
 
 function TAetherLexer.ConsumeDocComment: string;
@@ -114,21 +116,21 @@ begin
   begin
     C := PeekChar;
 
-    // Espacos em branco, tabs e quebras de linha
+    // Whitespace, tabs, and newlines
     if C in [' ', #9, #10, #13] then
     begin
       ReadChar;
       Continue;
     end;
 
-    // Comentario de documentacao /// (tres barras, mas nao quatro)
+    // Documentation comment /// (three slashes, not four)
     if (C = '/') and (PeekChar(1) = '/') and (PeekChar(2) = '/') and (PeekChar(3) <> '/') then
     begin
-      ReadChar; // Consome primeiro /
-      ReadChar; // Consome segundo /
-      ReadChar; // Consome terceiro /
+      ReadChar; // Consume first /
+      ReadChar; // Consume second /
+      ReadChar; // Consume third /
       if (not IsEOF) and (PeekChar = ' ') then
-        ReadChar; // Consome espaco opcional apos ///
+        ReadChar; // Consume optional space after ///
       DocLine := '';
       while (not IsEOF) and (PeekChar <> #10) and (PeekChar <> #13) do
         DocLine := DocLine + ReadChar;
@@ -139,38 +141,38 @@ begin
       Continue;
     end;
 
-    // Comentario de linha //
+    // Line comment //
     if (C = '/') and (PeekChar(1) = '/') then
     begin
-      ReadChar; // Consome primeiro /
-      ReadChar; // Consome segundo /
+      ReadChar; // Consume first /
+      ReadChar; // Consume second /
       while (not IsEOF) and (PeekChar <> #10) do
         ReadChar;
       Continue;
     end;
 
-    // Comentario de bloco Pascal { ... }
+    // Pascal block comment { ... }
     if C = '{' then
     begin
-      ReadChar; // Consome {
+      ReadChar; // Consume {
       while (not IsEOF) and (PeekChar <> '}') do
         ReadChar;
       if not IsEOF then
-        ReadChar; // Consome }
+        ReadChar; // Consume }
       Continue;
     end;
 
-    // Comentario de bloco C /* ... */
+    // C-style block comment /* ... */
     if (C = '/') and (PeekChar(1) = '*') then
     begin
-      ReadChar; // Consome /
-      ReadChar; // Consome *
+      ReadChar; // Consume /
+      ReadChar; // Consume *
       while not IsEOF do
       begin
         if (PeekChar = '*') and (PeekChar(1) = '/') then
         begin
-          ReadChar; // Consome *
-          ReadChar; // Consome /
+          ReadChar; // Consume *
+          ReadChar; // Consume /
           Break;
         end;
         ReadChar;
@@ -204,7 +206,7 @@ begin
     Result := CreateToken(tokModAssign, 'mod=', StartLine, StartCol);
     Exit;
   end;
-  if Kind = tokAsm then
+  if (Kind = tokAsm) and (FLastTokenKind <> tokEnd) then
   begin
     Val := ScanAsmBlock;
     Result := CreateToken(tokAsm, Val, StartLine, StartCol);
@@ -259,7 +261,7 @@ begin
   Val := '';
   IsFloat := False;
 
-  // Hexadecimal estilo $FF ou 0x
+  // Hexadecimal literal ($FF or 0x style)
   if (PeekChar = '$') or ((PeekChar = '0') and (PeekChar(1) in ['x', 'X'])) then
   begin
     if PeekChar = '$' then
@@ -279,7 +281,7 @@ begin
     Exit;
   end;
 
-  // Binario estilo %1010 ou 0b
+  // Binary literal (%1010 or 0b style)
   if (PeekChar = '%') or ((PeekChar = '0') and (PeekChar(1) in ['b', 'B'])) then
   begin
     if PeekChar = '%' then
@@ -299,7 +301,7 @@ begin
     Exit;
   end;
 
-  // Decimal ou Float
+  // Decimal or Float
   while (not IsEOF) and (PeekChar in ['0'..'9', '_']) do
   begin
     C := ReadChar;
@@ -307,7 +309,7 @@ begin
       Val := Val + C;
   end;
 
-  // Ponto flutuante (cuidado com operador '..' de range se existir)
+  // Floating-point (be careful with '..' range operator if present)
   if (PeekChar = '.') and (PeekChar(1) in ['0'..'9']) then
   begin
     IsFloat := True;
@@ -336,20 +338,20 @@ begin
   StartCol := FCol;
   Val := '';
 
-  ReadChar; // Consome aspas duplas iniciais '"'
+  ReadChar; // Consume opening double quote '"'
 
   while not IsEOF do
   begin
     C := PeekChar;
     if C = '"' then
     begin
-      ReadChar; // Consome aspas duplas finais
+      ReadChar; // Consume closing double quote
       Result := CreateToken(tokStringLiteral, Val, StartLine, StartCol);
       Exit;
     end
     else if C = '\' then
     begin
-      ReadChar; // Consome '\'
+      ReadChar; // Consume '\'
       case PeekChar of
         'n': begin ReadChar; Val := Val + #10; end;
         'r': begin ReadChar; Val := Val + #13; end;
@@ -364,7 +366,7 @@ begin
     end
     else if C in [#10, #13] then
     begin
-      raise EAetherLexerError.Create('String nao finalizada antes da quebra de linha', StartLine, StartCol);
+      raise EAetherLexerError.Create('Unterminated string before newline', StartLine, StartCol);
     end
     else
     begin
@@ -372,7 +374,7 @@ begin
     end;
   end;
 
-  raise EAetherLexerError.Create('Fim de arquivo inesperado dentro de String literal', StartLine, StartCol);
+  raise EAetherLexerError.Create('Unexpected end of file inside string literal', StartLine, StartCol);
 end;
 
 function TAetherLexer.ScanCharLiteral: TToken;
@@ -383,14 +385,14 @@ begin
   StartLine := FLine;
   StartCol := FCol;
 
-  ReadChar; // Consome aspas simples iniciais "'"
+  ReadChar; // Consume opening single quote "'"
 
   if IsEOF then
-    raise EAetherLexerError.Create('Caractere literal nao finalizado', StartLine, StartCol);
+    raise EAetherLexerError.Create('Unterminated character literal', StartLine, StartCol);
 
   if PeekChar = '\' then
   begin
-    ReadChar; // Consome '\'
+    ReadChar; // Consume '\'
     case PeekChar of
       'n': begin ReadChar; CharVal := #10; end;
       'r': begin ReadChar; CharVal := #13; end;
@@ -409,9 +411,9 @@ begin
   end;
 
   if PeekChar <> '''' then
-    raise EAetherLexerError.Create('Esperado fechamento de aspas simples para Char', StartLine, StartCol);
+    raise EAetherLexerError.Create('Expected closing single quote for Char literal', StartLine, StartCol);
 
-  ReadChar; // Consome aspas simples finais
+  ReadChar; // Consume closing single quote
 
   Result := CreateToken(tokCharLiteral, CharVal, StartLine, StartCol);
 end;
@@ -431,14 +433,14 @@ begin
   StartCol := FCol;
   C := PeekChar;
 
-  // Letra ou _ -> Identificador ou Palavra-chave
+  // Letter or _ -> Identifier or Keyword
   if C in ['a'..'z', 'A'..'Z'] then
   begin
     Result := ScanIdentifierOrKeyword;
     Exit;
   end;
 
-  // Sublinhado: pode ser identificador ou tokUnderscore
+  // Underscore: can be an identifier or tokUnderscore
   if C = '_' then
   begin
     if PeekChar(1) in ['a'..'z', 'A'..'Z', '0'..'9', '_'] then
@@ -454,16 +456,16 @@ begin
     end;
   end;
 
-  // String interpolada $"..."
+  // Interpolated string $"..."
   if (C = '$') and (PeekChar(1) = '"') then
   begin
-    ReadChar; // Consome '$'
+    ReadChar; // Consume '$'
     Result := ScanString;
     Result.Kind := tokInterpStringLiteral;
     Exit;
   end;
 
-  // Digito -> Numero
+  // Digit -> Number
   if (C in ['0'..'9']) or ((C = '$') and (PeekChar(1) in ['0'..'9', 'a'..'f', 'A'..'F'])) or
      ((C = '%') and (PeekChar(1) in ['0', '1'])) then
   begin
@@ -485,7 +487,7 @@ begin
     Exit;
   end;
 
-  // Operadores e Pontuacao
+  // Operators and Punctuation
   case C of
     ':':
       begin
@@ -724,6 +726,7 @@ begin
 
   Result := ScanTokenInternal;
   Result.DocComment := SavedDoc;
+  FLastTokenKind := Result.Kind;
 end;
 
 end.

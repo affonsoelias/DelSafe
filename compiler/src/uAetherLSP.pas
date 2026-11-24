@@ -80,11 +80,11 @@ begin
   HeaderBuf := '';
   ContentLength := 0;
 
-  // Le cabecalhos ate encontrar sequencia vazia CRLF CRLF
+  // Read headers until empty CRLF CRLF sequence
   while True do
   begin
     BytesRead := FileRead(StdInputHandle, C, 1);
-    if BytesRead <= 0 then Exit(''); // Stream fechado
+    if BytesRead <= 0 then Exit(''); // Stream closed
     HeaderBuf := HeaderBuf + C;
     if (Length(HeaderBuf) >= 4) and (Copy(HeaderBuf, Length(HeaderBuf) - 3, 4) = #13#10#13#10) then
       Break;
@@ -202,13 +202,13 @@ begin
       Lexer.Free;
     end;
 
-    // Salva AST imediatamente em memoria para autocompletar, hover e go-to-definition
+    // Cache AST in memory immediately for completion, hover, and go-to-definition
     Idx := FindDocIndex(URI);
     if Idx >= 0 then
     begin
       if Assigned(FDocuments[Idx].AST) then FDocuments[Idx].AST.Free;
       FDocuments[Idx].AST := ModuleNode;
-      ModuleNode := nil; // Posse transferida para FDocuments
+      ModuleNode := nil; // Ownership transferred to FDocuments
     end;
 
     TypeChecker := TAetherTypeChecker.Create;
@@ -306,7 +306,7 @@ begin
     end;
     on E: Exception do
     begin
-      // Erro generico
+      // Generic error
     end;
   end;
 
@@ -364,70 +364,70 @@ var
 begin
   Items := TJSONArray.Create;
 
-  // Palavras-chave fundamentais
-  AddItem('module', 14, 'Declaração de Módulo');
-  AddItem('program', 14, 'Bloco de Programa Principal');
-  AddItem('interface', 14, 'Seção Pública de Unit');
-  AddItem('implementation', 14, 'Seção de Implementação de Unit');
-  AddItem('initialization', 14, 'Bloco de Inicialização de Unit');
-  AddItem('finalization', 14, 'Bloco de Finalização de Unit');
-  AddItem('import', 14, 'Importar Módulo Aether');
-  AddItem('extern', 14, 'Declarar Função Externa C');
-  AddItem('function', 14, 'Declaração de Função (com retorno)');
-  AddItem('procedure', 14, 'Declaração de Procedimento (sem retorno)');
-  AddItem('is', 14, 'Início de definição de rotina Ada');
-  AddItem('contract', 14, 'Bloco de Contratos (require / ensure)');
-  AddItem('require', 14, 'Pré-condição Contratual');
-  AddItem('ensure', 14, 'Pós-condição Contratual');
-  AddItem('type', 14, 'Seção de Tipos');
-  AddItem('record', 14, 'Tipo Estruturado Record');
-  AddItem('enum', 14, 'Tipo Algébrico Enum');
-  AddItem('trait', 14, 'Declaração de Interface/Trait');
-  AddItem('impl', 14, 'Implementação de Trait para Tipo');
-  AddItem('for', 14, 'Cláusula de Associação (impl Trait for Tipo)');
-  AddItem('var', 14, 'Variável Mutável');
-  AddItem('let', 14, 'Variável Imutável');
-  AddItem('begin', 14, 'Início de Bloco');
-  AddItem('end', 14, 'Fim de Bloco');
-  AddItem('if', 14, 'Controle Condicional');
-  AddItem('then', 14, 'Cláusula Then');
-  AddItem('else', 14, 'Cláusula Else');
-  AddItem('while', 14, 'Laço de Repetição');
-  AddItem('match', 14, 'Casamento de Padrões Exaustivo');
-  AddItem('case', 14, 'Caso do Match');
-  AddItem('return', 14, 'Retorno de Função');
+  // Fundamental keywords
+  AddItem('module', 14, 'Module Declaration');
+  AddItem('program', 14, 'Main Program Block');
+  AddItem('interface', 14, 'Unit Public Interface Section');
+  AddItem('implementation', 14, 'Unit Implementation Section');
+  AddItem('initialization', 14, 'Unit Initialization Block');
+  AddItem('finalization', 14, 'Unit Finalization Block');
+  AddItem('import', 14, 'Import Aether Module');
+  AddItem('extern', 14, 'Declare External C Function');
+  AddItem('function', 14, 'Function Declaration (with return)');
+  AddItem('procedure', 14, 'Procedure Declaration (no return)');
+  AddItem('is', 14, 'Ada-style routine definition start');
+  AddItem('contract', 14, 'Contracts Block (require / ensure)');
+  AddItem('require', 14, 'Contract Pre-condition');
+  AddItem('ensure', 14, 'Contract Post-condition');
+  AddItem('type', 14, 'Types Section');
+  AddItem('record', 14, 'Record Struct Type');
+  AddItem('enum', 14, 'Algebraic Enum Type');
+  AddItem('trait', 14, 'Trait / Interface Declaration');
+  AddItem('impl', 14, 'Trait Implementation for Type');
+  AddItem('for', 14, 'Association Clause (impl Trait for Type)');
+  AddItem('var', 14, 'Mutable Variable');
+  AddItem('let', 14, 'Immutable Binding');
+  AddItem('begin', 14, 'Block Start');
+  AddItem('end', 14, 'Block End');
+  AddItem('if', 14, 'Conditional Branch');
+  AddItem('then', 14, 'Then Clause');
+  AddItem('else', 14, 'Else Clause');
+  AddItem('while', 14, 'While Loop');
+  AddItem('match', 14, 'Exhaustive Pattern Match');
+  AddItem('case', 14, 'Match Case Arm');
+  AddItem('return', 14, 'Function Return');
 
   // Ownership & Borrowing
-  AddItem('borrow', 14, 'Empréstimo Imutável (Somente Leitura)');
-  AddItem('take', 14, 'Transferência de Posse (Move)');
-  AddItem('mut borrow', 14, 'Empréstimo Mutável Exclusivo');
-  AddItem('own', 14, 'Modificador de Posse Exclusiva');
+  AddItem('borrow', 14, 'Immutable Borrow (Read-Only)');
+  AddItem('take', 14, 'Ownership Transfer (Move)');
+  AddItem('mut borrow', 14, 'Exclusive Mutable Borrow');
+  AddItem('own', 14, 'Exclusive Ownership Modifier');
 
-  // Tipos Primitivos
-  AddItem('Int8', 7, 'Inteiro 8-bit com sinal');
-  AddItem('Int16', 7, 'Inteiro 16-bit com sinal');
-  AddItem('Int32', 7, 'Inteiro 32-bit com sinal');
-  AddItem('Int64', 7, 'Inteiro 64-bit com sinal');
-  AddItem('UInt8', 7, 'Inteiro 8-bit sem sinal');
-  AddItem('UInt16', 7, 'Inteiro 16-bit sem sinal');
-  AddItem('UInt32', 7, 'Inteiro 32-bit sem sinal');
-  AddItem('UInt64', 7, 'Inteiro 64-bit sem sinal');
-  AddItem('Float32', 7, 'Ponto Flutuante 32-bit');
-  AddItem('Float64', 7, 'Ponto Flutuante 64-bit');
-  AddItem('Bool', 7, 'Booleano (true/false)');
-  AddItem('String', 7, 'Texto UTF-8');
-  AddItem('Char', 7, 'Caractere Unicode');
+  // Primitive Types
+  AddItem('Int8', 7, '8-bit signed integer');
+  AddItem('Int16', 7, '16-bit signed integer');
+  AddItem('Int32', 7, '32-bit signed integer');
+  AddItem('Int64', 7, '64-bit signed integer');
+  AddItem('UInt8', 7, '8-bit unsigned integer');
+  AddItem('UInt16', 7, '16-bit unsigned integer');
+  AddItem('UInt32', 7, '32-bit unsigned integer');
+  AddItem('UInt64', 7, '64-bit unsigned integer');
+  AddItem('Float32', 7, '32-bit floating-point');
+  AddItem('Float64', 7, '64-bit floating-point');
+  AddItem('Bool', 7, 'Boolean (true/false)');
+  AddItem('String', 7, 'UTF-8 String');
+  AddItem('Char', 7, 'Unicode Character');
 
-  // Mônades
-  AddItem('Result', 7, 'Mônade de Resultado Result<T, E>');
-  AddItem('Option', 7, 'Mônade Opcional Option<T>');
-  AddItem('Ok', 3, 'Construtor de Sucesso: Ok(valor)');
-  AddItem('Err', 3, 'Construtor de Erro: Err(erro)');
-  AddItem('Some', 3, 'Construtor Opcional Presente: Some(valor)');
-  AddItem('None', 14, 'Ausência de Valor: None');
-  AddItem('PrintLn', 3, 'Imprime linha formatada no console');
+  // Monads
+  AddItem('Result', 7, 'Result<T, E> Monad');
+  AddItem('Option', 7, 'Option<T> Monad');
+  AddItem('Ok', 3, 'Success Constructor: Ok(value)');
+  AddItem('Err', 3, 'Error Constructor: Err(error)');
+  AddItem('Some', 3, 'Present Optional Constructor: Some(value)');
+  AddItem('None', 14, 'Absent Value: None');
+  AddItem('PrintLn', 3, 'Prints a formatted line to the console');
 
-  // Simbolos do documento atual
+  // Symbols from current document
   if Assigned(Params) and Assigned(Params.Find('textDocument')) then
   begin
     URI := (Params.Find('textDocument') as TJSONObject).Get('uri', '');
@@ -436,36 +436,36 @@ begin
     begin
       ModNode := FDocuments[Idx].AST;
 
-      // Records e Enums
+      // Records and Enums
       for I := 0 to ModNode.Types.Count - 1 do
       begin
         if ModNode.Types[I] is TASTRecordDecl then
         begin
           Rec := TASTRecordDecl(ModNode.Types[I]);
-          AddItem(Rec.Name, 7, 'Record Definido no Módulo');
+          AddItem(Rec.Name, 7, 'Module Record Type');
         end
         else if ModNode.Types[I] is TASTEnumDecl then
         begin
           Enm := TASTEnumDecl(ModNode.Types[I]);
-          AddItem(Enm.Name, 7, 'Enum Algébrico no Módulo');
+          AddItem(Enm.Name, 7, 'Module Algebraic Enum');
         end;
       end;
 
-      // Traits declaradas
+      // Declared Traits
       for I := 0 to ModNode.Traits.Count - 1 do
       begin
         TraitDecl := TASTTraitDecl(ModNode.Traits[I]);
-        AddItem(TraitDecl.Name, 8, 'Trait Declarada no Módulo');
+        AddItem(TraitDecl.Name, 8, 'Module Trait Declaration');
       end;
 
-      // Funcoes do modulo com assinatura completa
+      // Module functions with full signatures
       for I := 0 to ModNode.Functions.Count - 1 do
       begin
         Func := TASTFunction(ModNode.Functions[I]);
         AddItem(Func.Name, 3, FormatFunctionSignature(Func));
       end;
 
-      // Metodos implementados em Impls (UFCS / Trait Methods)
+      // Methods implemented in Impls (UFCS / Trait Methods)
       for I := 0 to ModNode.Impls.Count - 1 do
       begin
         ImplDecl := TASTImplDecl(ModNode.Impls[I]);
@@ -542,41 +542,41 @@ begin
 
   InfoText := '';
 
-  // 1. Palavras-chave de Posse e Concorrencia
+  // 1. Ownership and Concurrency Keywords
   if LowerCase(Word) = 'borrow' then
-    InfoText := '**borrow (Empréstimo Imutável)**'#10#10 +
-                'Garante acesso somente-leitura ao dado sem transferir posse. Múltiplos leitores permitidos simultaneamente.'
+    InfoText := '**borrow (Immutable Borrow)**'#10#10 +
+                'Grants read-only access to data without transferring ownership. Multiple concurrent readers allowed.'
   else if LowerCase(Word) = 'take' then
-    InfoText := '**take (Transferência de Posse / Move)**'#10#10 +
-                'Move a posse do dado permanentemente. A variável de origem torna-se inválida (*Use-After-Move* é impedido).'
+    InfoText := '**take (Ownership Transfer / Move)**'#10#10 +
+                'Transfers ownership permanently. The source variable becomes invalid (*Use-After-Move* is prevented).'
   else if LowerCase(Word) = 'mut' then
-    InfoText := '**mut (Mutabilidade Exclusiva)**'#10#10 +
-                'Quando combinado com `mut borrow`, garante um único escritor ativo por vez, prevenindo corridas de dados (*data races*).'
+    InfoText := '**mut (Exclusive Mutability)**'#10#10 +
+                'When combined with `mut borrow`, enforces a single active writer at a time, preventing data races.'
   else if LowerCase(Word) = 'own' then
-    InfoText := '**own (Posse de Memória / Ownership)**'#10#10 +
-                'Modificador que explicita posse sobre um recurso ou ponteiro em memória.'
+    InfoText := '**own (Memory Ownership)**'#10#10 +
+                'Modifier that explicitly denotes ownership over a resource or memory pointer.'
   else if LowerCase(Word) = 'trait' then
-    InfoText := '**trait (Interface / Contrato de Tipos)**'#10#10 +
-                'Define um conjunto de assinaturas de métodos e regras contratuais que tipos concretos podem implementar via `impl Trait for Tipo`.'
+    InfoText := '**trait (Interface / Type Contract)**'#10#10 +
+                'Defines a set of method signatures and contractual rules that concrete types can implement via `impl Trait for Type`.'
   else if LowerCase(Word) = 'impl' then
-    InfoText := '**impl (Implementação de Trait)**'#10#10 +
-                'Implementa os métodos e comportamentos exigidos por uma `trait` para um tipo record específico.'
+    InfoText := '**impl (Trait Implementation)**'#10#10 +
+                'Implements the methods and behavior required by a `trait` for a specific record type.'
   else if LowerCase(Word) = 'contract' then
-    InfoText := '**contract (Contrato Formal)**'#10#10 +
-                'Especifica pré-condições (`require`) e pós-condições (`ensure`) validadas pelo compilador Aether.'
+    InfoText := '**contract (Formal Contract)**'#10#10 +
+                'Specifies pre-conditions (`require`) and post-conditions (`ensure`) validated by the Aether compiler.'
   else if LowerCase(Word) = 'result' then
-    InfoText := '**Result<T, E> (Mônade de Sucesso/Falha)**'#10#10 +
-                'Tipo canônico para operações que podem falhar. Trate exaustivamente com `match` (`Ok(v)` ou `Err(e)`).'
+    InfoText := '**Result<T, E> (Success/Failure Monad)**'#10#10 +
+                'Canonical type for fallible operations. Handle exhaustively with `match` (`Ok(v)` or `Err(e)`).'
   else if LowerCase(Word) = 'option' then
-    InfoText := '**Option<T> (Mônade Opcional)**'#10#10 +
-                'Elimina ponteiros nulos (`nil`/`null`). Contém `Some(v)` quando presente ou `None` quando ausente.';
+    InfoText := '**Option<T> (Optional Monad)**'#10#10 +
+                'Eliminates null pointers (`nil`/`null`). Holds `Some(v)` when present or `None` when absent.';
 
-  // 2. Busca na AST do documento atual
+  // 2. Search in current document AST
   if (InfoText = '') and Assigned(FDocuments[Idx].AST) then
   begin
     ModNode := FDocuments[Idx].AST;
 
-    // Funcoes do modulo
+    // Module functions
     for I := 0 to ModNode.Functions.Count - 1 do
     begin
       Func := TASTFunction(ModNode.Functions[I]);
@@ -584,32 +584,32 @@ begin
       begin
         InfoText := Format('```aether'#10'%s'#10'```', [FormatFunctionSignature(Func)]);
         if Func.Requires.Count > 0 then
-          InfoText := InfoText + #10#10'**Contrato (require):** Pré-condições ativas de validação.';
+          InfoText := InfoText + #10#10'**Contract (require):** Active validation pre-conditions.';
         if Func.Ensures.Count > 0 then
-          InfoText := InfoText + #10#10'**Contrato (ensure):** Pós-condições ativas de validação.';
+          InfoText := InfoText + #10#10'**Contract (ensure):** Active validation post-conditions.';
         Break;
       end;
 
-      // Parâmetros da função
+      // Function parameters
       for J := 0 to Func.Params.Count - 1 do
       begin
         ParamNode := TASTParam(Func.Params[J]);
         if SameText(ParamNode.Name, Word) then
         begin
-          InfoText := Format('```aether'#10'param %s%s: %s'#10'```'#10#10'*Parâmetro da função `%s`*',
+          InfoText := Format('```aether'#10'param %s%s: %s'#10'```'#10#10'*Parameter of function `%s`*',
             [OwnershipToString(ParamNode.Ownership), ParamNode.Name, ParamNode.TypeName, Func.Name]);
           Break;
         end;
       end;
       if InfoText <> '' then Break;
 
-      // Variáveis locais da função
+      // Local variables of function
       for J := 0 to Func.LocalVars.Count - 1 do
       begin
         VarNode := TASTVarDecl(Func.LocalVars[J]);
         if SameText(VarNode.Name, Word) then
         begin
-          InfoText := Format('```aether'#10'var %s: %s'#10'```'#10#10'*Variável local da função `%s`*',
+          InfoText := Format('```aether'#10'var %s: %s'#10'```'#10#10'*Local variable of function `%s`*',
             [VarNode.Name, VarNode.TypeName, Func.Name]);
           Break;
         end;
@@ -617,7 +617,7 @@ begin
       if InfoText <> '' then Break;
     end;
 
-    // Traits do modulo
+    // Module traits
     if InfoText = '' then
     begin
       for I := 0 to ModNode.Traits.Count - 1 do
@@ -628,13 +628,13 @@ begin
           SubText := '';
           for J := 0 to TraitDecl.Methods.Count - 1 do
             SubText := SubText + '    ' + FormatFunctionSignature(TASTFunction(TraitDecl.Methods[J])) + ';'#10;
-          InfoText := Format('```aether'#10'trait %s'#10'%send'#10'```', [TraitDecl.Name, SubText]);
+          InfoText := Format('```aether'#10'trait %s'#10'%send trait;'#10'```', [TraitDecl.Name, SubText]);
           Break;
         end;
       end;
     end;
 
-    // Metodos em Impls
+    // Methods in Impls
     if InfoText = '' then
     begin
       for I := 0 to ModNode.Impls.Count - 1 do
@@ -645,7 +645,7 @@ begin
           Func := TASTFunction(ImplDecl.Methods[J]);
           if SameText(Func.Name, Word) then
           begin
-            InfoText := Format('```aether'#10'%s'#10'```'#10#10'*Implementação da trait `%s` para o tipo `%s`*',
+            InfoText := Format('```aether'#10'%s'#10'```'#10#10'*Implementation of trait `%s` for type `%s`*',
               [FormatFunctionSignature(Func), ImplDecl.TraitName, ImplDecl.TargetTypeName]);
             Break;
           end;
@@ -654,7 +654,7 @@ begin
       end;
     end;
 
-    // Records e Enums
+    // Records and Enums
     if InfoText = '' then
     begin
       for I := 0 to ModNode.Types.Count - 1 do
@@ -667,7 +667,7 @@ begin
             SubText := '';
             for J := 0 to Rec.Fields.Count - 1 do
               SubText := SubText + Format('    %s: %s;'#10, [TASTRecordField(Rec.Fields[J]).Name, TASTRecordField(Rec.Fields[J]).TypeName]);
-            InfoText := Format('```aether'#10'type %s = record'#10'%send;'#10'```', [Rec.Name, SubText]);
+            InfoText := Format('```aether'#10'type %s = record'#10'%send record;'#10'```', [Rec.Name, SubText]);
             Break;
           end;
         end
@@ -682,14 +682,14 @@ begin
               if J > 0 then SubText := SubText + ','#10;
               SubText := SubText + '    ' + TASTEnumVariant(Enm.Variants[J]).Name;
             end;
-            InfoText := Format('```aether'#10'type %s = enum'#10'%s'#10'end;'#10'```', [Enm.Name, SubText]);
+            InfoText := Format('```aether'#10'type %s = enum'#10'%s'#10'end enum;'#10'```', [Enm.Name, SubText]);
             Break;
           end;
         end;
       end;
     end;
 
-    // Variaveis do bloco principal do programa
+    // Main program variables
     if (InfoText = '') and Assigned(ModNode.ProgramBlock) then
     begin
       for I := 0 to ModNode.ProgramBlock.LocalVars.Count - 1 do
@@ -697,7 +697,7 @@ begin
         VarNode := TASTVarDecl(ModNode.ProgramBlock.LocalVars[I]);
         if SameText(VarNode.Name, Word) then
         begin
-          InfoText := Format('```aether'#10'var %s: %s'#10'```'#10#10'*Variável do programa principal*',
+          InfoText := Format('```aether'#10'var %s: %s'#10'```'#10#10'*Main program variable*',
             [VarNode.Name, VarNode.TypeName]);
           Break;
         end;
@@ -746,7 +746,7 @@ begin
   DefCol := -1;
   ModNode := FDocuments[Idx].AST;
 
-  // 1. Busca em funcoes do modulo
+  // 1. Search module functions
   for I := 0 to ModNode.Functions.Count - 1 do
   begin
     Func := TASTFunction(ModNode.Functions[I]);
@@ -758,7 +758,7 @@ begin
     end;
   end;
 
-  // 2. Busca em Traits
+  // 2. Search Traits
   if DefLine < 0 then
   begin
     for I := 0 to ModNode.Traits.Count - 1 do
@@ -773,7 +773,7 @@ begin
     end;
   end;
 
-  // 3. Busca em Metodos de Impls
+  // 3. Search Impl methods
   if DefLine < 0 then
   begin
     for I := 0 to ModNode.Impls.Count - 1 do
@@ -793,7 +793,7 @@ begin
     end;
   end;
 
-  // 4. Busca em Tipos (Records e Enums)
+  // 4. Search Types (Records and Enums)
   if DefLine < 0 then
   begin
     for I := 0 to ModNode.Types.Count - 1 do
@@ -955,27 +955,27 @@ begin
     DiagMsg := DiagObj.Get('message', '');
     DiagCode := DiagObj.Get('code', '');
 
-    // 1. QuickFix para Borrow Checker (E0401, E0402 ou 'posse' / 'borrow')
-    if (Pos('E04', DiagCode) = 1) or (Pos('posse', LowerCase(DiagMsg)) > 0) or (Pos('borrow', LowerCase(DiagMsg)) > 0) then
+    // 1. QuickFix for Borrow Checker (E0401, E0402, or 'ownership' / 'borrow')
+    if (Pos('E04', DiagCode) = 1) or (Pos('ownership', LowerCase(DiagMsg)) > 0) or (Pos('borrow', LowerCase(DiagMsg)) > 0) then
     begin
       ActionObj := TJSONObject.Create;
-      ActionObj.Add('title', '💡 Substituir argumento por "borrow" (Empréstimo Imutável)');
+      ActionObj.Add('title', 'Replace argument with "borrow" (Immutable Borrow)');
       ActionObj.Add('kind', 'quickfix');
       ActionObj.Add('isPreferred', True);
       Result.Add(ActionObj);
 
       ActionObj := TJSONObject.Create;
-      ActionObj.Add('title', '💡 Substituir argumento por "mut borrow" (Empréstimo Mutável Exclusivo)');
+      ActionObj.Add('title', 'Replace argument with "mut borrow" (Exclusive Mutable Borrow)');
       ActionObj.Add('kind', 'quickfix');
       ActionObj.Add('isPreferred', False);
       Result.Add(ActionObj);
     end;
 
-    // 2. QuickFix para imports canônicos da stdlib
+    // 2. QuickFix for canonical stdlib imports
     if (Pos('FileInfo', DiagMsg) > 0) or (Pos('CreateDir', DiagMsg) > 0) or (Pos('HasDir', DiagMsg) > 0) or (Pos('GetFileInfo', DiagMsg) > 0) then
     begin
       ActionObj := TJSONObject.Create;
-      ActionObj.Add('title', '📦 Adicionar import "std.fs;"');
+      ActionObj.Add('title', 'Add import "std.fs;"');
       ActionObj.Add('kind', 'quickfix');
       ActionObj.Add('isPreferred', True);
 
@@ -997,7 +997,7 @@ begin
     else if (Pos('Timer', DiagMsg) > 0) or (Pos('NewTimer', DiagMsg) > 0) or (Pos('GetNanoseconds', DiagMsg) > 0) then
     begin
       ActionObj := TJSONObject.Create;
-      ActionObj.Add('title', '📦 Adicionar import "std.time;"');
+      ActionObj.Add('title', 'Add import "std.time;"');
       ActionObj.Add('kind', 'quickfix');
       ActionObj.Add('isPreferred', True);
 
@@ -1019,7 +1019,7 @@ begin
     else if (Pos('Client', DiagMsg) > 0) or (Pos('Server', DiagMsg) > 0) or (Pos('NewClient', DiagMsg) > 0) then
     begin
       ActionObj := TJSONObject.Create;
-      ActionObj.Add('title', '📦 Adicionar import "std.http;"');
+      ActionObj.Add('title', 'Add import "std.http;"');
       ActionObj.Add('kind', 'quickfix');
       ActionObj.Add('isPreferred', True);
 
@@ -1041,7 +1041,7 @@ begin
     else if (Pos('JsonBuilder', DiagMsg) > 0) or (Pos('ParseJson', DiagMsg) > 0) then
     begin
       ActionObj := TJSONObject.Create;
-      ActionObj.Add('title', '📦 Adicionar import "std.json;"');
+      ActionObj.Add('title', 'Add import "std.json;"');
       ActionObj.Add('kind', 'quickfix');
       ActionObj.Add('isPreferred', True);
 
@@ -1117,7 +1117,7 @@ begin
         end
         else if Method = 'initialized' then
         begin
-          // Notificação de handshake concluído
+          // Handshake completion notification
         end
         else if Method = 'textDocument/didOpen' then
         begin
@@ -1199,7 +1199,7 @@ begin
         end
         else if Assigned(Id) then
         begin
-          // Metodo desconhecido respondido com null
+          // Unknown method responds with null
           SendLSPResponse(Id, TJSONNull.Create);
         end;
 

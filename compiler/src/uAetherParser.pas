@@ -67,7 +67,7 @@ type
 
     function ParseStatement: TASTStmt;
     function ParseInlineVarStmt: TASTVarDeclStmt;
-    function ParseIfStmt: TASTIfStmt;
+    function ParseIfStmt(RequireClosingEnd: Boolean = True): TASTIfStmt;
     function ParseWhileStmt: TASTWhileStmt;
     function ParseForStmt: TASTForStmt;
     function ParseRepeatStmt: TASTRepeatStmt;
@@ -98,7 +98,7 @@ implementation
 
 constructor EAetherParserError.Create(const Msg: string; ALine, ACol: Integer);
 begin
-  inherited Create(Format('[Erro Sintatico em %d:%d]: %s', [ALine, ACol, Msg]));
+  inherited Create(Format('[Syntax Error at %d:%d]: %s', [ALine, ACol, Msg]));
   Line := ALine;
   Col := ACol;
 end;
@@ -146,7 +146,7 @@ begin
       raise EAetherParserError.Create(Msg, FCurTok.Line, FCurTok.Col)
     else
       raise EAetherParserError.Create(
-        Format('Esperado token "%s", mas encontrado "%s" ("%s")',
+        Format('Expected token "%s", but found "%s" ("%s")',
           [TokenKindToString(Kind), TokenKindToString(FCurTok.Kind), FCurTok.Value]),
         FCurTok.Line, FCurTok.Col);
   end;
@@ -180,42 +180,42 @@ begin
       Result := 'array of ' + ParseTypeRef();
       Exit;
     end;
-    Expect(tokLBracket, 'Esperado "[" na especificacao de dimensoes do array');
+    Expect(tokLBracket, 'Expected "[" in array dimensions specification');
     BaseType := 'array[';
-    BaseType := BaseType + Expect(tokIntLiteral, 'Esperada dimensao inteira do array').Value;
+    BaseType := BaseType + Expect(tokIntLiteral, 'Expected integer array dimension').Value;
     while Match(tokComma) do
-      BaseType := BaseType + ', ' + Expect(tokIntLiteral, 'Esperada dimensao inteira do array').Value;
-    Expect(tokRBracket, 'Esperado "]" ao fechar dimensoes do array');
-    Expect(tokOf, 'Esperado "of" apos dimensoes do array');
+      BaseType := BaseType + ', ' + Expect(tokIntLiteral, 'Expected integer array dimension').Value;
+    Expect(tokRBracket, 'Expected "]" to close array dimensions');
+    Expect(tokOf, 'Expected "of" after array dimensions');
     BaseType := BaseType + '] of ' + ParseTypeRef();
     Result := BaseType;
     Exit;
   end;
   if Match(tokSet) then
   begin
-    Expect(tokOf, 'Esperado "of" apos "set"');
+    Expect(tokOf, 'Expected "of" after "set"');
     Result := 'set of ' + ParseTypeRef();
     Exit;
   end;
   if Match(tokMap) then
   begin
-    Expect(tokLBracket, 'Esperado "[" apos "map"');
+    Expect(tokLBracket, 'Expected "[" after "map"');
     BaseType := 'map[' + ParseTypeRef() + ']';
-    Expect(tokRBracket, 'Esperado "]" apos tipo da chave do mapa');
+    Expect(tokRBracket, 'Expected "]" after map key type');
     Result := BaseType + ParseTypeRef();
     Exit;
   end;
 
-  BaseType := Expect(tokIdentifier, 'Esperado identificador de tipo').Value;
+  BaseType := Expect(tokIdentifier, 'Expected type identifier').Value;
   while Match(tokDot) do
-    BaseType := Expect(tokIdentifier, 'Esperado identificador de tipo apos "."').Value;
+    BaseType := Expect(tokIdentifier, 'Expected type identifier after "."').Value;
   if Match(tokLess) then
   begin
     BaseType := BaseType + '<' + ParseTypeRef();
     while Match(tokComma) do
       BaseType := BaseType + ', ' + ParseTypeRef();
     if not ConsumeGenericClose then
-      Expect(tokGreater, 'Esperado ">" no fechamento do tipo generico');
+      Expect(tokGreater, 'Expected ">" to close generic type');
     BaseType := BaseType + '>';
   end;
   Result := BaseType;
@@ -254,12 +254,12 @@ begin
   end
   else
   begin
-    ImportName := Expect(tokIdentifier, 'Esperado nome do modulo importado').Value;
+    ImportName := Expect(tokIdentifier, 'Expected imported module name').Value;
     while Match(tokDot) do
-      ImportName := ImportName + '.' + Expect(tokIdentifier, 'Esperado identificador apos "." no nome do modulo importado').Value;
+      ImportName := ImportName + '.' + Expect(tokIdentifier, 'Expected identifier after "." in imported module name').Value;
     if Match(tokAs) then
     begin
-      AliasName := Expect(tokIdentifier, 'Esperado alias apos "as"').Value;
+      AliasName := Expect(tokIdentifier, 'Expected alias after "as"').Value;
       AModule.ImportAliases.Values[AliasName] := ImportName;
     end;
   end;
@@ -303,17 +303,18 @@ begin
       FLine := FCurTok.Line;
       FCol := FCurTok.Col;
       FDoc := FCurTok.DocComment;
-      FieldName := Expect(tokIdentifier, 'Esperado nome do campo do record').Value;
-      Expect(tokColon, 'Esperado ":" apos nome do campo');
+      FieldName := Expect(tokIdentifier, 'Expected record field name').Value;
+      Expect(tokColon, 'Expected ":" after field name');
       FieldType := ParseTypeRef;
-      Expect(tokSemicolon, 'Esperado ";" apos definicao do campo');
+      Expect(tokSemicolon, 'Expected ";" after field definition');
       FieldNode := TASTRecordField.Create(FLine, FCol, FieldName, FieldType);
       FieldNode.DocComment := FDoc;
       FieldNode.HasExplicitVis := FHasVis;
       FieldNode.IsPublic := FIsPub;
       Result.Fields.Add(FieldNode);
     end;
-    Expect(tokEnd, 'Esperado "end" no fechamento do record');
+    Expect(tokEnd, 'Expected "end record;" to close record');
+    Expect(tokRecord, 'Expected "record" after "end" to close record');
   except
     Result.Free;
     raise;
@@ -334,30 +335,31 @@ begin
       VLine := FCurTok.Line;
       VCol := FCurTok.Col;
       VDoc := FCurTok.DocComment;
-      VName := Expect(tokIdentifier, 'Esperado nome da variante do enum').Value;
+      VName := Expect(tokIdentifier, 'Expected enum variant name').Value;
       VariantNode := TASTEnumVariant.Create(VLine, VCol, VName);
       VariantNode.DocComment := VDoc;
       Result.Variants.Add(VariantNode);
 
-      // Payload opcional: Variante(campo: Tipo, ...)
+      // Optional payload: Variant(field: Type, ...)
       if Match(tokLParen) then
       begin
         while not Check(tokRParen) and not Check(tokEOF) do
         begin
-          FName := Expect(tokIdentifier, 'Esperado nome do campo do enum').Value;
+          FName := Expect(tokIdentifier, 'Expected enum field name').Value;
           Expect(tokColon);
           FType := ParseTypeRef;
           VariantNode.Fields.Add(TASTRecordField.Create(VLine, VCol, FName, FType));
           if not Match(tokComma) then
             Break;
         end;
-        Expect(tokRParen, 'Esperado ")" apos campos do enum');
+        Expect(tokRParen, 'Expected ")" after enum fields');
       end;
 
       if not Match(tokComma) then
         Break;
     end;
-    Expect(tokEnd, 'Esperado "end" no fechamento do enum');
+    Expect(tokEnd, 'Expected "end enum;" to close enum');
+    Expect(tokEnum, 'Expected "enum" after "end" to close enum');
   except
     Result.Free;
     raise;
@@ -425,21 +427,21 @@ begin
   else
     Exit;
 
-  AttrId := Expect(tokIdentifier, 'Esperado identificador do atributo (ex: derive, cfg, inline, cold)').Value;
+  AttrId := Expect(tokIdentifier, 'Expected attribute identifier (e.g., derive, cfg, inline, cold)').Value;
 
   if SameText(AttrId, 'derive') then
   begin
-    Expect(tokLParen, 'Esperado "(" apos derive');
+    Expect(tokLParen, 'Expected "(" after derive');
     repeat
-      DeriveItem := Expect(tokIdentifier, 'Esperado nome da trait a derivar (ex: Debug, JSON, Clone, Equals)').Value;
+      DeriveItem := Expect(tokIdentifier, 'Expected trait name to derive (e.g., Debug, JSON, Clone, Equals)').Value;
       if Assigned(Attrs.Derives) and (Attrs.Derives.IndexOf(DeriveItem) < 0) then
         Attrs.Derives.Add(DeriveItem);
     until not Match(tokComma);
-    Expect(tokRParen, 'Esperado ")" ao fechar derive');
+    Expect(tokRParen, 'Expected ")" to close derive');
   end
   else if SameText(AttrId, 'cfg') then
   begin
-    Expect(tokLParen, 'Esperado "(" apos cfg');
+    Expect(tokLParen, 'Expected "(" after cfg');
     CondStr := '';
     ParenDepth := 1;
     while (ParenDepth > 0) and not Check(tokEOF) do
@@ -468,16 +470,16 @@ begin
         Advance;
       end;
     end;
-    Expect(tokRParen, 'Esperado ")" ao fechar cfg');
+    Expect(tokRParen, 'Expected ")" to close cfg');
     Attrs.CfgCondition := Trim(CondStr);
   end
   else if SameText(AttrId, 'inline') then
   begin
     if Match(tokLParen) then
     begin
-      InlineVal := Expect(tokIdentifier, 'Esperado "always" ou "never" em inline(...)').Value;
+      InlineVal := Expect(tokIdentifier, 'Expected "always" or "never" in inline(...)').Value;
       Attrs.InlineMode := LowerCase(InlineVal);
-      Expect(tokRParen, 'Esperado ")" ao fechar inline');
+      Expect(tokRParen, 'Expected ")" to close inline');
     end
     else
       Attrs.InlineMode := 'always';
@@ -489,12 +491,12 @@ begin
     begin
       while not Check(tokRParen) and not Check(tokEOF) do
         Advance;
-      Expect(tokRParen, 'Esperado ")" ao fechar cold');
+      Expect(tokRParen, 'Expected ")" to close cold');
     end;
   end
   else
   begin
-    // Atributo desconhecido / futuro
+    // Unknown / future attribute
     if Check(tokLParen) then
     begin
       Advance;
@@ -510,7 +512,7 @@ begin
   end;
 
   if IsBracket then
-    Expect(tokRBracket, 'Esperado "]" ao fechar atributo');
+    Expect(tokRBracket, 'Expected "]" to close attribute');
 end;
 
 procedure TAetherParser.ParseConstSection(AModule: TASTModule; var SectionAttrs: TParsedAttributes);
@@ -555,13 +557,13 @@ begin
         CLine := FCurTok.Line;
         CCol := FCurTok.Col;
         ConstDoc := FCurTok.DocComment;
-        ConstName := Expect(tokIdentifier, 'Esperado nome da constante').Value;
+        ConstName := Expect(tokIdentifier, 'Expected constant name').Value;
         ConstType := '';
         if Match(tokColon) then
           ConstType := ParseTypeRef;
-        Expect(tokEqual, 'Esperado "=" na definicao de constante');
+        Expect(tokEqual, 'Expected "=" in constant definition');
         ValExpr := ParseExpr;
-        Expect(tokSemicolon, 'Esperado ";" apos definicao de constante');
+        Expect(tokSemicolon, 'Expected ";" after constant definition');
 
         EffectiveCfg := CurrentAttrs.CfgCondition;
         if EffectiveCfg = '' then
@@ -646,7 +648,7 @@ begin
         TCol := FCurTok.Col;
         TypeDoc := FCurTok.DocComment;
         TypeName := Expect(tokIdentifier).Value;
-        Expect(tokEqual, 'Esperado "=" na declaracao de tipo');
+        Expect(tokEqual, 'Expected "=" in type declaration');
 
         EffectiveCfg := CurrentAttrs.CfgCondition;
         if EffectiveCfg = '' then
@@ -684,7 +686,7 @@ begin
         end
         else if Check(tokArray) then
         begin
-          Advance; // consome 'array'
+          Advance; // consume 'array'
           if Match(tokOf) then
           begin
             ArrDecl := TASTArrayDecl.Create(TLine, TCol, TypeName, ParseTypeRef);
@@ -696,13 +698,13 @@ begin
           end
           else
           begin
-            Expect(tokLBracket, 'Esperado "[" na declaracao de dimensoes do array');
+            Expect(tokLBracket, 'Expected "[" in array dimensions declaration');
             ArrDecl := TASTArrayDecl.Create(TLine, TCol, TypeName, '');
-            ArrDecl.Dims.Add(Expect(tokIntLiteral, 'Esperada dimensao inteira do array').Value);
+            ArrDecl.Dims.Add(Expect(tokIntLiteral, 'Expected integer array dimension').Value);
             while Match(tokComma) do
-              ArrDecl.Dims.Add(Expect(tokIntLiteral, 'Esperada dimensao inteira do array').Value);
-            Expect(tokRBracket, 'Esperado "]" apos dimensoes do array');
-            Expect(tokOf, 'Esperado "of" apos dimensoes do array');
+              ArrDecl.Dims.Add(Expect(tokIntLiteral, 'Expected integer array dimension').Value);
+            Expect(tokRBracket, 'Expected "]" after array dimensions');
+            Expect(tokOf, 'Expected "of" after array dimensions');
             ArrDecl.ElemType := ParseTypeRef;
             ArrDecl.DocComment := TypeDoc;
             ArrDecl.CfgCondition := EffectiveCfg;
@@ -713,17 +715,17 @@ begin
         end
         else if Check(tokSet) then
         begin
-          Advance; // consome 'set'
-          Expect(tokOf, 'Esperado "of" apos "set"');
+          Advance; // consume 'set'
+          Expect(tokOf, 'Expected "of" after "set"');
           SetDecl := TASTSetDecl.Create(TLine, TCol, TypeName);
           if Match(tokLParen) then
           begin
             while not Check(tokRParen) and not Check(tokEOF) do
             begin
-              SetDecl.Variants.Add(TASTEnumVariant.Create(FCurTok.Line, FCurTok.Col, Expect(tokIdentifier, 'Esperado identificador de variante de conjunto').Value));
+              SetDecl.Variants.Add(TASTEnumVariant.Create(FCurTok.Line, FCurTok.Col, Expect(tokIdentifier, 'Expected set variant identifier').Value));
               if not Match(tokComma) then Break;
             end;
-            Expect(tokRParen, 'Esperado ")" ao fechar variantes de conjunto');
+            Expect(tokRParen, 'Expected ")" to close set variants');
           end
           else
             SetDecl.ElemType := ParseTypeRef;
@@ -735,10 +737,10 @@ begin
         end
         else if Check(tokMap) then
         begin
-          Advance; // consome 'map'
-          Expect(tokLBracket, 'Esperado "[" apos "map"');
+          Advance; // consume 'map'
+          Expect(tokLBracket, 'Expected "[" after "map"');
           KeyType := ParseTypeRef();
-          Expect(tokRBracket, 'Esperado "]" apos tipo da chave do mapa');
+          Expect(tokRBracket, 'Expected "]" after map key type');
           ValType := ParseTypeRef();
           MapDecl := TASTMapDecl.Create(TLine, TCol, TypeName, KeyType, ValType);
           MapDecl.DocComment := TypeDoc;
@@ -751,7 +753,7 @@ begin
         begin
           LowBound := FCurTok.Value;
           Advance;
-          Expect(tokDotDot, 'Esperado ".." no intervalo da subfaixa');
+          Expect(tokDotDot, 'Expected ".." in subrange bounds');
           HighBound := FCurTok.Value;
           Advance;
           if (Length(LowBound) > 0) and (LowBound[1] = '''') then
@@ -767,14 +769,14 @@ begin
         end
         else if Check(tokLParen) then
         begin
-          Advance; // consome '('
+          Advance; // consume '('
           EnumDecl := TASTEnumDecl.Create(TLine, TCol, TypeName);
           while not Check(tokRParen) and not Check(tokEOF) do
           begin
-            EnumDecl.Variants.Add(TASTEnumVariant.Create(FCurTok.Line, FCurTok.Col, Expect(tokIdentifier, 'Esperado nome da variante do enum').Value));
+            EnumDecl.Variants.Add(TASTEnumVariant.Create(FCurTok.Line, FCurTok.Col, Expect(tokIdentifier, 'Expected enum variant name').Value));
             if not Match(tokComma) then Break;
           end;
-          Expect(tokRParen, 'Esperado ")" ao fechar variantes do enum');
+          Expect(tokRParen, 'Expected ")" to close enum variants');
           EnumDecl.DocComment := TypeDoc;
           EnumDecl.Derives.AddStrings(CurrentAttrs.Derives);
           EnumDecl.Derives.AddStrings(SectionAttrs.Derives);
@@ -795,7 +797,7 @@ begin
         end;
 
         ClearAttributes(SectionAttrs);
-        Expect(tokSemicolon, 'Esperado ";" apos declaracao de tipo');
+        Expect(tokSemicolon, 'Expected ";" after type declaration');
       end
       else
       begin
@@ -834,7 +836,7 @@ begin
   if AName <> '' then
     TraitName := AName
   else
-    TraitName := Expect(tokIdentifier, 'Esperado identificador com nome da trait').Value;
+    TraitName := Expect(tokIdentifier, 'Expected trait name identifier').Value;
 
   Result := TASTTraitDecl.Create(ALine, ACol, TraitName);
   Result.DocComment := TraitDoc;
@@ -844,11 +846,12 @@ begin
       if Check(tokFunction) or Check(tokProcedure) or Check(tokAsync) then
         Result.Methods.Add(ParseFunction(True))
       else
-        raise EAetherParserError.Create('Esperado "function" ou "procedure" na declaracao da trait', FCurTok.Line, FCurTok.Col);
+        raise EAetherParserError.Create('Expected "function" or "procedure" in trait declaration', FCurTok.Line, FCurTok.Col);
     end;
-    Expect(tokEnd, 'Esperado "end" no fechamento da trait');
+    Expect(tokEnd, 'Expected "end trait;" to close trait');
+    Expect(tokTrait, 'Expected "trait" after "end" to close trait');
     if AName = '' then
-      Expect(tokSemicolon, 'Esperado ";" apos "end" da trait');
+      Expect(tokSemicolon, 'Expected ";" after "end trait"');
   except
     Result.Free;
     raise;
@@ -865,11 +868,11 @@ begin
   ILine := FCurTok.Line;
   ICol := FCurTok.Col;
   Expect(tokImpl);
-  FirstName := Expect(tokIdentifier, 'Esperado nome da trait ou tipo apos "impl"').Value;
+  FirstName := Expect(tokIdentifier, 'Expected trait or type name after "impl"').Value;
   if Match(tokFor) then
   begin
     TraitName := FirstName;
-    TargetName := Expect(tokIdentifier, 'Esperado nome do tipo apos "for"').Value;
+    TargetName := Expect(tokIdentifier, 'Expected type name after "for"').Value;
   end
   else
   begin
@@ -914,10 +917,11 @@ begin
         Result.Methods.Add(FuncNode);
       end
       else
-        raise EAetherParserError.Create('Esperado "function" ou "procedure" no bloco impl', FCurTok.Line, FCurTok.Col);
+        raise EAetherParserError.Create('Expected "function" or "procedure" in impl block', FCurTok.Line, FCurTok.Col);
     end;
-    Expect(tokEnd, 'Esperado "end" no fechamento do bloco impl');
-    Expect(tokSemicolon, 'Esperado ";" apos "end" do bloco impl');
+    Expect(tokEnd, 'Expected "end impl;" to close impl block');
+    Expect(tokImpl, 'Expected "impl" after "end" to close impl block');
+    Expect(tokSemicolon, 'Expected ";" after "end impl"');
   except
     Result.Free;
     raise;
@@ -934,7 +938,7 @@ var
   VD: TASTVarDecl;
 begin
   IsMut := Check(tokVar);
-  Advance; // consome 'var' ou 'let'
+  Advance; // consume 'var' or 'let'
 
   VarNames := TStringList.Create;
   try
@@ -945,7 +949,7 @@ begin
       VCol := FCurTok.Col;
       VarNames.Add(Expect(tokIdentifier).Value);
       while Match(tokComma) do
-        VarNames.Add(Expect(tokIdentifier, 'Esperado identificador apos "," na declaracao de variaveis').Value);
+        VarNames.Add(Expect(tokIdentifier, 'Expected identifier after "," in variable declaration').Value);
 
       VarType := '';
       if Match(tokColon) then
@@ -956,9 +960,9 @@ begin
         InitExpr := ParseExpr;
 
       if (VarType = '') and not Assigned(InitExpr) then
-        raise EAetherParserError.Create('Esperado ": <Tipo>" ou ":= <Valor>" na declaracao de variavel', FCurTok.Line, FCurTok.Col);
+        raise EAetherParserError.Create('Expected ": <Type>" or ":= <Value>" in variable declaration', FCurTok.Line, FCurTok.Col);
 
-      Expect(tokSemicolon, 'Esperado ";" apos declaracao de variavel');
+      Expect(tokSemicolon, 'Expected ";" after variable declaration');
       for I := 0 to VarNames.Count - 1 do
       begin
         if I = 0 then
@@ -1006,7 +1010,7 @@ var
         while (not Check(tokEnsure)) and (not AtContractBoundary) do
         begin
           Result.Requires.Add(ParseExpr);
-          Expect(tokSemicolon, 'Esperado ";" apos expressao de require');
+          Expect(tokSemicolon, 'Expected ";" after require expression');
         end;
       end;
 
@@ -1015,7 +1019,7 @@ var
         while not AtContractBoundary do
         begin
           Result.Ensures.Add(ParseExpr);
-          Expect(tokSemicolon, 'Esperado ";" apos expressao de ensure');
+          Expect(tokSemicolon, 'Expected ";" after ensure expression');
         end;
       end;
     end;
@@ -1094,8 +1098,8 @@ begin
 
   IsProc := Match(tokProcedure);
   if not IsProc then
-    Expect(tokFunction, 'Esperado "function" ou "procedure"');
-  FuncName := Expect(tokIdentifier, 'Esperado nome da rotina').Value;
+    Expect(tokFunction, 'Expected "function" or "procedure"');
+  FuncName := Expect(tokIdentifier, 'Expected routine name').Value;
 
   Result := TASTFunction.Create(FLine, FCol, FuncName, '');
   Result.IsProcedure := IsProc;
@@ -1113,16 +1117,16 @@ begin
   Result.IsPublic := FIsPub;
   ParamNames := TStringList.Create;
   try
-    // Parametro generico com bound opcional: function Imprimir<T: Printable>(...)
+    // Generic parameter with optional bound: function Print<T: Printable>(...)
     if Match(tokLess) then
     begin
-      Result.GenericParam := Expect(tokIdentifier, 'Esperado nome do parametro generico').Value;
+      Result.GenericParam := Expect(tokIdentifier, 'Expected generic parameter name').Value;
       if Match(tokColon) then
-        Result.TraitBound := Expect(tokIdentifier, 'Esperado nome da trait no bound').Value;
-      Expect(tokGreater, 'Esperado ">" no fechamento do parametro generico');
+        Result.TraitBound := Expect(tokIdentifier, 'Expected trait name in bound').Value;
+      Expect(tokGreater, 'Expected ">" to close generic parameter');
     end;
 
-    // Parenteses opcionais quando nao ha parametros
+    // Optional parentheses when there are no parameters
     if Match(tokLParen) then
     begin
       if not Check(tokRParen) then
@@ -1135,50 +1139,50 @@ begin
             Ownership := owBorrow
           else if Match(tokMut) then
           begin
-            Expect(tokBorrow, 'Esperado "borrow" apos "mut"');
+            Expect(tokBorrow, 'Expected "borrow" after "mut"');
             Ownership := owMutBorrow;
           end;
 
           ParamNames.Clear;
           PLine := FCurTok.Line;
           PCol := FCurTok.Col;
-          ParamNames.Add(Expect(tokIdentifier, 'Esperado nome do parametro').Value);
+          ParamNames.Add(Expect(tokIdentifier, 'Expected parameter name').Value);
           while Match(tokComma) do
-            ParamNames.Add(Expect(tokIdentifier, 'Esperado nome do parametro apos ","').Value);
+            ParamNames.Add(Expect(tokIdentifier, 'Expected parameter name after ","').Value);
 
           if Match(tokColon) then
             ParamType := ParseTypeRef
           else if (ParamNames.Count = 1) and SameText(ParamNames[0], 'self') then
             ParamType := 'Self'
           else
-            raise EAetherParserError.Create('Esperado ":" apos nome do parametro', FCurTok.Line, FCurTok.Col);
+            raise EAetherParserError.Create('Expected ":" after parameter name', FCurTok.Line, FCurTok.Col);
 
           for I := 0 to ParamNames.Count - 1 do
             Result.Params.Add(TASTParam.Create(PLine, PCol, ParamNames[I], ParamType, Ownership));
         until (not Match(tokSemicolon)) and (not Match(tokComma));
       end;
-      Expect(tokRParen, 'Esperado ")" no fechamento dos parametros');
+      Expect(tokRParen, 'Expected ")" to close parameters');
     end;
 
-    // Cláusula de retorno (hard cutover: procedure sem retorno; function obriga "return <Tipo>")
+    // Return clause (hard cutover: procedure has no return; function requires "return <Type>")
     if IsProc then
     begin
       if Check(tokReturn) or Check(tokColon) then
-        raise EAetherParserError.Create('Procedures nao possuem tipo de retorno; use "function ... return <Tipo>"', FCurTok.Line, FCurTok.Col);
+        raise EAetherParserError.Create('Procedures cannot have a return type; use "function ... return <Type>"', FCurTok.Line, FCurTok.Col);
       Result.ReturnType := 'Void';
     end
     else
     begin
       if Check(tokColon) then
-        raise EAetherParserError.Create('Sintaxe legada ": Tipo" removida. Use "return <Tipo>" na declaracao de function', FCurTok.Line, FCurTok.Col);
-      Expect(tokReturn, 'Esperado "return <Tipo>" apos parametros da function');
+        raise EAetherParserError.Create('Legacy ": Type" syntax removed. Use "return <Type>" in function declaration', FCurTok.Line, FCurTok.Col);
+      Expect(tokReturn, 'Expected "return <Type>" after function parameters');
       ReturnType := ParseTypeRef;
       if SameText(ReturnType, 'Void') then
-        raise EAetherParserError.Create('Functions nao podem retornar "Void". Use "procedure"', FCurTok.Line, FCurTok.Col);
+        raise EAetherParserError.Create('Functions cannot return "Void". Use "procedure"', FCurTok.Line, FCurTok.Col);
       Result.ReturnType := ReturnType;
     end;
 
-    // Modificadores opcionais apos retorno/assinatura (na mesma linha): export; cdecl; stdcall;
+    // Optional modifiers after return/signature (on the same line): export; cdecl; stdcall;
     while Check(tokExport) or Check(tokCdecl) or
           (Check(tokIdentifier) and (SameText(FCurTok.Value, 'export') or SameText(FCurTok.Value, 'cdecl') or SameText(FCurTok.Value, 'stdcall'))) or
           (Check(tokSemicolon) and (FPeekTok.Line = FCurTok.Line) and ((FPeekTok.Kind in [tokExport, tokCdecl]) or
@@ -1203,7 +1207,7 @@ begin
       end;
     end;
 
-    // Se for extern, nao possui "is" nem corpo (pode ter contract antes de ";")
+    // If extern, it has no "is" or body (may have contract before ";")
     if IsExt then
     begin
       if Check(tokContract) or Check(tokRequire) or Check(tokEnsure) then
@@ -1213,7 +1217,7 @@ begin
       Exit;
     end;
 
-    // Se for assinatura (trait ou secao interface de unit)
+    // If signature (trait or unit interface section)
     if IsSignatureOnly then
     begin
       if AllowInterfaceContracts then
@@ -1223,37 +1227,37 @@ begin
           ParseOptionalContracts
         else
         begin
-          Expect(tokSemicolon, 'Esperado ";" apos assinatura na secao interface');
+          Expect(tokSemicolon, 'Expected ";" after signature in interface section');
           if Check(tokContract) or Check(tokRequire) or Check(tokEnsure) then
             ParseOptionalContracts;
         end;
       end
       else
-        Expect(tokSemicolon, 'Esperado ";" apos assinatura do metodo da trait');
+        Expect(tokSemicolon, 'Expected ";" after trait method signature');
       Exit;
     end;
 
-    // Definicao completa estilo Ada: ... is [contract] [var/let] begin ... end Nome;
-    Expect(tokIs, Format('Esperado "is" na definicao de "%s"', [FuncName]));
+    // Full Ada-style definition: ... is [contract] [var/let] begin ... end Name;
+    Expect(tokIs, Format('Expected "is" in definition of "%s"', [FuncName]));
 
     ParseOptionalContracts;
 
-    // Variaveis Locais
+    // Local Variables
     while Check(tokVar) or Check(tokLet) do
       ParseVarSection(Result.LocalVars);
 
-    // Corpo begin...end <Nome>;
-    Expect(tokBegin, 'Esperado "begin" para iniciar o corpo da rotina');
+    // Body begin...end <Name>;
+    Expect(tokBegin, 'Expected "begin" to start routine body');
     while not Check(tokEnd) and not Check(tokEOF) do
     begin
       Result.Body.Add(ParseStatement);
-      Expect(tokSemicolon, 'Esperado ";" apos instrucao');
+      Expect(tokSemicolon, 'Expected ";" after statement');
     end;
-    Expect(tokEnd, Format('Esperado "end %s;" para fechar a rotina', [FuncName]));
-    CloseName := Expect(tokIdentifier, Format('Esperado nome "%s" apos "end"', [FuncName])).Value;
+    Expect(tokEnd, Format('Expected "end %s;" to close routine', [FuncName]));
+    CloseName := Expect(tokIdentifier, Format('Expected name "%s" after "end"', [FuncName])).Value;
     if not SameText(CloseName, FuncName) then
-      raise EAetherParserError.Create(Format('Nome de fechamento divergente: esperado "end %s;", mas encontrado "end %s"', [FuncName, CloseName]), FCurTok.Line, FCurTok.Col);
-    Expect(tokSemicolon, Format('Esperado ";" apos "end %s"', [FuncName]));
+      raise EAetherParserError.Create(Format('Mismatched closing name: expected "end %s;", but found "end %s"', [FuncName, CloseName]), FCurTok.Line, FCurTok.Col);
+    Expect(tokSemicolon, Format('Expected ";" after "end %s"', [FuncName]));
   except
     ParamNames.Free;
     Result.Free;
@@ -1282,62 +1286,76 @@ begin
   PLine := FCurTok.Line;
   PCol := FCurTok.Col;
   Expect(tokProgram);
-  ProgName := Expect(tokIdentifier, 'Esperado "Main" apos a palavra-chave "program"').Value;
+  ProgName := Expect(tokIdentifier, 'Expected "Main" after "program" keyword').Value;
   if not SameText(ProgName, 'Main') then
-    raise EAetherParserError.CreateFmt('Erro E0002: O bloco executavel deve ser obrigatoriamente "program Main;", mas foi encontrado "program %s;" na linha %d, coluna %d', [ProgName, PLine, PCol]);
-  Expect(tokSemicolon, 'Esperado ";" apos declaracao "program Main"');
+    raise EAetherParserError.CreateFmt('Error E0002: The executable block must be "program Main;", but found "program %s;" at line %d, column %d', [ProgName, PLine, PCol]);
+  Expect(tokSemicolon, 'Expected ";" after "program Main" declaration');
 
   Result := TASTProgramBlock.Create(PLine, PCol, ProgName);
   try
     while Check(tokVar) or Check(tokLet) do
       ParseVarSection(Result.LocalVars);
 
-    Expect(tokBegin, 'Esperado "begin" para iniciar o bloco do programa');
+    Expect(tokBegin, 'Expected "begin" to start program block');
     while not Check(tokEnd) and not Check(tokEOF) do
     begin
       Result.Body.Add(ParseStatement);
-      Expect(tokSemicolon, 'Esperado ";" apos instrucao');
+      Expect(tokSemicolon, 'Expected ";" after statement');
     end;
-    Expect(tokEnd, Format('Esperado "end %s." para finalizar o programa', [AModuleName]));
-    CloseMod := Expect(tokIdentifier, Format('Esperado nome do modulo "%s" apos "end"', [AModuleName])).Value;
+    Expect(tokEnd, Format('Expected "end %s." to end program', [AModuleName]));
+    CloseMod := Expect(tokIdentifier, Format('Expected module name "%s" after "end"', [AModuleName])).Value;
     if not SameText(CloseMod, AModuleName) then
-      raise EAetherParserError.Create(Format('Fechamento de modulo divergente: esperado "end %s.", mas encontrado "end %s."', [AModuleName, CloseMod]), FCurTok.Line, FCurTok.Col);
-    Expect(tokDot, Format('Esperado "." apos "end %s"', [AModuleName]));
+      raise EAetherParserError.Create(Format('Mismatched module closing: expected "end %s.", but found "end %s."', [AModuleName, CloseMod]), FCurTok.Line, FCurTok.Col);
+    Expect(tokDot, Format('Expected "." after "end %s"', [AModuleName]));
   except
     Result.Free;
     raise;
   end;
 end;
 
-function TAetherParser.ParseIfStmt: TASTIfStmt;
+function TAetherParser.ParseIfStmt(RequireClosingEnd: Boolean): TASTIfStmt;
 var
   Cond: TASTExpr;
-  ILine, ICol: Integer;
+  ILine, ICol, ElseLine: Integer;
 begin
   ILine := FCurTok.Line;
   ICol := FCurTok.Col;
   Expect(tokIf);
   Cond := ParseExpr;
-  Expect(tokThen, 'Esperado "then" apos condicao do if');
+  Expect(tokThen, 'Expected "then" after if condition');
 
   Result := TASTIfStmt.Create(ILine, ICol, Cond);
   try
     while not Check(tokElse) and not Check(tokEnd) and not Check(tokEOF) do
     begin
       Result.ThenBranch.Add(ParseStatement);
-      Expect(tokSemicolon, 'Esperado ";" apos instrucao no ramo then');
+      Expect(tokSemicolon, 'Expected ";" after statement in then branch');
     end;
 
-    if Match(tokElse) then
+    if Check(tokElse) then
     begin
-      while not Check(tokEnd) and not Check(tokEOF) do
+      ElseLine := FCurTok.Line;
+      Advance;
+      if Check(tokIf) and (FCurTok.Line = ElseLine) then
       begin
-        Result.ElseBranch.Add(ParseStatement);
-        Expect(tokSemicolon, 'Esperado ";" apos instrucao no ramo else');
+        // Flattened "else if ... then ..." chain: "end if;" closes only the outermost if
+        Result.ElseBranch.Add(ParseIfStmt(False));
+      end
+      else
+      begin
+        while not Check(tokEnd) and not Check(tokEOF) do
+        begin
+          Result.ElseBranch.Add(ParseStatement);
+          Expect(tokSemicolon, 'Expected ";" after statement in else branch');
+        end;
       end;
     end;
 
-    Expect(tokEnd, 'Esperado "end" no fechamento do if');
+    if RequireClosingEnd then
+    begin
+      Expect(tokEnd, 'Expected "end if;" to close if');
+      Expect(tokIf, 'Expected "if" after "end" to close if');
+    end;
   except
     Result.Free;
     raise;
@@ -1353,16 +1371,17 @@ begin
   WCol := FCurTok.Col;
   Expect(tokWhile);
   Cond := ParseExpr;
-  Expect(tokDo, 'Esperado "do" apos condicao do while');
+  Expect(tokDo, 'Expected "do" after while condition');
 
   Result := TASTWhileStmt.Create(WLine, WCol, Cond);
   try
     while not Check(tokEnd) and not Check(tokEOF) do
     begin
       Result.Body.Add(ParseStatement);
-      Expect(tokSemicolon, 'Esperado ";" apos instrucao do while');
+      Expect(tokSemicolon, 'Expected ";" after while statement');
     end;
-    Expect(tokEnd, 'Esperado "end" no fechamento do while');
+    Expect(tokEnd, 'Expected "end while;" to close while');
+    Expect(tokWhile, 'Expected "while" after "end" to close while');
   except
     Result.Free;
     raise;
@@ -1379,15 +1398,15 @@ begin
   FLine := FCurTok.Line;
   FCol := FCurTok.Col;
   Expect(tokFor);
-  VarName := Expect(tokIdentifier, 'Esperado nome da variavel contadora do for').Value;
+  VarName := Expect(tokIdentifier, 'Expected for loop counter variable name').Value;
   ValVarName := '';
   if Match(tokComma) then
-    ValVarName := Expect(tokIdentifier, 'Esperado identificador de valor apos "," no laco for..in').Value;
+    ValVarName := Expect(tokIdentifier, 'Expected value identifier after "," in for..in loop').Value;
 
   if Match(tokIn) then
   begin
     ColExpr := ParseExpr;
-    Expect(tokDo, 'Esperado "do" apos colecao do laco for..in');
+    Expect(tokDo, 'Expected "do" after collection in for..in loop');
     Result := TASTForStmt.Create(FLine, FCol, VarName, nil, nil, False);
     Result.ValVarName := ValVarName;
     Result.CollectionExpr := ColExpr;
@@ -1395,9 +1414,10 @@ begin
       while not Check(tokEnd) and not Check(tokEOF) do
       begin
         Result.Body.Add(ParseStatement);
-        Expect(tokSemicolon, 'Esperado ";" apos instrucao do for');
+        Expect(tokSemicolon, 'Expected ";" after for statement');
       end;
-      Expect(tokEnd, 'Esperado "end" no fechamento do for');
+      Expect(tokEnd, 'Expected "end for;" to close for');
+      Expect(tokFor, 'Expected "for" after "end" to close for');
     except
       Result.Free;
       raise;
@@ -1406,9 +1426,9 @@ begin
   end;
 
   if ValVarName <> '' then
-    raise EAetherParserError.Create('Esperado "in" apos par chave, valor no laco for..in', FCurTok.Line, FCurTok.Col);
+    raise EAetherParserError.Create('Expected "in" after key, value pair in for..in loop', FCurTok.Line, FCurTok.Col);
 
-  Expect(tokAssign, 'Esperado ":=" ou "in" apos nome da variavel no for');
+  Expect(tokAssign, 'Expected ":=" or "in" after variable name in for');
   StartExpr := ParseExpr;
   IsDownTo := False;
   if Match(tokTo) then
@@ -1416,19 +1436,20 @@ begin
   else if Match(tokDownto) then
     IsDownTo := True
   else
-    raise EAetherParserError.CreateFmt('Esperado "to" ou "downto" no laco for na linha %d, coluna %d', [FCurTok.Line, FCurTok.Col]);
+    raise EAetherParserError.CreateFmt('Expected "to" or "downto" in for loop at line %d, column %d', [FCurTok.Line, FCurTok.Col]);
 
   EndExpr := ParseExpr;
-  Expect(tokDo, 'Esperado "do" apos limites do laco for');
+  Expect(tokDo, 'Expected "do" after for loop bounds');
 
   Result := TASTForStmt.Create(FLine, FCol, VarName, StartExpr, EndExpr, IsDownTo);
   try
     while not Check(tokEnd) and not Check(tokEOF) do
     begin
       Result.Body.Add(ParseStatement);
-      Expect(tokSemicolon, 'Esperado ";" apos instrucao do for');
+      Expect(tokSemicolon, 'Expected ";" after for statement');
     end;
-    Expect(tokEnd, 'Esperado "end" no fechamento do for');
+    Expect(tokEnd, 'Expected "end for;" to close for');
+    Expect(tokFor, 'Expected "for" after "end" to close for');
   except
     Result.Free;
     raise;
@@ -1448,9 +1469,9 @@ begin
     while not Check(tokUntil) and not Check(tokEOF) do
     begin
       Result.Body.Add(ParseStatement);
-      Expect(tokSemicolon, 'Esperado ";" apos instrucao no bloco repeat');
+      Expect(tokSemicolon, 'Expected ";" after statement in repeat block');
     end;
-    Expect(tokUntil, 'Esperado "until" para fechar o bloco repeat');
+    Expect(tokUntil, 'Expected "until" to close repeat block');
     Cond := ParseExpr;
     Result.Condition := Cond;
   except
@@ -1489,7 +1510,7 @@ begin
     Advance;
   end
   else if Match(tokMinus) then
-    Result := '-' + Expect(tokIntLiteral, 'Esperado literal inteiro apos "-" no case').Value
+    Result := '-' + Expect(tokIntLiteral, 'Expected integer literal after "-" in case').Value
   else if Check(tokStringLiteral) then
   begin
     Result := '"' + FCurTok.Value + '"';
@@ -1506,7 +1527,7 @@ begin
     Result := 'false'
   else
   begin
-    Result := Expect(tokIdentifier, 'Esperado padrao no case').Value;
+    Result := Expect(tokIdentifier, 'Expected pattern in case').Value;
     if Match(tokDot) then
       Result := Result + '.' + Expect(tokIdentifier).Value;
   end;
@@ -1519,7 +1540,7 @@ begin
       Advance;
     end
     else if Match(tokMinus) then
-      HiVal := '-' + Expect(tokIntLiteral, 'Esperado literal inteiro apos "-" na faixa').Value
+      HiVal := '-' + Expect(tokIntLiteral, 'Expected integer literal after "-" in range').Value
     else if Check(tokCharLiteral) then
     begin
       HiVal := '''' + FCurTok.Value + '''';
@@ -1527,7 +1548,7 @@ begin
     end
     else
     begin
-      HiVal := Expect(tokIdentifier, 'Esperado limite superior da faixa no case').Value;
+      HiVal := Expect(tokIdentifier, 'Expected upper range bound in case').Value;
       if Match(tokDot) then
         HiVal := HiVal + '.' + Expect(tokIdentifier).Value;
     end;
@@ -1550,7 +1571,7 @@ begin
   if Match(tokLet) then
   begin
     PatVal := '_';
-    SubVal := Expect(tokIdentifier, 'Esperado identificador apos "let" no padrao do case').Value;
+    SubVal := Expect(tokIdentifier, 'Expected identifier after "let" in case pattern').Value;
     IsLet := True;
     PatternNode := TASTPattern.Create(PLine, PCol, PatVal, SubVal, IsLet);
   end
@@ -1574,7 +1595,7 @@ begin
       if Match(tokDot) then
         SubVal := SubVal + '.' + Expect(tokIdentifier).Value;
 
-      Expect(tokRParen, 'Esperado ")" apos argumento do padrao');
+      Expect(tokRParen, 'Expected ")" after pattern argument');
     end;
 
     PatternNode := TASTPattern.Create(PLine, PCol, PatVal, SubVal, IsLet);
@@ -1592,7 +1613,7 @@ begin
     end;
 
     if not Match(tokColon) and not Match(tokFatArrow) then
-      Expect(tokColon, 'Esperado ":" ou "=>" apos padrao do case');
+      Expect(tokColon, 'Expected ":" or "=>" after case pattern');
   except
     Result.Free;
     raise;
@@ -1611,7 +1632,7 @@ begin
   Expect(tokMatch);
   MatchExpr := ParseExpr;
   if not Match(tokDo) and not Match(tokWith) then
-    Expect(tokDo, 'Esperado "do" ou "with" apos expressao do match');
+    Expect(tokDo, 'Expected "do" or "with" after match expression');
 
   Result := TASTMatchStmt.Create(MLine, MCol, MatchExpr);
   try
@@ -1625,10 +1646,11 @@ begin
             not Check(tokEnd) and not Check(tokEOF) do
       begin
         CaseNode.Body.Add(ParseStatement);
-        Expect(tokSemicolon, 'Esperado ";" apos instrucao do case');
+        Expect(tokSemicolon, 'Expected ";" after case statement');
       end;
     end;
-    Expect(tokEnd, 'Esperado "end" no fechamento do match');
+    Expect(tokEnd, 'Expected "end match;" to close match');
+    Expect(tokMatch, 'Expected "match" after "end" to close match');
   except
     Result.Free;
     raise;
@@ -1647,7 +1669,7 @@ begin
   Expect(tokMatch);
   TargetExpr := ParseExpr;
   if not Match(tokDo) and not Match(tokWith) then
-    Expect(tokDo, 'Esperado "do" ou "with" apos expressao do match');
+    Expect(tokDo, 'Expected "do" or "with" after match expression');
 
   Result := TASTMatchExpr.Create(MLine, MCol, TargetExpr);
   try
@@ -1665,7 +1687,8 @@ begin
       if not Match(tokSemicolon) then
         Match(tokComma);
     end;
-    Expect(tokEnd, 'Esperado "end" no fechamento da expressao match');
+    Expect(tokEnd, 'Expected "end match" to close match expression');
+    Expect(tokMatch, 'Expected "match" after "end" to close match expression');
   except
     Result.Free;
     raise;
@@ -1692,7 +1715,8 @@ var
 begin
   AsmTok := Expect(tokAsm);
   Result := TASTAsmStmt.Create(AsmTok.Line, AsmTok.Col, AsmTok.Value);
-  Expect(tokEnd, 'Esperado "end" no fechamento do bloco asm');
+  Expect(tokEnd, 'Expected "end asm;" to close asm block');
+  Expect(tokAsm, 'Expected "asm" after "end" to close asm block');
 end;
 
 function TAetherParser.ParseDeferStmt: TASTDeferStmt;
@@ -1717,15 +1741,16 @@ begin
     while not Check(tokExcept) and not Check(tokEnd) and not Check(tokEOF) do
     begin
       Result.TryBody.Add(ParseStatement);
-      Expect(tokSemicolon, 'Esperado ";" apos instrucao no bloco try');
+      Expect(tokSemicolon, 'Expected ";" after statement in try block');
     end;
-    Expect(tokExcept, 'Esperado "except" no bloco try..except');
+    Expect(tokExcept, 'Expected "except" in try..except block');
     while not Check(tokEnd) and not Check(tokEOF) do
     begin
       Result.ExceptBody.Add(ParseStatement);
-      Expect(tokSemicolon, 'Esperado ";" apos instrucao no bloco except');
+      Expect(tokSemicolon, 'Expected ";" after statement in except block');
     end;
-    Expect(tokEnd, 'Esperado "end" no fechamento do bloco try..except');
+    Expect(tokEnd, 'Expected "end try;" to close try..except block');
+    Expect(tokTry, 'Expected "try" after "end" to close try..except block');
   except
     Result.Free;
     raise;
@@ -1754,9 +1779,10 @@ begin
     while not Check(tokEnd) and not Check(tokEOF) do
     begin
       Result.Body.Add(ParseStatement);
-      Expect(tokSemicolon, 'Esperado ";" apos instrucao no bloco unsafe');
+      Expect(tokSemicolon, 'Expected ";" after statement in unsafe block');
     end;
-    Expect(tokEnd, 'Esperado "end" no fechamento do bloco unsafe');
+    Expect(tokEnd, 'Expected "end unsafe;" to close unsafe block');
+    Expect(tokUnsafe, 'Expected "unsafe" after "end" to close unsafe block');
   except
     Result.Free;
     raise;
@@ -1774,15 +1800,15 @@ begin
   VLine := FCurTok.Line;
   VCol := FCurTok.Col;
   IsMut := Check(tokVar);
-  Advance; // consome 'var' ou 'let'
+  Advance; // consume 'var' or 'let'
 
   Result := TASTVarDeclStmt.Create(VLine, VCol);
   VarNames := TStringList.Create;
   try
     try
-      VarNames.Add(Expect(tokIdentifier, 'Esperado nome da variavel apos "var" ou "let"').Value);
+      VarNames.Add(Expect(tokIdentifier, 'Expected variable name after "var" or "let"').Value);
       while Match(tokComma) do
-        VarNames.Add(Expect(tokIdentifier, 'Esperado identificador apos "," na declaracao de variaveis').Value);
+        VarNames.Add(Expect(tokIdentifier, 'Expected identifier after "," in variable declaration').Value);
 
       VarType := '';
       if Match(tokColon) then
@@ -1793,7 +1819,7 @@ begin
         InitExpr := ParseExpr;
 
       if (VarType = '') and not Assigned(InitExpr) then
-        raise EAetherParserError.Create('Esperado ": <Tipo>" ou ":= <Valor>" na declaracao de variavel', FCurTok.Line, FCurTok.Col);
+        raise EAetherParserError.Create('Expected ": <Type>" or ":= <Value>" in variable declaration', FCurTok.Line, FCurTok.Col);
 
       for I := 0 to VarNames.Count - 1 do
       begin
@@ -1851,7 +1877,7 @@ begin
     Result := TASTCallStmt.Create(Expr.Line, Expr.Col, TASTCallExpr(Expr));
   end
   else
-    raise EAetherParserError.Create('Instrucao invalida (esperada atribuicao ou chamada de funcao)', Expr.Line, Expr.Col);
+    raise EAetherParserError.Create('Invalid statement (expected assignment or function call)', Expr.Line, Expr.Col);
 end;
 
 function TAetherParser.ParseStatement: TASTStmt;
@@ -1944,11 +1970,11 @@ begin
         if BraceDepth > 0 then Inc(I);
       end;
       if BraceDepth > 0 then
-        raise EAetherParserError.Create('Chave "{" nao fechada em string interpolada', ALine, ACol);
+        raise EAetherParserError.Create('Unclosed "{" brace in interpolated string', ALine, ACol);
       InnerCode := Trim(Copy(RawStr, StartPos, I - StartPos));
       Inc(I);
       if InnerCode = '' then
-        raise EAetherParserError.Create('Expressao vazia dentro de interpolacao "{}"', ALine, ACol);
+        raise EAetherParserError.Create('Empty expression inside "{}" interpolation', ALine, ACol);
 
       SubLexer := TAetherLexer.Create(InnerCode);
       try
@@ -1995,13 +2021,13 @@ begin
   Line := FCurTok.Line;
   Col := FCurTok.Col;
 
-  // Expressao condicional inline: if cond then a else b
+  // Inline conditional expression: if cond then a else b
   if Match(tokIf) then
   begin
     CondExpr := ParseExpr;
-    Expect(tokThen, 'Esperado "then" na expressao condicional "if"');
+    Expect(tokThen, 'Expected "then" in "if" conditional expression');
     ThenExpr := ParseExpr;
-    Expect(tokElse, 'Esperado "else" na expressao condicional "if"');
+    Expect(tokElse, 'Expected "else" in "if" conditional expression');
     ElseExpr := ParseExpr;
     Exit(TASTIfExpr.Create(Line, Col, CondExpr, ThenExpr, ElseExpr));
   end;
@@ -2009,7 +2035,7 @@ begin
   if Check(tokMatch) then
     Exit(ParseMatchExpr);
 
-  // Literais, arrays/conjuntos, agrupamento por parenteses ou identificadores/chamadas
+  // Literals, arrays/sets, parenthesized grouping, or identifiers/calls
   if Check(tokIntLiteral) then
   begin
     Result := TASTLiteralExpr.Create(Line, Col, lkInt, FCurTok.Value);
@@ -2043,10 +2069,10 @@ begin
     Result := TASTLiteralExpr.Create(Line, Col, lkNil, 'nil')
   else if Match(tokLBracket) then
   begin
-    // Literal de Mapa vazio [:], Mapa [k: v, ...] ou Conjunto/Array [e1, e2, ...] / []
+    // Empty Map literal [:], Map [k: v, ...], or Set/Array [e1, e2, ...] / []
     if Match(tokColon) then
     begin
-      Expect(tokRBracket, 'Esperado "]" apos "[:" em literal de mapa vazio');
+      Expect(tokRBracket, 'Expected "]" after "[:" in empty map literal');
       Result := TASTMapLiteralExpr.Create(Line, Col);
     end
     else if Check(tokRBracket) then
@@ -2066,10 +2092,10 @@ begin
         begin
           if Check(tokRBracket) then Break;
           TASTMapLiteralExpr(Result).Keys.Add(ParseExpr);
-          Expect(tokColon, 'Esperado ":" entre chave e valor no literal de mapa');
+          Expect(tokColon, 'Expected ":" between key and value in map literal');
           TASTMapLiteralExpr(Result).Values.Add(ParseExpr);
         end;
-        Expect(tokRBracket, 'Esperado "]" ao fechar literal de mapa');
+        Expect(tokRBracket, 'Expected "]" to close map literal');
       end
       else
       begin
@@ -2080,21 +2106,21 @@ begin
           if Check(tokRBracket) then Break;
           TASTSetLiteralExpr(Result).Elements.Add(ParseExpr);
         end;
-        Expect(tokRBracket, 'Esperado "]" ao fechar literal de conjunto');
+        Expect(tokRBracket, 'Expected "]" to close set literal');
       end;
     end;
   end
   else if Match(tokLParen) then
   begin
-    // Parenteses (Expr)
+    // Parentheses (Expr)
     Result := ParseExpr;
-    Expect(tokRParen, 'Esperado ")" para fechar expressao');
+    Expect(tokRParen, 'Expected ")" to close expression');
   end
   else if Check(tokIdentifier) then
   begin
     Id := Expect(tokIdentifier).Value;
 
-    // Chamada de Funcao ou Construtor de Record
+    // Function Call or Record Constructor
     if Match(tokLParen) then
     begin
       CallExpr := TASTCallExpr.Create(Line, Col, Id);
@@ -2112,13 +2138,13 @@ begin
             ArgOwn := owMutBorrow;
           end;
 
-          // Suporte a argumentos nomeados estilo DataBuffer(id: 101, size: 2048)
+          // Support for named arguments like DataBuffer(id: 101, size: 2048)
           ArgFieldName := '';
           if Check(tokIdentifier) and (FPeekTok.Kind = tokColon) then
           begin
             ArgFieldName := FCurTok.Value;
-            Advance; // consome nome do campo
-            Advance; // consome ':'
+            Advance; // consume field name
+            Advance; // consume ':'
           end;
 
           ArgExpr := ParseExpr;
@@ -2127,7 +2153,7 @@ begin
           CallExpr.Args.Add(CallArg);
         until not Match(tokComma);
       end;
-      Expect(tokRParen, 'Esperado ")" no fechamento dos argumentos');
+      Expect(tokRParen, 'Expected ")" to close arguments');
       Result := CallExpr;
     end
     else
@@ -2136,9 +2162,9 @@ begin
     end;
   end
   else
-    raise EAetherParserError.Create(Format('Expressao inesperada: "%s"', [FCurTok.Value]), Line, Col);
+    raise EAetherParserError.Create(Format('Unexpected expression: "%s"', [FCurTok.Value]), Line, Col);
 
-  // Acesso sequencial para qualquer expressao primaria: membro (obj.campo / UFCS), indexacao (arr[i]), desreferencia (ptr^) ou propagacao (?)
+  // Postfix access on any primary expression: member (obj.field / UFCS), indexing (arr[i]), dereference (ptr^), or propagation (?)
   while Check(tokDot) or Check(tokLBracket) or Check(tokCaret) or Check(tokQuestion) do
   begin
     if Check(tokQuestion) then
@@ -2152,10 +2178,10 @@ begin
     end
     else if Match(tokDot) then
     begin
-      Id := Expect(tokIdentifier, 'Esperado identificador apos "."').Value;
+      Id := Expect(tokIdentifier, 'Expected identifier after "."').Value;
       if Match(tokLParen) then
       begin
-        // UFCS: expr.Metodo(args...) e transformado transparentemente em Metodo(borrow expr, args...)
+        // UFCS: expr.Method(args...) is transparently lowered to Method(borrow expr, args...)
         CallExpr := TASTCallExpr.Create(Line, Col, Id);
         CallExpr.IsQualified := True;
         CallExpr.Args.Add(TASTCallArg.Create(Line, Col, owBorrow, Result));
@@ -2176,7 +2202,7 @@ begin
             CallExpr.Args.Add(TASTCallArg.Create(Line, Col, ArgOwn, ArgExpr));
           until not Match(tokComma);
         end;
-        Expect(tokRParen, 'Esperado ")" no fechamento dos argumentos');
+        Expect(tokRParen, 'Expected ")" to close arguments');
         Result := CallExpr;
       end
       else
@@ -2193,7 +2219,7 @@ begin
           IdxExpr.Indices.Add(ParseExpr);
         until not Match(tokComma);
       end;
-      Expect(tokRBracket, 'Esperado "]" ao fechar indexador de array');
+      Expect(tokRBracket, 'Expected "]" to close array indexer');
       Result := IdxExpr;
     end;
   end;
@@ -2310,24 +2336,24 @@ begin
   MLine := FCurTok.Line;
   MCol := FCurTok.Col;
   ModDoc := FCurTok.DocComment;
-  Expect(tokModule, 'Todo arquivo Aether deve iniciar com "module <Nome>;"');
-  ModName := Expect(tokIdentifier, 'Esperado nome do modulo').Value;
-  Expect(tokSemicolon, 'Esperado ";" apos nome do modulo');
+  Expect(tokModule, 'Every Aether file must start with "module <Name>;"');
+  ModName := Expect(tokIdentifier, 'Expected module name').Value;
+  Expect(tokSemicolon, 'Expected ";" after module name');
 
   Result := TASTModule.Create(MLine, MCol, ModName);
   Result.DocComment := ModDoc;
   InitAttributes(PendingAttrs);
   try
-    // Imports iniciais
+    // Initial imports
     while Check(tokImport) do
       ParseImport(Result);
 
     if Check(tokInterface) then
     begin
-      // Estrutura de Unit Object Pascal: interface ... implementation ... [initialization] [finalization] end <ModName>.
+      // Object Pascal Unit structure: interface ... implementation ... [initialization] [finalization] end <ModName>.
       Result.IsUnit := True;
       Result.HasExplicitPub := True;
-      Advance; // consome 'interface'
+      Advance; // consume 'interface'
 
       while Check(tokImport) do
         ParseImport(Result);
@@ -2342,7 +2368,7 @@ begin
             PendingAttrs.IsPublic := True;
           end
           else if Match(tokPriv) then
-            raise EAetherParserError.Create('Declaracoes privadas ("priv") devem ficar na secao "implementation", nao na "interface"', FCurTok.Line, FCurTok.Col)
+            raise EAetherParserError.Create('Private declarations ("priv") must be in the "implementation" section, not "interface"', FCurTok.Line, FCurTok.Col)
           else
             ParseAttribute(PendingAttrs);
         end;
@@ -2383,10 +2409,10 @@ begin
           ClearAttributes(PendingAttrs);
         end
         else
-          raise EAetherParserError.Create(Format('Declaracao inesperada na secao "interface": "%s"', [FCurTok.Value]), FCurTok.Line, FCurTok.Col);
+          raise EAetherParserError.Create(Format('Unexpected declaration in "interface" section: "%s"', [FCurTok.Value]), FCurTok.Line, FCurTok.Col);
       end;
 
-      Expect(tokImplementation, Format('Esperado "implementation" na unit "%s"', [ModName]));
+      Expect(tokImplementation, Format('Expected "implementation" in unit "%s"', [ModName]));
 
       while Check(tokImport) do
         ParseImport(Result);
@@ -2465,27 +2491,27 @@ begin
           begin
             StubFunc := TASTFunction(Result.Functions[StubIdx]);
             if StubFunc.IsProcedure <> ImplFunc.IsProcedure then
-              raise EAetherParserError.Create(Format('Assinatura divergente na implementation para "%s" (function/procedure)', [ImplFunc.Name]), ImplFunc.Line, ImplFunc.Col);
+              raise EAetherParserError.Create(Format('Mismatched signature in implementation for "%s" (function/procedure)', [ImplFunc.Name]), ImplFunc.Line, ImplFunc.Col);
             if (not SameText(StubFunc.GenericParam, ImplFunc.GenericParam)) or (not SameText(StubFunc.TraitBound, ImplFunc.TraitBound)) then
-              raise EAetherParserError.Create(Format('Parametro generico divergente na implementation para "%s"', [ImplFunc.Name]), ImplFunc.Line, ImplFunc.Col);
+              raise EAetherParserError.Create(Format('Mismatched generic parameter in implementation for "%s"', [ImplFunc.Name]), ImplFunc.Line, ImplFunc.Col);
             if not SameText(StubFunc.ReturnType, ImplFunc.ReturnType) then
-              raise EAetherParserError.Create(Format('Tipo de retorno divergente na implementation para "%s": esperado "%s", encontrado "%s"',
+              raise EAetherParserError.Create(Format('Mismatched return type in implementation for "%s": expected "%s", found "%s"',
                 [ImplFunc.Name, StubFunc.ReturnType, ImplFunc.ReturnType]), ImplFunc.Line, ImplFunc.Col);
             if StubFunc.Params.Count <> ImplFunc.Params.Count then
-              raise EAetherParserError.Create(Format('Quantidade de parametros divergente na implementation para "%s": esperado %d, encontrado %d',
+              raise EAetherParserError.Create(Format('Mismatched parameter count in implementation for "%s": expected %d, found %d',
                 [ImplFunc.Name, StubFunc.Params.Count, ImplFunc.Params.Count]), ImplFunc.Line, ImplFunc.Col);
             for J := 0 to StubFunc.Params.Count - 1 do
             begin
               if (TASTParam(StubFunc.Params[J]).Ownership <> TASTParam(ImplFunc.Params[J]).Ownership) or
                  (not SameText(TASTParam(StubFunc.Params[J]).TypeName, TASTParam(ImplFunc.Params[J]).TypeName)) then
-                raise EAetherParserError.Create(Format('Parametro %d de "%s" na implementation diverge da assinatura na interface',
+                raise EAetherParserError.Create(Format('Parameter %d of "%s" in implementation differs from interface signature',
                   [J + 1, ImplFunc.Name]), ImplFunc.Line, ImplFunc.Col);
             end;
 
             if (StubFunc.Requires.Count > 0) or (StubFunc.Ensures.Count > 0) then
             begin
               if (ImplFunc.Requires.Count > 0) or (ImplFunc.Ensures.Count > 0) then
-                raise EAetherParserError.Create(Format('Contratos de "%s" devem ser declarados apenas na secao "interface", sem duplicacao na "implementation"',
+                raise EAetherParserError.Create(Format('Contracts for "%s" must be declared only in the "interface" section, without duplication in "implementation"',
                   [ImplFunc.Name]), ImplFunc.Line, ImplFunc.Col);
               while StubFunc.Requires.Count > 0 do
                 ImplFunc.Requires.Add(StubFunc.Requires.Extract(StubFunc.Requires[0]));
@@ -2516,15 +2542,15 @@ begin
           end;
         end
         else
-          raise EAetherParserError.Create(Format('Declaracao inesperada na secao "implementation": "%s"', [FCurTok.Value]), FCurTok.Line, FCurTok.Col);
+          raise EAetherParserError.Create(Format('Unexpected declaration in "implementation" section: "%s"', [FCurTok.Value]), FCurTok.Line, FCurTok.Col);
       end;
 
-      // Garante que toda assinatura declarada na interface foi implementada
+      // Ensure every signature declared in interface was implemented
       for I := 0 to Result.Functions.Count - 1 do
       begin
         StubFunc := TASTFunction(Result.Functions[I]);
         if StubFunc.IsInterfaceDecl and (not StubFunc.IsExtern) then
-          raise EAetherParserError.Create(Format('Rotina "%s" declarada na secao "interface" nao foi implementada na secao "implementation"',
+          raise EAetherParserError.Create(Format('Routine "%s" declared in "interface" section was not implemented in "implementation" section',
             [StubFunc.Name]), StubFunc.Line, StubFunc.Col);
       end;
 
@@ -2533,7 +2559,7 @@ begin
         while not Check(tokFinalization) and not Check(tokEnd) and not Check(tokEOF) do
         begin
           Result.InitBody.Add(ParseStatement);
-          Expect(tokSemicolon, 'Esperado ";" apos instrucao na secao initialization');
+          Expect(tokSemicolon, 'Expected ";" after statement in initialization section');
         end;
       end;
 
@@ -2542,19 +2568,19 @@ begin
         while not Check(tokEnd) and not Check(tokEOF) do
         begin
           Result.FiniBody.Add(ParseStatement);
-          Expect(tokSemicolon, 'Esperado ";" apos instrucao na secao finalization');
+          Expect(tokSemicolon, 'Expected ";" after statement in finalization section');
         end;
       end;
 
-      Expect(tokEnd, Format('Esperado "end %s." no fechamento da unit', [ModName]));
-      CloseMod := Expect(tokIdentifier, Format('Esperado nome "%s" apos "end"', [ModName])).Value;
+      Expect(tokEnd, Format('Expected "end %s." to close unit', [ModName]));
+      CloseMod := Expect(tokIdentifier, Format('Expected name "%s" after "end"', [ModName])).Value;
       if not SameText(CloseMod, ModName) then
-        raise EAetherParserError.Create(Format('Fechamento de unit divergente: esperado "end %s.", mas encontrado "end %s."', [ModName, CloseMod]), FCurTok.Line, FCurTok.Col);
-      Expect(tokDot, Format('Esperado "." apos "end %s"', [ModName]));
+        raise EAetherParserError.Create(Format('Mismatched unit closing: expected "end %s.", but found "end %s."', [ModName, CloseMod]), FCurTok.Line, FCurTok.Col);
+      Expect(tokDot, Format('Expected "." after "end %s"', [ModName]));
     end
     else
     begin
-      // Modulo executavel com "program Main;"
+      // Executable module with "program Main;"
       while not Check(tokEOF) do
       begin
         while Check(tokLBracket) or Check(tokAt) or Check(tokPub) or Check(tokPriv) do
@@ -2614,15 +2640,15 @@ begin
           Break;
         end
         else
-          raise EAetherParserError.Create(Format('Declaracao inesperada no modulo: "%s"', [FCurTok.Value]), FCurTok.Line, FCurTok.Col);
+          raise EAetherParserError.Create(Format('Unexpected declaration in module: "%s"', [FCurTok.Value]), FCurTok.Line, FCurTok.Col);
       end;
 
       if not Assigned(Result.ProgramBlock) then
-        raise EAetherParserError.Create(Format('Modulo "%s" sem "program Main;" deve declarar a estrutura de Unit Object Pascal ("interface" ... "implementation" ... end %s.)',
+        raise EAetherParserError.Create(Format('Module "%s" without "program Main;" must declare the Object Pascal Unit structure ("interface" ... "implementation" ... end %s.)',
           [ModName, ModName]), FCurTok.Line, FCurTok.Col);
     end;
 
-    // Expande derivacoes automaticas (Debug, JSON, Clone, Equals)
+    // Expand automatic derivations (Debug, JSON, Clone, Equals)
     ExpandDerives(Result);
   except
     FreeAttributes(PendingAttrs);

@@ -28,7 +28,7 @@ type
     Buffer = record
         capacity: Int32;
         data: String;
-    end;
+    end record;
 
 procedure ConsumeBuffer(take buf: Buffer) is
 begin
@@ -62,7 +62,7 @@ type
     Document = record
         title: String;
         word_count: Int32;
-    end;
+    end record;
 
 procedure PrintSummary(borrow doc: Document) is
 begin
@@ -97,7 +97,7 @@ type
     Account = record
         holder: String;
         balance: Float64;
-    end;
+    end record;
 
 procedure Deposit(mut borrow acc: Account; amount: Float64) is
 begin

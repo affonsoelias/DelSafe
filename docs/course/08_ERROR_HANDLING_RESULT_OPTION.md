@@ -17,7 +17,7 @@ type
     IntOption = enum
         None,
         Some(Int32)
-    end;
+    end enum;
 
 function FindUserIndex(name: String) return IntOption is
 begin
@@ -27,7 +27,7 @@ begin
         return IntOption.Some(1);
     else
         return IntOption.None;
-    end;
+    end if;
 end FindUserIndex;
 
 program Main;
@@ -41,7 +41,7 @@ begin
             PrintLn("User found at index: " + IntToStr(idx));
         IntOption.None =>
             PrintLn("User does not exist in registry.");
-    end;
+    end match;
 end option_demo.
 ```
 
@@ -63,13 +63,13 @@ type
     MathResult = enum
         Ok(Int32),
         Err(String)
-    end;
+    end enum;
 
 function SafeDivide(a, b: Int32) return MathResult is
 begin
     if b = 0 then
         return MathResult.Err("Division by zero error!");
-    end;
+    end if;
     return MathResult.Ok(a / b);
 end SafeDivide;
 
@@ -83,7 +83,7 @@ begin
             PrintLn("Division succeeded: " + IntToStr(val));
         MathResult.Err(msg) =>
             PrintLn("Operation failed: " + msg);
-    end;
+    end match;
 
     res := SafeDivide(100, 0);
     match res with
@@ -91,7 +91,7 @@ begin
             PrintLn("Division succeeded: " + IntToStr(val));
         MathResult.Err(msg) =>
             PrintLn("Handled gracefully: " + msg);
-    end;
+    end match;
 end result_demo.
 ```
 

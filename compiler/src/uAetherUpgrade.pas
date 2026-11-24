@@ -147,7 +147,7 @@ begin
     except
       on E: Exception do
       begin
-        WriteLn(ErrOutput, 'Erro ao executar comando: ', E.Message);
+        WriteLn(ErrOutput, 'Error executing command: ', E.Message);
         Result := -1;
       end;
     end;
@@ -243,14 +243,14 @@ begin
 
   if ExitCode <> 0 then
   begin
-    ErrorMsg := 'Falha ao conectar aos servidores de release (curl retornou codigo ' + IntToStr(ExitCode) + '). ' +
-                'Verifique sua conexao de rede ou use "aetherc upgrade --from-source". Log: ' + OutputLog;
+    ErrorMsg := 'Failed to connect to release servers (curl returned exit code ' + IntToStr(ExitCode) + '). ' +
+                'Check your network connection or use "aetherc upgrade --from-source". Log: ' + OutputLog;
     Exit(False);
   end;
 
   if (OutputLog = '') or (Pos('{', OutputLog) = 0) then
   begin
-    ErrorMsg := 'Resposta inesperada do servidor de release. Log: ' + OutputLog;
+    ErrorMsg := 'Unexpected response from release server. Log: ' + OutputLog;
     Exit(False);
   end;
 
@@ -259,7 +259,7 @@ begin
   except
     on E: Exception do
     begin
-      ErrorMsg := 'Falha ao processar metadados JSON do release: ' + E.Message;
+      ErrorMsg := 'Failed to parse release JSON metadata: ' + E.Message;
       Exit(False);
     end;
   end;
@@ -267,16 +267,16 @@ begin
   try
     if not (JsonData is TJSONObject) then
     begin
-      ErrorMsg := 'Resposta JSON invalida da API de releases.';
+      ErrorMsg := 'Invalid JSON response from releases API.';
       Exit(False);
     end;
 
     RootObj := TJSONObject(JsonData);
 
-    // Verifica se houve mensagem de erro da API do GitHub (ex: 404 Not Found, Rate limit exceeded)
+    // Check for GitHub API error message (e.g., 404 Not Found, Rate limit exceeded)
     if RootObj.IndexOfName('message') >= 0 then
     begin
-      ErrorMsg := 'API GitHub: ' + RootObj.Get('message', 'Erro desconhecido');
+      ErrorMsg := 'GitHub API: ' + RootObj.Get('message', 'Unknown error');
       Exit(False);
     end;
 
@@ -296,14 +296,14 @@ begin
           CurName := LowerCase(AssetObj.Get('name', ''));
           CurDownloadUrl := AssetObj.Get('browser_download_url', '');
 
-          // Identifica arquivo de checksum
+          // Identify checksum file
           if (Pos('.sha256', CurName) > 0) or (Pos('checksum', CurName) > 0) then
           begin
             if (Pos(OSName, CurName) > 0) or (ChecksumUrl = '') then
               ChecksumUrl := CurDownloadUrl;
           end;
 
-          // Identifica o pacote binario correspondente ao sistema operacional e arquitetura (excluindo checksums)
+          // Identify the binary package matching the OS and architecture (excluding checksums)
           if (Pos(OSName, CurName) > 0) and
              (Pos('.sha256', CurName) = 0) and
              (Pos('.sig', CurName) = 0) and
@@ -324,7 +324,7 @@ begin
 
   if not FoundAsset and (AssetUrl = '') then
   begin
-    ErrorMsg := Format('Nenhum pacote binario compativel com a plataforma (%s-%s) foi encontrado no release %s.',
+    ErrorMsg := Format('No binary package compatible with platform (%s-%s) was found in release %s.',
       [OSName, ArchName, TagName]);
     Exit(False);
   end;
@@ -345,56 +345,56 @@ begin
 
   if not FileExists(BakPath) then
   begin
-    WriteLn(ErrOutput, Format('Erro: Nenhum backup de versao anterior foi encontrado em "%s".', [BakPath]));
-    WriteLn(ErrOutput, 'O rollback so e possivel apos uma atualizacao anterior bem-sucedida.');
+    WriteLn(ErrOutput, Format('Error: No previous version backup found at "%s".', [BakPath]));
+    WriteLn(ErrOutput, 'Rollback is only available after a previously successful update.');
     Halt(1);
   end;
 
-  WriteLn('==> Iniciando reversao (Rollback) da toolchain Aether...');
-  WriteLn(Format('    Executavel atual : %s', [ExePath]));
-  WriteLn(Format('    Backup anterior  : %s', [BakPath]));
+  WriteLn('==> Starting Aether toolchain rollback...');
+  WriteLn(Format('    Current executable: %s', [ExePath]));
+  WriteLn(Format('    Previous backup   : %s', [BakPath]));
 
   if DryRun then
   begin
     WriteLn('');
-    WriteLn('[DRY-RUN] Nenhuma alteracao foi feita no disco.');
-    WriteLn(Format('[DRY-RUN] O arquivo "%s" seria restaurado como "%s".', [BakPath, ExePath]));
+    WriteLn('[DRY-RUN] No changes were written to disk.');
+    WriteLn(Format('[DRY-RUN] File "%s" would be restored as "%s".', [BakPath, ExePath]));
     Exit;
   end;
 
-  // No Windows, renomeamos o atual para .failed e o .bak para o atual
+  // On Windows, rename current to .failed and .bak to current
   if FileExists(ExePath + '.failed') then
     DeleteFile(ExePath + '.failed');
 
   if not RenameFile(ExePath, ExePath + '.failed') then
   begin
-    WriteLn(ErrOutput, 'Erro: Falha ao mover o executavel atual para backup temporario.');
+    WriteLn(ErrOutput, 'Error: Failed to move current executable to temporary backup.');
     Halt(1);
   end;
 
   if not RenameFile(BakPath, ExePath) then
   begin
-    // Tenta restaurar em caso de erro
+    // Attempt restore on error
     RenameFile(ExePath + '.failed', ExePath);
-    WriteLn(ErrOutput, 'Erro critico: Falha ao restaurar o backup anterior.');
+    WriteLn(ErrOutput, 'Critical error: Failed to restore previous backup.');
     Halt(1);
   end;
 
   DeleteFile(ExePath + '.failed');
 
-  // Verifica o executavel restaurado
+  // Verify restored executable
   if RunProcessWithOutput(ExePath, '-h', OutputLog) = 0 then
   begin
     WriteLn('');
     WriteLn('========================================================');
-    WriteLn('  [SUCESSO] Reversao concluida com sucesso!             ');
-    WriteLn('  A versao anterior da toolchain foi restaurada.        ');
+    WriteLn('  [SUCCESS] Rollback completed successfully!            ');
+    WriteLn('  The previous toolchain version has been restored.      ');
     WriteLn('========================================================');
   end
   else
   begin
     WriteLn('');
-    WriteLn('Aviso: O binario restaurado retornou codigo de saida diferente de zero.');
+    WriteLn('Warning: Restored binary returned a non-zero exit code.');
   end;
 end;
 
@@ -405,14 +405,14 @@ var
   IsWindows: Boolean;
 begin
   WriteLn('========================================================');
-  WriteLn('  Atualizacao Aether via Codigo-Fonte (Source Build)    ');
+  WriteLn('  Aether Update via Source Code (Source Build)          ');
   WriteLn('========================================================');
-  WriteLn(Format('Repositorio Git detectado: %s', [GitDir]));
+  WriteLn(Format('Git repository detected: %s', [GitDir]));
 
   if Opts.DryRun then
   begin
     WriteLn('');
-    WriteLn('[DRY-RUN] Comandos que seriam executados:');
+    WriteLn('[DRY-RUN] Commands that would be executed:');
     WriteLn('  1. git -C "' + GitDir + '" fetch --tags --all');
     if Opts.TargetVersion <> '' then
       WriteLn('  2. git -C "' + GitDir + '" checkout ' + Opts.TargetVersion)
@@ -430,28 +430,28 @@ begin
 
   // 1. Git Fetch
   WriteLn('');
-  WriteLn('-> [1/4] Buscando atualizacoes e tags remotas via Git...');
+  WriteLn('-> [1/4] Fetching remote updates and tags via Git...');
   ExitCode := RunProcessWithOutput('git', Format('-C "%s" fetch --tags --all', [GitDir]), OutputLog);
   if ExitCode <> 0 then
   begin
-    WriteLn(ErrOutput, 'Erro ao executar git fetch: ' + OutputLog);
+    WriteLn(ErrOutput, 'Error running git fetch: ' + OutputLog);
     Halt(1);
   end;
 
   // 2. Checkout / Pull
   if Opts.TargetVersion <> '' then
   begin
-    WriteLn(Format('-> [2/4] Atualizando para versao/tag especifica: %s...', [Opts.TargetVersion]));
+    WriteLn(Format('-> [2/4] Updating to specific version/tag: %s...', [Opts.TargetVersion]));
     ExitCode := RunProcessWithOutput('git', Format('-C "%s" checkout %s', [GitDir, Opts.TargetVersion]), OutputLog);
   end
   else
   begin
-    WriteLn('-> [2/4] Mesclando codigo mais recente da branch principal (pull)...');
+    WriteLn('-> [2/4] Pulling latest code from main branch...');
     TargetBranch := 'main';
     ExitCode := RunProcessWithOutput('git', Format('-C "%s" pull origin %s', [GitDir, TargetBranch]), OutputLog);
     if ExitCode <> 0 then
     begin
-      // Tenta 'master' caso a branch remota seja master
+      // Fall back to 'master' if remote branch is master
       TargetBranch := 'master';
       ExitCode := RunProcessWithOutput('git', Format('-C "%s" pull origin %s', [GitDir, TargetBranch]), OutputLog);
     end;
@@ -459,14 +459,14 @@ begin
 
   if ExitCode <> 0 then
   begin
-    WriteLn(ErrOutput, 'Erro ao sincronizar branch/tag Git: ' + OutputLog);
+    WriteLn(ErrOutput, 'Error syncing Git branch/tag: ' + OutputLog);
     Halt(1);
   end;
-  WriteLn('   Git sincronizado com sucesso.');
+  WriteLn('   Git synchronized successfully.');
 
-  // 3. Recompilação do compilador
+  // 3. Rebuild compiler
   WriteLn('');
-  WriteLn('-> [3/4] Recompilando o compilador Aether (aetherc)...');
+  WriteLn('-> [3/4] Rebuilding the Aether compiler (aetherc)...');
   {$IFDEF MSWINDOWS}
   IsWindows := True;
   if FileExists(GitDir + PathDelim + 'build.ps1') then
@@ -484,13 +484,13 @@ begin
   ExitCode := RunCommandStream(Cmd);
   if ExitCode <> 0 then
   begin
-    WriteLn(ErrOutput, Format('Erro na compilacao do aetherc (codigo %d).', [ExitCode]));
+    WriteLn(ErrOutput, Format('Error compiling aetherc (exit code %d).', [ExitCode]));
     Halt(1);
   end;
 
-  // 4. Executa a suite de testes unitarios com o novo binario
+  // 4. Run unit test suite with the new binary
   WriteLn('');
-  WriteLn('-> [4/4] Validando novo compilador com a suite de testes unitarios...');
+  WriteLn('-> [4/4] Validating new compiler against the unit test suite...');
   if IsWindows then
     Cmd := Format('"%s%sbin%saetherc.exe" test', [GitDir, PathDelim, PathDelim])
   else
@@ -499,14 +499,14 @@ begin
   ExitCode := RunCommandStream(Cmd);
   if ExitCode <> 0 then
   begin
-    WriteLn(ErrOutput, 'Aviso: Alguns testes da suite falharam apos a atualizacao.');
+    WriteLn(ErrOutput, 'Warning: Some suite tests failed after updating.');
     Halt(1);
   end;
 
   WriteLn('');
   WriteLn('========================================================');
-  WriteLn('  [SUCESSO] Compilador Aether atualizado com sucesso!   ');
-  WriteLn('  Toolchain reconstruida e validada via testes.         ');
+  WriteLn('  [SUCCESS] Aether compiler updated successfully!       ');
+  WriteLn('  Toolchain rebuilt and verified via tests.             ');
   WriteLn('========================================================');
 end;
 
@@ -525,32 +525,32 @@ begin
   DetectPlatform(OSName, ArchName);
 
   WriteLn('========================================================');
-  WriteLn('  Verificando Atualizacoes do Compilador AetherLang     ');
+  WriteLn('  Checking for AetherLang Compiler Updates             ');
   WriteLn('========================================================');
-  WriteLn(Format('Versao instalada atual : v%s', [AETHER_COMPILER_VERSION]));
-  WriteLn(Format('Plataforma detectada   : %s-%s', [OSName, ArchName]));
-  WriteLn(Format('Repositorio de releases: %s', [RepoName]));
-  WriteLn('Consultando metadados de release...');
+  WriteLn(Format('Current installed version : v%s', [AETHER_COMPILER_VERSION]));
+  WriteLn(Format('Detected platform         : %s-%s', [OSName, ArchName]));
+  WriteLn(Format('Releases repository       : %s', [RepoName]));
+  WriteLn('Fetching release metadata...');
 
   if not FetchReleaseMetadata(RepoName, Opts.TargetVersion, Opts.CustomUrl,
                               TagName, Notes, AssetUrl, AssetName, ChecksumUrl, ChecksumVal, ErrorMsg) then
   begin
-    WriteLn(ErrOutput, 'Erro: ' + ErrorMsg);
+    WriteLn(ErrOutput, 'Error: ' + ErrorMsg);
     Halt(1);
   end;
 
   WriteLn('');
-  WriteLn(Format('Ultima versao encontrada : %s', [TagName]));
+  WriteLn(Format('Latest version found      : %s', [TagName]));
   if AssetName <> '' then
-    WriteLn(Format('Pacote compativel        : %s', [AssetName]));
+    WriteLn(Format('Compatible package        : %s', [AssetName]));
 
-  // Compara SemVer da versão atual com o release remoto
+  // Compare SemVer of current version against remote release
   if (CompareSemVer(TagName, AETHER_COMPILER_VERSION) <= 0) and (Opts.TargetVersion = '') then
   begin
     WriteLn('');
     WriteLn('========================================================');
-    WriteLn(Format('  O AetherLang ja esta atualizado na versao v%s!  ', [AETHER_COMPILER_VERSION]));
-    WriteLn('  Nenhuma acao adicional e necessaria.                  ');
+    WriteLn(Format('  AetherLang is already up to date at v%s!        ', [AETHER_COMPILER_VERSION]));
+    WriteLn('  No further action is required.                        ');
     WriteLn('========================================================');
     Exit;
   end;
@@ -559,16 +559,16 @@ begin
   begin
     WriteLn('');
     WriteLn('--------------------------------------------------------');
-    WriteLn(Format('Nova versao disponivel: %s (instalada: v%s)', [TagName, AETHER_COMPILER_VERSION]));
+    WriteLn(Format('New version available: %s (installed: v%s)', [TagName, AETHER_COMPILER_VERSION]));
     if Trim(Notes) <> '' then
     begin
       WriteLn('');
-      WriteLn('Notas de Lancamento:');
+      WriteLn('Release Notes:');
       WriteLn(Copy(Notes, 1, 400));
       if Length(Notes) > 400 then WriteLn('...');
     end;
     WriteLn('--------------------------------------------------------');
-    WriteLn('Para atualizar para esta versao agora, execute:');
+    WriteLn('To update to this version now, run:');
     WriteLn('  aetherc upgrade');
     Exit;
   end;
@@ -576,22 +576,22 @@ begin
   if Opts.DryRun then
   begin
     WriteLn('');
-    WriteLn('[DRY-RUN] Plano de execucao da atualizacao:');
+    WriteLn('[DRY-RUN] Update execution plan:');
     WriteLn(Format('  1. Download: %s', [AssetUrl]));
     if ChecksumUrl <> '' then
-      WriteLn(Format('  2. Verificacao de Integridade SHA-256 via %s', [ChecksumUrl]));
-    WriteLn(Format('  3. Extracao do pacote %s', [AssetName]));
-    WriteLn(Format('  4. Backup atomico: %s -> %s.bak', [ExePath, ExePath]));
-    WriteLn(Format('  5. Substituicao de: %s', [ExePath]));
-    WriteLn('  6. Teste de inicializacao com o novo binario');
+      WriteLn(Format('  2. SHA-256 Integrity Check via %s', [ChecksumUrl]));
+    WriteLn(Format('  3. Extract package %s', [AssetName]));
+    WriteLn(Format('  4. Atomic backup: %s -> %s.bak', [ExePath, ExePath]));
+    WriteLn(Format('  5. Replace: %s', [ExePath]));
+    WriteLn('  6. Startup test with the new binary');
     Exit;
   end;
 
-  // Cria diretorio temporario para download
+  // Create temporary download directory
   TempDir := GetTempDir + 'aether_upgrade_' + IntToStr(DateTimeToFileDate(Now));
   if not ForceDirectories(TempDir) then
   begin
-    WriteLn(ErrOutput, 'Erro ao criar diretorio temporario de atualizacao: ' + TempDir);
+    WriteLn(ErrOutput, 'Error creating temporary update directory: ' + TempDir);
     Halt(1);
   end;
 
@@ -600,52 +600,52 @@ begin
   ForceDirectories(ExtractDir);
 
   try
-    // 1. Download do arquivo de release
+    // 1. Download release archive
     WriteLn('');
-    WriteLn(Format('-> [1/4] Baixando release %s (%s)...', [TagName, AssetName]));
+    WriteLn(Format('-> [1/4] Downloading release %s (%s)...', [TagName, AssetName]));
     CurlCmd := Format('-sL -H "User-Agent: Aether-Upgrader" -o "%s" "%s"', [DownloadedFile, AssetUrl]);
     ExitCode := RunCommandStream('curl ' + CurlCmd);
     if (ExitCode <> 0) or not FileExists(DownloadedFile) then
     begin
-      WriteLn(ErrOutput, 'Erro ao baixar o artefato de release via curl.');
+      WriteLn(ErrOutput, 'Error downloading release artifact via curl.');
       Halt(1);
     end;
 
-    // 2. Verificação de integridade SHA-256
-    WriteLn('-> [2/4] Verificando integridade criptografica (SHA-256)...');
+    // 2. SHA-256 integrity verification
+    WriteLn('-> [2/4] Verifying cryptographic integrity (SHA-256)...');
     HashCalc := LowerCase(SHA256File(DownloadedFile));
-    WriteLn(Format('   Hash SHA-256 calculado: %s', [HashCalc]));
+    WriteLn(Format('   Computed SHA-256 hash: %s', [HashCalc]));
 
     if ChecksumUrl <> '' then
     begin
-      // Baixa checksum se disponivel
+      // Download checksum if available
       RunProcessWithOutput('curl', Format('-sL "%s"', [ChecksumUrl]), ChecksumVal);
       if ChecksumVal <> '' then
       begin
         if Pos(HashCalc, LowerCase(ChecksumVal)) = 0 then
         begin
-          WriteLn(ErrOutput, 'Erro de Seguranca E9991: O hash SHA-256 do arquivo baixado nao confere com o release oficial.');
-          WriteLn(ErrOutput, 'Operacao abortada por motivos de integridade.');
+          WriteLn(ErrOutput, 'Security Error E9991: Downloaded file SHA-256 hash does not match the official release.');
+          WriteLn(ErrOutput, 'Operation aborted due to integrity check failure.');
           Halt(1);
         end
         else
-          WriteLn('   [OK] Checksum SHA-256 verificado com sucesso contra a assinatura do release.');
+          WriteLn('   [OK] SHA-256 checksum verified against the release signature.');
       end;
     end
     else
-      WriteLn('   [OK] Checksum local calculado com sucesso.');
+      WriteLn('   [OK] Local checksum computed successfully.');
 
-    // 3. Descompactação do arquivo
-    WriteLn('-> [3/4] Extraindo artefato de release...');
+    // 3. Extract archive
+    WriteLn('-> [3/4] Extracting release artifact...');
     TarCmd := Format('-xf "%s" -C "%s"', [DownloadedFile, ExtractDir]);
     ExitCode := RunProcessWithOutput('tar', TarCmd, TestLog);
     if ExitCode <> 0 then
     begin
-      WriteLn(ErrOutput, 'Erro ao descompactar artefato com tar: ' + TestLog);
+      WriteLn(ErrOutput, 'Error extracting artifact with tar: ' + TestLog);
       Halt(1);
     end;
 
-    // Localiza o executável extraído
+    // Locate extracted executable
     {$IFDEF MSWINDOWS}
     NewExeCandidate := ExtractDir + PathDelim + 'aetherc.exe';
     if not FileExists(NewExeCandidate) then
@@ -658,56 +658,56 @@ begin
 
     if not FileExists(NewExeCandidate) then
     begin
-      WriteLn(ErrOutput, 'Erro: O executavel do compilador aetherc nao foi encontrado no pacote descompactado.');
+      WriteLn(ErrOutput, 'Error: The aetherc compiler executable was not found in the extracted package.');
       Halt(1);
     end;
 
-    // 4. Substituição atômica no sistema de arquivos
-    WriteLn('-> [4/4] Aplicando atualizacao atomica no executavel do compilador...');
+    // 4. Atomic filesystem replacement
+    WriteLn('-> [4/4] Applying atomic update to the compiler executable...');
     BakPath := ExePath + '.bak';
     if FileExists(BakPath) then
       DeleteFile(BakPath);
 
-    // No Windows, renomear o executavel em execucao e permitido
+    // On Windows, renaming a running executable is allowed
     if not RenameFile(ExePath, BakPath) then
     begin
-      WriteLn(ErrOutput, Format('Erro ao criar backup do executavel atual em "%s".', [BakPath]));
+      WriteLn(ErrOutput, Format('Error creating backup of current executable at "%s".', [BakPath]));
       Halt(1);
     end;
 
-    // Copia ou move o novo executável para o local definitivo
+    // Copy or move the new executable into place
     if not RenameFile(NewExeCandidate, ExePath) then
     begin
-      // Se mover falhou (ex: unidades de disco diferentes), tenta copiar
+      // If rename failed (e.g., cross-drive), try copying
       if not CopyFileStream(NewExeCandidate, ExePath) then
       begin
-        WriteLn(ErrOutput, 'Erro ao gravar o novo executavel. Restaurando backup anterior...');
+        WriteLn(ErrOutput, 'Error writing new executable. Restoring previous backup...');
         RenameFile(BakPath, ExePath);
         Halt(1);
       end;
     end;
 
-    // Valida execução do novo binário
+    // Verify execution of the new binary
     ExitCode := RunProcessWithOutput(ExePath, '-h', TestLog);
     if ExitCode <> 0 then
     begin
-      WriteLn(ErrOutput, 'Aviso: O novo binario falhou no auto-teste inicial. Restaurando backup anterior...');
+      WriteLn(ErrOutput, 'Warning: New binary failed initial self-test. Restoring previous backup...');
       DeleteFile(ExePath);
       RenameFile(BakPath, ExePath);
-      WriteLn(ErrOutput, 'Rollback automatico concluido com sucesso.');
+      WriteLn(ErrOutput, 'Automatic rollback completed successfully.');
       Halt(1);
     end;
 
     WriteLn('');
     WriteLn('========================================================');
-    WriteLn(Format('  [SUCESSO] Compilador Aether atualizado para %s!   ', [TagName]));
-    WriteLn('  Backup da versao anterior preservado em:             ');
+    WriteLn(Format('  [SUCCESS] Aether compiler updated to %s!          ', [TagName]));
+    WriteLn('  Previous version backup preserved at:                ');
     WriteLn(Format('    %s', [BakPath]));
-    WriteLn('  Para reverter caso necessario: aetherc upgrade --rollback');
+    WriteLn('  To revert if needed: aetherc upgrade --rollback');
     WriteLn('========================================================');
 
   finally
-    // Limpeza de arquivos temporários
+    // Clean up temporary files
     if FileExists(DownloadedFile) then DeleteFile(DownloadedFile);
   end;
 end;
@@ -718,7 +718,7 @@ var
 begin
   CurExe := GetCurrentExePath;
 
-  // 1. Rollback explícito solicitado
+  // 1. Explicit rollback requested
   if Opts.Rollback then
   begin
     HandleRollback(CurExe, Opts.DryRun);
@@ -727,7 +727,7 @@ begin
 
   GitDir := FindGitRoot;
 
-  // 2. Atualização via código-fonte explícita ou automática quando dentro de repo git
+  // 2. Source-based update (explicit or automatic inside a git repo)
   if Opts.FromSource or ((GitDir <> '') and not Opts.BinaryMode and not Opts.CheckOnly) then
   begin
     if GitDir <> '' then
@@ -737,14 +737,14 @@ begin
     end
     else
     begin
-      WriteLn(ErrOutput, 'Erro: Nenhum repositorio Git foi detectado no diretorio atual ou pastas superiores.');
-      WriteLn(ErrOutput, 'Para atualizar usando binarios pre-compilados do release oficial:');
+      WriteLn(ErrOutput, 'Error: No Git repository detected in the current or parent directories.');
+      WriteLn(ErrOutput, 'To update using prebuilt binaries from the official release:');
       WriteLn(ErrOutput, '  aetherc upgrade --binary');
       Halt(1);
     end;
   end;
 
-  // 3. Atualização via pacotes binários
+  // 3. Binary package update
   HandleBinaryUpgrade(CurExe, Opts);
 end;
 

@@ -3,18 +3,18 @@ module Carvalho;
 interface
 
 type
-    Arvore = record
-        altura: Int32;
-        idade: Int32;
-    end;
+    Tree = record
+        height: Int32;
+        age: Int32;
+    end record;
 
-function CriarCarvalho(h, anos: Int32) return Arvore;
+function CreateOak(h, years: Int32) return Tree;
 
 implementation
 
-function CriarCarvalho(h, anos: Int32) return Arvore is
+function CreateOak(h, years: Int32) return Tree is
 begin
-    return Arvore(altura: h, idade: anos);
-end CriarCarvalho;
+    return Tree(height: h, age: years);
+end CreateOak;
 
 end Carvalho.

@@ -96,7 +96,7 @@ var
 begin
   if not Assigned(AModule) then Exit;
 
-  // 1. Filtra constantes
+  // 1. Filter constants
   I := AModule.Constants.Count - 1;
   while I >= 0 do
   begin
@@ -108,7 +108,7 @@ begin
     Dec(I);
   end;
 
-  // 2. Filtra funcoes
+  // 2. Filter functions
   I := AModule.Functions.Count - 1;
   while I >= 0 do
   begin
@@ -120,7 +120,7 @@ begin
     Dec(I);
   end;
 
-  // 2. Filtra tipos
+  // 2. Filter types
   I := AModule.Types.Count - 1;
   while I >= 0 do
   begin

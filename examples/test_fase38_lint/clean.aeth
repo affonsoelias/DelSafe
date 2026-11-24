@@ -1,21 +1,21 @@
 module clean;
 
 type
-    Ponto = record
+    Point = record
         x: Float64;
         y: Float64;
-    end;
+    end record;
 
-function Dobrar(val: Int32) return Int32 is
+function DoubleVal(val: Int32) return Int32 is
 begin
     return val * 2;
-end Dobrar;
+end DoubleVal;
 
 program Main;
 var
-    p: Ponto;
+    p: Point;
 begin
-    p := Ponto(3.5, 7.5);
-    PrintLn("Coordenadas: %f, %f", p.x, p.y);
-    PrintLn("Dobro: %d", Dobrar(21));
+    p := Point(3.5, 7.5);
+    PrintLn("Coordinates: %f, %f", p.x, p.y);
+    PrintLn("Double: %d", DoubleVal(21));
 end clean.

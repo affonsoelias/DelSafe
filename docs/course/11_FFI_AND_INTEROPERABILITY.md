@@ -245,7 +245,7 @@ begin
     while i <= Length(data) do
         hash := ((hash * 33) + UInt32(Byte(data[i])));
         i := i + 1;
-    end;
+    end while;
     return hash;
 end ComputeHash;
 
@@ -267,7 +267,7 @@ aetherc emit-header algorithms.aeth -o include/algorithms.h
 
 Output:
 ```text
-Cabecalho C (C99/C++) gerado com sucesso:
+C header (C99/C++) generated successfully:
   --> include/algorithms.h
 ```
 

@@ -1,7 +1,7 @@
 {
   "name": "aether-lang",
   "displayName": "Aether Programming Language",
-  "description": "Suporte oficial e estável (v1.0.0) para a linguagem Aether (.aeth): realce de sintaxe, formatação canônica (Shift+Alt+F), refatoração segura (F2), quick-fix para Borrow Checker, snippets e LSP nativo com diagnóstico instantâneo.",
+  "description": "Official stable support (v1.0.0) for the Aether language (.aeth): syntax highlighting, canonical formatting (Shift+Alt+F), safe refactoring (F2), Borrow Checker quick-fixes, snippets, and native LSP with instant diagnostics.",
   "version": "1.0.0",
   "publisher": "aether-lang",
   "engines": {
@@ -56,37 +56,37 @@
     "commands": [
       {
         "command": "aether.initProject",
-        "title": "Aether: Inicializar Novo Projeto (Init / aether.json)",
+        "title": "Aether: Initialize New Project (Init / aether.json)",
         "category": "Aether"
       },
       {
         "command": "aether.buildProject",
-        "title": "Aether: Compilar Projeto (Build)",
+        "title": "Aether: Build Project (Build)",
         "category": "Aether"
       },
       {
         "command": "aether.runProject",
-        "title": "Aether: Executar Projeto (Run)",
+        "title": "Aether: Run Project (Run)",
         "category": "Aether"
       },
       {
         "command": "aether.compilePascal",
-        "title": "Aether: Compilar Arquivo Atual (Backend Pascal)",
+        "title": "Aether: Compile Current File (Pascal Backend)",
         "category": "Aether"
       },
       {
         "command": "aether.compileC",
-        "title": "Aether: Compilar Arquivo Atual (Backend C99 / GCC)",
+        "title": "Aether: Compile Current File (C99 / GCC Backend)",
         "category": "Aether"
       },
       {
         "command": "aether.checkDiagnostics",
-        "title": "Aether: Analisar e Atualizar Diagnósticos (Modo IA)",
+        "title": "Aether: Analyze and Refresh Diagnostics (AI Mode)",
         "category": "Aether"
       },
       {
         "command": "aether.formatDocument",
-        "title": "Aether: Formatar Documento (Shift+Alt+F)",
+        "title": "Aether: Format Document (Shift+Alt+F)",
         "category": "Aether"
       }
     ],
@@ -100,7 +100,7 @@
         ],
         "pattern": [
           {
-            "regexp": "^\\[Erro (?:Sintatico|Semantico|de Posse)(?: (\\w+))? em (\\d+):(\\d+)\\]: (.*)$",
+            "regexp": "^\\[(?:Syntax|Semantic|Ownership) Error(?: (\\w+))? at (\\d+):(\\d+)\\]: (.*)$",
             "code": 1,
             "line": 2,
             "column": 3,

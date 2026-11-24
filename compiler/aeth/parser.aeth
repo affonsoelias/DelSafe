@@ -191,7 +191,7 @@ var
 begin
     tok := p.current;
 
-    // 1. Declaracao de variavel: var vname: tname;
+    // 1. Variable declaration: var vname: tname;
     if tok.kind = TokenKind.tkVar then
         AdvanceParser(mut borrow p);
         if p.current.kind = TokenKind.tkIdentifier then
@@ -205,14 +205,14 @@ begin
         end;
     end;
 
-    // 2. Chamada de PrintLn(...)
+    // 2. Call to PrintLn(...)
     if (tok.kind = TokenKind.tkIdentifier) and (tok.text = "PrintLn") then
         call_expr := ParsePrimary(mut borrow p);
         MatchToken(mut borrow p, TokenKind.tkSemi);
         return NewPrintLnStmt(take call_expr);
     end;
 
-    // 3. Estrutura condicional: if cond then stmts else stmts end;
+    // 3. Conditional structure: if cond then stmts else stmts end;
     if tok.kind = TokenKind.tkIf then
         AdvanceParser(mut borrow p);
         cond_expr := ParseExpr(mut borrow p);
@@ -228,7 +228,7 @@ begin
         return NewIfStmt(take cond_expr, take then_st, take else_st);
     end;
 
-    // 4. Laco de repeticao: while cond do stmts end;
+    // 4. Loop structure: while cond do stmts end;
     if tok.kind = TokenKind.tkWhile then
         AdvanceParser(mut borrow p);
         cond_expr := ParseExpr(mut borrow p);
@@ -239,7 +239,7 @@ begin
         return NewWhileStmt(take cond_expr, take then_st);
     end;
 
-    // 5. Retorno: return expr;
+    // 5. Return: return expr;
     if tok.kind = TokenKind.tkReturn then
         AdvanceParser(mut borrow p);
         ret_expr := ParseExpr(mut borrow p);
@@ -247,7 +247,7 @@ begin
         return NewReturnStmt(take ret_expr);
     end;
 
-    // 6. Atribuicao: vname := expr; ou Chamada: vname(args);
+    // 6. Assignment: vname := expr; or Call: vname(args);
     if tok.kind = TokenKind.tkIdentifier then
         vname := tok.text;
         AdvanceParser(mut borrow p);
@@ -376,7 +376,7 @@ var
     body_stmts: ASTStmtNode;
     fn_node: ASTFunctionNode;
 begin
-    AdvanceParser(mut borrow p); // consome 'function'
+    AdvanceParser(mut borrow p); // consume 'function'
     fname := p.current.text;
     AdvanceParser(mut borrow p);
     MatchToken(mut borrow p, TokenKind.tkLParen);

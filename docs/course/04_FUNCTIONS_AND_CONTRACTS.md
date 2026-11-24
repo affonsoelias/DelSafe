@@ -51,7 +51,7 @@ contract
 begin
     if x < 0 then
         return 0; // `ensure` still checks `result >= 0` before returning
-    end;
+    end if;
     return x;
 end SafeStep;
 

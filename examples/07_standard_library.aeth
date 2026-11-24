@@ -15,21 +15,21 @@ var
     buffer: FixedBuffer;
     ok_push: Bool;
 begin
-    PrintLn("=== TESTE DA BIBLIOTECA PADRAO AETHER (STD/) ===");
+    PrintLn("=== AETHER STANDARD LIBRARY TEST (STD/) ===");
 
-    // 1. Testando std/io
-    LogInfo(borrow "Inicializando demonstracao da biblioteca padrao...");
+    // 1. Testing std/io
+    LogInfo(borrow "Initializing standard library demonstration...");
 
-    // 2. Testando std/strings
-    PrintMessage(borrow "INFO", borrow "Modulo Strings carregado com sucesso!");
+    // 2. Testing std/strings
+    PrintMessage(borrow "INFO", borrow "Strings module loaded successfully!");
     if IsEmpty(borrow "") then
-        PrintLn("Validacao Strings: IsEmpty(\"\") retornou true como esperado.");
-    end;
+        PrintLn("Strings validation: IsEmpty(\"\") returned true as expected.");
+    end if;
 
-    // 3. Testando std/math
+    // 3. Testing std/math
     val_abs := Abs(borrow -42.5);
     val_max := Max(borrow 10.0, borrow 99.5);
-    val_clamped := Clamp(borrow 150.0, borrow 0.0, borrow 100.0);
+    val_clamped := Clamp(borrow 150.0, borrow 0.0, 100.0);
     val_pow := Pow(borrow 2.0, borrow 8.0);
 
     PrintLn("Math.Abs(-42.5) = %f", val_abs);
@@ -39,31 +39,31 @@ begin
 
     res_sqrt := SqrtSafe(borrow 81.0);
     match res_sqrt do
-        case Ok(let raiz):
-            PrintLn("Math.SqrtSafe(81.0) = %f", raiz);
+        case Ok(let root_val):
+            PrintLn("Math.SqrtSafe(81.0) = %f", root_val);
         case Err(MathError.InvalidDomain):
-            PrintLn("Erro: Raiz de numero negativo!");
+            PrintLn("Error: Square root of a negative number!");
         case Err(MathError.DivisionByZero):
-            PrintLn("Erro: Divisao por zero!");
-    end;
+            PrintLn("Error: Division by zero!");
+    end match;
 
-    // 4. Testando std/collections com sintaxe UFCS e controle de posse
-    PrintLn("\n--- Testando std/collections (FixedBuffer) ---");
+    // 4. Testing std/collections with UFCS syntax and ownership control
+    PrintLn("\n--- Testing std/collections (FixedBuffer) ---");
     buffer := NewBuffer(borrow 3);
-    PrintLn("Buffer criado com capacidade: %d, itens: %d", buffer.capacity, buffer.count);
+    PrintLn("Buffer created with capacity: %d, items: %d", buffer.capacity, buffer.count);
 
     ok_push := buffer.PushItem();
     ok_push := buffer.PushItem();
-    PrintLn("Apos 2 PushItem: itens = %d, disponivel = %d", buffer.count, buffer.Available());
+    PrintLn("After 2 PushItem calls: items = %d, available = %d", buffer.count, buffer.Available());
 
     if not buffer.IsFull() then
-        PrintLn("Buffer ainda possui espaco!");
-    end;
+        PrintLn("Buffer still has space!");
+    end if;
 
     ok_push := buffer.PushItem();
     if buffer.IsFull() then
-        PrintLn("Buffer agora esta totalmente cheio (capacidade esgotada)!");
-    end;
+        PrintLn("Buffer is now completely full (capacity exhausted)!");
+    end if;
 
-    PrintLn("\nTodos os 4 modulos da std/ operando com sucesso!");
+    PrintLn("\nAll 4 std/ modules operating successfully!");
 end StandardLibrary.

@@ -4,7 +4,7 @@ function ParsePositive(n: Int32) return Result<Int32, String> is
 begin
     if n <= 0 then
         return Err("non-positive");
-    end;
+    end if;
     return Ok(n);
 end ParsePositive;
 
@@ -19,7 +19,7 @@ function FindEven(n: Int32) return Option<Int32> is
 begin
     if (n mod 2) = 0 then
         return Some(n);
-    end;
+    end if;
     return None;
 end FindEven;
 
@@ -37,7 +37,7 @@ begin
         case let c if c >= 500 => "SERVER_ERR";
         case let c when c >= 400 => "CLIENT_ERR";
         case _ => "OTHER";
-    end;
+    end match;
     return statusLabel;
 end ClassifyCode;
 
@@ -47,7 +47,7 @@ begin
         case Ok(let v) if v > 50 => v * 2;
         case Ok(let v) => v + 1;
         case Err(let _msg) => -1;
-    end;
+    end match;
 end ScoreResultExpr;
 
 program Main;
@@ -55,7 +55,7 @@ var
     resOk, resErr: Result<Int32, String>;
     optSome, optNone: Option<Int32>;
 begin
-    // 1. Operador de propagacao rapida ? e try expr
+    // 1. Fast error propagation operator ? and try expr
     resOk := SumPositivesWithTry(10, 25);
     Assert(resOk.is_ok);
     Assert(resOk.value = 35);
@@ -71,7 +71,7 @@ begin
     optNone := SumEvensWithTry(4, 7);
     Assert(optNone.is_none);
 
-    // 2. match como expressao & Pattern Guards (if / when)
+    // 2. match as expression & Pattern Guards (if / when)
     Assert(ClassifyCode(200) = "OK");
     Assert(ClassifyCode(201) = "OK");
     Assert(ClassifyCode(503) = "SERVER_ERR");
@@ -90,27 +90,27 @@ begin
             stmtGuardOut := v;
         case Err(let _err) =>
             stmtGuardOut := -1;
-    end;
+    end match;
     Assert(stmtGuardOut = 160);
 
-    // 3. Declaracoes var/let inline dentro de begin..end e blocos aninhados
+    // 3. Inline var/let declarations inside begin..end and nested blocks
     var mutVal: Int32 := 10;
     let immutVal := 25;
     if mutVal < immutVal then
         let insideIf := mutVal + immutVal;
         Assert(insideIf = 35);
         mutVal += insideIf;
-    end;
+    end if;
     Assert(mutVal = 45);
 
     var loopSum: Int32 := 0;
     for i := 1 to 3 do
         let doubled := i * 2;
         loopSum += doubled;
-    end;
+    end for;
     Assert(loopSum = 12);
 
-    // 4. Operadores div, /=, mod=, %=, &=, |=, ^=, <<= e >>=
+    // 4. Operators div, /=, mod=, %=, &=, |=, ^=, <<= and >>=
     let q := 29 div 5;
     Assert(q = 5);
 
@@ -139,7 +139,7 @@ begin
     flags >>= 1;
     Assert(flags = 10);
 
-    // 5. Literais de Mapa (["a": 1, "b": 2], [:]) & Escapes Completos de Char/String
+    // 5. Map Literals (["a": 1, "b": 2], [:]) & Full Char/String Escapes
     var scores := ["alice": 100, "bob": 85];
     Assert(scores.Contains("alice"));
     Assert(scores["bob"] = 85);
@@ -170,5 +170,5 @@ begin
     let escStr := "a\nb\tc\"d\\e";
     Assert(escStr.Length() = 9);
 
-    PrintLn("=== FASE 51 TEST PASSOU (TRY/?, MATCH EXPR/GUARDS, INLINE VAR/LET, DIV/COMPOSTOS, MAPLIT/ESCAPES) ===");
+    PrintLn("=== PHASE 51 TEST PASSED (TRY/?, MATCH EXPR/GUARDS, INLINE VAR/LET, DIV/COMPOUND, MAPLIT/ESCAPES) ===");
 end Fase51TryopMatchexprInlinevarDivcompMaplitTest.

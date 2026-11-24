@@ -3,140 +3,140 @@ module Fase54ModulesPubInherentImplDerivesFromjsonTest;
 import lib.helper_fase54_mod as hmod;
 
 type
-    NotasArr = array[2] of Int32;
+    ScoresArr = array[2] of Int32;
 
     [derive(Debug, JSON, Clone, Equals)]
-    Prioridade = enum
-        Baixa,
-        Media,
-        Alta
-    end;
+    Priority = enum
+        PrioLow,
+        PrioMedium,
+        PrioHigh
+    end enum;
 
     [derive(Debug, JSON, Clone, Equals)]
     Meta = record
         code: Int32;
         tag: Char;
-    end;
+    end record;
 
     [derive(Debug, JSON, Clone, Equals)]
-    Vetor2D = record
+    Vector2D = record
         x: Int32;
         y: Int32;
-    end;
+    end record;
 
-impl Vetor2D
+impl Vector2D
     function New(ax, ay: Int32) return Self is
     begin
-        return Vetor2D(ax, ay);
+        return Vector2D(ax, ay);
     end New;
 
     function Zero() return Self is
     begin
-        return Vetor2D(0, 0);
+        return Vector2D(0, 0);
     end Zero;
 
     function Add(borrow self; other: Self) return Self is
     begin
-        return Vetor2D(self.x + other.x, self.y + other.y);
+        return Vector2D(self.x + other.x, self.y + other.y);
     end Add;
 
     function Dot(borrow self; other: Self) return Int32 is
     begin
         return (self.x * other.x) + (self.y * other.y);
     end Dot;
-end;
+end impl;
 
 type
     [derive(Debug, JSON, Clone, Equals)]
-    Registro = record
+    RecordItem = record
         id: Int32;
-        nome: String;
-        inicial: Char;
-        ativo: Bool;
-        prio: Prioridade;
+        name: String;
+        initial: Char;
+        active: Bool;
+        prio: Priority;
         meta: Meta;
         bonus: Option<Int32>;
-        vazio: Option<Int32>;
+        emptyVal: Option<Int32>;
         resOk: Result<Int32, String>;
-        notas: NotasArr;
-    end;
+        scores: ScoresArr;
+    end record;
 
     [derive(Debug, JSON, Clone, Equals)]
     Payload = record
         id: Int32;
-        nome: String;
-        inicial: Char;
-        ativo: Bool;
+        name: String;
+        initial: Char;
+        active: Bool;
         ratio: Float64;
-        prio: Prioridade;
+        prio: Priority;
         meta: Meta;
         bonus: Option<Int32>;
-        vazio: Option<Int32>;
-    end;
+        emptyVal: Option<Int32>;
+    end record;
 
 program Main;
 var
-    c: hmod.Caixa;
-    nv: hmod.Nivel;
-    v0, v1, v2, v3: Vetor2D;
-    r1, r2: Registro;
+    c: hmod.BoxItem;
+    nv: hmod.Level;
+    v0, v1, v2, v3: Vector2D;
+    r1, r2: RecordItem;
     p1, p2: Payload;
-    arr: NotasArr;
+    arr: ScoresArr;
     dbg, js, pjs: String;
 begin
-    // 1. Fase 54.1: Alias de modulo (as), pub/priv e acesso qualificado
+    // 1. Phase 54.1: Module alias (as), pub/priv and qualified access
     Assert(hmod.PUBLIC_FACTOR = 3);
-    Assert(hmod.Escalar(14) = 42);
-    nv := hmod.Nivel.Alto;
-    Assert(nv = hmod.Nivel.Alto);
-    c := hmod.Caixa.Create("cofre", 77);
-    Assert(c.titulo = "cofre");
+    Assert(hmod.ScaleVal(14) = 42);
+    nv := hmod.Level.High;
+    Assert(nv = hmod.Level.High);
+    c := hmod.BoxItem.Create("vault", 77);
+    Assert(c.title = "vault");
     Assert(c.ReadSecret() = 77);
 
-    // 2. Fase 54.2: impl Tipo direto (sem trait) + Tipo.Metodo()
-    v0 := Vetor2D.Zero();
+    // 2. Phase 54.2: Direct impl Type (without trait) + Type.Method()
+    v0 := Vector2D.Zero();
     Assert((v0.x = 0) and (v0.y = 0));
-    v1 := Vetor2D.New(3, 4);
-    v2 := Vetor2D.New(1, 2);
+    v1 := Vector2D.New(3, 4);
+    v2 := Vector2D.New(1, 2);
     v3 := v1.Add(v2);
     Assert((v3.x = 4) and (v3.y = 6));
     Assert(v1.Dot(v2) = 11);
 
-    // 3. Fase 54.3: derive(Debug, JSON, Clone, Equals) com Char, Enum, Option, Result, array e nested record
+    // 3. Phase 54.3: derive(Debug, JSON, Clone, Equals) with Char, Enum, Option, Result, array and nested record
     arr[0] := 10;
     arr[1] := 20;
-    r1 := Registro(7, "Aether", 'A', true, Prioridade.Alta, Meta(9, 'Z'), Some(50), None, Ok(200), arr);
+    r1 := RecordItem(7, "Aether", 'A', true, Priority.PrioHigh, Meta(9, 'Z'), Some(50), None, Ok(200), arr);
     dbg := r1.ToString();
-    Assert(Contains(dbg, "inicial: 'A'"));
-    Assert(Contains(dbg, "prio: Prioridade.Alta"));
+    Assert(Contains(dbg, "initial: 'A'"));
+    Assert(Contains(dbg, "prio: Priority.PrioHigh"));
     Assert(Contains(dbg, "bonus: Some(50)"));
-    Assert(Contains(dbg, "vazio: None"));
+    Assert(Contains(dbg, "emptyVal: None"));
     Assert(Contains(dbg, "resOk: Ok(200)"));
-    Assert(Contains(dbg, "notas: [10, 20]"));
+    Assert(Contains(dbg, "scores: [10, 20]"));
 
     js := r1.ToJSON();
-    Assert(Contains(js, "\"vazio\": null"));
+    Assert(Contains(js, "\"emptyVal\": null"));
     Assert(Contains(js, "\"bonus\": 50"));
     Assert(Contains(js, "\"ok\": 200"));
-    Assert(Contains(js, "\"notas\": [10, 20]"));
+    Assert(Contains(js, "\"scores\": [10, 20]"));
 
     r2 := r1.Clone();
     Assert(r1.Equals(r2));
 
-    // 4. Fase 54.3: Round-trip JSON -> FromJSON
-    p1 := Payload(42, "Bento", 'B', true, 3.5, Prioridade.Media, Meta(12, 'K'), Some(88), None);
+    // 4. Phase 54.3: Round-trip JSON -> FromJSON
+    p1 := Payload(42, "Bento", 'B', true, 3.5, Priority.PrioMedium, Meta(12, 'K'), Some(88), None);
     pjs := p1.ToJSON();
     p2 := Payload.FromJSON(pjs);
     Assert(p1.Equals(p2));
     Assert(p2.id = 42);
-    Assert(p2.nome = "Bento");
-    Assert(p2.inicial = 'B');
-    Assert(p2.ativo);
-    Assert(p2.prio = Prioridade.Media);
+    Assert(p2.name = "Bento");
+    Assert(p2.initial = 'B');
+    Assert(p2.active);
+    Assert(p2.prio = Priority.PrioMedium);
     Assert(p2.meta.code = 12);
     Assert(p2.meta.tag = 'K');
     Assert(p2.bonus.is_some and (p2.bonus.value = 88));
-    Assert(p2.vazio.is_none);
+    Assert(p2.emptyVal.is_none);
 
-    PrintLn("=== FASE 54 TEST PASSOU (MODULOS/PUB, IMPL TIPO, DERIVES EXPANDIDOS & FROMJSON) ===");
+    PrintLn("=== PHASE 54 TEST PASSED (MODULES/PUB, IMPL TYPE, EXPANDED DERIVES & FROMJSON) ===");
 end Fase54ModulesPubInherentImplDerivesFromjsonTest.

@@ -12,7 +12,7 @@ export function activate(context: vscode.ExtensionContext) {
     const config = vscode.workspace.getConfiguration('aether');
     let compilerPath = config.get<string>('compilerPath', 'aetherc');
 
-    // Se nao for caminho absoluto, tenta encontrar no PATH ou na workspace
+    // If not an absolute path, attempt to locate it on PATH or in workspace
     const serverOptions: ServerOptions = {
         command: compilerPath,
         args: ['lsp'],
@@ -37,13 +37,13 @@ export function activate(context: vscode.ExtensionContext) {
 
     client.start();
 
-    // Comandos de Build e Testes
+    // Build and Test Commands
     context.subscriptions.push(
         vscode.commands.registerCommand('aether.build', () => {
-            runAetherCommand('', 'Compilar Aether (Pascal Backend)');
+            runAetherCommand('', 'Compile Aether (Pascal Backend)');
         }),
         vscode.commands.registerCommand('aether.buildC', () => {
-            runAetherCommand('--target=c', 'Compilar Aether (C99 / GCC Backend)');
+            runAetherCommand('--target=c', 'Compile Aether (C99 / GCC Backend)');
         }),
         vscode.commands.registerCommand('aether.runTests', () => {
             runAetherTerminalCommand('test', 'Aether Test Runner');
@@ -52,7 +52,7 @@ export function activate(context: vscode.ExtensionContext) {
             if (client) {
                 await client.stop();
                 client.start();
-                vscode.window.showInformationMessage('Servidor de Linguagem Aether reiniciado com sucesso!');
+                vscode.window.showInformationMessage('Aether Language Server restarted successfully!');
             }
         })
     );
@@ -61,7 +61,7 @@ export function activate(context: vscode.ExtensionContext) {
 function runAetherCommand(flags: string, title: string) {
     const editor = vscode.window.activeTextEditor;
     if (!editor) {
-        vscode.window.showWarningMessage('Abra um arquivo .aeth para compilar.');
+        vscode.window.showWarningMessage('Open an .aeth file to compile.');
         return;
     }
     const filePath = editor.document.uri.fsPath;

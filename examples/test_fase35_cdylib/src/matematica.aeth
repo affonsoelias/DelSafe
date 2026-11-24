@@ -3,47 +3,47 @@ module matematica;
 interface
 
 type
-    Ponto2D = record
+    Point2D = record
         x: Float64;
         y: Float64;
-    end;
+    end record;
 
-/// Cria e inicializa uma coordenada 2D
-export cdecl function CriarPonto(x, y: Float64) return Ponto2D;
-/// Soma dois pontos 2D
-export cdecl function SomarPontos(p1, p2: Ponto2D) return Ponto2D;
-/// Retorna a norma euclidiana ao quadrado de um ponto
-export cdecl function NormaAoQuadrado(p: Ponto2D) return Float64;
-/// Funcao simples para somar dois inteiros de 32 bits
-export cdecl function SomarInteiros(a, b: Int32) return Int32;
-/// Multiplica dois inteiros de 32 bits
-export cdecl function MultiplicarInteiros(a, b: Int32) return Int32;
+/// Creates and initializes a 2D coordinate
+export cdecl function CreatePoint(x, y: Float64) return Point2D;
+/// Adds two 2D points
+export cdecl function AddPoints(p1, p2: Point2D) return Point2D;
+/// Returns the squared Euclidean norm of a point
+export cdecl function NormSquared(p: Point2D) return Float64;
+/// Simple function to add two 32-bit integers
+export cdecl function AddIntegers(a, b: Int32) return Int32;
+/// Multiplies two 32-bit integers
+export cdecl function MultiplyIntegers(a, b: Int32) return Int32;
 
 implementation
 
-export cdecl function CriarPonto(x, y: Float64) return Ponto2D is
+export cdecl function CreatePoint(x, y: Float64) return Point2D is
 begin
-    return Ponto2D(x: x, y: y);
-end CriarPonto;
+    return Point2D(x: x, y: y);
+end CreatePoint;
 
-export cdecl function SomarPontos(p1, p2: Ponto2D) return Ponto2D is
+export cdecl function AddPoints(p1, p2: Point2D) return Point2D is
 begin
-    return Ponto2D(x: p1.x + p2.x, y: p1.y + p2.y);
-end SomarPontos;
+    return Point2D(x: p1.x + p2.x, y: p1.y + p2.y);
+end AddPoints;
 
-export cdecl function NormaAoQuadrado(p: Ponto2D) return Float64 is
+export cdecl function NormSquared(p: Point2D) return Float64 is
 begin
     return (p.x * p.x) + (p.y * p.y);
-end NormaAoQuadrado;
+end NormSquared;
 
-export cdecl function SomarInteiros(a, b: Int32) return Int32 is
+export cdecl function AddIntegers(a, b: Int32) return Int32 is
 begin
     return a + b;
-end SomarInteiros;
+end AddIntegers;
 
-export cdecl function MultiplicarInteiros(a, b: Int32) return Int32 is
+export cdecl function MultiplyIntegers(a, b: Int32) return Int32 is
 begin
     return a * b;
-end MultiplicarInteiros;
+end MultiplyIntegers;
 
 end matematica.

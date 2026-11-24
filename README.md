@@ -44,12 +44,12 @@ type
         id: Int32;
         name: String;
         active: Bool;
-    end;
+    end record;
 
-function UpdateUser(mut borrow u: User; new_name: String)
+procedure UpdateUser(mut borrow u: User; new_name: String) is
 begin
     u.name := new_name;
-end;
+end UpdateUser;
 
 program Main;
 var
@@ -65,7 +65,8 @@ begin
 
     if user.Equals(borrow clone) then
         PrintLn("User successfully updated and cloned!");
-end.
+    end if;
+end main.
 ```
 
 ### Compiling and Running
@@ -113,8 +114,8 @@ Aether powers **Zephyr** (`vendor/zephyr`), the native backend engine for the Bl
 - [The Aether Masterclass Course](docs/course/README.md)
 - [Documentation Index](docs/README.md)
 - [Roadmap & Development Plan](docs/planning/ROADMAP_DE_DESENVOLVIMENTO.md)
-- [Language Specification](docs/technical/ESPECIFICACAO_LINGUAGEM.md)
-- [BlaiseVue & Zephyr Integration](docs/technical/INTEGRACAO_BLAISEVUE_E_PASCAL.md)
+- [Language Specification](docs/technical/LANGUAGE_SPECIFICATION.md)
+- [BlaiseVue & Zephyr Integration](docs/technical/BLAISEVUE_AND_PASCAL_INTEGRATION.md)
 
 ---
 

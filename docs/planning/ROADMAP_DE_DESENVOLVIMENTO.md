@@ -930,3 +930,28 @@ Mapeamento técnico completo dos recursos pendentes identificados no compilador 
   - Migrar toda a biblioteca padrão (`std/*.aeth`) para Units estruturadas (`interface`/`implementation` + `procedure`/`function ... return ... is ... end Nome;`).
   - Migrar todos os testes existentes em `tests/*.aeth` e os materiais do curso em `docs/course/*.md`.
   - Criar teste dedicado `tests/15_fase57_ada_syntax_units_test.aeth` (com `tests/lib/helper_fase57_unit.aeth`) validando `procedure`, `function ... return ... is`, `end Nome;`, `end Modulo.`, `interface`/`implementation`, `initialization`/`finalization`, agrupamento `borrow a, b: Tipo` e rejeição da sintaxe antiga em **Free Pascal e GCC C99** (`15/15 PASS` em ambos os backends).
+
+---
+
+### ✅ Fase 58: Fechamentos Tipados de Blocos e Declarações (`end if;`, `end while;`, `end record;`, ...) & `else if` Achatado - CONCLUÍDA
+
+> **Decisões de Design Fechadas (Corte Limpo, sem `elsif`)**:
+> - **Sem `elsif` (`else if` Achatado)**: O encadeamento condicional mantém `else if <cond> then ...`, porém achatado no parser (`ParseIfStmt`) para exigir **apenas um único `end if;`** ao final de toda a cadeia (incluindo eventual ramo `else` final). Não existe `end else;` — `else` é cláusula interna do `if`.
+> - **Fechamentos Tipados Obrigatórios (Opção B — Controle de Fluxo + Declarações)**:
+>   - **Controle de fluxo**: `end if;`, `end while;`, `end for;`, `end match;`, `end try;`, `end unsafe;`, `end asm;` (`repeat ... until <cond>;` permanece fechando com `until`).
+>   - **Declarações estruturadas**: `end record;`, `end enum;`, `end trait;`, `end impl;`.
+> - **Corte Limpo**: Fechamentos `end;` anônimos passam a ser rejeitados com erro de sintaxe claro apontando o fechamento esperado (ex.: `Esperado "end if;"`).
+
+- [x] **58.1 Lexer & Parser (`uAetherLexer.pas`, `uAetherParser.pas`) — Fechamentos Tipados & `else if` Achatado**:
+  - Refatorado `TAetherParser.ParseIfStmt` para reconhecer `else` seguido imediatamente de `if` na mesma linha como continuação encadeada da mesma instrução `if` (sem exigir um `end if;` extra por ramo), encerrando a cadeia inteira (incluindo `else` final) com um único `end if;`, mantendo `if` aninhado na linha seguinte dentro de `else` como bloco independente.
+  - Exigidos fechamentos tipados em blocos de controle de fluxo: `end if;`, `end while;`, `end for;`, `end match;` (instrução e expressão `end match`), `end asm;` (com suporte em `TAetherLexer.ScanIdentifierOrKeyword` via `FLastTokenKind <> tokEnd`), `end try;` e `end unsafe;`.
+  - Exigidos fechamentos tipados em declarações estruturadas: `end record;`, `end enum;`, `end trait;` e `end impl;`.
+  - Rejeitados `end;` anônimo e fechamentos inválidos (como `end else;` e `end` divergente) com diagnóstico sintático explícito.
+- [x] **58.2 Ferramental (`uAetherFormatter.pas`, `uAetherProject.pas`, `uAetherLSP.pas` e Snippets VS Code)**:
+  - Atualizado `aetherc fmt` (`uAetherFormatter.pas`) para formatar e indentar corretamente cadeias `if / else if / else / end if;`, preservar indentação dentro de seções `type` após `end record;` / `end enum;` / `end trait;` e reconhecer todos os fechamentos tipados (`end while;`, `end for;`, `end match;`, `end asm;`, `end try;`, `end unsafe;`, `end record;`, `end enum;`, `end trait;`, `end impl;`).
+  - Atualizado o template de teste em `uAetherProject.pas` (`aetherc new`), hovers de `trait`/`record`/`enum` em `uAetherLSP.pas` e os snippets de `ide/vscode/snippets/aether.json` e `editors/vscode/snippets/aether.json`.
+- [x] **58.3 Migração Integral do Repositório (`std/`, `tests/`, `examples/`, `docs/course/`)**:
+  - Migrados todos os módulos de `std/*.aeth` (incluindo simplificação de `std/json.aeth` e `std/net.aeth`), testes em `tests/*.aeth` e `tests/lib/*.aeth`, exemplos em `examples/**/*.aeth` (incluindo doctests de `examples/test_fase32_doc/geometria.aeth`) e capítulos de `docs/course/*.md` (`02`–`13` e `README.md`) para fechamentos tipados e `else if` achatado.
+- [x] **58.4 Suíte de Testes & Validação Dual-Backend**:
+  - Criado teste dedicado `tests/17_fase58_typed_end_and_elseif_test.aeth` cobrindo `if / else if / else / end if;`, `if / else if / end if;`, `if` aninhado em `else`, `end while;`, `end for;` (`to`/`downto`/`in`), `repeat ... until`, `end match;` (instrução e expressão), `end try;`, `end unsafe;`, `end record;`, `end enum;`, `end trait;` e `end impl;`.
+  - Validados 100% dos testes (`17/17 PASS`) nos backends **Free Pascal** e **GCC C99**, validação negativa de `end;` / `end else;` / fechamento divergente e `aetherc fmt --check`.

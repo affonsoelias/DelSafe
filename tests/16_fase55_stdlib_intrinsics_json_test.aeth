@@ -25,23 +25,23 @@ var
     extFloat, elFlt: Float64;
     extBool: Bool;
 begin
-    Print("=== FASE 55 ");
+    Print("=== PHASE 55 ");
     PrintLn("TEST START ===");
 
-    // 7.1 Strings & Conversoes
-    parts := Split("alfa,,beta,gama", ",");
+    // 7.1 Strings & Conversions
+    parts := Split("alpha,,beta,gamma", ",");
     Assert(parts.Length() = 4);
-    Assert(parts[0] = "alfa");
+    Assert(parts[0] = "alpha");
     Assert(parts[1] = "");
     Assert(parts[2] = "beta");
-    Assert(parts[3] = "gama");
+    Assert(parts[3] = "gamma");
 
     let ufcsParts := "x:y:z".Split(":");
     Assert(ufcsParts.Length() = 3);
     Assert(ufcsParts[1] = "y");
 
     joined := Join(parts, "|");
-    Assert(joined = "alfa||beta|gama");
+    Assert(joined = "alpha||beta|gamma");
 
     pL := PadLeft("42", 5, '0');
     pR := PadRight("ok", 5, ".");
@@ -72,7 +72,7 @@ begin
     let safeRt := Math.SqrtSafe(16.0);
     Assert(safeRt.is_ok and (safeRt.value > 3.99) and (safeRt.value < 4.01));
 
-    // 7.2 Matematica
+    // 7.2 Math
     Assert((Sqrt(81.0) > 8.99) and (Sqrt(81.0) < 9.01));
     Assert(Floor(3.9) = 3.0);
     Assert(Floor(-3.1) = -4.0);
@@ -95,28 +95,28 @@ begin
         Assert((rndI >= 10) and (rndI <= 20));
         rndF := RandomFloat();
         Assert((rndF >= 0.0) and (rndF < 1.0));
-    end;
+    end for;
 
-    // 7.3 Env & FS (e compilacao de ReadLn sem bloquear stdin)
+    // 7.3 Env & FS (and ReadLn compilation without blocking stdin)
     if false then
         let _ignored := ReadLn();
-    end;
-    Assert(SetEnv("AETHER_FASE55_VAR", "valor_ok"));
-    Assert(GetEnv("AETHER_FASE55_VAR") = "valor_ok");
-    Assert(IO.SetEnvVar("AETHER_FASE55_IO", "ok2"));
-    Assert(IO.GetEnvVar("AETHER_FASE55_IO") = "ok2");
+    end if;
+    Assert(SetEnv("AETHER_PHASE55_VAR", "ok_value"));
+    Assert(GetEnv("AETHER_PHASE55_VAR") = "ok_value");
+    Assert(IO.SetEnvVar("AETHER_PHASE55_IO", "ok2"));
+    Assert(IO.GetEnvVar("AETHER_PHASE55_IO") = "ok2");
 
-    baseDir := "build/tmp_fase55_fs_test";
+    baseDir := "build/tmp_phase55_fs_test";
     f1 := baseDir + "/a.txt";
     f2 := baseDir + "/b.txt";
     f3 := baseDir + "/c.txt";
     let _mk := CreateDir("build");
     let _mk2 := CreateDir(baseDir);
     Assert(DirExists(baseDir));
-    Assert(WriteFile(f1, "conteudo123"));
+    Assert(WriteFile(f1, "content123"));
     okCopy := CopyFile(f1, f2);
     Assert(okCopy and FileExists(f2));
-    Assert(Trim(ReadFile(f2)) = "conteudo123");
+    Assert(Trim(ReadFile(f2)) = "content123");
     okRen := RenameFile(f2, f3);
     Assert(okRen and FileExists(f3) and (not FileExists(f2)));
 
@@ -125,23 +125,23 @@ begin
     found1 := false;
     found3 := false;
     for i := 0 to entries.Length() - 1 do
-        if entries[i] = "a.txt" then found1 := true; end;
-        if entries[i] = "c.txt" then found3 := true; end;
-    end;
+        if entries[i] = "a.txt" then found1 := true; end if;
+        if entries[i] = "c.txt" then found3 := true; end if;
+    end for;
     Assert(found1 and found3);
 
     Assert(DeleteFile(f1));
     Assert(DeleteFile(f3));
     Assert(RemoveDir(baseDir));
 
-    // 7.4 JSON Estruturado (Validate, Builder, Escapes, Nested Objects & Arrays)
+    // 7.4 Structured JSON (Validate, Builder, Escapes, Nested Objects & Arrays)
     jb := JSON.NewJsonBuilder();
-    JSON.AddString(mut borrow jb, borrow "nome", borrow "Ana \"Dev\"\nLinha2");
-    JSON.AddInt(mut borrow jb, borrow "idade", borrow 28);
-    JSON.AddFloat(mut borrow jb, borrow "nota", borrow 9.5);
-    JSON.AddBool(mut borrow jb, borrow "ativo", borrow true);
-    JSON.AddRaw(mut borrow jb, borrow "meta", borrow "{\"falsa_chave\": 1, \"nivel\": 7}");
-    JSON.AddRaw(mut borrow jb, borrow "notas", borrow "[10, 20.5, \"fim\"]");
+    JSON.AddString(mut borrow jb, borrow "name", borrow "Ana \"Dev\"\nLine2");
+    JSON.AddInt(mut borrow jb, borrow "age", borrow 28);
+    JSON.AddFloat(mut borrow jb, borrow "score", borrow 9.5);
+    JSON.AddBool(mut borrow jb, borrow "active", borrow true);
+    JSON.AddRaw(mut borrow jb, borrow "meta", borrow "{\"fake_key\": 1, \"level\": 7}");
+    JSON.AddRaw(mut borrow jb, borrow "scores", borrow "[10, 20.5, \"end\"]");
     builtJson := JSON.Build(borrow jb);
 
     Assert(JSON.Validate(borrow builtJson));
@@ -150,34 +150,34 @@ begin
     Assert(not JSON.Validate(borrow "{\"a\": [1, 2,]}"));
     Assert(not JSON.Validate(borrow "{\"a\": 1} extra"));
 
-    // Garantir que chave interna nao cause falso positivo no nivel raiz
-    Assert(JSON.HasKey(borrow builtJson, borrow "nome"));
-    Assert(not JSON.HasKey(borrow builtJson, borrow "falsa_chave"));
+    // Ensure nested key does not trigger false positive at root level
+    Assert(JSON.HasKey(borrow builtJson, borrow "name"));
+    Assert(not JSON.HasKey(borrow builtJson, borrow "fake_key"));
 
     extStr := "";
-    Assert(JSON.ExtractString(borrow builtJson, borrow "nome", mut borrow extStr));
-    Assert(extStr = "Ana \"Dev\"\nLinha2");
+    Assert(JSON.ExtractString(borrow builtJson, borrow "name", mut borrow extStr));
+    Assert(extStr = "Ana \"Dev\"\nLine2");
 
     extInt := 0;
-    Assert(JSON.ExtractInt(borrow builtJson, borrow "idade", mut borrow extInt));
+    Assert(JSON.ExtractInt(borrow builtJson, borrow "age", mut borrow extInt));
     Assert(extInt = 28);
 
     extFloat := 0.0;
-    Assert(JSON.ExtractFloat(borrow builtJson, borrow "nota", mut borrow extFloat));
+    Assert(JSON.ExtractFloat(borrow builtJson, borrow "score", mut borrow extFloat));
     Assert((extFloat > 9.49) and (extFloat < 9.51));
 
     extBool := false;
-    Assert(JSON.ExtractBool(borrow builtJson, borrow "ativo", mut borrow extBool));
+    Assert(JSON.ExtractBool(borrow builtJson, borrow "active", mut borrow extBool));
     Assert(extBool);
 
     subObj := "";
     Assert(JSON.ExtractObject(borrow builtJson, borrow "meta", mut borrow subObj));
     extSubInt := 0;
-    Assert(JSON.ExtractInt(borrow subObj, borrow "nivel", mut borrow extSubInt));
+    Assert(JSON.ExtractInt(borrow subObj, borrow "level", mut borrow extSubInt));
     Assert(extSubInt = 7);
 
     subArr := "";
-    Assert(JSON.ExtractArray(borrow builtJson, borrow "notas", mut borrow subArr));
+    Assert(JSON.ExtractArray(borrow builtJson, borrow "scores", mut borrow subArr));
     arrLen := JSON.ArrayLength(borrow subArr);
     Assert(arrLen = 3);
 
@@ -186,7 +186,7 @@ begin
     elFlt := 0.0;
     Assert(JSON.ArrayGetFloat(borrow subArr, 1, mut borrow elFlt) and (elFlt > 20.49) and (elFlt < 20.51));
     elStr := "";
-    Assert(JSON.ArrayGetString(borrow subArr, 2, mut borrow elStr) and (elStr = "fim"));
+    Assert(JSON.ArrayGetString(borrow subArr, 2, mut borrow elStr) and (elStr = "end"));
 
-    PrintLn("=== FASE 55 TEST PASSOU (STRINGS, MATH, ENV/FS & JSON ESTRUTURADO) ===");
+    PrintLn("=== PHASE 55 TEST PASSED (STRINGS, MATH, ENV/FS & STRUCTURED JSON) ===");
 end Fase55StdlibIntrinsicsJsonTest.

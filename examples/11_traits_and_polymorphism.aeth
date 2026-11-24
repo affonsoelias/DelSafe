@@ -1,39 +1,39 @@
 module TraitsAndPolymorphism;
 
-// Definicao de Contrato de Tipo (Trait) para representacao em texto
+// Trait definition for text representation
 trait Printable
     function ToString(borrow self) return String;
-end;
+end trait;
 
-// Definicao de Contrato de Tipo (Trait) para calculos geometricos
+// Trait definition for geometric calculations
 trait Shape
     function Area(borrow self) return Int32;
     function Perimeter(borrow self) return Int32;
-end;
+end trait;
 
 type
     Circle = record
         radius: Int32;
-    end;
+    end record;
 
     Rectangle = record
         width: Int32;
         height: Int32;
-    end;
+    end record;
 
-// Implementacao da Trait Printable para Circle
+// Printable trait implementation for Circle
 impl Printable for Circle
     function ToString(borrow self) return String is
     begin
-        return "Circulo Geometrico";
+        return "Geometric Circle";
     end ToString;
-end;
+end impl;
 
-// Implementacao da Trait Shape para Circle
+// Shape trait implementation for Circle
 impl Shape for Circle
     function Area(borrow self) return Int32 is
     begin
-        // Pi aproximado = 3 para calculo inteiro exato
+        // Approximate Pi = 3 for exact integer calculation
         return 3 * self.radius * self.radius;
     end Area;
 
@@ -41,17 +41,17 @@ impl Shape for Circle
     begin
         return 2 * 3 * self.radius;
     end Perimeter;
-end;
+end impl;
 
-// Implementacao da Trait Printable para Rectangle
+// Printable trait implementation for Rectangle
 impl Printable for Rectangle
     function ToString(borrow self) return String is
     begin
-        return "Retangulo Geometrico";
+        return "Geometric Rectangle";
     end ToString;
-end;
+end impl;
 
-// Implementacao da Trait Shape para Rectangle
+// Shape trait implementation for Rectangle
 impl Shape for Rectangle
     function Area(borrow self) return Int32 is
     begin
@@ -62,13 +62,13 @@ impl Shape for Rectangle
     begin
         return 2 * (self.width + self.height);
     end Perimeter;
-end;
+end impl;
 
-// Funcao Polimorfica Estatica com Trait Bound (Zero-Cost Abstraction)
-procedure ExibirElemento<T: Printable>(borrow item: T) is
+// Static Polymorphic Function with Trait Bound (Zero-Cost Abstraction)
+procedure DisplayElement<T: Printable>(borrow item: T) is
 begin
-    PrintLn("Exibindo elemento via Polimorfismo Estatico: %s", item.ToString());
-end ExibirElemento;
+    PrintLn("Displaying element via Static Polymorphism: %s", item.ToString());
+end DisplayElement;
 
 program Main;
 var
@@ -79,28 +79,28 @@ var
     area_r: Int32;
     perim_r: Int32;
 begin
-    PrintLn("=== TESTE DE TRAITS E POLIMORFISMO ESTATICO (FASE 14) ===");
+    PrintLn("=== TRAITS AND STATIC POLYMORPHISM TEST (PHASE 14) ===");
 
     c := Circle(radius: 5);
     r := Rectangle(width: 10, height: 4);
 
-    // 1. Despacho Estatico Direto via Chamada Estilo Metodo (UFCS)
-    PrintLn("\n1. Despacho Estatico de Metodos (Traits):");
-    PrintLn("Identificacao do circulo: %s", c.ToString());
-    PrintLn("Identificacao do retangulo: %s", r.ToString());
+    // 1. Direct Static Dispatch via Method-Style Call (UFCS)
+    PrintLn("\n1. Static Method Dispatch (Traits):");
+    PrintLn("Circle identification: %s", c.ToString());
+    PrintLn("Rectangle identification: %s", r.ToString());
 
     area_c := c.Area();
     perim_c := c.Perimeter();
-    PrintLn("Circulo (raio = 5) -> Area aproximada: %d, Perimetro: %d", area_c, perim_c);
+    PrintLn("Circle (radius = 5) -> Approximate area: %d, Perimeter: %d", area_c, perim_c);
 
     area_r := r.Area();
     perim_r := r.Perimeter();
-    PrintLn("Retangulo (10x4) -> Area: %d, Perimetro: %d", area_r, perim_r);
+    PrintLn("Rectangle (10x4) -> Area: %d, Perimeter: %d", area_r, perim_r);
 
-    // 2. Polimorfismo Estatico com Trait Bounds e Monomorfizacao Zero-Cost
-    PrintLn("\n2. Polimorfismo Estatico com Trait Bound <T: Printable>:");
-    ExibirElemento(c);
-    ExibirElemento(r);
+    // 2. Static Polymorphism with Trait Bounds and Zero-Cost Monomorphization
+    PrintLn("\n2. Static Polymorphism with Trait Bound <T: Printable>:");
+    DisplayElement(c);
+    DisplayElement(r);
 
-    PrintLn("\n[PASS] Todos os contratos de tipo e despachos estaticos executados com sucesso!");
+    PrintLn("\n[PASS] All type contracts and static dispatches executed successfully!");
 end TraitsAndPolymorphism.

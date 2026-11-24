@@ -9,11 +9,11 @@ uses
 
 type
   TTokenKind = (
-    // Controle e Especiais
+    // Control and Special
     tokEOF,
     tokUnknown,
 
-    // Identificadores e Literais
+    // Identifiers and Literals
     tokIdentifier,
     tokIntLiteral,
     tokFloatLiteral,
@@ -21,7 +21,7 @@ type
     tokInterpStringLiteral,
     tokCharLiteral,
 
-    // Palavras-chave: Estrutura
+    // Keywords: Structure
     tokModule,
     tokProgram,
     tokInterface,
@@ -37,7 +37,7 @@ type
     tokCdecl,
     tokPascal,
 
-    // Palavras-chave: Tipos e Contratos de Tipos (Traits)
+    // Keywords: Types and Type Contracts (Traits)
     tokType,
     tokRecord,
     tokEnum,
@@ -48,13 +48,13 @@ type
     tokSet,
     tokMap,
 
-    // Palavras-chave: Concorrencia e Async
+    // Keywords: Concurrency and Async
     tokAsync,
     tokAwait,
     tokSpawn,
     tokYield,
 
-    // Palavras-chave: Funções, Procedimentos e Contratos
+    // Keywords: Functions, Procedures, and Contracts
     tokFunction,
     tokProcedure,
     tokIs,
@@ -62,12 +62,12 @@ type
     tokRequire,
     tokEnsure,
 
-    // Palavras-chave: Constantes e Variaveis
+    // Keywords: Constants and Variables
     tokConst,
     tokVar,
     tokLet,
 
-    // Palavras-chave: Blocos e Fluxo
+    // Keywords: Blocks and Control Flow
     tokBegin,
     tokEnd,
     tokIf,
@@ -94,12 +94,12 @@ type
     tokRaise,
     tokUnsafe,
 
-    // Palavras-chave: Posse e Empréstimo (Ownership)
+    // Keywords: Ownership and Borrowing
     tokTake,
     tokBorrow,
     tokMut,
 
-    // Palavras-chave: Lógica, Bitwise e Valores
+    // Keywords: Logic, Bitwise, and Values
     tokAnd,
     tokOr,
     tokNot,
@@ -113,7 +113,7 @@ type
     tokMod,
     tokDiv,
 
-    // Pontuação e Operadores
+    // Punctuation and Operators
     tokColon,          // :
     tokSemicolon,      // ;
     tokComma,          // ,
@@ -290,7 +290,7 @@ begin
     tokCaret:         Result := '^';
     tokQuestion:      Result := '?';
   else
-    Result := 'Desconhecido';
+    Result := 'Unknown';
   end;
 end;
 

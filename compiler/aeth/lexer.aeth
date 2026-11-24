@@ -67,24 +67,24 @@ end;
 function SkipWhitespace(mut borrow lex: Lexer): Void
 var
     ch: String;
-    continua: Bool;
+    keep_going: Bool;
 begin
-    continua := true;
-    while continua do
+    keep_going := true;
+    while keep_going do
         if lex.pos >= lex.len then
-            continua := false;
+            keep_going := false;
         else
             ch := Peek(borrow lex);
             if (ch = " ") or (ch = "\t") or (ch = "\r") or (ch = "\n") then
                 Advance(mut borrow lex);
             else
                 if (ch = "/") and (PeekNext(borrow lex) = "/") then
-                    // Comentário de linha //
+                    // Line comment //
                     while (not IsAtEnd(borrow lex)) and (Peek(borrow lex) <> "\n") do
                         Advance(mut borrow lex);
                     end;
                 else
-                    continua := false;
+                    keep_going := false;
                 end;
             end;
         end;
@@ -117,7 +117,7 @@ var
     ch: String;
     txt: String;
     sub_len: UInt32;
-    continua: Bool;
+    keep_going: Bool;
 begin
     SkipWhitespace(mut borrow lex);
 
@@ -130,10 +130,10 @@ begin
     start_pos := lex.pos;
     ch := Advance(mut borrow lex);
 
-    // 1. Strings entre aspas duplas
+    // 1. Double-quoted strings
     if ch = "\"" then
-        continua := true;
-        while (not IsAtEnd(borrow lex)) and continua do
+        keep_going := true;
+        while (not IsAtEnd(borrow lex)) and keep_going do
             if Peek(borrow lex) = "\\" then
                 Advance(mut borrow lex);
                 if not IsAtEnd(borrow lex) then
@@ -141,21 +141,21 @@ begin
                 end;
             else
                 if Peek(borrow lex) = "\"" then
-                    continua := false;
+                    keep_going := false;
                 else
                     Advance(mut borrow lex);
                 end;
             end;
         end;
         if not IsAtEnd(borrow lex) then
-            Advance(mut borrow lex); // consome aspas finais
+            Advance(mut borrow lex); // consume closing quote
         end;
         sub_len := lex.pos - start_pos;
         txt := Substring(borrow lex.source, start_pos, sub_len);
         return NewToken(TokenKind.tkStringLiteral, txt, token_line, token_col);
     end;
 
-    // 2. Numeros
+    // 2. Numbers
     if IsDigit(borrow ch) then
         while IsDigit(borrow Peek(borrow lex)) do
             Advance(mut borrow lex);
@@ -165,7 +165,7 @@ begin
         return NewToken(TokenKind.tkIntLiteral, txt, token_line, token_col);
     end;
 
-    // 3. Identificadores e Palavras-chave
+    // 3. Identifiers and Keywords
     if IsAlpha(borrow ch) then
         while IsAlpha(borrow Peek(borrow lex)) or IsDigit(borrow Peek(borrow lex)) do
             Advance(mut borrow lex);
@@ -198,7 +198,7 @@ begin
         return NewToken(TokenKind.tkIdentifier, txt, token_line, token_col);
     end;
 
-    // 4. Operadores e Pontuacao
+    // 4. Operators and Punctuation
     if (ch = ":") and (Peek(borrow lex) = "=") then
         Advance(mut borrow lex);
         return NewToken(TokenKind.tkAssign, ":=", token_line, token_col);

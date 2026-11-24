@@ -5,58 +5,58 @@ import Strings;
 import pascal SysUtils;
 import c "<math.h>";
 
-// ZERO DECLARACOES "EXTERN" MANUAIS!
-// O compilador Aether resolve automaticamente os simbolos
-// a partir dos modulos "import pascal" e "import c" declarados!
+// ZERO MANUAL "EXTERN" DECLARATIONS!
+// The Aether compiler automatically resolves symbols
+// from declared "import pascal" and "import c" modules!
 
-procedure DemonstrarInteroperabilidade is
+procedure DemonstrateInteroperability is
 var
-    inicio_ticks: UInt64;
-    fim_ticks: UInt64;
+    start_ticks: UInt64;
+    end_ticks: UInt64;
     delta_ticks: UInt64;
-    ang: Float64;
+    angle: Float64;
     val_sin: Float64;
     val_cos: Float64;
-    val_identidade: Float64;
-    hipotenusa: Float64;
+    val_identity: Float64;
+    hypotenuse: Float64;
 begin
     PrintLn("==========================================================");
-    PrintLn(" [Aether Phase 21] Interoperabilidade Nativa Pascal e C   ");
-    PrintLn(" Auto-Import & Zero-Boilerplate (Sem 'extern' manual!)    ");
+    PrintLn(" [Aether Phase 21] Native Pascal and C Interoperability   ");
+    PrintLn(" Auto-Import & Zero-Boilerplate (No manual 'extern'!)     ");
     PrintLn("==========================================================");
 
-    // --- Teste 1: Consumindo Funcao da Unit SysUtils do Free Pascal ---
-    PrintLn("[1/2] Invocando GetTickCount64() de 'import pascal SysUtils'...");
-    inicio_ticks := GetTickCount64();
-    PrintLn("      Tick inicial do SO: " + IntToStr(Int32(inicio_ticks)));
+    // --- Test 1: Calling Function from Free Pascal's SysUtils Unit ---
+    PrintLn("[1/2] Calling GetTickCount64() from 'import pascal SysUtils'...");
+    start_ticks := GetTickCount64();
+    PrintLn("      Initial OS tick count: " + IntToStr(Int32(start_ticks)));
 
-    // --- Teste 2: Consumindo Funcoes C de 'import c <math.h>' ---
+    // --- Test 2: Calling C Functions from 'import c <math.h>' ---
     PrintLn("");
-    PrintLn("[2/2] Invocando sin(), cos() e sqrt() de 'import c <math.h>'...");
-    ang := 0.785398; // aprox PI / 4 (45 graus)
-    val_sin := sin(ang);
-    val_cos := cos(ang);
-    val_identidade := (val_sin * val_sin) + (val_cos * val_cos);
+    PrintLn("[2/2] Calling sin(), cos() and sqrt() from 'import c <math.h>'...");
+    angle := 0.785398; // approx PI / 4 (45 degrees)
+    val_sin := sin(angle);
+    val_cos := cos(angle);
+    val_identity := (val_sin * val_sin) + (val_cos * val_cos);
 
     PrintLn("      sin(PI / 4) = 0.7071");
     PrintLn("      cos(PI / 4) = 0.7071");
-    PrintLn("      Identidade Trigonometrica (sin^2 + cos^2) = 1.0000");
+    PrintLn("      Trigonometric Identity (sin^2 + cos^2) = 1.0000");
 
-    hipotenusa := sqrt(9.0 + 16.0); // sqrt(25) = 5
+    hypotenuse := sqrt(9.0 + 16.0); // sqrt(25) = 5
     PrintLn("      sqrt(3^2 + 4^2) = 5.0");
 
-    fim_ticks := GetTickCount64();
-    delta_ticks := fim_ticks - inicio_ticks;
+    end_ticks := GetTickCount64();
+    delta_ticks := end_ticks - start_ticks;
 
     PrintLn("");
     PrintLn("----------------------------------------------------------");
-    PrintLn(" [OK] Interoperabilidade executada em " + IntToStr(Int32(delta_ticks)) + " ms!");
-    PrintLn(" [OK] Funcoes externas consumidas de forma 100% transparente");
-    PrintLn("      sem nenhuma linha de 'extern' manual!");
+    PrintLn(" [OK] Interoperability executed in " + IntToStr(Int32(delta_ticks)) + " ms!");
+    PrintLn(" [OK] External functions consumed 100% transparently");
+    PrintLn("      without a single line of manual 'extern'!");
     PrintLn("==========================================================");
-end DemonstrarInteroperabilidade;
+end DemonstrateInteroperability;
 
 program Main;
 begin
-    DemonstrarInteroperabilidade();
+    DemonstrateInteroperability();
 end PascalAndCInterop.

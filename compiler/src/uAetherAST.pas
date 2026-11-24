@@ -10,7 +10,7 @@ uses
 type
   TOwnershipKind = (owNone, owTake, owBorrow, owMutBorrow);
 
-  // Classe Base de todos os Nós da AST
+  // Base class for all AST nodes
   TASTNode = class
   public
     Line: Integer;
@@ -22,7 +22,7 @@ type
     function Dump(Indent: Integer = 0): string; virtual; abstract;
   end;
 
-  // Lista tipada de nós com gerenciamento de memória automático no Free
+  // Typed node list with automatic memory management on Free
   TASTNodeList = class
   private
     FItems: TFPList;
@@ -41,7 +41,7 @@ type
     property Items[Index: Integer]: TASTNode read GetItem write SetItem; default;
   end;
 
-  // --- Expressões ---
+  // --- Expressions ---
   TASTExpr = class(TASTNode);
 
   TASTLiteralKind = (lkInt, lkFloat, lkString, lkChar, lkBool, lkNil);
@@ -119,7 +119,7 @@ type
   public
     Callee: string;
     IsQualified: Boolean;
-    Args: TASTNodeList; // lista de TASTCallArg
+    Args: TASTNodeList; // list of TASTCallArg
     constructor Create(ALine, ACol: Integer; const ACallee: string);
     destructor Destroy; override;
     function Dump(Indent: Integer = 0): string; override;
@@ -128,7 +128,7 @@ type
   TASTIndexExpr = class(TASTExpr)
   public
     Target: TASTExpr;
-    Indices: TASTNodeList; // lista de TASTExpr
+    Indices: TASTNodeList; // list of TASTExpr
     constructor Create(ALine, ACol: Integer; ATarget: TASTExpr);
     destructor Destroy; override;
     function Dump(Indent: Integer = 0): string; override;
@@ -136,7 +136,7 @@ type
 
   TASTSetLiteralExpr = class(TASTExpr)
   public
-    Elements: TASTNodeList; // lista de TASTExpr
+    Elements: TASTNodeList; // list of TASTExpr
     constructor Create(ALine, ACol: Integer);
     destructor Destroy; override;
     function Dump(Indent: Integer = 0): string; override;
@@ -144,8 +144,8 @@ type
 
   TASTMapLiteralExpr = class(TASTExpr)
   public
-    Keys: TASTNodeList;   // lista de TASTExpr
-    Values: TASTNodeList; // lista de TASTExpr
+    Keys: TASTNodeList;   // list of TASTExpr
+    Values: TASTNodeList; // list of TASTExpr
     constructor Create(ALine, ACol: Integer);
     destructor Destroy; override;
     function Dump(Indent: Integer = 0): string; override;
@@ -170,7 +170,7 @@ type
     function Dump(Indent: Integer = 0): string; override;
   end;
 
-  // --- Instruções (Statements) ---
+  // --- Statements ---
   TASTStmt = class(TASTNode);
 
   TASTAssignStmt = class(TASTStmt)
@@ -329,7 +329,7 @@ type
     function Dump(Indent: Integer = 0): string; override;
   end;
 
-  // --- Declarações de Constantes, Variáveis e Tipos ---
+  // --- Constant, Variable, and Type Declarations ---
   TASTConstDecl = class(TASTNode)
   public
     Name: string;
@@ -380,7 +380,7 @@ type
   public
     Name: string;
     DocComment: string;
-    Fields: TASTNodeList; // TASTRecordField (payload opcional)
+    Fields: TASTNodeList; // TASTRecordField (optional payload)
     constructor Create(ALine, ACol: Integer; const AName: string);
     destructor Destroy; override;
     function Dump(Indent: Integer = 0): string; override;
@@ -468,11 +468,11 @@ type
   TASTFunction = class(TASTNode)
   public
     Name: string;
-    GenericParam: string;      // Parametro generico (ex: 'T')
-    TraitBound: string;        // Trait bound (ex: 'Printable')
-    OriginalName: string;      // Nome original do metodo (ex: 'ToString')
-    IsProcedure: Boolean;      // True para procedure (sem retorno), False para function
-    IsInterfaceDecl: Boolean;  // True para cabecalho declarado na secao interface
+    GenericParam: string;      // Generic parameter (e.g., 'T')
+    TraitBound: string;        // Trait bound (e.g., 'Printable')
+    OriginalName: string;      // Original method name (e.g., 'ToString')
+    IsProcedure: Boolean;      // True for procedure (no return), False for function
+    IsInterfaceDecl: Boolean;  // True for header declared in the interface section
     Params: TASTNodeList;      // TASTParam
     ReturnType: string;
     Requires: TASTNodeList;    // TASTExpr
@@ -498,7 +498,7 @@ type
   public
     Name: string;
     DocComment: string;
-    Methods: TASTNodeList;      // TASTFunction (assinaturas)
+    Methods: TASTNodeList;      // TASTFunction (signatures)
     constructor Create(ALine, ACol: Integer; const AName: string);
     destructor Destroy; override;
     function Dump(Indent: Integer = 0): string; override;
@@ -508,7 +508,7 @@ type
   public
     TraitName: string;
     TargetTypeName: string;
-    Methods: TASTNodeList;      // TASTFunction (implementacoes concretas)
+    Methods: TASTNodeList;      // TASTFunction (concrete implementations)
     constructor Create(ALine, ACol: Integer; const ATraitName, ATargetTypeName: string);
     destructor Destroy; override;
     function Dump(Indent: Integer = 0): string; override;
@@ -536,15 +536,15 @@ type
     CImports: TStringList;
     LinkDirectives: TStringList;
     Constants: TASTNodeList;   // TASTConstDecl
-    ModuleVars: TASTNodeList;  // TASTVarDecl em nivel de modulo/unit
+    ModuleVars: TASTNodeList;  // Module/unit-level TASTVarDecl
     Types: TASTNodeList;       // TASTRecordDecl, TASTEnumDecl
     Traits: TASTNodeList;      // TASTTraitDecl
     Impls: TASTNodeList;       // TASTImplDecl
     Functions: TASTNodeList;   // TASTFunction
-    InitBody: TASTNodeList;    // TASTStmt de initialization (Units)
-    FiniBody: TASTNodeList;    // TASTStmt de finalization (Units)
-    InitProcs: TStringList;    // Procedimentos _aether_init_<Unit> a chamar no inicio de Main
-    FiniProcs: TStringList;    // Procedimentos _aether_fini_<Unit> a chamar no fim de Main
+    InitBody: TASTNodeList;    // Initialization TASTStmt (Units)
+    FiniBody: TASTNodeList;    // Finalization TASTStmt (Units)
+    InitProcs: TStringList;    // _aether_init_<Unit> procedures to call at the start of Main
+    FiniProcs: TStringList;    // _aether_fini_<Unit> procedures to call at the end of Main
     ProgramBlock: TASTProgramBlock;
     constructor Create(ALine, ACol: Integer; const AName: string);
     destructor Destroy; override;
@@ -672,12 +672,12 @@ end;
 function TASTLiteralExpr.Dump(Indent: Integer): string;
 begin
   case Kind of
-    lkString: Result := MakeIndent(Indent) + Format('Literal String: "%s"', [Value]);
-    lkChar:   Result := MakeIndent(Indent) + Format('Literal Char: ''%s''', [Value]);
-    lkInt:    Result := MakeIndent(Indent) + Format('Literal Int: %s', [Value]);
-    lkFloat:  Result := MakeIndent(Indent) + Format('Literal Float: %s', [Value]);
-    lkBool:   Result := MakeIndent(Indent) + Format('Literal Bool: %s', [Value]);
-    lkNil:    Result := MakeIndent(Indent) + 'Literal Nil: nil';
+    lkString: Result := MakeIndent(Indent) + Format('String Literal: "%s"', [Value]);
+    lkChar:   Result := MakeIndent(Indent) + Format('Char Literal: ''%s''', [Value]);
+    lkInt:    Result := MakeIndent(Indent) + Format('Int Literal: %s', [Value]);
+    lkFloat:  Result := MakeIndent(Indent) + Format('Float Literal: %s', [Value]);
+    lkBool:   Result := MakeIndent(Indent) + Format('Bool Literal: %s', [Value]);
+    lkNil:    Result := MakeIndent(Indent) + 'Nil Literal: nil';
   end;
 end;
 
@@ -691,7 +691,7 @@ end;
 
 function TASTIdentifierExpr.Dump(Indent: Integer): string;
 begin
-  Result := MakeIndent(Indent) + Format('Identificador: %s', [Name]);
+  Result := MakeIndent(Indent) + Format('Identifier: %s', [Name]);
 end;
 
 { TASTMemberAccessExpr }
@@ -711,7 +711,7 @@ end;
 
 function TASTMemberAccessExpr.Dump(Indent: Integer): string;
 begin
-  Result := MakeIndent(Indent) + Format('Acesso a Membro: .%s' + LineEnding, [Member]) +
+  Result := MakeIndent(Indent) + Format('Member Access: .%s' + LineEnding, [Member]) +
             Target.Dump(Indent + 1);
 end;
 
@@ -734,7 +734,7 @@ end;
 
 function TASTBinaryExpr.Dump(Indent: Integer): string;
 begin
-  Result := MakeIndent(Indent) + Format('Operacao Binaria (%s):' + LineEnding, [Op]) +
+  Result := MakeIndent(Indent) + Format('Binary Operation (%s):' + LineEnding, [Op]) +
             Left.Dump(Indent + 1) + LineEnding +
             Right.Dump(Indent + 1);
 end;
@@ -756,7 +756,7 @@ end;
 
 function TASTUnaryExpr.Dump(Indent: Integer): string;
 begin
-  Result := MakeIndent(Indent) + Format('Operacao Unaria (%s):' + LineEnding, [Op]) +
+  Result := MakeIndent(Indent) + Format('Unary Operation (%s):' + LineEnding, [Op]) +
             Expr.Dump(Indent + 1);
 end;
 
@@ -817,10 +817,10 @@ end;
 function TASTCallArg.Dump(Indent: Integer): string;
 begin
   if FieldName <> '' then
-    Result := MakeIndent(Indent) + Format('Argumento [%s] (%s):' + LineEnding, [Trim(OwnershipToString(Ownership)), FieldName]) +
+    Result := MakeIndent(Indent) + Format('Argument [%s] (%s):' + LineEnding, [Trim(OwnershipToString(Ownership)), FieldName]) +
               Expr.Dump(Indent + 1)
   else
-    Result := MakeIndent(Indent) + Format('Argumento [%s]:' + LineEnding, [Trim(OwnershipToString(Ownership))]) +
+    Result := MakeIndent(Indent) + Format('Argument [%s]:' + LineEnding, [Trim(OwnershipToString(Ownership))]) +
               Expr.Dump(Indent + 1);
 end;
 
@@ -843,7 +843,7 @@ function TASTCallExpr.Dump(Indent: Integer): string;
 var
   I: Integer;
 begin
-  Result := MakeIndent(Indent) + Format('Chamada de Funcao: %s()', [Callee]);
+  Result := MakeIndent(Indent) + Format('Function Call: %s()', [Callee]);
   if Args.Count > 0 then
   begin
     Result := Result + LineEnding;
@@ -876,7 +876,7 @@ function TASTIndexExpr.Dump(Indent: Integer): string;
 var
   I: Integer;
 begin
-  Result := MakeIndent(Indent) + 'Indexacao de Array: Target =' + LineEnding +
+  Result := MakeIndent(Indent) + 'Array Index: Target =' + LineEnding +
             Target.Dump(Indent + 1) + LineEnding +
             MakeIndent(Indent) + 'Indices:';
   for I := 0 to Indices.Count - 1 do
@@ -901,7 +901,7 @@ function TASTSetLiteralExpr.Dump(Indent: Integer): string;
 var
   I: Integer;
 begin
-  Result := MakeIndent(Indent) + 'Literal de Conjunto: [';
+  Result := MakeIndent(Indent) + 'Set Literal: [';
   for I := 0 to Elements.Count - 1 do
   begin
     if I > 0 then Result := Result + ', ';
@@ -930,7 +930,7 @@ function TASTMapLiteralExpr.Dump(Indent: Integer): string;
 var
   I: Integer;
 begin
-  Result := MakeIndent(Indent) + 'Literal de Mapa: [';
+  Result := MakeIndent(Indent) + 'Map Literal: [';
   for I := 0 to Keys.Count - 1 do
   begin
     if I > 0 then Result := Result + ', ';
@@ -959,7 +959,7 @@ end;
 
 function TASTIfExpr.Dump(Indent: Integer): string;
 begin
-  Result := MakeIndent(Indent) + 'Expressao Condicional (if..then..else):' + LineEnding +
+  Result := MakeIndent(Indent) + 'Conditional Expression (if..then..else):' + LineEnding +
             Condition.Dump(Indent + 1) + LineEnding +
             ThenExpr.Dump(Indent + 1) + LineEnding +
             ElseExpr.Dump(Indent + 1);
@@ -985,7 +985,7 @@ function TASTMatchExpr.Dump(Indent: Integer): string;
 var
   I: Integer;
 begin
-  Result := MakeIndent(Indent) + 'Expressao Match:' + LineEnding + Expr.Dump(Indent + 1);
+  Result := MakeIndent(Indent) + 'Match Expression:' + LineEnding + Expr.Dump(Indent + 1);
   for I := 0 to Cases.Count - 1 do
     Result := Result + LineEnding + Cases[I].Dump(Indent + 1);
 end;
@@ -1008,7 +1008,7 @@ end;
 
 function TASTAssignStmt.Dump(Indent: Integer): string;
 begin
-  Result := MakeIndent(Indent) + 'Atribuicao :=' + LineEnding +
+  Result := MakeIndent(Indent) + 'Assignment :=' + LineEnding +
             Target.Dump(Indent + 1) + LineEnding +
             Expr.Dump(Indent + 1);
 end;
@@ -1054,15 +1054,15 @@ function TASTIfStmt.Dump(Indent: Integer): string;
 var
   I: Integer;
 begin
-  Result := MakeIndent(Indent) + 'Se (If):' + LineEnding +
+  Result := MakeIndent(Indent) + 'If:' + LineEnding +
             Condition.Dump(Indent + 1) + LineEnding +
-            MakeIndent(Indent) + 'Entao (Then):';
+            MakeIndent(Indent) + 'Then:';
   for I := 0 to ThenBranch.Count - 1 do
     Result := Result + LineEnding + ThenBranch[I].Dump(Indent + 1);
 
   if ElseBranch.Count > 0 then
   begin
-    Result := Result + LineEnding + MakeIndent(Indent) + 'Senao (Else):';
+    Result := Result + LineEnding + MakeIndent(Indent) + 'Else:';
     for I := 0 to ElseBranch.Count - 1 do
       Result := Result + LineEnding + ElseBranch[I].Dump(Indent + 1);
   end;
@@ -1088,9 +1088,9 @@ function TASTWhileStmt.Dump(Indent: Integer): string;
 var
   I: Integer;
 begin
-  Result := MakeIndent(Indent) + 'Enquanto (While):' + LineEnding +
+  Result := MakeIndent(Indent) + 'While:' + LineEnding +
             Condition.Dump(Indent + 1) + LineEnding +
-            MakeIndent(Indent) + 'Faca (Do):';
+            MakeIndent(Indent) + 'Do:';
   for I := 0 to Body.Count - 1 do
     Result := Result + LineEnding + Body[I].Dump(Indent + 1);
 end;
@@ -1126,22 +1126,22 @@ begin
   if Assigned(CollectionExpr) then
   begin
     if ValVarName <> '' then
-      Result := MakeIndent(Indent) + Format('Para (For-In) %s, %s in:', [VarName, ValVarName]) + LineEnding +
+      Result := MakeIndent(Indent) + Format('For-In %s, %s in:', [VarName, ValVarName]) + LineEnding +
                 CollectionExpr.Dump(Indent + 1) + LineEnding +
-                MakeIndent(Indent) + 'Faca (Do):'
+                MakeIndent(Indent) + 'Do:'
     else
-      Result := MakeIndent(Indent) + Format('Para (For-In) %s in:', [VarName]) + LineEnding +
+      Result := MakeIndent(Indent) + Format('For-In %s in:', [VarName]) + LineEnding +
                 CollectionExpr.Dump(Indent + 1) + LineEnding +
-                MakeIndent(Indent) + 'Faca (Do):';
+                MakeIndent(Indent) + 'Do:';
   end
   else
   begin
     if IsDownTo then DirStr := 'downto' else DirStr := 'to';
-    Result := MakeIndent(Indent) + Format('Para (For) %s := ', [VarName]) + LineEnding +
+    Result := MakeIndent(Indent) + Format('For %s := ', [VarName]) + LineEnding +
               StartExpr.Dump(Indent + 1) + LineEnding +
               MakeIndent(Indent) + DirStr + LineEnding +
               EndExpr.Dump(Indent + 1) + LineEnding +
-              MakeIndent(Indent) + 'Faca (Do):';
+              MakeIndent(Indent) + 'Do:';
   end;
   for I := 0 to Body.Count - 1 do
     Result := Result + LineEnding + Body[I].Dump(Indent + 1);
@@ -1167,10 +1167,10 @@ function TASTRepeatStmt.Dump(Indent: Integer): string;
 var
   I: Integer;
 begin
-  Result := MakeIndent(Indent) + 'Repita (Repeat):' + LineEnding;
+  Result := MakeIndent(Indent) + 'Repeat:' + LineEnding;
   for I := 0 to Body.Count - 1 do
     Result := Result + Body[I].Dump(Indent + 1) + LineEnding;
-  Result := Result + MakeIndent(Indent) + 'Ate (Until):' + LineEnding;
+  Result := Result + MakeIndent(Indent) + 'Until:' + LineEnding;
   if Assigned(Condition) then
     Result := Result + Condition.Dump(Indent + 1);
 end;
@@ -1213,14 +1213,14 @@ begin
   if SubPattern <> '' then
   begin
     if IsLet then
-      Result := MakeIndent(Indent) + Format('Padrao: %s(let %s)', [Value, SubPattern])
+      Result := MakeIndent(Indent) + Format('Pattern: %s(let %s)', [Value, SubPattern])
     else
-      Result := MakeIndent(Indent) + Format('Padrao: %s(%s)', [Value, SubPattern]);
+      Result := MakeIndent(Indent) + Format('Pattern: %s(%s)', [Value, SubPattern]);
   end
   else if (Assigned(Items)) and (Items.Count > 1) then
-    Result := MakeIndent(Indent) + Format('Padrao: %s', [Items.CommaText])
+    Result := MakeIndent(Indent) + Format('Pattern: %s', [Items.CommaText])
   else
-    Result := MakeIndent(Indent) + Format('Padrao: %s', [Value]);
+    Result := MakeIndent(Indent) + Format('Pattern: %s', [Value]);
 end;
 
 { TASTMatchCase }
@@ -1247,12 +1247,12 @@ function TASTMatchCase.Dump(Indent: Integer): string;
 var
   I: Integer;
 begin
-  Result := MakeIndent(Indent) + 'Caso:' + LineEnding +
+  Result := MakeIndent(Indent) + 'Case:' + LineEnding +
             Pattern.Dump(Indent + 1);
   if Assigned(Guard) then
-    Result := Result + LineEnding + MakeIndent(Indent + 1) + 'Guarda:' + LineEnding + Guard.Dump(Indent + 2);
+    Result := Result + LineEnding + MakeIndent(Indent + 1) + 'Guard:' + LineEnding + Guard.Dump(Indent + 2);
   if Assigned(ValueExpr) then
-    Result := Result + LineEnding + MakeIndent(Indent + 1) + 'Valor:' + LineEnding + ValueExpr.Dump(Indent + 2);
+    Result := Result + LineEnding + MakeIndent(Indent + 1) + 'Value:' + LineEnding + ValueExpr.Dump(Indent + 2);
   for I := 0 to Body.Count - 1 do
     Result := Result + LineEnding + Body[I].Dump(Indent + 1);
 end;
@@ -1429,7 +1429,7 @@ function TASTVarDeclStmt.Dump(Indent: Integer): string;
 var
   I: Integer;
 begin
-  Result := MakeIndent(Indent) + 'DeclVarInline:';
+  Result := MakeIndent(Indent) + 'InlineVarDecl:';
   for I := 0 to Decls.Count - 1 do
     Result := Result + LineEnding + Decls[I].Dump(Indent + 1);
 end;
@@ -1455,7 +1455,7 @@ end;
 
 function TASTConstDecl.Dump(Indent: Integer): string;
 begin
-  Result := MakeIndent(Indent) + Format('Constante: %s: %s', [Name, TypeName]);
+  Result := MakeIndent(Indent) + Format('Constant: %s: %s', [Name, TypeName]);
   if Assigned(ValueExpr) then
     Result := Result + ' =' + LineEnding + ValueExpr.Dump(Indent + 1);
 end;
@@ -1482,7 +1482,7 @@ var
   KindStr: string;
 begin
   if IsMutable then KindStr := 'var' else KindStr := 'let';
-  Result := MakeIndent(Indent) + Format('Declaracao Local (%s): %s: %s', [KindStr, Name, TypeName]);
+  Result := MakeIndent(Indent) + Format('Local Declaration (%s): %s: %s', [KindStr, Name, TypeName]);
   if Assigned(InitialExpr) then
     Result := Result + ' :=' + LineEnding + InitialExpr.Dump(Indent + 1);
 end;
@@ -1498,7 +1498,7 @@ end;
 
 function TASTRecordField.Dump(Indent: Integer): string;
 begin
-  Result := MakeIndent(Indent) + Format('Campo: %s : %s', [Name, TypeName]);
+  Result := MakeIndent(Indent) + Format('Field: %s : %s', [Name, TypeName]);
 end;
 
 { TASTRecordDecl }
@@ -1534,9 +1534,9 @@ var
   I: Integer;
 begin
   if Derives.Count > 0 then
-    Result := MakeIndent(Indent) + Format('Tipo Record: %s [derive(%s)]', [Name, Derives.CommaText])
+    Result := MakeIndent(Indent) + Format('Record Type: %s [derive(%s)]', [Name, Derives.CommaText])
   else
-    Result := MakeIndent(Indent) + Format('Tipo Record: %s', [Name]);
+    Result := MakeIndent(Indent) + Format('Record Type: %s', [Name]);
   for I := 0 to Fields.Count - 1 do
     Result := Result + LineEnding + Fields[I].Dump(Indent + 1);
 end;
@@ -1560,7 +1560,7 @@ function TASTEnumVariant.Dump(Indent: Integer): string;
 var
   I: Integer;
 begin
-  Result := MakeIndent(Indent) + Format('Variante: %s', [Name]);
+  Result := MakeIndent(Indent) + Format('Variant: %s', [Name]);
   for I := 0 to Fields.Count - 1 do
     Result := Result + LineEnding + Fields[I].Dump(Indent + 1);
 end;
@@ -1598,9 +1598,9 @@ var
   I: Integer;
 begin
   if Derives.Count > 0 then
-    Result := MakeIndent(Indent) + Format('Tipo Enum: %s [derive(%s)]', [Name, Derives.CommaText])
+    Result := MakeIndent(Indent) + Format('Enum Type: %s [derive(%s)]', [Name, Derives.CommaText])
   else
-    Result := MakeIndent(Indent) + Format('Tipo Enum: %s', [Name]);
+    Result := MakeIndent(Indent) + Format('Enum Type: %s', [Name]);
   for I := 0 to Variants.Count - 1 do
     Result := Result + LineEnding + Variants[I].Dump(Indent + 1);
 end;
@@ -1625,7 +1625,7 @@ end;
 
 function TASTArrayDecl.Dump(Indent: Integer): string;
 begin
-  Result := MakeIndent(Indent) + Format('Tipo Array: %s = array[%s] of %s', [Name, Dims.CommaText, ElemType]);
+  Result := MakeIndent(Indent) + Format('Array Type: %s = array[%s] of %s', [Name, Dims.CommaText, ElemType]);
 end;
 
 { TASTSetDecl }
@@ -1649,9 +1649,9 @@ end;
 function TASTSetDecl.Dump(Indent: Integer): string;
 begin
   if Variants.Count > 0 then
-    Result := MakeIndent(Indent) + Format('Tipo Set: %s = set of (variantes)', [Name])
+    Result := MakeIndent(Indent) + Format('Set Type: %s = set of (variants)', [Name])
   else
-    Result := MakeIndent(Indent) + Format('Tipo Set: %s = set of %s', [Name, ElemType]);
+    Result := MakeIndent(Indent) + Format('Set Type: %s = set of %s', [Name, ElemType]);
 end;
 
 { TASTSubrangeDecl }
@@ -1669,7 +1669,7 @@ end;
 
 function TASTSubrangeDecl.Dump(Indent: Integer): string;
 begin
-  Result := MakeIndent(Indent) + Format('Tipo Subfaixa: %s = %s..%s (base: %s)', [Name, LowBound, HighBound, BaseType]);
+  Result := MakeIndent(Indent) + Format('Subrange Type: %s = %s..%s (base: %s)', [Name, LowBound, HighBound, BaseType]);
 end;
 
 { TASTMapDecl }
@@ -1686,7 +1686,7 @@ end;
 
 function TASTMapDecl.Dump(Indent: Integer): string;
 begin
-  Result := MakeIndent(Indent) + Format('Tipo Mapa: %s = map[%s]%s', [Name, KeyType, ValType]);
+  Result := MakeIndent(Indent) + Format('Map Type: %s = map[%s]%s', [Name, KeyType, ValType]);
 end;
 
 { TASTTypeAliasDecl }
@@ -1702,7 +1702,7 @@ end;
 
 function TASTTypeAliasDecl.Dump(Indent: Integer): string;
 begin
-  Result := MakeIndent(Indent) + Format('Tipo Alias: %s = %s', [Name, TargetType]);
+  Result := MakeIndent(Indent) + Format('Alias Type: %s = %s', [Name, TargetType]);
 end;
 
 { TASTParam }
@@ -1717,7 +1717,7 @@ end;
 
 function TASTParam.Dump(Indent: Integer): string;
 begin
-  Result := MakeIndent(Indent) + Format('Parametro [%s%s: %s]', [OwnershipToString(Ownership), Name, TypeName]);
+  Result := MakeIndent(Indent) + Format('Parameter [%s%s: %s]', [OwnershipToString(Ownership), Name, TypeName]);
 end;
 
 { TASTFunction }
@@ -1762,38 +1762,38 @@ function TASTFunction.Dump(Indent: Integer): string;
 var
   I: Integer;
 begin
-  Result := MakeIndent(Indent) + Format('Funcao: %s(): %s', [Name, ReturnType]);
+  Result := MakeIndent(Indent) + Format('Function: %s(): %s', [Name, ReturnType]);
   if Params.Count > 0 then
   begin
-    Result := Result + LineEnding + MakeIndent(Indent + 1) + 'Parametros:';
+    Result := Result + LineEnding + MakeIndent(Indent + 1) + 'Parameters:';
     for I := 0 to Params.Count - 1 do
       Result := Result + LineEnding + Params[I].Dump(Indent + 2);
   end;
 
   if Requires.Count > 0 then
   begin
-    Result := Result + LineEnding + MakeIndent(Indent + 1) + 'Contrato (Require):';
+    Result := Result + LineEnding + MakeIndent(Indent + 1) + 'Contract (Require):';
     for I := 0 to Requires.Count - 1 do
       Result := Result + LineEnding + Requires[I].Dump(Indent + 2);
   end;
 
   if Ensures.Count > 0 then
   begin
-    Result := Result + LineEnding + MakeIndent(Indent + 1) + 'Contrato (Ensure):';
+    Result := Result + LineEnding + MakeIndent(Indent + 1) + 'Contract (Ensure):';
     for I := 0 to Ensures.Count - 1 do
       Result := Result + LineEnding + Ensures[I].Dump(Indent + 2);
   end;
 
   if LocalVars.Count > 0 then
   begin
-    Result := Result + LineEnding + MakeIndent(Indent + 1) + 'Variaveis Locais:';
+    Result := Result + LineEnding + MakeIndent(Indent + 1) + 'Local Variables:';
     for I := 0 to LocalVars.Count - 1 do
       Result := Result + LineEnding + LocalVars[I].Dump(Indent + 2);
   end;
 
   if Body.Count > 0 then
   begin
-    Result := Result + LineEnding + MakeIndent(Indent + 1) + 'Corpo:';
+    Result := Result + LineEnding + MakeIndent(Indent + 1) + 'Body:';
     for I := 0 to Body.Count - 1 do
       Result := Result + LineEnding + Body[I].Dump(Indent + 2);
   end;
@@ -1820,17 +1820,17 @@ function TASTProgramBlock.Dump(Indent: Integer): string;
 var
   I: Integer;
 begin
-  Result := MakeIndent(Indent) + Format('Programa Principal: %s', [Name]);
+  Result := MakeIndent(Indent) + Format('Main Program: %s', [Name]);
   if LocalVars.Count > 0 then
   begin
-    Result := Result + LineEnding + MakeIndent(Indent + 1) + 'Variaveis Locais:';
+    Result := Result + LineEnding + MakeIndent(Indent + 1) + 'Local Variables:';
     for I := 0 to LocalVars.Count - 1 do
       Result := Result + LineEnding + LocalVars[I].Dump(Indent + 2);
   end;
 
   if Body.Count > 0 then
   begin
-    Result := Result + LineEnding + MakeIndent(Indent + 1) + 'Corpo:';
+    Result := Result + LineEnding + MakeIndent(Indent + 1) + 'Body:';
     for I := 0 to Body.Count - 1 do
       Result := Result + LineEnding + Body[I].Dump(Indent + 2);
   end;
@@ -1858,7 +1858,7 @@ begin
   Result := MakeIndent(Indent) + Format('Trait: %s', [Name]);
   if Methods.Count > 0 then
   begin
-    Result := Result + LineEnding + MakeIndent(Indent + 1) + 'Metodos:';
+    Result := Result + LineEnding + MakeIndent(Indent + 1) + 'Methods:';
     for I := 0 to Methods.Count - 1 do
       Result := Result + LineEnding + Methods[I].Dump(Indent + 2);
   end;
@@ -1884,10 +1884,10 @@ function TASTImplDecl.Dump(Indent: Integer): string;
 var
   I: Integer;
 begin
-  Result := MakeIndent(Indent) + Format('Impl: %s para %s', [TraitName, TargetTypeName]);
+  Result := MakeIndent(Indent) + Format('Impl: %s for %s', [TraitName, TargetTypeName]);
   if Methods.Count > 0 then
   begin
-    Result := Result + LineEnding + MakeIndent(Indent + 1) + 'Metodos Implementados:';
+    Result := Result + LineEnding + MakeIndent(Indent + 1) + 'Implemented Methods:';
     for I := 0 to Methods.Count - 1 do
       Result := Result + LineEnding + Methods[I].Dump(Indent + 2);
   end;
@@ -1944,7 +1944,7 @@ function TASTModule.Dump(Indent: Integer): string;
 var
   I: Integer;
 begin
-  Result := MakeIndent(Indent) + Format('Modulo: %s', [Name]);
+  Result := MakeIndent(Indent) + Format('Module: %s', [Name]);
   if Imports.Count > 0 then
   begin
     Result := Result + LineEnding + MakeIndent(Indent + 1) + 'Imports: ' + Imports.CommaText;
@@ -1952,42 +1952,42 @@ begin
 
   if Constants.Count > 0 then
   begin
-    Result := Result + LineEnding + MakeIndent(Indent + 1) + 'Constantes Declaradas:';
+    Result := Result + LineEnding + MakeIndent(Indent + 1) + 'Declared Constants:';
     for I := 0 to Constants.Count - 1 do
       Result := Result + LineEnding + Constants[I].Dump(Indent + 2);
   end;
 
   if ModuleVars.Count > 0 then
   begin
-    Result := Result + LineEnding + MakeIndent(Indent + 1) + 'Variaveis do Modulo:';
+    Result := Result + LineEnding + MakeIndent(Indent + 1) + 'Module Variables:';
     for I := 0 to ModuleVars.Count - 1 do
       Result := Result + LineEnding + ModuleVars[I].Dump(Indent + 2);
   end;
 
   if Types.Count > 0 then
   begin
-    Result := Result + LineEnding + MakeIndent(Indent + 1) + 'Tipos Declarados:';
+    Result := Result + LineEnding + MakeIndent(Indent + 1) + 'Declared Types:';
     for I := 0 to Types.Count - 1 do
       Result := Result + LineEnding + Types[I].Dump(Indent + 2);
   end;
 
   if Traits.Count > 0 then
   begin
-    Result := Result + LineEnding + MakeIndent(Indent + 1) + 'Traits Declaradas:';
+    Result := Result + LineEnding + MakeIndent(Indent + 1) + 'Declared Traits:';
     for I := 0 to Traits.Count - 1 do
       Result := Result + LineEnding + Traits[I].Dump(Indent + 2);
   end;
 
   if Impls.Count > 0 then
   begin
-    Result := Result + LineEnding + MakeIndent(Indent + 1) + 'Implementacoes (Impls):';
+    Result := Result + LineEnding + MakeIndent(Indent + 1) + 'Implementations (Impls):';
     for I := 0 to Impls.Count - 1 do
       Result := Result + LineEnding + Impls[I].Dump(Indent + 2);
   end;
 
   if Functions.Count > 0 then
   begin
-    Result := Result + LineEnding + MakeIndent(Indent + 1) + 'Funcoes:';
+    Result := Result + LineEnding + MakeIndent(Indent + 1) + 'Functions:';
     for I := 0 to Functions.Count - 1 do
       Result := Result + LineEnding + Functions[I].Dump(Indent + 2);
   end;
@@ -2020,7 +2020,7 @@ var
 begin
   if not Assigned(Node) then Exit(nil);
 
-  // Literais e Identificadores
+  // Literals and Identifiers
   if Node is TASTLiteralExpr then
     Exit(TASTLiteralExpr.Create(Node.Line, Node.Col, TASTLiteralExpr(Node).Kind, TASTLiteralExpr(Node).Value))
   else if Node is TASTIdentifierExpr then
@@ -2086,7 +2086,7 @@ begin
     Exit;
   end
 
-  // Instruções
+  // Statements
   else if Node is TASTAssignStmt then
     Exit(TASTAssignStmt.Create(Node.Line, Node.Col, TASTExpr(CloneASTNode(TASTAssignStmt(Node).Target)), TASTExpr(CloneASTNode(TASTAssignStmt(Node).Expr))))
   else if Node is TASTCallStmt then

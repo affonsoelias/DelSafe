@@ -118,15 +118,15 @@ var
 begin
   FillChar(Result, SizeOf(Result), 0);
 
-  // --- 1. Deteccao do Free Pascal (FPC) ---
+  // --- 1. Free Pascal (FPC) Detection ---
   {$IFDEF MSWINDOWS}
   SetLength(CandidatePaths, 3);
-  CandidatePaths[0] := 'fpc.exe'; // PATH do sistema
+  CandidatePaths[0] := 'fpc.exe'; // System PATH
   CandidatePaths[1] := 'C:\lazarus\fpc\3.2.2\bin\x86_64-win64\fpc.exe';
   CandidatePaths[2] := 'C:\fpc\3.2.2\bin\i386-win32\fpc.exe';
   {$ELSE}
   SetLength(CandidatePaths, 3);
-  CandidatePaths[0] := 'fpc'; // PATH do sistema Linux/macOS
+  CandidatePaths[0] := 'fpc'; // Linux/macOS System PATH
   CandidatePaths[1] := '/usr/bin/fpc';
   CandidatePaths[2] := '/usr/local/bin/fpc';
   {$ENDIF}
@@ -146,7 +146,7 @@ begin
     end;
   end;
 
-  // --- 2. Deteccao do GCC (MSYS2 no Windows / Nativo no Linux e macOS) ---
+  // --- 2. GCC Detection (MSYS2 on Windows / Native on Linux and macOS) ---
   {$IFDEF MSWINDOWS}
   SetLength(CandidatePaths, 5);
   CandidatePaths[0] := 'C:\msys64\ucrt64\bin\gcc.exe';
@@ -167,7 +167,7 @@ begin
   begin
     if (P = 'gcc.exe') or (P = 'gcc') or (P = 'clang') or FileExists(P) then
     begin
-      // No Windows: para MSYS2, adicionar o diretorio bin correspondente
+      // On Windows: for MSYS2, add the corresponding bin directory
       {$IFDEF MSWINDOWS}
       if Pos('msys', LowerCase(P)) > 0 then
         Result.MSYS2BinDir := ExtractFileDir(P)
@@ -178,7 +178,7 @@ begin
       {$ENDIF}
 
       Code := RunCommandCapture(P, '--version', Result.MSYS2BinDir, OutText);
-      // Ignora o stub antigo de 2.95 do FPC
+      // Ignore FPC legacy 2.95 stub
       if (Code = 0) and (Pos('2.95', OutText) = 0) then
       begin
         Result.GCCFound := True;
@@ -192,7 +192,7 @@ begin
     end;
   end;
 
-  // --- 3. Deteccao do Clang (LLVM / WebAssembly wasm32) ---
+  // --- 3. Clang Detection (LLVM / WebAssembly wasm32) ---
   {$IFDEF MSWINDOWS}
   SetLength(CandidatePaths, 5);
   CandidatePaths[0] := 'C:\msys64\ucrt64\bin\clang.exe';
@@ -225,7 +225,7 @@ begin
     end;
   end;
 
-  // --- 4. Deteccao do Pas2JS (Compilador Web JavaScript Free Pascal) ---
+  // --- 4. Pas2JS Detection (Free Pascal Web JavaScript Compiler) ---
   {$IFDEF MSWINDOWS}
   SetLength(CandidatePaths, 4);
   CandidatePaths[0] := 'C:\ComponenteLazarus\pas2js-win64-x86_64-3.2.0\bin\pas2js.exe';
@@ -260,100 +260,100 @@ var
   Info: TToolchainInfo;
 begin
   WriteLn('--------------------------------------------------------');
-  WriteLn('   Diagnostico do Ambiente Aether (aetherc --doctor)    ');
+  WriteLn('   Aether Environment Diagnostics (aetherc --doctor)     ');
   WriteLn('--------------------------------------------------------');
 
   Info := DetectToolchain;
 
-  // Relatorio FPC
+  // FPC Report
   if Info.FPCFound then
   begin
-    WriteLn('[OK] Free Pascal (FPC) Encontrado:');
-    WriteLn('     Caminho : ', Info.FPCPath);
-    WriteLn('     Versao  : ', Info.FPCVersion);
+    WriteLn('[OK] Free Pascal (FPC) Found:');
+    WriteLn('     Path    : ', Info.FPCPath);
+    WriteLn('     Version : ', Info.FPCVersion);
   end
   else
   begin
-    WriteLn('[FALHA] Free Pascal (FPC) nao foi encontrado no sistema.');
+    WriteLn('[FAIL] Free Pascal (FPC) was not found on the system.');
     {$IFDEF MSWINDOWS}
-    WriteLn('        Instale o Lazarus ou Free Pascal em: https://www.lazarus-ide.org/');
+    WriteLn('       Install Lazarus or Free Pascal from: https://www.lazarus-ide.org/');
     {$ELSE}
-    WriteLn('        Instale o Free Pascal via gerenciador de pacotes (ex: sudo apt install fpc)');
+    WriteLn('       Install Free Pascal via package manager (e.g., sudo apt install fpc)');
     {$ENDIF}
   end;
 
   WriteLn('');
 
-  // Relatorio GCC / C Compiler
+  // GCC / C Compiler Report
   if Info.GCCFound then
   begin
     {$IFDEF MSWINDOWS}
-    WriteLn('[OK] Compilador C (GCC / MSYS2) Encontrado:');
+    WriteLn('[OK] C Compiler (GCC / MSYS2) Found:');
     {$ELSE}
-    WriteLn('[OK] Compilador C (GCC) Encontrado:');
+    WriteLn('[OK] C Compiler (GCC) Found:');
     {$ENDIF}
-    WriteLn('     Caminho : ', Info.GCCPath);
-    WriteLn('     Versao  : ', Trim(Info.GCCVersion));
+    WriteLn('     Path    : ', Info.GCCPath);
+    WriteLn('     Version : ', Trim(Info.GCCVersion));
     if Info.MSYS2BinDir <> '' then
-      WriteLn('     Ambiente: MSYS2 UCRT64 Ativo (', Info.MSYS2BinDir, ')');
+      WriteLn('     Env     : Active MSYS2 UCRT64 (', Info.MSYS2BinDir, ')');
   end
   else
   begin
     {$IFDEF MSWINDOWS}
-    WriteLn('[ALERTA] GCC moderno (MSYS2) nao foi detectado no Windows.');
-    WriteLn('         Para habilitar compilacao C via MSYS2:');
-    WriteLn('         1. Instale o MSYS2 (https://www.msys2.org/)');
-    WriteLn('         2. No terminal MSYS2 rode: pacman -S mingw-w64-ucrt-x86_64-gcc');
+    WriteLn('[WARNING] Modern GCC (MSYS2) was not detected on Windows.');
+    WriteLn('          To enable C compilation via MSYS2:');
+    WriteLn('          1. Install MSYS2 (https://www.msys2.org/)');
+    WriteLn('          2. In MSYS2 terminal run: pacman -S mingw-w64-ucrt-x86_64-gcc');
     {$ELSE}
-    WriteLn('[ALERTA] GCC nativo nao foi detectado no sistema.');
-    WriteLn('         Instale o pacote padrao de compilacao (ex: sudo apt install build-essential).');
+    WriteLn('[WARNING] Native GCC was not detected on the system.');
+    WriteLn('          Install the standard build toolchain (e.g., sudo apt install build-essential).');
     {$ENDIF}
   end;
 
   WriteLn('');
 
-  // Relatorio Clang (LLVM / Wasm)
+  // Clang (LLVM / Wasm) Report
   if Info.ClangFound then
   begin
-    WriteLn('[OK] Compilador Clang (LLVM / WebAssembly) Encontrado:');
-    WriteLn('     Caminho : ', Info.ClangPath);
-    WriteLn('     Versao  : ', Trim(Info.ClangVersion));
-    WriteLn('     Suporte : Nativo x86_64 e WebAssembly (wasm32)');
+    WriteLn('[OK] Clang Compiler (LLVM / WebAssembly) Found:');
+    WriteLn('     Path    : ', Info.ClangPath);
+    WriteLn('     Version : ', Trim(Info.ClangVersion));
+    WriteLn('     Support : Native x86_64 and WebAssembly (wasm32)');
   end
   else
   begin
-    WriteLn('[AVISO] Clang nao detectado no sistema.');
-    WriteLn('        Necessario para geracao de WebAssembly (--target=wasm).');
+    WriteLn('[WARNING] Clang not detected on the system.');
+    WriteLn('          Required for WebAssembly generation (--target=wasm).');
     {$IFDEF MSWINDOWS}
-    WriteLn('        No MSYS2 rode: pacman -S mingw-w64-ucrt-x86_64-clang');
+    WriteLn('          In MSYS2 run: pacman -S mingw-w64-ucrt-x86_64-clang');
     {$ENDIF}
   end;
 
   WriteLn('');
 
-  // Relatorio Pas2JS (JavaScript)
+  // Pas2JS (JavaScript) Report
   if Info.Pas2JSFound then
   begin
-    WriteLn('[OK] Compilador Pas2JS (Free Pascal JavaScript) Encontrado:');
-    WriteLn('     Caminho : ', Info.Pas2JSPath);
-    WriteLn('     Versao  : ', Trim(Info.Pas2JSVersion));
-    WriteLn('     Suporte : Web JavaScript (ECMAScript 5/6)');
+    WriteLn('[OK] Pas2JS Compiler (Free Pascal JavaScript) Found:');
+    WriteLn('     Path    : ', Info.Pas2JSPath);
+    WriteLn('     Version : ', Trim(Info.Pas2JSVersion));
+    WriteLn('     Support : Web JavaScript (ECMAScript 5/6)');
   end
   else
   begin
-    WriteLn('[AVISO] Pas2JS nao detectado no sistema.');
-    WriteLn('        Necessario para geracao de JavaScript (--target=js).');
+    WriteLn('[WARNING] Pas2JS not detected on the system.');
+    WriteLn('          Required for JavaScript generation (--target=js).');
   end;
 
   WriteLn('--------------------------------------------------------');
   if Info.FPCFound and Info.GCCFound and Info.ClangFound and Info.Pas2JSFound then
-    WriteLn('Status Geral: Perfeito! Todos os 4 backends (Pascal, C, Wasm e JS) estao 100% operacionais.')
+    WriteLn('Overall Status: Perfect! All 4 backends (Pascal, C, Wasm, and JS) are 100% operational.')
   else if Info.FPCFound and Info.GCCFound then
-    WriteLn('Status Geral: Excelente! Backends nativos (Pascal e C) operacionais.')
+    WriteLn('Overall Status: Great! Native backends (Pascal and C) are operational.')
   else if Info.FPCFound then
-    WriteLn('Status Geral: Operacional para backend Pascal (Padrao).')
+    WriteLn('Overall Status: Operational for Pascal backend (Default).')
   else
-    WriteLn('Status Geral: Atencao! Nao ha compilador nativo configurado.');
+    WriteLn('Overall Status: Attention! No native compiler configured.');
   WriteLn('--------------------------------------------------------');
 end;
 
@@ -368,7 +368,7 @@ begin
   Info := DetectToolchain;
   if not Info.FPCFound then
   begin
-    OutputLog := 'Free Pascal Compiler (fpc) nao encontrado no sistema.';
+    OutputLog := 'Free Pascal Compiler (fpc) not found on the system.';
     Exit(False);
   end;
 
@@ -428,7 +428,7 @@ begin
   Info := DetectToolchain;
   if not Info.GCCFound then
   begin
-    OutputLog := 'Compilador C (GCC) nao encontrado no sistema.';
+    OutputLog := 'C Compiler (GCC) not found on the system.';
     Exit(False);
   end;
 
@@ -500,7 +500,7 @@ begin
   Info := DetectToolchain;
   if not Info.ClangFound then
   begin
-    OutputLog := 'Compilador Clang nao encontrado no sistema.';
+    OutputLog := 'Clang compiler not found on the system.';
     Exit(False);
   end;
 
@@ -583,8 +583,8 @@ begin
   Info := DetectToolchain;
   if not Info.ClangFound then
   begin
-    OutputLog := 'Compilador Clang nao encontrado no sistema. Necessario para compilar WebAssembly (wasm32).' + LineEnding +
-                 'Instale o Clang no MSYS2 com: pacman -S mingw-w64-ucrt-x86_64-clang mingw-w64-ucrt-x86_64-lld';
+    OutputLog := 'Clang compiler not found on the system. Required to compile WebAssembly (wasm32).' + LineEnding +
+                 'Install Clang in MSYS2 with: pacman -S mingw-w64-ucrt-x86_64-clang mingw-w64-ucrt-x86_64-lld';
     Exit(False);
   end;
 
@@ -611,7 +611,7 @@ begin
   Info := DetectToolchain;
   if not Info.Pas2JSFound then
   begin
-    OutputLog := 'Compilador Pas2JS nao encontrado no sistema. Necessario para compilar para JavaScript.';
+    OutputLog := 'Pas2JS compiler not found on the system. Required to compile to JavaScript.';
     Exit(False);
   end;
 
@@ -659,7 +659,7 @@ begin
             SrcStream.Free;
           end;
         except
-          // Nao interromper caso ocorra erro ao copiar rtl.js
+          // Do not abort if copying rtl.js fails
         end;
       end;
     end;
@@ -676,7 +676,7 @@ begin
   Lines := TStringList.Create;
   try
     Lines.Add('<!DOCTYPE html>');
-    Lines.Add('<html lang="pt-BR">');
+    Lines.Add('<html lang="en">');
     Lines.Add('<head>');
     Lines.Add('  <meta charset="UTF-8">');
     Lines.Add('  <title>Aether WebAssembly Runner</title>');
@@ -688,8 +688,8 @@ begin
     Lines.Add('</head>');
     Lines.Add('<body>');
     Lines.Add('  <h1>Aether WebAssembly (Wasm) Runner</h1>');
-    Lines.Add('  <p>Modulo Wasm: <b>' + WasmBase + '</b></p>');
-    Lines.Add('  <pre id="output">Inicializando WebAssembly...</pre>');
+    Lines.Add('  <p>Wasm Module: <b>' + WasmBase + '</b></p>');
+    Lines.Add('  <pre id="output">Initializing WebAssembly...</pre>');
     Lines.Add('  <script>');
     Lines.Add('    const log = (msg) => {');
     Lines.Add('      document.getElementById("output").textContent += "\n" + msg;');
@@ -697,13 +697,13 @@ begin
     Lines.Add('    };');
     Lines.Add('    WebAssembly.instantiateStreaming(fetch("' + WasmBase + '"))');
     Lines.Add('      .then(obj => {');
-    Lines.Add('        log("[OK] Modulo WebAssembly carregado com sucesso!");');
+    Lines.Add('        log("[OK] WebAssembly module loaded successfully!");');
     Lines.Add('        const exp = Object.keys(obj.instance.exports);');
-    Lines.Add('        log("Exports disponiveis: " + exp.join(", "));');
+    Lines.Add('        log("Available exports: " + exp.join(", "));');
     Lines.Add('        window.aetherWasm = obj.instance.exports;');
-    Lines.Add('        log("Objeto disponivel no console em: window.aetherWasm");');
+    Lines.Add('        log("Object available in console at: window.aetherWasm");');
     Lines.Add('      })');
-    Lines.Add('      .catch(err => log("[ERRO] Falha ao instanciar WebAssembly: " + err));');
+    Lines.Add('      .catch(err => log("[ERROR] Failed to instantiate WebAssembly: " + err));');
     Lines.Add('  </script>');
     Lines.Add('</body>');
     Lines.Add('</html>');
@@ -726,7 +726,7 @@ begin
   Lines := TStringList.Create;
   try
     Lines.Add('<!DOCTYPE html>');
-    Lines.Add('<html lang="pt-BR">');
+    Lines.Add('<html lang="en">');
     Lines.Add('<head>');
     Lines.Add('  <meta charset="UTF-8">');
     Lines.Add('  <title>Aether JavaScript (Pas2JS) Runner</title>');
@@ -739,20 +739,20 @@ begin
     Lines.Add('<body>');
     Lines.Add('  <h1>Aether JavaScript (Pas2JS) Runner</h1>');
     Lines.Add('  <p>Script: <b>' + JSBase + '</b></p>');
-    Lines.Add('  <pre id="output">Inicializando JavaScript (Pas2JS)...</pre>');
+    Lines.Add('  <pre id="output">Initializing JavaScript (Pas2JS)...</pre>');
     Lines.Add('  <script src="rtl.js"></script>');
     Lines.Add('  <script src="' + JSBase + '"></script>');
     Lines.Add('  <script>');
     Lines.Add('    const outElem = document.getElementById("output");');
     Lines.Add('    if (typeof rtl !== ''undefined'') {');
-    Lines.Add('      try { rtl.run(); } catch (e) { console.warn("rtl.run aviso:", e); }');
+    Lines.Add('      try { rtl.run(); } catch (e) { console.warn("rtl.run warning:", e); }');
     Lines.Add('    }');
     Lines.Add('    if (window.pas) {');
     Lines.Add('      const mods = Object.keys(window.pas);');
-    Lines.Add('      outElem.textContent = "[OK] Script carregado com sucesso!\nModulos disponiveis em window.pas: " + mods.join(", ");');
-    Lines.Add('      console.log("Modulos Pas2JS disponiveis em window.pas:", window.pas);');
+    Lines.Add('      outElem.textContent = "[OK] Script loaded successfully!\nModules available in window.pas: " + mods.join(", ");');
+    Lines.Add('      console.log("Pas2JS modules available in window.pas:", window.pas);');
     Lines.Add('    } else {');
-    Lines.Add('      outElem.textContent = "[OK] Script carregado. Abra o DevTools (F12) para interagir.";');
+    Lines.Add('      outElem.textContent = "[OK] Script loaded. Open DevTools (F12) to interact.";');
     Lines.Add('    }');
     Lines.Add('  </script>');
     Lines.Add('</body>');

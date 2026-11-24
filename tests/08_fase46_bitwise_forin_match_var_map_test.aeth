@@ -2,9 +2,9 @@ module Fase46BitwiseForInMatchVarMapTest;
 
 type
     HttpStatus = (OkStatus, NotFound, ServerError);
-    ListaInt = array of Int32;
-    Vetor4 = array[4] of Int32;
-    Placar = map[String]Int32;
+    IntList = array of Int32;
+    Vec4 = array[4] of Int32;
+    ScoreMap = map[String]Int32;
 
 function ExtractNibble(val: UInt32) return UInt32 is
 begin
@@ -25,7 +25,7 @@ begin
             res := -1;
         _ =>
             res := 99;
-    end;
+    end match;
     return res;
 end ClassifyCode;
 
@@ -41,17 +41,17 @@ begin
             outVal := 404;
         case HttpStatus.ServerError:
             outVal := 500;
-    end;
+    end match;
     return outVal;
 end StatusToNumber;
 
-procedure AddScore(mut borrow tabela: Placar; nome: String; delta: Int32) is
+procedure AddScore(mut borrow table: ScoreMap; name: String; delta: Int32) is
 begin
-    if tabela.Contains(nome) then
-        tabela[nome] := tabela[nome] + delta;
+    if table.Contains(name) then
+        table[name] := table[name] + delta;
     else
-        tabela[nome] := delta;
-    end;
+        table[name] := delta;
+    end if;
 end AddScore;
 
 function MakeOk(v: Float64) return Result<Float64, Int32> is
@@ -68,15 +68,15 @@ program Main;
 var
     a, b, c: Int32;
     hexA, hexB, binA, binB, mask, bits: UInt32;
-    dynNums: ListaInt;
-    fixedArr: Vetor4;
+    dynNums: IntList;
+    fixedArr: Vec4;
     item, sumDyn, sumFixed: Int32;
     ch: Char;
     word: String;
     aCount, cmdCode, charCode, boolCode, matchResSum: Int32;
     infInt := 42;
     infFloat := 2.5;
-    scores: Placar;
+    scores: ScoreMap;
     names: map[Int32]String;
     rOk, rErr: Result<Float64, Int32>;
 let
@@ -114,14 +114,14 @@ begin
     Assert(infStr = "Aether");
     Assert(infBool);
 
-    // 3. for item in colecao (dynamic array, fixed array, String)
+    // 3. for item in collection (dynamic array, fixed array, String)
     dynNums.Push(3);
     dynNums.Push(7);
     dynNums.Push(11);
     sumDyn := 0;
     for item in dynNums do
         sumDyn := sumDyn + item;
-    end;
+    end for;
     Assert(sumDyn = 21);
 
     fixedArr[0] := 2;
@@ -132,9 +132,9 @@ begin
     for item in fixedArr do
         if item = 6 then
             continue;
-        end;
+        end if;
         sumFixed := sumFixed + item;
-    end;
+    end for;
     Assert(sumFixed = 14);
 
     word := "banana";
@@ -142,8 +142,8 @@ begin
     for ch in word do
         if ch = 'a' then
             aCount := aCount + 1;
-        end;
-    end;
+        end if;
+    end for;
     Assert(aCount = 3);
 
     // 4. Complete match code emission
@@ -163,7 +163,7 @@ begin
             cmdCode := 7;
         _:
             cmdCode := -1;
-    end;
+    end match;
     Assert(cmdCode = 7);
 
     charCode := 0;
@@ -174,7 +174,7 @@ begin
             charCode := 42;
         _ =>
             charCode := 0;
-    end;
+    end match;
     Assert(charCode = 42);
 
     boolCode := 0;
@@ -183,7 +183,7 @@ begin
             boolCode := 10;
         false =>
             boolCode := 20;
-    end;
+    end match;
     Assert(boolCode = 10);
 
     matchResSum := 0;
@@ -192,19 +192,19 @@ begin
         case Ok(let val):
             if val > 14.0 then
                 matchResSum := matchResSum + 100;
-            end;
+            end if;
         case Err(let errCode):
             matchResSum := matchResSum + errCode;
-    end;
+    end match;
     rErr := MakeErr(7);
     match rErr with
         case Ok(let ignored):
             if ignored > 0.0 then
                 matchResSum := matchResSum + 1;
-            end;
+            end if;
         case Err(let errNum):
             matchResSum := matchResSum + errNum;
-    end;
+    end match;
     Assert(matchResSum = 107);
 
     // 5. Associative maps map[K]V
@@ -229,11 +229,11 @@ begin
     Assert(scores.Count() = 2);
     Assert(scores["Bob"] = 0);
 
-    names[1] := "Um";
-    names[2] := "Dois";
+    names[1] := "One";
+    names[2] := "Two";
     Assert(names.Contains(1));
-    Assert(names[2] = "Dois");
+    Assert(names[2] = "Two");
     Assert(names[99] = "");
 
-    PrintLn("=== FASE 46 TEST PASSOU (BITWISE, FOR..IN, MATCH, VAR/LET, MAP) ===");
+    PrintLn("=== PHASE 46 TEST PASSED (BITWISE, FOR..IN, MATCH, VAR/LET, MAP) ===");
 end Fase46BitwiseForInMatchVarMapTest.

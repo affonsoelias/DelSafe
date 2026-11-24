@@ -5,12 +5,12 @@ interface
 type
     AtomicInt32 = record
         val: Int32;
-    end;
+    end record;
 
     Mutex = record
         locked: Bool;
         holder_id: UInt32;
-    end;
+    end record;
 
     Channel = record
         capacity: UInt32;
@@ -18,7 +18,7 @@ type
         head: UInt32;
         tail: UInt32;
         is_closed: Bool;
-    end;
+    end record;
 
 function NewAtomic(borrow initial: Int32) return AtomicInt32;
 function AtomicLoad(borrow a: AtomicInt32) return Int32;
@@ -71,7 +71,7 @@ begin
         return true;
     else
         return false;
-    end;
+    end if;
 end Lock;
 
 function Unlock(mut borrow m: Mutex; borrow thread_id: UInt32) return Bool is
@@ -82,7 +82,7 @@ begin
         return true;
     else
         return false;
-    end;
+    end if;
 end Unlock;
 
 function IsLocked(borrow m: Mutex) return Bool is
@@ -103,7 +103,7 @@ begin
         ch.count := ch.count + 1;
         ch.tail := (ch.tail + 1) mod ch.capacity;
         return true;
-    end;
+    end if;
 end Send;
 
 function Recv(mut borrow ch: Channel) return Bool is
@@ -114,7 +114,7 @@ begin
         ch.count := ch.count - 1;
         ch.head := (ch.head + 1) mod ch.capacity;
         return true;
-    end;
+    end if;
 end Recv;
 
 function IsChannelEmpty(borrow ch: Channel) return Bool is

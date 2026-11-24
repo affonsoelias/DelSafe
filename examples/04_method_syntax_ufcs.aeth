@@ -4,19 +4,19 @@ type
     DataBuffer = record
         id: UInt32;
         size: UInt64;
-    end;
+    end record;
 
-procedure Inspecionar(borrow buf: DataBuffer) is
+procedure Inspect(borrow buf: DataBuffer) is
 begin
-    PrintLn("Inspecionando buffer via chamada estilo metodo: id = %d, size = %d", buf.id, buf.size);
-end Inspecionar;
+    PrintLn("Inspecting buffer via method-style call: id = %d, size = %d", buf.id, buf.size);
+end Inspect;
 
 program Main;
 var
-    meu_buffer: DataBuffer;
+    my_buffer: DataBuffer;
 begin
-    meu_buffer := DataBuffer(id: 777, size: 8192);
+    my_buffer := DataBuffer(id: 777, size: 8192);
 
-    // Chamada estilo metodo (UFCS)!
-    meu_buffer.Inspecionar();
+    // Method-style call (UFCS)!
+    my_buffer.Inspect();
 end MethodSyntaxUFCS.

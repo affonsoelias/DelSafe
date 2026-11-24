@@ -1,11 +1,11 @@
 const DOC_SEARCH_INDEX = [
-  { name: "geometria", kind: "module", link: "geometria.html", desc: "Módulo de cálculos geométricos e estatísticos de alta precisão." },
-  { name: "Ponto", kind: "record", link: "geometria.html#type-Ponto", desc: "Representa um Ponto 2D no plano cartesiano." },
-  { name: "ModoRender", kind: "enum", link: "geometria.html#type-ModoRender", desc: "Modo de renderização de formas geométricas." },
-  { name: "FormaGeometrica", kind: "trait", link: "geometria.html#trait-FormaGeometrica", desc: "Contrato para formas geométricas com cálculo de área." },
-  { name: "CriarPonto", kind: "function", link: "geometria.html#func-CriarPonto", desc: "Cria um novo ponto no plano cartesiano." },
-  { name: "DeslocarPonto", kind: "function", link: "geometria.html#func-DeslocarPonto", desc: "Desloca as coordenadas de um ponto diretamente na memória." },
-  { name: "CalcularAreaAsync", kind: "function", link: "geometria.html#func-CalcularAreaAsync", desc: "Computa a área assíncrona de um retângulo delimitador." },
+  { name: "geometria", kind: "module", link: "geometria.html", desc: "High-precision geometric and statistical calculations module." },
+  { name: "Point", kind: "record", link: "geometria.html#type-Point", desc: "Represents a 2D Point on the Cartesian plane." },
+  { name: "RenderMode", kind: "enum", link: "geometria.html#type-RenderMode", desc: "Rendering mode for geometric shapes." },
+  { name: "GeometricShape", kind: "trait", link: "geometria.html#trait-GeometricShape", desc: "Contract for geometric shapes supporting area calculation." },
+  { name: "CreatePoint", kind: "function", link: "geometria.html#func-CreatePoint", desc: "Creates a new point on the Cartesian plane." },
+  { name: "ShiftPoint", kind: "function", link: "geometria.html#func-ShiftPoint", desc: "Translates the coordinates of a point directly in memory." },
+  { name: "ComputeAreaAsync", kind: "function", link: "geometria.html#func-ComputeAreaAsync", desc: "Asynchronously computes the area of a bounding rectangle." },
 ];
 
 function initSearch() {
@@ -17,7 +17,7 @@ function initSearch() {
     if (q.length === 0) { results.style.display = "none"; return; }
     const matches = DOC_SEARCH_INDEX.filter(item => item.name.toLowerCase().includes(q) || item.desc.toLowerCase().includes(q)).slice(0, 8);
     if (matches.length === 0) {
-      results.innerHTML = '<div class="search-item" style="color: #8b949e;">Nenhum simbolo encontrado.</div>';
+      results.innerHTML = '<div class="search-item" style="color: #8b949e;">No symbols found.</div>';
     } else {
       results.innerHTML = matches.map(m => `<div class="search-item" onclick="window.location.href='${m.link}'"><span class="badge badge-async" style="margin-right: 8px;">${m.kind}</span><strong>${m.name}</strong><br><small style="color: #8b949e;">${m.desc || ""}</small></div>`).join("");
     }
