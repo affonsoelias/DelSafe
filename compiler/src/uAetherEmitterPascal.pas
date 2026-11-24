@@ -33,6 +33,13 @@ type
     FFnSigs: TStringList;
     FThunkFuncs: TStringList;
     FLambdas: TFPList;
+    FTaskTags: TStringList;
+    FTaskInners: TStringList;
+    FChanTags: TStringList;
+    FChanElems: TStringList;
+    FSpawns: TFPList;
+    FSpawnRefNames: TStringList;
+    FSpawnRefTargets: TStringList;
 
     procedure Emit(const Line: string = '');
     procedure IncIndent;
@@ -66,6 +73,11 @@ type
     procedure RegisterThunkFunc(const FuncName: string);
     procedure EmitFnRuntimeHelpers(DeclOnly: Boolean);
     procedure EmitLambdaAndThunkDecls(ForwardOnly: Boolean);
+    function RegisterTaskType(const AType: string): string;
+    function RegisterChanType(const AType: string; OptTags, OptInners: TStrings): string;
+    procedure RegisterSpawn(Spawn: TASTSpawnExpr);
+    procedure EmitChanRuntimeHelpers(OptTags, OptInners: TStrings; DeclOnly: Boolean);
+    procedure EmitSpawnDecls(ForwardOnly: Boolean);
     function MangleTypeTag(const AType: string): string;
     function IsCompoundMonadType(const AType: string): Boolean;
     function IsTypedValueOption(const AType: string; out InnerT: string): Boolean;
@@ -161,10 +173,24 @@ begin
   FFnSigs := TStringList.Create;
   FThunkFuncs := TStringList.Create;
   FLambdas := TFPList.Create;
+  FTaskTags := TStringList.Create;
+  FTaskInners := TStringList.Create;
+  FChanTags := TStringList.Create;
+  FChanElems := TStringList.Create;
+  FSpawns := TFPList.Create;
+  FSpawnRefNames := TStringList.Create;
+  FSpawnRefTargets := TStringList.Create;
 end;
 
 destructor TAetherEmitterPascal.Destroy;
 begin
+  FSpawnRefTargets.Free;
+  FSpawnRefNames.Free;
+  FSpawns.Free;
+  FChanElems.Free;
+  FChanTags.Free;
+  FTaskInners.Free;
+  FTaskTags.Free;
   FLambdas.Free;
   FThunkFuncs.Free;
   FFnSigs.Free;
@@ -577,6 +603,55 @@ begin
     FThunkFuncs.Add(FuncName);
 end;
 
+function TAetherEmitterPascal.RegisterTaskType(const AType: string): string;
+var
+  T, InnerT, Tag: string;
+begin
+  T := ResolveAliasType(Trim(AType));
+  if (Copy(T, 1, 5) <> 'Task<') or (T[Length(T)] <> '>') then Exit('');
+  InnerT := Trim(Copy(T, 6, Length(T) - 6));
+  if InnerT = '' then InnerT := 'Void';
+  Tag := MangleTypeTag(InnerT);
+  if FTaskTags.IndexOf(Tag) < 0 then
+  begin
+    FTaskTags.Add(Tag);
+    FTaskInners.Add(InnerT);
+  end;
+  Result := Tag;
+end;
+
+function TAetherEmitterPascal.RegisterChanType(const AType: string; OptTags, OptInners: TStrings): string;
+var
+  T, ElemT, Tag, OptTag: string;
+begin
+  T := ResolveAliasType(Trim(AType));
+  if (Copy(T, 1, 8) <> 'Channel<') or (T[Length(T)] <> '>') then Exit('');
+  ElemT := Trim(Copy(T, 9, Length(T) - 9));
+  if ElemT = '' then ElemT := 'Int32';
+  Tag := MangleTypeTag(ElemT);
+  if FChanTags.IndexOf(Tag) < 0 then
+  begin
+    FChanTags.Add(Tag);
+    FChanElems.Add(ElemT);
+  end;
+  if Assigned(OptTags) and Assigned(OptInners) and IsTypedValueOption('Option<' + ElemT + '>', ElemT) then
+  begin
+    OptTag := MangleTypeTag(ElemT);
+    if OptTags.IndexOf(OptTag) < 0 then
+    begin
+      OptTags.Add(OptTag);
+      OptInners.Add(ElemT);
+    end;
+  end;
+  Result := Tag;
+end;
+
+procedure TAetherEmitterPascal.RegisterSpawn(Spawn: TASTSpawnExpr);
+begin
+  if Assigned(Spawn) and (FSpawns.IndexOf(Spawn) < 0) then
+    FSpawns.Add(Spawn);
+end;
+
 function TAetherEmitterPascal.MangleTypeTag(const AType: string): string;
 var
   T, ValT, ErrT, InnerT, Res: string;
@@ -587,6 +662,10 @@ begin
   if T = '' then Exit('Void');
   if Pos('fn(', T) = 1 then
     Exit('Fn__' + FnTypeTag(T));
+  if (Copy(T, 1, 5) = 'Task<') and (T[Length(T)] = '>') then
+    Exit('Task__' + MangleTypeTag(Copy(T, 6, Length(T) - 6)));
+  if (Copy(T, 1, 8) = 'Channel<') and (T[Length(T)] = '>') then
+    Exit('Chan__' + MangleTypeTag(Copy(T, 9, Length(T) - 9)));
   if Pos('^', T) = 1 then
     Exit('ptr_' + MangleTypeTag(Copy(T, 2, Length(T))));
   if Pos('array of ', T) = 1 then
@@ -633,6 +712,7 @@ begin
     Exit(False);
 
   if (Pos('array of ', T) = 1) or (Pos('array[', T) = 1) or (Pos('fn(', T) = 1) or
+     (Pos('Task<', T) = 1) or (Pos('Channel<', T) = 1) or
      (Pos('Option<', T) = 1) or (Pos('Result<', T) = 1) or IsMapType(T, K, V) then
     Exit(True);
 
@@ -827,6 +907,24 @@ begin
     CollectTypedMonadsFromType(ValM, OptTags, OptInners, ResTags, ResVals, ResErrs);
     Exit;
   end;
+  if (Copy(T, 1, 5) = 'Task<') and (T[Length(T)] = '>') then
+  begin
+    InnerT := Trim(Copy(T, 6, Length(T) - 6));
+    if InnerT = '' then InnerT := 'Void';
+    if not SameText(InnerT, 'Void') then
+      CollectTypedMonadsFromType(InnerT, OptTags, OptInners, ResTags, ResVals, ResErrs);
+    RegisterTaskType('Task<' + InnerT + '>');
+    Exit;
+  end;
+  if (Copy(T, 1, 8) = 'Channel<') and (T[Length(T)] = '>') then
+  begin
+    InnerT := Trim(Copy(T, 9, Length(T) - 9));
+    if InnerT = '' then InnerT := 'Int32';
+    CollectTypedMonadsFromType(InnerT, OptTags, OptInners, ResTags, ResVals, ResErrs);
+    CollectTypedMonadsFromType('Option<' + InnerT + '>', OptTags, OptInners, ResTags, ResVals, ResErrs);
+    RegisterChanType('Channel<' + InnerT + '>', OptTags, OptInners);
+    Exit;
+  end;
   if IsTypedValueOption(T, InnerT) then
   begin
     CollectTypedMonadsFromType(InnerT, OptTags, OptInners, ResTags, ResVals, ResErrs);
@@ -901,12 +999,24 @@ begin
     CollectTypedMonadsFromExpr(TASTUnaryExpr(Expr).Expr, OptTags, OptInners, ResTags, ResVals, ResErrs);
   end
   else if Expr is TASTAwaitExpr then
-    CollectTypedMonadsFromExpr(TASTAwaitExpr(Expr).Expr, OptTags, OptInners, ResTags, ResVals, ResErrs)
+  begin
+    CollectTypedMonadsFromExpr(TASTAwaitExpr(Expr).Expr, OptTags, OptInners, ResTags, ResVals, ResErrs);
+    CollectTypedMonadsFromType(GetExprTypeName(TASTAwaitExpr(Expr).Expr), OptTags, OptInners, ResTags, ResVals, ResErrs);
+  end
   else if Expr is TASTSpawnExpr then
-    CollectTypedMonadsFromExpr(TASTSpawnExpr(Expr).CallExpr, OptTags, OptInners, ResTags, ResVals, ResErrs)
+  begin
+    RegisterSpawn(TASTSpawnExpr(Expr));
+    if TASTSpawnExpr(Expr).ResolvedTaskType <> '' then
+      CollectTypedMonadsFromType(TASTSpawnExpr(Expr).ResolvedTaskType, OptTags, OptInners, ResTags, ResVals, ResErrs);
+    for I := 0 to TASTSpawnExpr(Expr).CaptureTypes.Count - 1 do
+      CollectTypedMonadsFromType(TASTSpawnExpr(Expr).CaptureTypes[I], OptTags, OptInners, ResTags, ResVals, ResErrs);
+    CollectTypedMonadsFromExpr(TASTSpawnExpr(Expr).CallExpr, OptTags, OptInners, ResTags, ResVals, ResErrs);
+  end
   else if Expr is TASTCallExpr then
   begin
     Call := TASTCallExpr(Expr);
+    if SameText(Call.Callee, 'NewChannel') and (Call.GenericArgs.Count = 1) then
+      CollectTypedMonadsFromType('Channel<' + Call.GenericArgs[0] + '>', OptTags, OptInners, ResTags, ResVals, ResErrs);
     if Assigned(Call.CalleeExpr) then
       CollectTypedMonadsFromExpr(Call.CalleeExpr, OptTags, OptInners, ResTags, ResVals, ResErrs);
     if Call.IsIndirectCall and (Call.IndirectFnType <> '') then
@@ -1007,6 +1117,8 @@ begin
     end
     else if S is TASTCallStmt then
       CollectTypedMonadsFromExpr(TASTCallStmt(S).CallExpr, OptTags, OptInners, ResTags, ResVals, ResErrs)
+    else if S is TASTExprStmt then
+      CollectTypedMonadsFromExpr(TASTExprStmt(S).Expr, OptTags, OptInners, ResTags, ResVals, ResErrs)
     else if S is TASTReturnStmt then
       CollectTypedMonadsFromExpr(TASTReturnStmt(S).Expr, OptTags, OptInners, ResTags, ResVals, ResErrs)
     else if S is TASTIfStmt then
@@ -1134,6 +1246,8 @@ begin
       FProgramBlock := nil;
       if not Func.IsProcedure then
         CollectTypedMonadsFromType(Func.ReturnType, OptTags, OptInners, ResTags, ResVals, ResErrs);
+      if Func.IsAsync then
+        CollectTypedMonadsFromType('Task<' + Func.ReturnType + '>', OptTags, OptInners, ResTags, ResVals, ResErrs);
       for J := 0 to Func.Params.Count - 1 do
         CollectTypedMonadsFromType(TASTParam(Func.Params[J]).TypeName, OptTags, OptInners, ResTags, ResVals, ResErrs);
       for J := 0 to Func.LocalVars.Count - 1 do
@@ -1706,6 +1820,8 @@ begin
     end
     else if S is TASTCallStmt then
       CollectAutoVarsFromExpr(TASTCallStmt(S).CallExpr, VarNames, VarTypes, SkipNames)
+    else if S is TASTExprStmt then
+      CollectAutoVarsFromExpr(TASTExprStmt(S).Expr, VarNames, VarTypes, SkipNames)
     else if S is TASTReturnStmt then
       CollectAutoVarsFromExpr(TASTReturnStmt(S).Expr, VarNames, VarTypes, SkipNames)
     else if S is TASTDeferStmt then
@@ -2329,6 +2445,24 @@ begin
     Exit(TASTTupleLiteralExpr(Expr).ResolvedType)
   else if Expr is TASTLambdaExpr then
     Exit(TASTLambdaExpr(Expr).ResolvedFnType)
+  else if Expr is TASTAwaitExpr then
+  begin
+    if TASTAwaitExpr(Expr).ResolvedInnerType <> '' then
+      Exit(TASTAwaitExpr(Expr).ResolvedInnerType);
+    TargetType := ResolveAliasType(GetExprTypeName(TASTAwaitExpr(Expr).Expr));
+    if (Copy(TargetType, 1, 5) = 'Task<') and (TargetType[Length(TargetType)] = '>') then
+      Exit(Copy(TargetType, 6, Length(TargetType) - 6));
+    Exit(TargetType);
+  end
+  else if Expr is TASTSpawnExpr then
+  begin
+    if TASTSpawnExpr(Expr).ResolvedTaskType <> '' then
+      Exit(TASTSpawnExpr(Expr).ResolvedTaskType);
+    TargetType := GetExprTypeName(TASTSpawnExpr(Expr).CallExpr);
+    if (Copy(TargetType, 1, 5) = 'Task<') and (TargetType[Length(TargetType)] = '>') then
+      Exit(TargetType);
+    Exit('Task<' + TargetType + '>');
+  end
   else if Expr is TASTCallExpr then
   begin
     Call := TASTCallExpr(Expr);
@@ -2389,6 +2523,25 @@ begin
     if SameText(Call.Callee, 'Split') or SameText(Call.Callee, 'ListDir') then Exit('array of String');
     if SameText(Call.Callee, 'TryStrToInt') then Exit('Option<Int32>');
     if SameText(Call.Callee, 'TryStrToFloat') then Exit('Option<Float64>');
+    if SameText(Call.Callee, 'NewChannel') and (Call.GenericArgs.Count = 1) then
+      Exit('Channel<' + Call.GenericArgs[0] + '>');
+    if (SameText(Call.Callee, 'Recv') or SameText(Call.Callee, 'TryRecv')) and (Call.Args.Count >= 1) then
+    begin
+      TargetType := ResolveAliasType(GetExprTypeName(TASTCallArg(Call.Args[0]).Expr));
+      if (Copy(TargetType, 1, 8) = 'Channel<') and (TargetType[Length(TargetType)] = '>') then
+        Exit('Option<' + Trim(Copy(TargetType, 9, Length(TargetType) - 9)) + '>');
+    end;
+    if SameText(Call.Callee, 'Send') or SameText(Call.Callee, 'TrySend') or
+       SameText(Call.Callee, 'IsChannelEmpty') or SameText(Call.Callee, 'IsChannelFull') or
+       SameText(Call.Callee, 'IsChannelClosed') or (Call.Callee = '__SyncAtomicCas') or
+       (Call.Callee = '__SyncMutexTryLock') then Exit('Bool');
+    if (Call.Callee = '__SyncAtomicNew') or (Call.Callee = '__SyncMutexNew') then Exit('Pointer');
+    if (Call.Callee = '__SyncAtomicLoad') or (Call.Callee = '__SyncAtomicAdd') or
+       SameText(Call.Callee, 'ChannelLen') then Exit('Int32');
+    if (Call.Callee = '__SyncAtomicStore') or (Call.Callee = '__SyncAtomicFree') or
+       (Call.Callee = '__SyncMutexLock') or (Call.Callee = '__SyncMutexUnlock') or
+       (Call.Callee = '__SyncMutexFree') or SameText(Call.Callee, 'CloseChannel') or
+       SameText(Call.Callee, 'DestroyChannel') then Exit('Void');
     if (Call.Callee = '__JsonGetInt') then Exit('Int32');
     if (Call.Callee = '__JsonGetFloat') then Exit('Float64');
     if (Call.Callee = '__JsonGetBool') or (Call.Callee = '__JsonHasValue') then Exit('Bool');
@@ -2448,7 +2601,12 @@ begin
     begin
       for I := 0 to FModule.Functions.Count - 1 do
         if SameText(TASTFunction(FModule.Functions[I]).Name, Call.Callee) then
-          Exit(TASTFunction(FModule.Functions[I]).ReturnType);
+        begin
+          if TASTFunction(FModule.Functions[I]).IsAsync then
+            Exit('Task<' + TASTFunction(FModule.Functions[I]).ReturnType + '>')
+          else
+            Exit(TASTFunction(FModule.Functions[I]).ReturnType);
+        end;
     end;
   end;
 end;
@@ -2548,7 +2706,14 @@ begin
   else if (Copy(AType, 1, 5) = 'Task<') and (AType[Length(AType)] = '>') then
   begin
     Inner := Copy(AType, 6, Length(AType) - 6);
-    Result := 'specialize TAetherTask<' + EmitTypeRef(Inner) + '>';
+    if Inner = '' then Inner := 'Void';
+    Result := 'TAetherTask_' + MangleTypeTag(Inner);
+  end
+  else if (Copy(AType, 1, 8) = 'Channel<') and (AType[Length(AType)] = '>') then
+  begin
+    Inner := Copy(AType, 9, Length(AType) - 9);
+    if Inner = '' then Inner := 'Int32';
+    Result := 'TAetherChan_' + MangleTypeTag(Inner);
   end
   else if IsTypedValueOption(AType, Inner) then
     Result := 'TAetherOpt_' + MangleTypeTag(Inner)
@@ -2612,6 +2777,9 @@ begin
     for I := FGuardBindNames.Count - 1 downto 0 do
       if SameText(FGuardBindNames[I], Id.Name) then
         Exit('(' + FGuardBindExprs[I] + ')');
+    for I := FSpawnRefNames.Count - 1 downto 0 do
+      if SameText(FSpawnRefNames[I], Id.Name) then
+        Exit(FSpawnRefTargets[I]);
     for I := FMatchBindNames.Count - 1 downto 0 do
       if SameText(FMatchBindNames[I], Id.Name) then
         Exit(FMatchBindTargets[I]);
@@ -2840,13 +3008,29 @@ begin
 
   if Expr is TASTAwaitExpr then
   begin
-    Result := Format('(%s).value', [EmitExpr(TASTAwaitExpr(Expr).Expr)]);
+    TargetT := ResolveAliasType(GetExprTypeName(TASTAwaitExpr(Expr).Expr));
+    if (Copy(TargetT, 1, 5) = 'Task<') and (TargetT[Length(TargetT)] = '>') then
+      ValF := Trim(Copy(TargetT, 6, Length(TargetT) - 6))
+    else
+      ValF := TASTAwaitExpr(Expr).ResolvedInnerType;
+    if ValF = '' then ValF := 'Void';
+    MTag := RegisterTaskType('Task<' + ValF + '>');
+    Result := Format('AetherAwaitTask_%s(%s)', [MTag, EmitExpr(TASTAwaitExpr(Expr).Expr)]);
     Exit;
   end;
 
   if Expr is TASTSpawnExpr then
   begin
-    Result := EmitExpr(TASTSpawnExpr(Expr).CallExpr);
+    RegisterSpawn(TASTSpawnExpr(Expr));
+    if TASTSpawnExpr(Expr).ResolvedTaskType <> '' then
+      RegisterTaskType(TASTSpawnExpr(Expr).ResolvedTaskType);
+    ArgsStr := '';
+    for I := 0 to TASTSpawnExpr(Expr).CaptureNames.Count - 1 do
+    begin
+      if I > 0 then ArgsStr := ArgsStr + ', ';
+      ArgsStr := ArgsStr + TASTSpawnExpr(Expr).CaptureNames[I];
+    end;
+    Result := Format('__aether_spawn_%d(%s)', [TASTSpawnExpr(Expr).SpawnId, ArgsStr]);
     Exit;
   end;
 
@@ -3663,6 +3847,98 @@ begin
       Exit;
     end;
 
+    if Call.Callee = '__SyncAtomicNew' then
+    begin
+      Result := 'AetherSyncAtomicNew(' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + ')';
+      Exit;
+    end;
+    if Call.Callee = '__SyncAtomicLoad' then
+    begin
+      Result := 'AetherSyncAtomicLoad(' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + ')';
+      Exit;
+    end;
+    if Call.Callee = '__SyncAtomicStore' then
+    begin
+      Result := 'AetherSyncAtomicStore(' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + ', ' + EmitExpr(TASTCallArg(Call.Args[1]).Expr) + ')';
+      Exit;
+    end;
+    if Call.Callee = '__SyncAtomicAdd' then
+    begin
+      Result := 'AetherSyncAtomicAdd(' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + ', ' + EmitExpr(TASTCallArg(Call.Args[1]).Expr) + ')';
+      Exit;
+    end;
+    if Call.Callee = '__SyncAtomicCas' then
+    begin
+      Result := 'AetherSyncAtomicCas(' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + ', ' +
+                EmitExpr(TASTCallArg(Call.Args[1]).Expr) + ', ' + EmitExpr(TASTCallArg(Call.Args[2]).Expr) + ')';
+      Exit;
+    end;
+    if Call.Callee = '__SyncAtomicFree' then
+    begin
+      Result := 'AetherSyncAtomicFree(' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + ')';
+      Exit;
+    end;
+    if Call.Callee = '__SyncMutexNew' then
+    begin
+      Result := 'AetherSyncMutexNew()';
+      Exit;
+    end;
+    if Call.Callee = '__SyncMutexLock' then
+    begin
+      Result := 'AetherSyncMutexLock(' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + ')';
+      Exit;
+    end;
+    if Call.Callee = '__SyncMutexTryLock' then
+    begin
+      Result := 'AetherSyncMutexTryLock(' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + ')';
+      Exit;
+    end;
+    if Call.Callee = '__SyncMutexUnlock' then
+    begin
+      Result := 'AetherSyncMutexUnlock(' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + ')';
+      Exit;
+    end;
+    if Call.Callee = '__SyncMutexFree' then
+    begin
+      Result := 'AetherSyncMutexFree(' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + ')';
+      Exit;
+    end;
+
+    if SameText(Call.Callee, 'NewChannel') and (Call.GenericArgs.Count = 1) then
+    begin
+      MTag := RegisterChanType('Channel<' + Call.GenericArgs[0] + '>', nil, nil);
+      Result := Format('AetherChanNew_%s(%s)', [MTag, EmitExpr(TASTCallArg(Call.Args[0]).Expr)]);
+      Exit;
+    end;
+    if SameText(Call.Callee, 'Send') or SameText(Call.Callee, 'TrySend') then
+    begin
+      TargetT := ResolveAliasType(GetExprTypeName(TASTCallArg(Call.Args[0]).Expr));
+      MTag := RegisterChanType(TargetT, nil, nil);
+      if SameText(Call.Callee, 'TrySend') then
+        Result := Format('AetherChanTrySend_%s(%s, %s)', [MTag, EmitExpr(TASTCallArg(Call.Args[0]).Expr), EmitExpr(TASTCallArg(Call.Args[1]).Expr)])
+      else
+        Result := Format('AetherChanSend_%s(%s, %s)', [MTag, EmitExpr(TASTCallArg(Call.Args[0]).Expr), EmitExpr(TASTCallArg(Call.Args[1]).Expr)]);
+      Exit;
+    end;
+    if SameText(Call.Callee, 'Recv') or SameText(Call.Callee, 'TryRecv') or
+       SameText(Call.Callee, 'CloseChannel') or SameText(Call.Callee, 'ChannelLen') or
+       SameText(Call.Callee, 'IsChannelEmpty') or SameText(Call.Callee, 'IsChannelFull') or
+       SameText(Call.Callee, 'IsChannelClosed') or SameText(Call.Callee, 'DestroyChannel') then
+    begin
+      TargetT := ResolveAliasType(GetExprTypeName(TASTCallArg(Call.Args[0]).Expr));
+      MTag := RegisterChanType(TargetT, nil, nil);
+      TargetStr := EmitExpr(TASTCallArg(Call.Args[0]).Expr);
+      if SameText(Call.Callee, 'Recv') then Result := Format('AetherChanRecv_%s(%s)', [MTag, TargetStr])
+      else if SameText(Call.Callee, 'TryRecv') then Result := Format('AetherChanTryRecv_%s(%s)', [MTag, TargetStr])
+      else if SameText(Call.Callee, 'CloseChannel') then Result := Format('AetherChanClose_%s(%s)', [MTag, TargetStr])
+      else if SameText(Call.Callee, 'ChannelLen') then Result := Format('AetherChanLen_%s(%s)', [MTag, TargetStr])
+      else if SameText(Call.Callee, 'IsChannelEmpty') then Result := Format('AetherChanIsEmpty_%s(%s)', [MTag, TargetStr])
+      else if SameText(Call.Callee, 'IsChannelFull') then Result := Format('AetherChanIsFull_%s(%s)', [MTag, TargetStr])
+      else if SameText(Call.Callee, 'IsChannelClosed') then Result := Format('AetherChanIsClosed_%s(%s)', [MTag, TargetStr])
+      else Result := Format('AetherChanDestroy_%s(%s)', [MTag, TargetStr]);
+      Exit;
+    end;
+
     // Normal call, enum variant constructor, or record constructor
     ArgsStr := '';
     for I := 0 to Call.Args.Count - 1 do
@@ -4450,6 +4726,15 @@ begin
     CallStmt := TASTCallStmt(Stmt);
     Emit(EmitExpr(CallStmt.CallExpr) + ';');
   end
+  else if Stmt is TASTExprStmt then
+  begin
+    if Assigned(TASTExprStmt(Stmt).Expr) then
+      Emit(EmitExpr(TASTExprStmt(Stmt).Expr) + ';');
+  end
+  else if Stmt is TASTYieldStmt then
+  begin
+    Emit('ThreadSwitch;');
+  end
   else if Stmt is TASTIfStmt then
   begin
     IfStmt := TASTIfStmt(Stmt);
@@ -4574,7 +4859,8 @@ begin
       if Assigned(Ret.Expr) then
       begin
         if Assigned(FCurrentFunc) and FCurrentFunc.IsAsync then
-          Emit(Format('Result.is_completed := True; Result.value := %s;', [EmitExpr(Ret.Expr)]))
+          Emit(Format('Result := Default(%s); Result.state := nil; Result.is_completed := True; Result.value := %s;',
+            [EmitTypeRef('Task<' + FCurrentFunc.ReturnType + '>'), EmitExpr(Ret.Expr)]))
         else
           Emit(Format('Result := %s;', [EmitExpr(Ret.Expr)]));
         if FActiveDefers.Count > 0 then
@@ -4597,7 +4883,13 @@ begin
               [EmitExpr(TASTExpr(FCurrentFunc.Ensures[J])), FCurrentFunc.Name]));
         if FRaiiNames.Count > 0 then
           EmitActiveRaii(0);
-        Emit('Exit;');
+        if Assigned(FCurrentFunc) and FCurrentFunc.IsAsync then
+        begin
+          Emit(Format('Result := Default(%s); Result.state := nil; Result.is_completed := True; Exit(Result);',
+            [EmitTypeRef('Task<' + FCurrentFunc.ReturnType + '>')]));
+        end
+        else
+          Emit('Exit;');
       end;
     end
     else
@@ -4605,10 +4897,14 @@ begin
       if Assigned(Ret.Expr) then
       begin
         if Assigned(FCurrentFunc) and FCurrentFunc.IsAsync then
-          Emit(Format('begin Result.is_completed := True; Result.value := %s; Exit(Result); end;', [EmitExpr(Ret.Expr)]))
+          Emit(Format('begin Result := Default(%s); Result.state := nil; Result.is_completed := True; Result.value := %s; Exit(Result); end;',
+            [EmitTypeRef('Task<' + FCurrentFunc.ReturnType + '>'), EmitExpr(Ret.Expr)]))
         else
           Emit(Format('Exit(%s);', [EmitExpr(Ret.Expr)]));
       end
+      else if Assigned(FCurrentFunc) and FCurrentFunc.IsAsync then
+        Emit(Format('begin Result := Default(%s); Result.state := nil; Result.is_completed := True; Exit(Result); end;',
+          [EmitTypeRef('Task<' + FCurrentFunc.ReturnType + '>')]))
       else
         Emit('Exit;');
     end;
@@ -4937,7 +5233,7 @@ begin
     ExportClause := ExportClause + ' inline;';
 
   if Func.IsAsync then
-    Emit(Format('function %s(%s): specialize TAetherTask<%s>;%s', [Func.Name, ParamListStr, EmitTypeRef(Func.ReturnType), ExportClause]))
+    Emit(Format('function %s(%s): %s;%s', [Func.Name, ParamListStr, EmitTypeRef('Task<' + Func.ReturnType + '>'), ExportClause]))
   else if (Func.ReturnType = 'Void') or (Func.ReturnType = '') then
     Emit(Format('procedure %s(%s);%s', [Func.Name, ParamListStr, ExportClause]))
   else
@@ -5024,6 +5320,11 @@ begin
         [EmitExpr(TASTExpr(Func.Ensures[I])), Func.Name]));
     if FRaiiNames.Count > 0 then
       EmitActiveRaii(0);
+    if Func.IsAsync and (Func.IsProcedure or (Func.ReturnType = 'Void') or (Func.ReturnType = '')) then
+    begin
+      Emit(Format('Result := Default(%s); Result.state := nil; Result.is_completed := True;',
+        [EmitTypeRef('Task<' + Func.ReturnType + '>')]));
+    end;
   end;
   FRaiiNames.Clear;
   FRaiiTypes.Clear;
@@ -5224,7 +5525,7 @@ begin
     ExportClause := ' cdecl;';
 
   if Func.IsAsync then
-    Result := Format('function %s(%s): specialize TAetherTask<%s>;%s', [Func.Name, ParamListStr, EmitTypeRef(Func.ReturnType), ExportClause])
+    Result := Format('function %s(%s): %s;%s', [Func.Name, ParamListStr, EmitTypeRef('Task<' + Func.ReturnType + '>'), ExportClause])
   else if (Func.ReturnType = 'Void') or (Func.ReturnType = '') then
     Result := Format('procedure %s(%s);%s', [Func.Name, ParamListStr, ExportClause])
   else
@@ -5261,7 +5562,7 @@ begin
              (Pos('AetherListDir', RefText) > 0);
   NeedResult := (Pos('TAetherResult', RefText) > 0) or (Pos('TResultDoubleError', RefText) > 0) or
                 (Pos('AetherOk(', RefText) > 0) or (Pos('AetherErr(', RefText) > 0);
-  NeedTask := (Pos('TAetherTask', RefText) > 0);
+  NeedTask := False;
   NeedOption := (Pos('TAetherOption', RefText) > 0) or (Pos('AetherSome(', RefText) > 0) or
                 (Pos('AetherNone(', RefText) > 0) or (Pos('AetherTryStrToInt', RefText) > 0) or
                 (Pos('AetherTryStrToFloat', RefText) > 0);
@@ -5345,7 +5646,7 @@ end;
 
 procedure TAetherEmitterPascal.EmitRuntimeHelpersInterface(const RefText: string);
 var
-  NeedResult, NeedOption, NeedFileIO, NeedJson, NeedSockets, EmittedAny: Boolean;
+  NeedResult, NeedOption, NeedFileIO, NeedJson, NeedSockets, NeedSync, EmittedAny: Boolean;
 begin
   EmittedAny := False;
   NeedResult := (Pos('AetherOk(', RefText) > 0) or (Pos('AetherErr(', RefText) > 0);
@@ -5450,6 +5751,22 @@ begin
   end;
   if Pos('AetherGetNanoseconds', RefText) > 0 then begin Emit('function AetherGetNanoseconds: {$IFDEF PAS2JS}Double{$ELSE}QWord{$ENDIF};'); EmittedAny := True; end;
   if Pos('AetherSleepMs', RefText) > 0 then begin Emit('procedure AetherSleepMs(AMs: Cardinal);'); EmittedAny := True; end;
+  NeedSync := (Pos('AetherSync', RefText) > 0);
+  if NeedSync then
+  begin
+    Emit('function AetherSyncAtomicNew(AInit: Int32): Pointer;');
+    Emit('function AetherSyncAtomicLoad(P: Pointer): Int32;');
+    Emit('procedure AetherSyncAtomicStore(P: Pointer; V: Int32);');
+    Emit('function AetherSyncAtomicAdd(P: Pointer; Delta: Int32): Int32;');
+    Emit('function AetherSyncAtomicCas(P: Pointer; Expected, Desired: Int32): Boolean;');
+    Emit('procedure AetherSyncAtomicFree(P: Pointer);');
+    Emit('function AetherSyncMutexNew(): Pointer;');
+    Emit('procedure AetherSyncMutexLock(P: Pointer);');
+    Emit('function AetherSyncMutexTryLock(P: Pointer): Boolean;');
+    Emit('procedure AetherSyncMutexUnlock(P: Pointer);');
+    Emit('procedure AetherSyncMutexFree(P: Pointer);');
+    EmittedAny := True;
+  end;
   if NeedSockets then
   begin
     Emit('function AetherSocketCreate(): LongInt;');
@@ -6237,6 +6554,79 @@ begin
     Emit('{$ENDIF}');
     Emit('');
   end;
+
+  if Pos('AetherSync', RefText) > 0 then
+  begin
+    Emit('function AetherSyncAtomicNew(AInit: Int32): Pointer;');
+    Emit('var P: PLongInt;');
+    Emit('begin');
+    Emit('  New(P);');
+    Emit('  P^ := AInit;');
+    Emit('  Result := P;');
+    Emit('end;');
+    Emit('');
+    Emit('function AetherSyncAtomicLoad(P: Pointer): Int32;');
+    Emit('begin');
+    Emit('  if P = nil then Exit(0);');
+    Emit('  Result := InterlockedExchangeAdd(PLongInt(P)^, 0);');
+    Emit('end;');
+    Emit('');
+    Emit('procedure AetherSyncAtomicStore(P: Pointer; V: Int32);');
+    Emit('begin');
+    Emit('  if P <> nil then InterlockedExchange(PLongInt(P)^, V);');
+    Emit('end;');
+    Emit('');
+    Emit('function AetherSyncAtomicAdd(P: Pointer; Delta: Int32): Int32;');
+    Emit('begin');
+    Emit('  if P = nil then Exit(0);');
+    Emit('  Result := InterlockedExchangeAdd(PLongInt(P)^, Delta) + Delta;');
+    Emit('end;');
+    Emit('');
+    Emit('function AetherSyncAtomicCas(P: Pointer; Expected, Desired: Int32): Boolean;');
+    Emit('begin');
+    Emit('  if P = nil then Exit(False);');
+    Emit('  Result := InterlockedCompareExchange(PLongInt(P)^, Desired, Expected) = Expected;');
+    Emit('end;');
+    Emit('');
+    Emit('procedure AetherSyncAtomicFree(P: Pointer);');
+    Emit('begin');
+    Emit('  if P <> nil then Dispose(PLongInt(P));');
+    Emit('end;');
+    Emit('');
+    Emit('function AetherSyncMutexNew(): Pointer;');
+    Emit('var M: PRTLCriticalSection;');
+    Emit('begin');
+    Emit('  New(M);');
+    Emit('  InitCriticalSection(M^);');
+    Emit('  Result := M;');
+    Emit('end;');
+    Emit('');
+    Emit('procedure AetherSyncMutexLock(P: Pointer);');
+    Emit('begin');
+    Emit('  if P <> nil then EnterCriticalSection(PRTLCriticalSection(P)^);');
+    Emit('end;');
+    Emit('');
+    Emit('function AetherSyncMutexTryLock(P: Pointer): Boolean;');
+    Emit('begin');
+    Emit('  if P = nil then Exit(False);');
+    Emit('  Result := TryEnterCriticalSection(PRTLCriticalSection(P)^) <> 0;');
+    Emit('end;');
+    Emit('');
+    Emit('procedure AetherSyncMutexUnlock(P: Pointer);');
+    Emit('begin');
+    Emit('  if P <> nil then LeaveCriticalSection(PRTLCriticalSection(P)^);');
+    Emit('end;');
+    Emit('');
+    Emit('procedure AetherSyncMutexFree(P: Pointer);');
+    Emit('begin');
+    Emit('  if P <> nil then');
+    Emit('  begin');
+    Emit('    DoneCriticalSection(PRTLCriticalSection(P)^);');
+    Emit('    Dispose(PRTLCriticalSection(P));');
+    Emit('  end;');
+    Emit('end;');
+    Emit('');
+  end;
 end;
 
 procedure TAetherEmitterPascal.EmitTopologicalTypesAndMonads(const TypeUsed: array of Boolean;
@@ -6298,6 +6688,20 @@ var
       Exit;
     end;
     if IsMapType(T, VT, ET) then Exit;
+    if (Copy(T, 1, 5) = 'Task<') and (T[Length(T)] = '>') then
+    begin
+      InnerT := Trim(Copy(T, 6, Length(T) - 6));
+      if InnerT = '' then InnerT := 'Void';
+      Deps.Add('__TASK_' + UpperCase(MangleTypeTag(InnerT)));
+      Exit;
+    end;
+    if (Copy(T, 1, 8) = 'Channel<') and (T[Length(T)] = '>') then
+    begin
+      InnerT := Trim(Copy(T, 9, Length(T) - 9));
+      if InnerT = '' then InnerT := 'Int32';
+      Deps.Add('__CHAN_' + UpperCase(MangleTypeTag(InnerT)));
+      Exit;
+    end;
     if IsTypedValueOption(T, InnerT) then
     begin
       Deps.Add('__OPT_' + UpperCase(MangleTypeTag(InnerT)));
@@ -6430,6 +6834,21 @@ begin
       end;
     end;
 
+  if Assigned(FTaskTags) then
+    for I := 0 to FTaskTags.Count - 1 do
+    begin
+      AppendItem(5, I, '__TASK_' + UpperCase(FTaskTags[I]));
+      if (FTaskInners[I] <> '') and (not SameText(FTaskInners[I], 'Void')) then
+        AddDepToList(ItemDeps[Count - 1], FTaskInners[I]);
+    end;
+
+  if Assigned(FChanTags) then
+    for I := 0 to FChanTags.Count - 1 do
+    begin
+      AppendItem(6, I, '__CHAN_' + UpperCase(FChanTags[I]));
+      AddDepToList(ItemDeps[Count - 1], FChanElems[I]);
+    end;
+
   try
     Rem := Count;
     while Rem > 0 do
@@ -6496,6 +6915,55 @@ begin
         finally
           FnParams2.Free;
         end;
+      end
+      else if ItemKind[ReadyIdx] = 5 then
+      begin
+        FIdx := ItemIdx[ReadyIdx];
+        FnPSig := FTaskTags[FIdx];
+        FnRet2 := FTaskInners[FIdx];
+        Emit(Format('PAetherTaskState_%s = ^TAetherTaskState_%s;', [FnPSig, FnPSig]));
+        Emit(Format('TAetherTaskState_%s = record', [FnPSig]));
+        IncIndent;
+        Emit('thread_id: TThreadID;');
+        Emit('has_thread: Boolean;');
+        Emit('is_completed: Boolean;');
+        if (FnRet2 <> '') and (not SameText(FnRet2, 'Void')) then
+          Emit(Format('value: %s;', [EmitTypeRef(FnRet2)]));
+        DecIndent;
+        Emit('end;');
+        Emit(Format('TAetherTask_%s = record', [FnPSig]));
+        IncIndent;
+        Emit(Format('state: PAetherTaskState_%s;', [FnPSig]));
+        Emit('is_completed: Boolean;');
+        if (FnRet2 <> '') and (not SameText(FnRet2, 'Void')) then
+          Emit(Format('value: %s;', [EmitTypeRef(FnRet2)]));
+        DecIndent;
+        Emit('end;');
+        Emit('');
+      end
+      else if ItemKind[ReadyIdx] = 6 then
+      begin
+        FIdx := ItemIdx[ReadyIdx];
+        FnPSig := FChanTags[FIdx];
+        FnRet2 := FChanElems[FIdx];
+        Emit(Format('PAetherChanState_%s = ^TAetherChanState_%s;', [FnPSig, FnPSig]));
+        Emit(Format('TAetherChanState_%s = record', [FnPSig]));
+        IncIndent;
+        Emit('lock: TRTLCriticalSection;');
+        Emit(Format('buf: array of %s;', [EmitTypeRef(FnRet2)]));
+        Emit('capacity: Int32;');
+        Emit('count: Int32;');
+        Emit('head: Int32;');
+        Emit('tail: Int32;');
+        Emit('is_closed: Boolean;');
+        DecIndent;
+        Emit('end;');
+        Emit(Format('TAetherChan_%s = record', [FnPSig]));
+        IncIndent;
+        Emit(Format('state: PAetherChanState_%s;', [FnPSig]));
+        DecIndent;
+        Emit('end;');
+        Emit('');
       end;
     end;
   finally
@@ -6742,6 +7210,463 @@ begin
   end;
 end;
 
+procedure TAetherEmitterPascal.EmitChanRuntimeHelpers(OptTags, OptInners: TStrings; DeclOnly: Boolean);
+var
+  I: Integer;
+  Tag, InnerT, PasT, OptRet, OptTag, Dummy: string;
+  IsVoid, TypedOpt: Boolean;
+begin
+  // Task await helpers
+  for I := 0 to FTaskTags.Count - 1 do
+  begin
+    Tag := FTaskTags[I];
+    InnerT := FTaskInners[I];
+    IsVoid := (InnerT = '') or SameText(InnerT, 'Void');
+    if IsVoid then
+    begin
+      Emit(Format('procedure AetherAwaitTask_%s(const T: TAetherTask_%s);', [Tag, Tag]));
+      if not DeclOnly then
+      begin
+        Emit('begin');
+        IncIndent;
+        Emit('if T.state <> nil then');
+        Emit('begin');
+        IncIndent;
+        Emit('if T.state^.has_thread then');
+        Emit('begin');
+        IncIndent;
+        Emit('WaitForThreadTerminate(T.state^.thread_id, 0);');
+        Emit('CloseThread(T.state^.thread_id);');
+        DecIndent;
+        Emit('end;');
+        Emit('Dispose(T.state);');
+        DecIndent;
+        Emit('end;');
+        DecIndent;
+        Emit('end;');
+        Emit('');
+      end;
+    end
+    else
+    begin
+      PasT := EmitTypeRef(InnerT);
+      Emit(Format('function AetherAwaitTask_%s(const T: TAetherTask_%s): %s;', [Tag, Tag, PasT]));
+      if not DeclOnly then
+      begin
+        Emit('begin');
+        IncIndent;
+        Emit('if T.state <> nil then');
+        Emit('begin');
+        IncIndent;
+        Emit('if T.state^.has_thread then');
+        Emit('begin');
+        IncIndent;
+        Emit('WaitForThreadTerminate(T.state^.thread_id, 0);');
+        Emit('CloseThread(T.state^.thread_id);');
+        DecIndent;
+        Emit('end;');
+        Emit('Result := T.state^.value;');
+        Emit('Dispose(T.state);');
+        DecIndent;
+        Emit('end');
+        Emit('else');
+        Emit('  Result := T.value;');
+        DecIndent;
+        Emit('end;');
+        Emit('');
+      end;
+    end;
+  end;
+
+  // Channel helpers
+  for I := 0 to FChanTags.Count - 1 do
+  begin
+    Tag := FChanTags[I];
+    InnerT := FChanElems[I];
+    PasT := EmitTypeRef(InnerT);
+    TypedOpt := IsTypedValueOption('Option<' + InnerT + '>', Dummy);
+    if TypedOpt then
+    begin
+      OptTag := MangleTypeTag(InnerT);
+      OptRet := 'TAetherOpt_' + OptTag;
+    end
+    else
+    begin
+      OptTag := '';
+      OptRet := 'TAetherOption';
+    end;
+
+    Emit(Format('function AetherChanNew_%s(ACap: Int32): TAetherChan_%s;', [Tag, Tag]));
+    if not DeclOnly then
+    begin
+      Emit('var _st: PAetherChanState_' + Tag + '; _cap: Int32;');
+      Emit('begin');
+      IncIndent;
+      Emit('_cap := ACap;');
+      Emit('if _cap < 1 then _cap := 1;');
+      Emit('New(_st);');
+      Emit(Format('_st^ := Default(TAetherChanState_%s);', [Tag]));
+      Emit('InitCriticalSection(_st^.lock);');
+      Emit('SetLength(_st^.buf, _cap);');
+      Emit('_st^.capacity := _cap;');
+      Emit('Result.state := _st;');
+      DecIndent;
+      Emit('end;');
+      Emit('');
+    end;
+
+    Emit(Format('function AetherChanSend_%s(const C: TAetherChan_%s; const V: %s): Boolean;', [Tag, Tag, PasT]));
+    if not DeclOnly then
+    begin
+      Emit('begin');
+      IncIndent;
+      Emit('if C.state = nil then Exit(False);');
+      Emit('EnterCriticalSection(C.state^.lock);');
+      Emit('while (not C.state^.is_closed) and (C.state^.count >= C.state^.capacity) do');
+      Emit('begin');
+      IncIndent;
+      Emit('LeaveCriticalSection(C.state^.lock);');
+      Emit('ThreadSwitch;');
+      Emit('EnterCriticalSection(C.state^.lock);');
+      DecIndent;
+      Emit('end;');
+      Emit('if C.state^.is_closed then');
+      Emit('begin');
+      IncIndent;
+      Emit('LeaveCriticalSection(C.state^.lock);');
+      Emit('Exit(False);');
+      DecIndent;
+      Emit('end;');
+      Emit('C.state^.buf[C.state^.tail] := V;');
+      Emit('C.state^.tail := (C.state^.tail + 1) mod C.state^.capacity;');
+      Emit('Inc(C.state^.count);');
+      Emit('LeaveCriticalSection(C.state^.lock);');
+      Emit('Result := True;');
+      DecIndent;
+      Emit('end;');
+      Emit('');
+    end;
+
+    Emit(Format('function AetherChanTrySend_%s(const C: TAetherChan_%s; const V: %s): Boolean;', [Tag, Tag, PasT]));
+    if not DeclOnly then
+    begin
+      Emit('begin');
+      IncIndent;
+      Emit('if C.state = nil then Exit(False);');
+      Emit('EnterCriticalSection(C.state^.lock);');
+      Emit('if C.state^.is_closed or (C.state^.count >= C.state^.capacity) then');
+      Emit('begin');
+      IncIndent;
+      Emit('LeaveCriticalSection(C.state^.lock);');
+      Emit('Exit(False);');
+      DecIndent;
+      Emit('end;');
+      Emit('C.state^.buf[C.state^.tail] := V;');
+      Emit('C.state^.tail := (C.state^.tail + 1) mod C.state^.capacity;');
+      Emit('Inc(C.state^.count);');
+      Emit('LeaveCriticalSection(C.state^.lock);');
+      Emit('Result := True;');
+      DecIndent;
+      Emit('end;');
+      Emit('');
+    end;
+
+    Emit(Format('function AetherChanRecv_%s(const C: TAetherChan_%s): %s;', [Tag, Tag, OptRet]));
+    if not DeclOnly then
+    begin
+      Emit('var _item: ' + PasT + ';');
+      Emit('begin');
+      IncIndent;
+      Emit('if C.state = nil then');
+      if TypedOpt then Emit(Format('  Exit(AetherNone_%s());', [OptTag])) else Emit('  Exit(AetherNone());');
+      Emit('EnterCriticalSection(C.state^.lock);');
+      Emit('while (C.state^.count = 0) and (not C.state^.is_closed) do');
+      Emit('begin');
+      IncIndent;
+      Emit('LeaveCriticalSection(C.state^.lock);');
+      Emit('ThreadSwitch;');
+      Emit('EnterCriticalSection(C.state^.lock);');
+      DecIndent;
+      Emit('end;');
+      Emit('if C.state^.count = 0 then');
+      Emit('begin');
+      IncIndent;
+      Emit('LeaveCriticalSection(C.state^.lock);');
+      if TypedOpt then Emit(Format('Exit(AetherNone_%s());', [OptTag])) else Emit('Exit(AetherNone());');
+      DecIndent;
+      Emit('end;');
+      Emit('_item := C.state^.buf[C.state^.head];');
+      Emit(Format('C.state^.buf[C.state^.head] := Default(%s);', [PasT]));
+      Emit('C.state^.head := (C.state^.head + 1) mod C.state^.capacity;');
+      Emit('Dec(C.state^.count);');
+      Emit('LeaveCriticalSection(C.state^.lock);');
+      if TypedOpt then Emit(Format('Result := AetherSome_%s(_item);', [OptTag])) else Emit('Result := AetherSome(_item);');
+      DecIndent;
+      Emit('end;');
+      Emit('');
+    end;
+
+    Emit(Format('function AetherChanTryRecv_%s(const C: TAetherChan_%s): %s;', [Tag, Tag, OptRet]));
+    if not DeclOnly then
+    begin
+      Emit('var _item: ' + PasT + ';');
+      Emit('begin');
+      IncIndent;
+      Emit('if C.state = nil then');
+      if TypedOpt then Emit(Format('  Exit(AetherNone_%s());', [OptTag])) else Emit('  Exit(AetherNone());');
+      Emit('EnterCriticalSection(C.state^.lock);');
+      Emit('if C.state^.count = 0 then');
+      Emit('begin');
+      IncIndent;
+      Emit('LeaveCriticalSection(C.state^.lock);');
+      if TypedOpt then Emit(Format('Exit(AetherNone_%s());', [OptTag])) else Emit('Exit(AetherNone());');
+      DecIndent;
+      Emit('end;');
+      Emit('_item := C.state^.buf[C.state^.head];');
+      Emit(Format('C.state^.buf[C.state^.head] := Default(%s);', [PasT]));
+      Emit('C.state^.head := (C.state^.head + 1) mod C.state^.capacity;');
+      Emit('Dec(C.state^.count);');
+      Emit('LeaveCriticalSection(C.state^.lock);');
+      if TypedOpt then Emit(Format('Result := AetherSome_%s(_item);', [OptTag])) else Emit('Result := AetherSome(_item);');
+      DecIndent;
+      Emit('end;');
+      Emit('');
+    end;
+
+    Emit(Format('procedure AetherChanClose_%s(const C: TAetherChan_%s);', [Tag, Tag]));
+    if not DeclOnly then
+    begin
+      Emit('begin');
+      IncIndent;
+      Emit('if C.state = nil then Exit;');
+      Emit('EnterCriticalSection(C.state^.lock);');
+      Emit('C.state^.is_closed := True;');
+      Emit('LeaveCriticalSection(C.state^.lock);');
+      DecIndent;
+      Emit('end;');
+      Emit('');
+    end;
+
+    Emit(Format('function AetherChanLen_%s(const C: TAetherChan_%s): Int32;', [Tag, Tag]));
+    if not DeclOnly then
+    begin
+      Emit('begin');
+      IncIndent;
+      Emit('if C.state = nil then Exit(0);');
+      Emit('EnterCriticalSection(C.state^.lock);');
+      Emit('Result := C.state^.count;');
+      Emit('LeaveCriticalSection(C.state^.lock);');
+      DecIndent;
+      Emit('end;');
+      Emit('');
+    end;
+
+    Emit(Format('function AetherChanIsEmpty_%s(const C: TAetherChan_%s): Boolean;', [Tag, Tag]));
+    if not DeclOnly then
+    begin
+      Emit('begin');
+      IncIndent;
+      Emit('if C.state = nil then Exit(True);');
+      Emit('EnterCriticalSection(C.state^.lock);');
+      Emit('Result := (C.state^.count = 0);');
+      Emit('LeaveCriticalSection(C.state^.lock);');
+      DecIndent;
+      Emit('end;');
+      Emit('');
+    end;
+
+    Emit(Format('function AetherChanIsFull_%s(const C: TAetherChan_%s): Boolean;', [Tag, Tag]));
+    if not DeclOnly then
+    begin
+      Emit('begin');
+      IncIndent;
+      Emit('if C.state = nil then Exit(False);');
+      Emit('EnterCriticalSection(C.state^.lock);');
+      Emit('Result := (C.state^.count >= C.state^.capacity);');
+      Emit('LeaveCriticalSection(C.state^.lock);');
+      DecIndent;
+      Emit('end;');
+      Emit('');
+    end;
+
+    Emit(Format('function AetherChanIsClosed_%s(const C: TAetherChan_%s): Boolean;', [Tag, Tag]));
+    if not DeclOnly then
+    begin
+      Emit('begin');
+      IncIndent;
+      Emit('if C.state = nil then Exit(True);');
+      Emit('EnterCriticalSection(C.state^.lock);');
+      Emit('Result := C.state^.is_closed;');
+      Emit('LeaveCriticalSection(C.state^.lock);');
+      DecIndent;
+      Emit('end;');
+      Emit('');
+    end;
+
+    Emit(Format('procedure AetherChanDestroy_%s(const C: TAetherChan_%s);', [Tag, Tag]));
+    if not DeclOnly then
+    begin
+      Emit('begin');
+      IncIndent;
+      Emit('if C.state = nil then Exit;');
+      Emit('DoneCriticalSection(C.state^.lock);');
+      Emit('SetLength(C.state^.buf, 0);');
+      Emit('Dispose(C.state);');
+      DecIndent;
+      Emit('end;');
+      Emit('');
+    end;
+  end;
+end;
+
+procedure TAetherEmitterPascal.EmitSpawnDecls(ForwardOnly: Boolean);
+var
+  I, J: Integer;
+  S: TASTSpawnExpr;
+  TempFunc, OldFunc: TASTFunction;
+  OldProg: TASTProgramBlock;
+  OldScopeList: TASTNodeList;
+  NewV: TASTVarDecl;
+  SkipNames, AutoNames, AutoTypes: TStringList;
+  TaskTag, InnerT, FwdSuffix, CapParams, CallType, CallExprStr, AwaitTag: string;
+  IsVoid: Boolean;
+begin
+  if ForwardOnly then FwdSuffix := ' forward;' else FwdSuffix := '';
+  for I := 0 to FSpawns.Count - 1 do
+  begin
+    S := TASTSpawnExpr(FSpawns[I]);
+    InnerT := S.InnerReturnType;
+    if InnerT = '' then InnerT := 'Void';
+    TaskTag := RegisterTaskType('Task<' + InnerT + '>');
+    IsVoid := SameText(InnerT, 'Void');
+
+    Emit(Format('function __aether_spawn_worker_%d(_raw: Pointer): PtrInt;%s', [S.SpawnId, FwdSuffix]));
+    if not ForwardOnly then
+    begin
+      OldFunc := FCurrentFunc;
+      OldProg := FProgramBlock;
+      OldScopeList := FCurrentScopeList;
+      TempFunc := TASTFunction.Create(S.Line, S.Col, Format('__aether_spawn_worker_%d', [S.SpawnId]), 'Void');
+      try
+        for J := 0 to S.CaptureNames.Count - 1 do
+        begin
+          NewV := TASTVarDecl.Create(S.Line, S.Col, S.CaptureNames[J], S.CaptureTypes[J]);
+          TempFunc.LocalVars.Add(NewV);
+        end;
+        FCurrentFunc := TempFunc;
+        FProgramBlock := nil;
+        FCurrentScopeList := nil;
+        FSpawnRefNames.Clear;
+        FSpawnRefTargets.Clear;
+
+        Emit('var');
+        IncIndent;
+        Emit(Format('_e: PAetherSpawnEnv_%d;', [S.SpawnId]));
+        for J := 0 to S.CaptureNames.Count - 1 do
+          if (J >= S.CaptureByRef.Count) or (S.CaptureByRef[J] <> '1') then
+            Emit(Format('%s: %s;', [S.CaptureNames[J], EmitTypeRef(S.CaptureTypes[J])]));
+
+        SkipNames := TStringList.Create;
+        AutoNames := TStringList.Create;
+        AutoTypes := TStringList.Create;
+        try
+          for J := 0 to S.CaptureNames.Count - 1 do
+            SkipNames.Add(S.CaptureNames[J]);
+          CollectAutoVarsFromExpr(S.CallExpr, AutoNames, AutoTypes, SkipNames);
+          for J := 0 to AutoNames.Count - 1 do
+            Emit(Format('%s: %s;', [AutoNames[J], AutoTypes[J]]));
+        finally
+          SkipNames.Free;
+          AutoNames.Free;
+          AutoTypes.Free;
+        end;
+        DecIndent;
+
+        Emit('begin');
+        IncIndent;
+        Emit(Format('_e := PAetherSpawnEnv_%d(_raw);', [S.SpawnId]));
+        for J := 0 to S.CaptureNames.Count - 1 do
+        begin
+          if (J < S.CaptureByRef.Count) and (S.CaptureByRef[J] = '1') then
+          begin
+            FSpawnRefNames.Add(S.CaptureNames[J]);
+            FSpawnRefTargets.Add('_e^.' + S.CaptureNames[J] + '^');
+          end
+          else
+            Emit(Format('%s := _e^.%s;', [S.CaptureNames[J], S.CaptureNames[J]]));
+        end;
+
+        CallType := ResolveAliasType(GetExprTypeName(S.CallExpr));
+        CallExprStr := EmitExpr(S.CallExpr);
+        if (Copy(CallType, 1, 5) = 'Task<') and (CallType[Length(CallType)] = '>') then
+        begin
+          AwaitTag := RegisterTaskType(CallType);
+          CallExprStr := Format('AetherAwaitTask_%s(%s)', [AwaitTag, CallExprStr]);
+        end;
+        if IsVoid then
+          Emit(CallExprStr + ';')
+        else
+          Emit(Format('_e^.state^.value := %s;', [CallExprStr]));
+        Emit('_e^.state^.is_completed := True;');
+        Emit('Dispose(_e);');
+        Emit('Result := 0;');
+        DecIndent;
+        Emit('end;');
+        Emit('');
+      finally
+        FSpawnRefNames.Clear;
+        FSpawnRefTargets.Clear;
+        FCurrentFunc := OldFunc;
+        FProgramBlock := OldProg;
+        FCurrentScopeList := OldScopeList;
+        TempFunc.Free;
+      end;
+    end;
+
+    CapParams := '';
+    for J := 0 to S.CaptureNames.Count - 1 do
+    begin
+      if J > 0 then CapParams := CapParams + '; ';
+      if (J < S.CaptureByRef.Count) and (S.CaptureByRef[J] = '1') then
+        CapParams := CapParams + Format('var A_%s: %s', [S.CaptureNames[J], EmitTypeRef(S.CaptureTypes[J])])
+      else
+        CapParams := CapParams + Format('const A_%s: %s', [S.CaptureNames[J], EmitTypeRef(S.CaptureTypes[J])]);
+    end;
+    Emit(Format('function __aether_spawn_%d(%s): TAetherTask_%s;%s', [S.SpawnId, CapParams, TaskTag, FwdSuffix]));
+    if not ForwardOnly then
+    begin
+      Emit('var');
+      IncIndent;
+      Emit(Format('_st: PAetherTaskState_%s;', [TaskTag]));
+      Emit(Format('_env: PAetherSpawnEnv_%d;', [S.SpawnId]));
+      DecIndent;
+      Emit('begin');
+      IncIndent;
+      Emit('New(_st);');
+      Emit(Format('_st^ := Default(TAetherTaskState_%s);', [TaskTag]));
+      Emit('_st^.has_thread := True;');
+      Emit('_st^.is_completed := False;');
+      Emit('New(_env);');
+      Emit(Format('_env^ := Default(TAetherSpawnEnv_%d);', [S.SpawnId]));
+      Emit('_env^.state := _st;');
+      for J := 0 to S.CaptureNames.Count - 1 do
+      begin
+        if (J < S.CaptureByRef.Count) and (S.CaptureByRef[J] = '1') then
+          Emit(Format('_env^.%s := @A_%s;', [S.CaptureNames[J], S.CaptureNames[J]]))
+        else
+          Emit(Format('_env^.%s := A_%s;', [S.CaptureNames[J], S.CaptureNames[J]]));
+      end;
+      Emit(Format('_st^.thread_id := BeginThread(@__aether_spawn_worker_%d, _env);', [S.SpawnId]));
+      Emit(Format('Result := Default(TAetherTask_%s);', [TaskTag]));
+      Emit('Result.state := _st;');
+      Emit('Result.is_completed := False;');
+      DecIndent;
+      Emit('end;');
+      Emit('');
+    end;
+  end;
+end;
+
 function TAetherEmitterPascal.Generate(AModule: TASTModule; AsUnit: Boolean = False; AsLibrary: Boolean = False): string;
 var
   I, ExportCount, CurExp, UsedConstCount, UsedTypeCount, UsedOptCount, UsedResCount: Integer;
@@ -6780,9 +7705,16 @@ begin
   FFnSigs.Clear;
   FThunkFuncs.Clear;
   FLambdas.Clear;
+  FTaskTags.Clear;
+  FTaskInners.Clear;
+  FChanTags.Clear;
+  FChanElems.Clear;
+  FSpawns.Clear;
+  FSpawnRefNames.Clear;
+  FSpawnRefTargets.Clear;
   CollectMapsFromModule(AModule, MapTags, MapKeys, MapVals);
   CollectTypedMonadsFromModule(AModule, OptTags, OptInners, ResTags, ResVals, ResErrs);
-  HasEnvTypes := False;
+  HasEnvTypes := (FSpawns.Count > 0);
   for I := 0 to FLambdas.Count - 1 do
     if TASTLambdaExpr(FLambdas[I]).CaptureNames.Count > 0 then
     begin
@@ -6919,6 +7851,8 @@ begin
   FIndent := 0;
   EmitFnRuntimeHelpers(False);
   EmitLambdaAndThunkDecls(False);
+  EmitChanRuntimeHelpers(OptTags, OptInners, False);
+  EmitSpawnDecls(False);
   FnHelperText := FOutput.Text;
 
   ReachText := ProgText + #10 + MapText + #10 + FnHelperText;
@@ -7039,7 +7973,10 @@ begin
   FOutput.Clear;
   FIndent := 0;
 
-  UsesClause := '  SysUtils, Math';
+  if (not AsUnit) and ((FTaskTags.Count > 0) or (FChanTags.Count > 0) or (FSpawns.Count > 0) or (Pos('AetherSync', ReachText) > 0)) then
+    UsesClause := '  {$IFNDEF PAS2JS}{$IFDEF UNIX}cthreads, {$ENDIF}{$ENDIF}SysUtils, Math'
+  else
+    UsesClause := '  SysUtils, Math';
   if Pos('AetherSocket', ReachText) > 0 then
     UsesClause := UsesClause + '{$IFNDEF PAS2JS}, Sockets{$ENDIF}';
   if (Pos('AetherGetNanoseconds', ReachText) > 0) or (Pos('AetherSetEnv', ReachText) > 0) then
@@ -7077,7 +8014,7 @@ begin
       Emit('');
     end;
 
-    if (UsedTypeCount > 0) or (UsedOptCount > 0) or (UsedResCount > 0) or (FDynTags.Count > 0) or HasCustomMap or (FFnTags.Count > 0) then
+    if (UsedTypeCount > 0) or (UsedOptCount > 0) or (UsedResCount > 0) or (FDynTags.Count > 0) or HasCustomMap or (FFnTags.Count > 0) or (FTaskTags.Count > 0) or (FChanTags.Count > 0) then
     begin
       Emit('type');
       IncIndent;
@@ -7122,6 +8059,7 @@ begin
     EmitTypedMonadHelpers(UOptTags, UOptInners, UResTags, UResVals, UResErrs, True);
     EmitMapRuntimeHelpers(MapTags, MapKeys, MapVals, True);
     EmitFnRuntimeHelpers(True);
+    EmitChanRuntimeHelpers(UOptTags, UOptInners, True);
 
     HasVarsBlock := False;
     for I := 0 to AModule.ModuleVars.Count - 1 do
@@ -7178,6 +8116,21 @@ begin
           Emit('');
         end;
       end;
+      for I := 0 to FSpawns.Count - 1 do
+      begin
+        Emit(Format('PAetherSpawnEnv_%d = ^TAetherSpawnEnv_%d;', [TASTSpawnExpr(FSpawns[I]).SpawnId, TASTSpawnExpr(FSpawns[I]).SpawnId]));
+        Emit(Format('TAetherSpawnEnv_%d = record', [TASTSpawnExpr(FSpawns[I]).SpawnId]));
+        IncIndent;
+        Emit(Format('state: PAetherTaskState_%s;', [RegisterTaskType('Task<' + TASTSpawnExpr(FSpawns[I]).InnerReturnType + '>')]));
+        for CurExp := 0 to TASTSpawnExpr(FSpawns[I]).CaptureNames.Count - 1 do
+          if (CurExp < TASTSpawnExpr(FSpawns[I]).CaptureByRef.Count) and (TASTSpawnExpr(FSpawns[I]).CaptureByRef[CurExp] = '1') then
+            Emit(Format('%s: ^%s;', [TASTSpawnExpr(FSpawns[I]).CaptureNames[CurExp], EmitTypeRef(TASTSpawnExpr(FSpawns[I]).CaptureTypes[CurExp])]))
+          else
+            Emit(Format('%s: %s;', [TASTSpawnExpr(FSpawns[I]).CaptureNames[CurExp], EmitTypeRef(TASTSpawnExpr(FSpawns[I]).CaptureTypes[CurExp])]));
+        DecIndent;
+        Emit('end;');
+        Emit('');
+      end;
       DecIndent;
     end;
 
@@ -7228,13 +8181,16 @@ begin
     EmitTypedMonadHelpers(UOptTags, UOptInners, UResTags, UResVals, UResErrs, False);
     EmitMapRuntimeHelpers(MapTags, MapKeys, MapVals, False);
     EmitFnRuntimeHelpers(False);
+    EmitChanRuntimeHelpers(UOptTags, UOptInners, False);
     EmitLambdaAndThunkDecls(True);
+    EmitSpawnDecls(True);
 
     for I := 0 to AModule.Functions.Count - 1 do
       if FuncUsed[I] then
         EmitFunction(TASTFunction(AModule.Functions[I]));
 
     EmitLambdaAndThunkDecls(False);
+    EmitSpawnDecls(False);
 
     HasVarsBlock := False;
     for I := 0 to AModule.ModuleVars.Count - 1 do
@@ -7308,7 +8264,7 @@ begin
       Emit('');
     end;
 
-    if (UsedTypeCount > 0) or (UsedOptCount > 0) or (UsedResCount > 0) or (FDynTags.Count > 0) or HasCustomMap or (FFnTags.Count > 0) or HasEnvTypes then
+    if (UsedTypeCount > 0) or (UsedOptCount > 0) or (UsedResCount > 0) or (FDynTags.Count > 0) or HasCustomMap or (FFnTags.Count > 0) or (FTaskTags.Count > 0) or (FChanTags.Count > 0) or HasEnvTypes then
     begin
       Emit('type');
       IncIndent;
@@ -7345,6 +8301,21 @@ begin
           Emit('');
         end;
       end;
+      for I := 0 to FSpawns.Count - 1 do
+      begin
+        Emit(Format('PAetherSpawnEnv_%d = ^TAetherSpawnEnv_%d;', [TASTSpawnExpr(FSpawns[I]).SpawnId, TASTSpawnExpr(FSpawns[I]).SpawnId]));
+        Emit(Format('TAetherSpawnEnv_%d = record', [TASTSpawnExpr(FSpawns[I]).SpawnId]));
+        IncIndent;
+        Emit(Format('state: PAetherTaskState_%s;', [RegisterTaskType('Task<' + TASTSpawnExpr(FSpawns[I]).InnerReturnType + '>')]));
+        for CurExp := 0 to TASTSpawnExpr(FSpawns[I]).CaptureNames.Count - 1 do
+          if (CurExp < TASTSpawnExpr(FSpawns[I]).CaptureByRef.Count) and (TASTSpawnExpr(FSpawns[I]).CaptureByRef[CurExp] = '1') then
+            Emit(Format('%s: ^%s;', [TASTSpawnExpr(FSpawns[I]).CaptureNames[CurExp], EmitTypeRef(TASTSpawnExpr(FSpawns[I]).CaptureTypes[CurExp])]))
+          else
+            Emit(Format('%s: %s;', [TASTSpawnExpr(FSpawns[I]).CaptureNames[CurExp], EmitTypeRef(TASTSpawnExpr(FSpawns[I]).CaptureTypes[CurExp])]));
+        DecIndent;
+        Emit('end;');
+        Emit('');
+      end;
       DecIndent;
       Emit('');
 
@@ -7372,6 +8343,7 @@ begin
     EmitTypedMonadHelpers(UOptTags, UOptInners, UResTags, UResVals, UResErrs, False);
     EmitMapRuntimeHelpers(MapTags, MapKeys, MapVals, False);
     EmitFnRuntimeHelpers(False);
+    EmitChanRuntimeHelpers(UOptTags, UOptInners, False);
 
     HasVarsBlock := False;
     for I := 0 to AModule.ModuleVars.Count - 1 do
@@ -7407,6 +8379,7 @@ begin
       end;
     end;
     EmitLambdaAndThunkDecls(True);
+    EmitSpawnDecls(True);
     Emit('');
 
     for I := 0 to AModule.Functions.Count - 1 do
@@ -7414,6 +8387,7 @@ begin
         EmitFunction(TASTFunction(AModule.Functions[I]));
 
     EmitLambdaAndThunkDecls(False);
+    EmitSpawnDecls(False);
 
     if EffectiveLibrary then
     begin

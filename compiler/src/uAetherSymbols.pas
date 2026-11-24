@@ -319,6 +319,34 @@ begin
   FGlobalScope.Define(TSymbol.Create('SocketSend', skFunction, 'Int32', 0, 0));
   FGlobalScope.Define(TSymbol.Create('SocketRecv', skFunction, 'String', 0, 0));
   FGlobalScope.Define(TSymbol.Create('SocketClose', skFunction, 'Void', 0, 0));
+
+  // OS Threading & Synchronization Primitives (Phase 53)
+  FGlobalScope.Define(TSymbol.Create('__SyncAtomicNew', skFunction, 'Pointer', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('__SyncAtomicLoad', skFunction, 'Int32', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('__SyncAtomicStore', skFunction, 'Void', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('__SyncAtomicAdd', skFunction, 'Int32', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('__SyncAtomicCas', skFunction, 'Bool', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('__SyncAtomicFree', skFunction, 'Void', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('__SyncMutexNew', skFunction, 'Pointer', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('__SyncMutexLock', skFunction, 'Void', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('__SyncMutexTryLock', skFunction, 'Bool', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('__SyncMutexUnlock', skFunction, 'Void', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('__SyncMutexFree', skFunction, 'Void', 0, 0));
+
+  // Generic Buffered Channels
+  AddType('Channel');
+  AddType('Task');
+  FGlobalScope.Define(TSymbol.Create('NewChannel', skFunction, 'Any', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('Send', skFunction, 'Bool', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('TrySend', skFunction, 'Bool', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('Recv', skFunction, 'Any', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('TryRecv', skFunction, 'Any', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('CloseChannel', skFunction, 'Void', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('ChannelLen', skFunction, 'Int32', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('IsChannelEmpty', skFunction, 'Bool', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('IsChannelFull', skFunction, 'Bool', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('IsChannelClosed', skFunction, 'Bool', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('DestroyChannel', skFunction, 'Void', 0, 0));
 end;
 
 procedure TSymbolTable.EnterScope;
@@ -378,7 +406,7 @@ begin
   if (Length(CleanName) > 1) and (CleanName[1] = '^') then
     Exit(ResolveType(Copy(CleanName, 2, Length(CleanName))));
 
-  if (CleanName = 'Result') or (CleanName = 'Option') or (CleanName = 'Box') or (CleanName = 'Task') or
+  if (CleanName = 'Result') or (CleanName = 'Option') or (CleanName = 'Box') or (CleanName = 'Task') or (CleanName = 'Channel') or
      (Pos('array[', CleanName) = 1) or (Pos('array of ', CleanName) = 1) or (Pos('set of', CleanName) = 1) or
      (Pos('map[', CleanName) = 1) then
     Exit(True);

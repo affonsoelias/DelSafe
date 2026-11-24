@@ -214,6 +214,14 @@ begin
     CallStmt := TASTCallStmt(Stmt);
     CollectIdentifiersInExpr(CallStmt.CallExpr, IdentList);
   end
+  else if Stmt is TASTExprStmt then
+  begin
+    CollectIdentifiersInExpr(TASTExprStmt(Stmt).Expr, IdentList);
+  end
+  else if Stmt is TASTYieldStmt then
+  begin
+    // Thread yield statement: no identifiers
+  end
   else if Stmt is TASTIfStmt then
   begin
     IfStmt := TASTIfStmt(Stmt);

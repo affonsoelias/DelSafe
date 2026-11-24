@@ -1,0 +1,201 @@
+module threads_sync_channels_test;
+
+import Sync;
+
+type
+    WorkItem = record
+        id: Int32;
+        score: Int32;
+    end record;
+
+async function ComputeSquareAsync(n: Int32) return Int32 is
+begin
+    yield;
+    return n * n;
+end ComputeSquareAsync;
+
+function MakeItem(id, mult: Int32) return WorkItem is
+var
+    w: WorkItem;
+begin
+    yield;
+    w.id := id;
+    w.score := id * mult;
+    return w;
+end MakeItem;
+
+async procedure MarkDoneAsync(a: AtomicInt32; delta: Int32) is
+var
+    v: Int32;
+begin
+    v := AtomicFetchAdd(borrow a, delta);
+    if v < 0 then
+        PrintLn("unreachable");
+    end if;
+    yield;
+end MarkDoneAsync;
+
+function IncrementWithAtomic(a: AtomicInt32; iters: Int32) return Int32 is
+var
+    i: Int32;
+    v: Int32;
+begin
+    for i := 1 to iters do
+        v := AtomicFetchAdd(borrow a, 1);
+        if (i mod 50) = 0 then
+            yield;
+        end if;
+    end for;
+    return iters;
+end IncrementWithAtomic;
+
+function IncrementWithMutex(mtx: Mutex; mut borrow shared: Int32; iters: Int32) return Int32 is
+var
+    i: Int32;
+begin
+    for i := 1 to iters do
+        MutexLock(borrow mtx);
+        shared := shared + 1;
+        MutexUnlock(borrow mtx);
+    end for;
+    return iters;
+end IncrementWithMutex;
+
+function ProduceInts(ch: Channel<Int32>; start_val, count: Int32) return Int32 is
+var
+    i: Int32;
+begin
+    for i := 0 to count - 1 do
+        Send(ch, start_val + i);
+    end for;
+    return count;
+end ProduceInts;
+
+function ConsumeInts(ch: Channel<Int32>; count: Int32) return Int32 is
+var
+    i, total: Int32;
+    got: Option<Int32>;
+begin
+    total := 0;
+    for i := 1 to count do
+        got := Recv(ch);
+        if got.is_some then
+            total := total + got.value;
+        end if;
+    end for;
+    return total;
+end ConsumeInts;
+
+function ProduceMessages(ch: Channel<String>) return Int32 is
+begin
+    Send(ch, "alpha");
+    Send(ch, "beta");
+    CloseChannel(ch);
+    return 2;
+end ProduceMessages;
+
+program Main;
+var
+    t1, t2, t3: Task<Int32>;
+    t_item: Task<WorkItem>;
+    t_void: Task<Void>;
+    atom: AtomicInt32;
+    mtx: Mutex;
+    shared_counter: Int32;
+    ch_int: Channel<Int32>;
+    ch_str: Channel<String>;
+    ch_rec: Channel<WorkItem>;
+    s1, s2, s3, s4, sum_cons, done_cnt: Int32;
+    w_res, w_item: WorkItem;
+    cas_ok, try_ok: Bool;
+    opt_int: Option<Int32>;
+    opt_str: Option<String>;
+    opt_rec: Option<WorkItem>;
+begin
+    // 1. OS threads for async function, normal function, async procedure, and record Task<T>
+    t1 := ComputeSquareAsync(6);
+    t2 := spawn ComputeSquareAsync(7);
+    t3 := spawn ComputeSquareAsync(8);
+    t_item := spawn MakeItem(9, 10);
+
+    s1 := await t1;
+    s2 := await t2;
+    s3 := await t3;
+    w_res := await t_item;
+
+    Assert((s1 = 36) and (s2 = 49) and (s3 = 64));
+    Assert((w_res.id = 9) and (w_res.score = 90));
+
+    // 2. Real hardware AtomicInt32 across 3 concurrent OS threads + async procedure (Task<Void>)
+    atom := NewAtomic(0);
+    t1 := spawn IncrementWithAtomic(atom, 200);
+    t2 := spawn IncrementWithAtomic(atom, 200);
+    t3 := spawn IncrementWithAtomic(atom, 200);
+    t_void := spawn MarkDoneAsync(atom, 10);
+
+    done_cnt := (await t1) + (await t2) + (await t3);
+    await t_void;
+    Assert(done_cnt = 600);
+    Assert(AtomicLoad(borrow atom) = 610);
+
+    cas_ok := AtomicCompareExchange(borrow atom, 610, 999);
+    Assert(cas_ok and (AtomicLoad(borrow atom) = 999));
+    Assert(not AtomicCompareExchange(borrow atom, 123, 777));
+    AtomicStore(borrow atom, 42);
+    Assert(AtomicLoad(borrow atom) = 42);
+    AtomicDestroy(mut borrow atom);
+
+    // 3. Real OS Mutex protecting shared mut borrow counter across 2 OS threads
+    mtx := NewMutex();
+    shared_counter := 0;
+    t1 := spawn IncrementWithMutex(mtx, mut borrow shared_counter, 500);
+    t2 := spawn IncrementWithMutex(mtx, mut borrow shared_counter, 500);
+    s4 := (await t1) + (await t2);
+    Assert((s4 = 1000) and (shared_counter = 1000));
+    Assert(MutexTryLock(borrow mtx));
+    MutexUnlock(borrow mtx);
+    MutexDestroy(mut borrow mtx);
+
+    // 4. Buffered Channel<Int32> with concurrent producers & consumer
+    ch_int := NewChannel<Int32>(2);
+    t1 := spawn ProduceInts(ch_int, 1, 5);
+    t2 := spawn ProduceInts(ch_int, 101, 5);
+    t3 := spawn ConsumeInts(ch_int, 10);
+
+    s1 := await t1;
+    s2 := await t2;
+    sum_cons := await t3;
+    Assert((s1 = 5) and (s2 = 5) and (sum_cons = 530));
+    Assert(IsChannelEmpty(ch_int));
+
+    try_ok := TrySend(ch_int, 77);
+    Assert(try_ok and (ChannelLen(ch_int) = 1));
+    opt_int := TryRecv(ch_int);
+    Assert(opt_int.is_some and (opt_int.value = 77));
+    DestroyChannel(ch_int);
+
+    // 5. Channel<String> with close semantics & Channel<WorkItem>
+    ch_str := NewChannel<String>(4);
+    t1 := spawn ProduceMessages(ch_str);
+    s1 := await t1;
+    Assert(s1 = 2);
+    opt_str := Recv(ch_str);
+    Assert(opt_str.is_some and (opt_str.value = "alpha"));
+    opt_str := Recv(ch_str);
+    Assert(opt_str.is_some and (opt_str.value = "beta"));
+    opt_str := Recv(ch_str);
+    Assert((not opt_str.is_some) and IsChannelClosed(ch_str));
+    DestroyChannel(ch_str);
+
+    ch_rec := NewChannel<WorkItem>(2);
+    w_item.id := 7;
+    w_item.score := 70;
+    Send(ch_rec, w_item);
+    if not IsChannelEmpty(ch_rec) then
+        opt_rec := Recv(ch_rec);
+        Assert(opt_rec.is_some and (opt_rec.value.score = 70));
+    end if;
+    DestroyChannel(ch_rec);
+
+    PrintLn("Phase 53 concurrency, sync, and channels test passed!");
+end threads_sync_channels_test.

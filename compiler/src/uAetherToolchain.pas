@@ -474,7 +474,7 @@ begin
     {$IFDEF MSWINDOWS}
     Params := Format('-O3 -flto -s%s%s "%s"%s -o "%s"%s -lws2_32 -lm', [SharedFlag, ExtraIncludes, CSource, ExtraSources, OutExe, ExtraLibs]);
     {$ELSE}
-    Params := Format('-O3 -flto -s%s%s "%s"%s -o "%s"%s -lm', [SharedFlag, ExtraIncludes, CSource, ExtraSources, OutExe, ExtraLibs]);
+    Params := Format('-O3 -flto -s%s%s "%s"%s -o "%s"%s -pthread -lm', [SharedFlag, ExtraIncludes, CSource, ExtraSources, OutExe, ExtraLibs]);
     {$ENDIF}
   end
   else
@@ -482,7 +482,7 @@ begin
     {$IFDEF MSWINDOWS}
     Params := Format('-O2%s%s "%s"%s -o "%s"%s -lws2_32 -lm', [SharedFlag, ExtraIncludes, CSource, ExtraSources, OutExe, ExtraLibs]);
     {$ELSE}
-    Params := Format('-O2%s%s "%s"%s -o "%s"%s -lm', [SharedFlag, ExtraIncludes, CSource, ExtraSources, OutExe, ExtraLibs]);
+    Params := Format('-O2%s%s "%s"%s -o "%s"%s -pthread -lm', [SharedFlag, ExtraIncludes, CSource, ExtraSources, OutExe, ExtraLibs]);
     {$ENDIF}
   end;
   Code := RunCommandCapture(Info.GCCPath, Params, Info.MSYS2BinDir, OutputLog);
@@ -549,7 +549,7 @@ begin
     {$IFDEF MSWINDOWS}
     Params := Format('-O3 -flto -s%s%s "%s"%s -o "%s"%s -lws2_32 -lm', [SharedFlag, ExtraIncludes, CSource, ExtraSources, OutExe, ExtraLibs]);
     {$ELSE}
-    Params := Format('-O3 -flto -s%s%s "%s"%s -o "%s"%s -lm', [SharedFlag, ExtraIncludes, CSource, ExtraSources, OutExe, ExtraLibs]);
+    Params := Format('-O3 -flto -s%s%s "%s"%s -o "%s"%s -pthread -lm', [SharedFlag, ExtraIncludes, CSource, ExtraSources, OutExe, ExtraLibs]);
     {$ENDIF}
   end
   else
@@ -557,7 +557,7 @@ begin
     {$IFDEF MSWINDOWS}
     Params := Format('-O2%s%s "%s"%s -o "%s"%s -lws2_32 -lm', [SharedFlag, ExtraIncludes, CSource, ExtraSources, OutExe, ExtraLibs]);
     {$ELSE}
-    Params := Format('-O2%s%s "%s"%s -o "%s"%s -lm', [SharedFlag, ExtraIncludes, CSource, ExtraSources, OutExe, ExtraLibs]);
+    Params := Format('-O2%s%s "%s"%s -o "%s"%s -pthread -lm', [SharedFlag, ExtraIncludes, CSource, ExtraSources, OutExe, ExtraLibs]);
     {$ENDIF}
   end;
   Code := RunCommandCapture(Info.ClangPath, Params, Info.MSYS2BinDir, OutputLog);

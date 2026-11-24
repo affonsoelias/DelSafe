@@ -331,6 +331,9 @@ begin
      (T = 'IntLiteral') or (T = 'FloatLiteral') then
     Exit(True);
 
+  if (Pos('Task<', T) = 1) or (Pos('Channel<', T) = 1) then
+    Exit(True);
+
   if (Pos('Box<', T) = 1) or (Pos('array of ', T) = 1) or (Pos('map[', T) = 1) or (T = 'String') then
     Exit(False);
 
@@ -1029,9 +1032,14 @@ begin
     if Assigned(FCurrentScope) then
       FCurrentScope.ReleaseTemporaryBorrows;
   end
-  else if (Stmt is TASTBreakStmt) or (Stmt is TASTContinueStmt) then
+  else if (Stmt is TASTBreakStmt) or (Stmt is TASTContinueStmt) or (Stmt is TASTYieldStmt) then
   begin
-    // Loop control flow: no borrow state transition
+    // Loop control flow / thread yield: no borrow state transition
+  end
+  else if Stmt is TASTExprStmt then
+  begin
+    if Assigned(TASTExprStmt(Stmt).Expr) then
+      CheckExpr(TASTExprStmt(Stmt).Expr, accRead);
   end
   else if Stmt is TASTReturnStmt then
   begin

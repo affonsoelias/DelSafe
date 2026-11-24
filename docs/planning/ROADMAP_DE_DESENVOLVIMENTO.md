@@ -861,12 +861,12 @@ Mapeamento técnico completo dos recursos pendentes identificados no compilador 
 - [x] **4.3 Gerenciamento Explícito e Automático de Heap no Backend C99 (`Free`/`Dispose` & RAII/`Drop`)**:
   - Introduzir liberação segura de `Box<T>`, buffers dinâmicos, mapas e strings temporárias no backend C99 e intrínsecos explícitos `Free`/`Dispose` em blocos controlados.
 
-### 📋 Fase 53: 5. Concorrência (`async` / `await` / `spawn` / `yield`) & `std/sync.aeth` - PLANEJADA
-- [ ] **5.1 Threads Reais de SO para `spawn`/`await` e Implementação de `yield`**:
-  - Substituir a execução síncrona imediata em `uAetherEmitterPascal.pas` (`TThread`) e `uAetherEmitterC.pas` (`CreateThread` no Windows / `pthread_create` no POSIX) para que `spawn` execute concorrentemente e `await` aguarde a conclusão real da tarefa.
-  - Conectar `tokYield` (`uAetherTokens.pas`) ao parser, analisador semântico e runtime.
-- [ ] **5.2 Primitivas Reais de Sincronização & Canais com Buffer em `std/sync.aeth`**:
-  - Evoluir `AtomicInt32` (operações atômicas de hardware/`Interlocked`/`__atomic_*`), `Mutex` real (bloqueio nativo de thread) e `Channel<T>` com fila real em memória em vez de contadores simulados.
+### ✅ Fase 53: 5. Concorrência (`async` / `await` / `spawn` / `yield`) & `std/sync.aeth` - CONCLUÍDA
+- [x] **5.1 Threads Reais de SO para `spawn`/`await` e Implementação de `yield`**:
+  - Substituída a execução síncrona imediata em `uAetherEmitterPascal.pas` (`BeginThread`/`WaitForThreadTerminate`/`CloseThread`) e `uAetherEmitterC.pas` (`CreateThread`/`WaitForSingleObject` no Windows / `pthread_create`/`pthread_join` no POSIX com `-pthread`), com handles genéricos tipados `Task<T>` (`Task<Void>` para procedimentos `async`), captura por valor ou referência (`mut borrow`) e comando `yield;` (`ThreadSwitch`/`SwitchToThread`/`sched_yield`).
+  - Conectado `tokYield` (`TASTYieldStmt`) e expressões em nível de instrução (`await task;`, `spawn ...;` via `TASTExprStmt`) no parser, analisador de tipos/borrows, linter e ambos os backends.
+- [x] **5.2 Primitivas Reais de Sincronização & Canais com Buffer em `std/sync.aeth`**:
+  - Evoluído `AtomicInt32` com intrínsecos atômicos de hardware (`Interlocked*` no FPC e `__atomic_*` no GCC/Clang), `Mutex` real (`TRTLCriticalSection` / `CRITICAL_SECTION` / `pthread_mutex_t` com `MutexLock`, `MutexTryLock`, `MutexUnlock`, `MutexDestroy`) e `Channel<T>` genérico thread-safe com buffer circular real (`NewChannel<T>`, `Send`, `TrySend`, `Recv`, `TryRecv`, `CloseChannel`, `ChannelLen`, `IsChannelEmpty`, `IsChannelFull`, `IsChannelClosed`, `DestroyChannel`), validado em `tests/language/concurrency/threads_sync_channels_test.aeth` e `tests/compile_fail/await_non_task_fail.aeth` (`FPC 27/27 | C99 27/27 PASS`).
 
 ### ✅ Fase 54: 6. Sistema de Módulos, Visibilidade, Traits e `#[derive]` - CONCLUÍDA
 - [x] **6.1 Alias de Importação (`import X as Y;`), Visibilidade (`pub` / `priv`) e Qualificação `Y.Simbolo`**:

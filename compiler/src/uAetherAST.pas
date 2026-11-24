@@ -95,6 +95,7 @@ type
   TASTAwaitExpr = class(TASTExpr)
   public
     Expr: TASTExpr;
+    ResolvedInnerType: string;
     constructor Create(ALine, ACol: Integer; AExpr: TASTExpr);
     destructor Destroy; override;
     function Dump(Indent: Integer = 0): string; override;
@@ -103,6 +104,12 @@ type
   TASTSpawnExpr = class(TASTExpr)
   public
     CallExpr: TASTExpr;
+    SpawnId: Integer;
+    ResolvedTaskType: string;
+    InnerReturnType: string;
+    CaptureNames: TStringList;
+    CaptureTypes: TStringList;
+    CaptureByRef: TStringList;
     constructor Create(ALine, ACol: Integer; ACallExpr: TASTExpr);
     destructor Destroy; override;
     function Dump(Indent: Integer = 0): string; override;
@@ -325,6 +332,19 @@ type
   public
     Stmt: TASTStmt;
     constructor Create(ALine, ACol: Integer; AStmt: TASTStmt);
+    destructor Destroy; override;
+    function Dump(Indent: Integer = 0): string; override;
+  end;
+
+  TASTYieldStmt = class(TASTStmt)
+  public
+    function Dump(Indent: Integer = 0): string; override;
+  end;
+
+  TASTExprStmt = class(TASTStmt)
+  public
+    Expr: TASTExpr;
+    constructor Create(ALine, ACol: Integer; AExpr: TASTExpr);
     destructor Destroy; override;
     function Dump(Indent: Integer = 0): string; override;
   end;
@@ -809,6 +829,7 @@ constructor TASTAwaitExpr.Create(ALine, ACol: Integer; AExpr: TASTExpr);
 begin
   inherited Create(ALine, ACol);
   Expr := AExpr;
+  ResolvedInnerType := '';
 end;
 
 destructor TASTAwaitExpr.Destroy;
@@ -828,10 +849,19 @@ constructor TASTSpawnExpr.Create(ALine, ACol: Integer; ACallExpr: TASTExpr);
 begin
   inherited Create(ALine, ACol);
   CallExpr := ACallExpr;
+  SpawnId := 0;
+  ResolvedTaskType := '';
+  InnerReturnType := '';
+  CaptureNames := TStringList.Create;
+  CaptureTypes := TStringList.Create;
+  CaptureByRef := TStringList.Create;
 end;
 
 destructor TASTSpawnExpr.Destroy;
 begin
+  CaptureByRef.Free;
+  CaptureTypes.Free;
+  CaptureNames.Free;
   CallExpr.Free;
   inherited Destroy;
 end;
@@ -1145,6 +1175,32 @@ end;
 function TASTCallStmt.Dump(Indent: Integer): string;
 begin
   Result := CallExpr.Dump(Indent);
+end;
+
+{ TASTYieldStmt }
+
+function TASTYieldStmt.Dump(Indent: Integer): string;
+begin
+  Result := MakeIndent(Indent) + 'YieldStmt';
+end;
+
+{ TASTExprStmt }
+
+constructor TASTExprStmt.Create(ALine, ACol: Integer; AExpr: TASTExpr);
+begin
+  inherited Create(ALine, ACol);
+  Expr := AExpr;
+end;
+
+destructor TASTExprStmt.Destroy;
+begin
+  Expr.Free;
+  inherited Destroy;
+end;
+
+function TASTExprStmt.Dump(Indent: Integer): string;
+begin
+  Result := MakeIndent(Indent) + 'ExprStmt:' + LineEnding + Expr.Dump(Indent + 1);
 end;
 
 { TASTIfStmt }
@@ -2177,9 +2233,22 @@ begin
   else if Node is TASTUnaryExpr then
     Exit(TASTUnaryExpr.Create(Node.Line, Node.Col, TASTUnaryExpr(Node).Op, TASTExpr(CloneASTNode(TASTUnaryExpr(Node).Expr))))
   else if Node is TASTAwaitExpr then
-    Exit(TASTAwaitExpr.Create(Node.Line, Node.Col, TASTExpr(CloneASTNode(TASTAwaitExpr(Node).Expr))))
+  begin
+    Result := TASTAwaitExpr.Create(Node.Line, Node.Col, TASTExpr(CloneASTNode(TASTAwaitExpr(Node).Expr)));
+    TASTAwaitExpr(Result).ResolvedInnerType := TASTAwaitExpr(Node).ResolvedInnerType;
+    Exit;
+  end
   else if Node is TASTSpawnExpr then
-    Exit(TASTSpawnExpr.Create(Node.Line, Node.Col, TASTExpr(CloneASTNode(TASTSpawnExpr(Node).CallExpr))))
+  begin
+    Result := TASTSpawnExpr.Create(Node.Line, Node.Col, TASTExpr(CloneASTNode(TASTSpawnExpr(Node).CallExpr)));
+    TASTSpawnExpr(Result).SpawnId := TASTSpawnExpr(Node).SpawnId;
+    TASTSpawnExpr(Result).ResolvedTaskType := TASTSpawnExpr(Node).ResolvedTaskType;
+    TASTSpawnExpr(Result).InnerReturnType := TASTSpawnExpr(Node).InnerReturnType;
+    TASTSpawnExpr(Result).CaptureNames.AddStrings(TASTSpawnExpr(Node).CaptureNames);
+    TASTSpawnExpr(Result).CaptureTypes.AddStrings(TASTSpawnExpr(Node).CaptureTypes);
+    TASTSpawnExpr(Result).CaptureByRef.AddStrings(TASTSpawnExpr(Node).CaptureByRef);
+    Exit;
+  end
   else if Node is TASTCallArg then
   begin
     Result := TASTCallArg.Create(Node.Line, Node.Col, TASTCallArg(Node).Ownership, TASTExpr(CloneASTNode(TASTCallArg(Node).Expr)));
@@ -2352,6 +2421,10 @@ begin
     Exit(TASTAsmStmt.Create(Node.Line, Node.Col, TASTAsmStmt(Node).AsmCode))
   else if Node is TASTDeferStmt then
     Exit(TASTDeferStmt.Create(Node.Line, Node.Col, TASTStmt(CloneASTNode(TASTDeferStmt(Node).Stmt))))
+  else if Node is TASTYieldStmt then
+    Exit(TASTYieldStmt.Create(Node.Line, Node.Col))
+  else if Node is TASTExprStmt then
+    Exit(TASTExprStmt.Create(Node.Line, Node.Col, TASTExpr(CloneASTNode(TASTExprStmt(Node).Expr))))
   else if Node is TASTTryStmt then
   begin
     Result := TASTTryStmt.Create(Node.Line, Node.Col);

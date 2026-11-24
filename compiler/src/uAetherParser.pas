@@ -2148,6 +2148,10 @@ begin
   begin
     Result := TASTCallStmt.Create(Expr.Line, Expr.Col, TASTCallExpr(Expr));
   end
+  else if (Expr is TASTAwaitExpr) or (Expr is TASTSpawnExpr) then
+  begin
+    Result := TASTExprStmt.Create(Expr.Line, Expr.Col, Expr);
+  end
   else
     raise EAetherParserError.Create('Invalid statement (expected assignment or function call)', Expr.Line, Expr.Col);
 end;
@@ -2172,6 +2176,11 @@ begin
   else if Check(tokContinue) then
   begin
     Result := TASTContinueStmt.Create(FCurTok.Line, FCurTok.Col);
+    Advance;
+  end
+  else if Check(tokYield) then
+  begin
+    Result := TASTYieldStmt.Create(FCurTok.Line, FCurTok.Col);
     Advance;
   end
   else if Check(tokMatch) then

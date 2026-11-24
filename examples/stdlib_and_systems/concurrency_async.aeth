@@ -19,7 +19,8 @@ var
     val_atom: Int32;
     mtx: Mutex;
     lock_ok: Bool;
-    chan: Channel;
+    chan: Channel<Int32>;
+    recv_opt: Option<Int32>;
     sock: Socket;
     req_http: String;
     bytes_sent: UInt32;
@@ -79,31 +80,32 @@ begin
     PrintLn("      [PASS] AtomicAdd (100 + 25) = %d", val_atom);
 
     mtx := NewMutex();
-    lock_ok := Lock(mut borrow mtx, 1);
-    if lock_ok then
-        PrintLn("      [PASS] Mutex acquired by thread 1 successfully");
-    end if;
-    Unlock(mut borrow mtx, 1);
+    Lock(mut borrow mtx);
+    PrintLn("      [PASS] Mutex acquired by thread 1 successfully");
+    Unlock(mut borrow mtx);
     if not IsLocked(borrow mtx) then
         PrintLn("      [PASS] Mutex released successfully (IsLocked: false)");
     end if;
 
-    chan := NewChannel(10);
-    Send(mut borrow chan);
-    Send(mut borrow chan);
-    PrintLn("      [PASS] CSP Channel populated (length: %d)", chan.count);
+    chan := NewChannel<Int32>(10);
+    Send(chan, 101);
+    Send(chan, 202);
+    PrintLn("      [PASS] CSP Channel populated (length: %d)", ChannelLen(chan));
 
-    lock_ok := Recv(mut borrow chan);
-    if lock_ok then
-        PrintLn("      [PASS] Message 1 received from CSP Channel");
+    recv_opt := Recv(chan);
+    if recv_opt.is_some then
+        PrintLn("      [PASS] Message 1 received from CSP Channel (value: %d)", recv_opt.value);
     end if;
-    lock_ok := Recv(mut borrow chan);
-    if lock_ok then
-        PrintLn("      [PASS] Message 2 received from CSP Channel");
+    recv_opt := Recv(chan);
+    if recv_opt.is_some then
+        PrintLn("      [PASS] Message 2 received from CSP Channel (value: %d)", recv_opt.value);
     end if;
-    if IsChannelEmpty(borrow chan) then
+    if IsChannelEmpty(chan) then
         PrintLn("      [PASS] Channel empty after consumption: OK");
     end if;
+    DestroyChannel(chan);
+    AtomicDestroy(mut borrow atom);
+    MutexDestroy(mut borrow mtx);
 
     // --- 3. Networking and Protocols Test ---
     PrintLn("");

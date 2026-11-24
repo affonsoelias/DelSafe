@@ -1,0 +1,9 @@
+// expect-error: E0308
+module await_non_task_fail;
+
+program Main;
+var
+  x: Int32;
+begin
+  x := await 42;
+end await_non_task_fail.

@@ -36,6 +36,7 @@ type
     FLoopDepth: Integer;
     FUnsafeDepth: Integer;
     FLambdaCounter: Integer;
+    FSpawnCounter: Integer;
 
     procedure Error(const ACode, AMsg: string; ALine, ACol: Integer);
     function ResolveAliasType(const AType: string): string;
@@ -71,6 +72,7 @@ type
     function CheckUnary(Un: TASTUnaryExpr): string;
     function CheckAwait(AwaitExpr: TASTAwaitExpr): string;
     function CheckSpawn(SpawnExpr: TASTSpawnExpr): string;
+    procedure CollectSpawnCaptures(SpawnExpr: TASTSpawnExpr);
     function CheckCall(Call: TASTCallExpr): string;
     function CheckIndexExpr(Idx: TASTIndexExpr): string;
     function CheckSetLiteral(SetLit: TASTSetLiteralExpr): string;
@@ -140,6 +142,7 @@ begin
   FLoopDepth := 0;
   FUnsafeDepth := 0;
   FLambdaCounter := 0;
+  FSpawnCounter := 0;
 end;
 
 destructor TAetherTypeChecker.Destroy;
@@ -1342,7 +1345,20 @@ begin
     end;
     Exit(True);
   end;
-  if (Pos('Task<', T) = 1) and (Pos('Task<', S) = 1) then Exit(True);
+  if ((Pos('Task<', T) = 1) and (Pos('Task<', S) = 1)) or
+     ((Pos('Channel<', T) = 1) and (Pos('Channel<', S) = 1)) then
+  begin
+    TArgs := TStringList.Create;
+    SArgs := TStringList.Create;
+    try
+      if SplitGenericType(T, TBase, TArgs) and SplitGenericType(S, SBase, SArgs) then
+        Exit(TypesAreCompatible(TArgs[0], SArgs[0]));
+    finally
+      TArgs.Free;
+      SArgs.Free;
+    end;
+    Exit(True);
+  end;
   // Set literals, array literals, and map literals
   if (S = 'MapLiteral') and IsMapType(T, TargetKey, TargetVal) then Exit(True);
   if (S = 'SetLiteral') and (IsSetType(T) or IsArrayType(T, TargetElem, IsFix, DimN)) then Exit(True);
@@ -1763,22 +1779,163 @@ function TAetherTypeChecker.CheckAwait(AwaitExpr: TASTAwaitExpr): string;
 var
   InnerType: string;
 begin
-  InnerType := CheckExpr(AwaitExpr.Expr);
-  if (Copy(InnerType, 1, 5) = 'Task<') and (InnerType[Length(InnerType)] = '>') then
-    Result := Copy(InnerType, 6, Length(InnerType) - 6)
-  else
-    Result := InnerType;
+  InnerType := ResolveAliasType(CheckExpr(AwaitExpr.Expr));
+  if (Copy(InnerType, 1, 5) <> 'Task<') or (InnerType[Length(InnerType)] <> '>') then
+    Error('E0308', Format('Cannot await non-Task type "%s"', [InnerType]), AwaitExpr.Line, AwaitExpr.Col);
+  Result := NormalizeTypeName(Copy(InnerType, 6, Length(InnerType) - 6));
+  if Result = '' then Result := 'Void';
+  AwaitExpr.ResolvedInnerType := Result;
+end;
+
+procedure TAetherTypeChecker.CollectSpawnCaptures(SpawnExpr: TASTSpawnExpr);
+  procedure TryCapture(const IdName: string; IsRef: Boolean);
+  var
+    Sym: TSymbol;
+    CType: string;
+    Idx: Integer;
+  begin
+    if (IdName = '') or SameText(IdName, 'None') or SameText(IdName, 'result') then Exit;
+    if not Assigned(FSymbols) then Exit;
+    Sym := FSymbols.Resolve(IdName);
+    if Assigned(Sym) and (Sym.Kind = skVariable) then
+    begin
+      if Assigned(FSymbols.GlobalScope.ResolveLocal(Sym.Name)) then
+        Exit; // module variable is globally accessible
+      Idx := SpawnExpr.CaptureNames.IndexOf(Sym.Name);
+      if Idx < 0 then
+      begin
+        CType := NormalizeTypeName(Sym.TypeName);
+        SpawnExpr.CaptureNames.Add(Sym.Name);
+        SpawnExpr.CaptureTypes.Add(CType);
+        if IsRef then
+          SpawnExpr.CaptureByRef.Add('1')
+        else
+          SpawnExpr.CaptureByRef.Add('0');
+      end
+      else if IsRef then
+        SpawnExpr.CaptureByRef[Idx] := '1';
+    end;
+  end;
+
+  procedure WalkExpr(E: TASTExpr);
+  var
+    I: Integer;
+    C: TASTCallExpr;
+    Arg: TASTCallArg;
+    FuncSym: TSymbol;
+    ArgIsMut: Boolean;
+    ME: TASTMatchExpr;
+  begin
+    if not Assigned(E) then Exit;
+    if E is TASTIdentifierExpr then
+      TryCapture(TASTIdentifierExpr(E).Name, False)
+    else if E is TASTMemberAccessExpr then
+      WalkExpr(TASTMemberAccessExpr(E).Target)
+    else if E is TASTBinaryExpr then
+    begin
+      WalkExpr(TASTBinaryExpr(E).Left);
+      WalkExpr(TASTBinaryExpr(E).Right);
+    end
+    else if E is TASTUnaryExpr then
+      WalkExpr(TASTUnaryExpr(E).Expr)
+    else if E is TASTAwaitExpr then
+      WalkExpr(TASTAwaitExpr(E).Expr)
+    else if E is TASTSpawnExpr then
+      WalkExpr(TASTSpawnExpr(E).CallExpr)
+    else if E is TASTCallExpr then
+    begin
+      C := TASTCallExpr(E);
+      if Assigned(C.CalleeExpr) then
+        WalkExpr(C.CalleeExpr)
+      else if C.IsIndirectCall and (C.Callee <> '') then
+        TryCapture(C.Callee, False);
+      FuncSym := nil;
+      if (C.Callee <> '') and Assigned(FSymbols) then
+        FuncSym := FSymbols.Resolve(C.Callee);
+      for I := 0 to C.Args.Count - 1 do
+      begin
+        Arg := TASTCallArg(C.Args[I]);
+        ArgIsMut := (Arg.Ownership = owMutBorrow);
+        if (not ArgIsMut) and Assigned(FuncSym) and (FuncSym.Kind = skFunction) and
+           Assigned(FuncSym.Node) and (FuncSym.Node is TASTFunction) and
+           (I < TASTFunction(FuncSym.Node).Params.Count) and
+           (TASTParam(TASTFunction(FuncSym.Node).Params[I]).Ownership = owMutBorrow) then
+          ArgIsMut := True;
+        if ArgIsMut and (Arg.Expr is TASTIdentifierExpr) then
+          TryCapture(TASTIdentifierExpr(Arg.Expr).Name, True)
+        else
+          WalkExpr(Arg.Expr);
+      end;
+    end
+    else if E is TASTIndexExpr then
+    begin
+      WalkExpr(TASTIndexExpr(E).Target);
+      for I := 0 to TASTIndexExpr(E).Indices.Count - 1 do
+        WalkExpr(TASTExpr(TASTIndexExpr(E).Indices[I]));
+    end
+    else if E is TASTSetLiteralExpr then
+      for I := 0 to TASTSetLiteralExpr(E).Elements.Count - 1 do
+        WalkExpr(TASTExpr(TASTSetLiteralExpr(E).Elements[I]))
+    else if E is TASTMapLiteralExpr then
+      for I := 0 to TASTMapLiteralExpr(E).Keys.Count - 1 do
+      begin
+        WalkExpr(TASTExpr(TASTMapLiteralExpr(E).Keys[I]));
+        WalkExpr(TASTExpr(TASTMapLiteralExpr(E).Values[I]));
+      end
+    else if E is TASTTupleLiteralExpr then
+      for I := 0 to TASTTupleLiteralExpr(E).Elements.Count - 1 do
+        WalkExpr(TASTExpr(TASTTupleLiteralExpr(E).Elements[I]))
+    else if E is TASTLambdaExpr then
+    begin
+      for I := 0 to TASTLambdaExpr(E).CaptureNames.Count - 1 do
+        TryCapture(TASTLambdaExpr(E).CaptureNames[I], False);
+    end
+    else if E is TASTIfExpr then
+    begin
+      WalkExpr(TASTIfExpr(E).Condition);
+      WalkExpr(TASTIfExpr(E).ThenExpr);
+      WalkExpr(TASTIfExpr(E).ElseExpr);
+    end
+    else if E is TASTMatchExpr then
+    begin
+      ME := TASTMatchExpr(E);
+      WalkExpr(ME.Expr);
+      for I := 0 to ME.Cases.Count - 1 do
+      begin
+        WalkExpr(TASTMatchCase(ME.Cases[I]).Guard);
+        WalkExpr(TASTMatchCase(ME.Cases[I]).ValueExpr);
+      end;
+    end;
+  end;
+begin
+  SpawnExpr.CaptureNames.Clear;
+  SpawnExpr.CaptureTypes.Clear;
+  SpawnExpr.CaptureByRef.Clear;
+  WalkExpr(SpawnExpr.CallExpr);
 end;
 
 function TAetherTypeChecker.CheckSpawn(SpawnExpr: TASTSpawnExpr): string;
 var
-  CallType: string;
+  CallType, InnerT: string;
 begin
-  CallType := CheckExpr(SpawnExpr.CallExpr);
+  CallType := NormalizeTypeName(CheckExpr(SpawnExpr.CallExpr));
   if (Copy(CallType, 1, 5) = 'Task<') and (CallType[Length(CallType)] = '>') then
-    Result := CallType
+    InnerT := NormalizeTypeName(Copy(CallType, 6, Length(CallType) - 6))
   else
-    Result := 'Task<' + CallType + '>';
+    InnerT := CallType;
+  if InnerT = 'IntLiteral' then InnerT := 'Int32'
+  else if InnerT = 'FloatLiteral' then InnerT := 'Float64'
+  else if InnerT = '' then InnerT := 'Void';
+
+  if SpawnExpr.SpawnId = 0 then
+  begin
+    Inc(FSpawnCounter);
+    SpawnExpr.SpawnId := FSpawnCounter;
+  end;
+  SpawnExpr.InnerReturnType := InnerT;
+  SpawnExpr.ResolvedTaskType := 'Task<' + InnerT + '>';
+  CollectSpawnCaptures(SpawnExpr);
+  Result := SpawnExpr.ResolvedTaskType;
 end;
 
 function TAetherTypeChecker.HasForeignImports: Boolean;
@@ -1893,8 +2050,8 @@ var
   Arg: TASTCallArg;
   HasNamed, HasPositional, FoundField: Boolean;
   ArgType, ExpectedType, Mangled, MonomorphedName, ElemType, KeyType, ValType: string;
-  T1, T2, T3, NormArg, FieldNameTarget, FnRet, CalleeT: string;
-  ConcreteArgs, Inferred, FnParams: TStringList;
+  T1, T2, T3, NormArg, FieldNameTarget, FnRet, CalleeT, ChanBase, ChanElem: string;
+  ConcreteArgs, Inferred, FnParams, ChanArgs: TStringList;
   RecExpr: TASTExpr;
 begin
   if Assigned(Call.CalleeExpr) then
@@ -3188,6 +3345,146 @@ begin
       Exit('Void');
     end;
 
+    // Phase 53: Low-level OS Sync Intrinsics & Generic Channels
+    if Call.Callee = '__SyncAtomicNew' then
+    begin
+      if Call.Args.Count <> 1 then
+        Error('E0061', 'Function "__SyncAtomicNew" expects 1 argument (initial: Int32)', Call.Line, Call.Col);
+      ArgType := CheckExpr(TASTCallArg(Call.Args[0]).Expr);
+      if not IsIntegerType(ArgType) and (ArgType <> 'IntLiteral') then
+        Error('E0308', Format('"__SyncAtomicNew" expects Int32, got "%s"', [ArgType]), Call.Line, Call.Col);
+      Exit('Pointer');
+    end;
+    if Call.Callee = '__SyncAtomicLoad' then
+    begin
+      if Call.Args.Count <> 1 then
+        Error('E0061', 'Function "__SyncAtomicLoad" expects 1 argument (handle: Pointer)', Call.Line, Call.Col);
+      ArgType := ResolveAliasType(CheckExpr(TASTCallArg(Call.Args[0]).Expr));
+      if ArgType <> 'Pointer' then
+        Error('E0308', Format('"__SyncAtomicLoad" expects Pointer, got "%s"', [ArgType]), Call.Line, Call.Col);
+      Exit('Int32');
+    end;
+    if (Call.Callee = '__SyncAtomicStore') or (Call.Callee = '__SyncAtomicAdd') then
+    begin
+      if Call.Args.Count <> 2 then
+        Error('E0061', Format('Function "%s" expects 2 arguments (handle: Pointer, val: Int32)', [Call.Callee]), Call.Line, Call.Col);
+      ArgType := ResolveAliasType(CheckExpr(TASTCallArg(Call.Args[0]).Expr));
+      if ArgType <> 'Pointer' then
+        Error('E0308', Format('"%s" first arg must be Pointer, got "%s"', [Call.Callee, ArgType]), Call.Line, Call.Col);
+      ArgType := CheckExpr(TASTCallArg(Call.Args[1]).Expr);
+      if not IsIntegerType(ArgType) and (ArgType <> 'IntLiteral') then
+        Error('E0308', Format('"%s" second arg must be Int32, got "%s"', [Call.Callee, ArgType]), Call.Line, Call.Col);
+      if Call.Callee = '__SyncAtomicAdd' then Exit('Int32') else Exit('Void');
+    end;
+    if Call.Callee = '__SyncAtomicCas' then
+    begin
+      if Call.Args.Count <> 3 then
+        Error('E0061', 'Function "__SyncAtomicCas" expects 3 arguments (handle, expected, desired)', Call.Line, Call.Col);
+      ArgType := ResolveAliasType(CheckExpr(TASTCallArg(Call.Args[0]).Expr));
+      if ArgType <> 'Pointer' then
+        Error('E0308', Format('"__SyncAtomicCas" first arg must be Pointer, got "%s"', [ArgType]), Call.Line, Call.Col);
+      for K := 1 to 2 do
+      begin
+        ArgType := CheckExpr(TASTCallArg(Call.Args[K]).Expr);
+        if not IsIntegerType(ArgType) and (ArgType <> 'IntLiteral') then
+          Error('E0308', Format('"__SyncAtomicCas" argument %d must be Int32, got "%s"', [K + 1, ArgType]), Call.Line, Call.Col);
+      end;
+      Exit('Bool');
+    end;
+    if (Call.Callee = '__SyncAtomicFree') or (Call.Callee = '__SyncMutexLock') or
+       (Call.Callee = '__SyncMutexTryLock') or (Call.Callee = '__SyncMutexUnlock') or
+       (Call.Callee = '__SyncMutexFree') then
+    begin
+      if Call.Args.Count <> 1 then
+        Error('E0061', Format('Function "%s" expects 1 argument (handle: Pointer)', [Call.Callee]), Call.Line, Call.Col);
+      ArgType := ResolveAliasType(CheckExpr(TASTCallArg(Call.Args[0]).Expr));
+      if ArgType <> 'Pointer' then
+        Error('E0308', Format('"%s" expects Pointer, got "%s"', [Call.Callee, ArgType]), Call.Line, Call.Col);
+      if Call.Callee = '__SyncMutexTryLock' then Exit('Bool') else Exit('Void');
+    end;
+    if Call.Callee = '__SyncMutexNew' then
+    begin
+      if Call.Args.Count <> 0 then
+        Error('E0061', 'Function "__SyncMutexNew" expects 0 arguments', Call.Line, Call.Col);
+      Exit('Pointer');
+    end;
+
+    if SameText(Call.Callee, 'NewChannel') then
+    begin
+      if Call.GenericArgs.Count <> 1 then
+        Error('E0061', 'Function "NewChannel" requires 1 generic type argument, e.g. NewChannel<Int32>(cap)', Call.Line, Call.Col);
+      if Call.Args.Count <> 1 then
+        Error('E0061', 'Function "NewChannel" expects 1 argument (capacity: Int32)', Call.Line, Call.Col);
+      ChanElem := NormalizeTypeName(Call.GenericArgs[0]);
+      if not FSymbols.ResolveType(ChanElem) then
+        Error('E0412', Format('Channel element type "%s" not found', [ChanElem]), Call.Line, Call.Col);
+      ArgType := CheckExpr(TASTCallArg(Call.Args[0]).Expr);
+      if not IsIntegerType(ArgType) and (ArgType <> 'IntLiteral') then
+        Error('E0308', Format('"NewChannel" capacity must be integer, got "%s"', [ArgType]), Call.Line, Call.Col);
+      Exit('Channel<' + ChanElem + '>');
+    end;
+
+    if SameText(Call.Callee, 'Send') or SameText(Call.Callee, 'TrySend') then
+    begin
+      if Call.Args.Count <> 2 then
+        Error('E0061', Format('Function "%s" expects 2 arguments (channel, value)', [Call.Callee]), Call.Line, Call.Col);
+      ArgType := NormalizeTypeName(ResolveAliasType(CheckExpr(TASTCallArg(Call.Args[0]).Expr)));
+      ChanArgs := TStringList.Create;
+      try
+        if (not SplitGenericType(ArgType, ChanBase, ChanArgs)) or (ChanBase <> 'Channel') or (ChanArgs.Count <> 1) then
+          Error('E0308', Format('"%s" first argument must be Channel<T>, got "%s"', [Call.Callee, ArgType]), Call.Line, Call.Col);
+        ChanElem := NormalizeTypeName(ChanArgs[0]);
+      finally
+        ChanArgs.Free;
+      end;
+      Arg := TASTCallArg(Call.Args[1]);
+      AnnotateMonadExpr(Arg.Expr, ChanElem);
+      ArgType := CheckExpr(Arg.Expr);
+      AnnotateMonadExpr(Arg.Expr, ChanElem);
+      if not TypesAreCompatible(ChanElem, ArgType) then
+        Error('E0308', Format('"%s" value expects "%s", but got "%s"', [Call.Callee, ChanElem, ArgType]), Arg.Line, Arg.Col);
+      Exit('Bool');
+    end;
+
+    if SameText(Call.Callee, 'Recv') or SameText(Call.Callee, 'TryRecv') then
+    begin
+      if Call.Args.Count <> 1 then
+        Error('E0061', Format('Function "%s" expects 1 argument (channel)', [Call.Callee]), Call.Line, Call.Col);
+      ArgType := NormalizeTypeName(ResolveAliasType(CheckExpr(TASTCallArg(Call.Args[0]).Expr)));
+      ChanArgs := TStringList.Create;
+      try
+        if (not SplitGenericType(ArgType, ChanBase, ChanArgs)) or (ChanBase <> 'Channel') or (ChanArgs.Count <> 1) then
+          Error('E0308', Format('"%s" argument must be Channel<T>, got "%s"', [Call.Callee, ArgType]), Call.Line, Call.Col);
+        ChanElem := NormalizeTypeName(ChanArgs[0]);
+      finally
+        ChanArgs.Free;
+      end;
+      Call.ResolvedMonadType := 'Option<' + ChanElem + '>';
+      Exit(Call.ResolvedMonadType);
+    end;
+
+    if SameText(Call.Callee, 'CloseChannel') or SameText(Call.Callee, 'DestroyChannel') or
+       SameText(Call.Callee, 'ChannelLen') or SameText(Call.Callee, 'IsChannelEmpty') or
+       SameText(Call.Callee, 'IsChannelFull') or SameText(Call.Callee, 'IsChannelClosed') then
+    begin
+      if Call.Args.Count <> 1 then
+        Error('E0061', Format('Function "%s" expects 1 argument (channel)', [Call.Callee]), Call.Line, Call.Col);
+      ArgType := NormalizeTypeName(ResolveAliasType(CheckExpr(TASTCallArg(Call.Args[0]).Expr)));
+      ChanArgs := TStringList.Create;
+      try
+        if (not SplitGenericType(ArgType, ChanBase, ChanArgs)) or (ChanBase <> 'Channel') or (ChanArgs.Count <> 1) then
+          Error('E0308', Format('"%s" argument must be Channel<T>, got "%s"', [Call.Callee, ArgType]), Call.Line, Call.Col);
+      finally
+        ChanArgs.Free;
+      end;
+      if SameText(Call.Callee, 'CloseChannel') or SameText(Call.Callee, 'DestroyChannel') then
+        Exit('Void')
+      else if SameText(Call.Callee, 'ChannelLen') then
+        Exit('Int32')
+      else
+        Exit('Bool');
+    end;
+
     if Assigned(Sym.Node) and (Sym.Node is TASTFunction) then
     begin
       FuncNode := TASTFunction(Sym.Node);
@@ -3206,6 +3503,8 @@ begin
           Error('E0308', Format('Argument %d of function "%s" expects "%s", but got "%s"',
             [I + 1, FuncNode.Name, ExpectedType, ArgType]), Arg.Line, Arg.Col);
       end;
+      if FuncNode.IsAsync then
+        Exit('Task<' + NormalizeTypeName(FuncNode.ReturnType) + '>');
     end;
     Exit(NormalizeTypeName(Sym.TypeName));
   end;
@@ -4314,6 +4613,10 @@ begin
     CheckAssign(TASTAssignStmt(Stmt))
   else if Stmt is TASTCallStmt then
     CheckExpr(TASTCallStmt(Stmt).CallExpr)
+  else if Stmt is TASTExprStmt then
+    CheckExpr(TASTExprStmt(Stmt).Expr)
+  else if Stmt is TASTYieldStmt then
+    // Thread scheduler yield
   else if Stmt is TASTIfStmt then
     CheckIf(TASTIfStmt(Stmt))
   else if Stmt is TASTWhileStmt then
@@ -5070,6 +5373,8 @@ begin
     end
     else if S is TASTCallStmt then
       SubstituteGenericInExpr(TASTCallStmt(S).CallExpr, GenericParams, ConcreteArgs)
+    else if S is TASTExprStmt then
+      SubstituteGenericInExpr(TASTExprStmt(S).Expr, GenericParams, ConcreteArgs)
     else if S is TASTReturnStmt then
       SubstituteGenericInExpr(TASTReturnStmt(S).Expr, GenericParams, ConcreteArgs)
     else if S is TASTIfStmt then
@@ -5153,6 +5458,7 @@ begin
 
   Result := TASTFunction.Create(OriginalFunc.Line, OriginalFunc.Col, MangledName, OriginalFunc.ReturnType);
   Result.IsProcedure := OriginalFunc.IsProcedure;
+  Result.IsAsync := OriginalFunc.IsAsync;
   Result.IsPublic := OriginalFunc.IsPublic;
   Result.SourceModule := OriginalFunc.SourceModule;
   if not Result.IsProcedure then
