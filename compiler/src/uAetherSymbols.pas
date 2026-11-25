@@ -325,6 +325,7 @@ begin
   FGlobalScope.Define(TSymbol.Create('SocketPeerIP', skFunction, 'String', 0, 0));
   FGlobalScope.Define(TSymbol.Create('SocketSendHex', skFunction, 'Int32', 0, 0));
   FGlobalScope.Define(TSymbol.Create('SocketRecvHex', skFunction, 'String', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('SocketSendFile', skFunction, 'Int64', 0, 0));
 
   // OS Threading & Synchronization Primitives (Phase 53)
   FGlobalScope.Define(TSymbol.Create('__SyncAtomicNew', skFunction, 'Pointer', 0, 0));

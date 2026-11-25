@@ -3205,7 +3205,7 @@ begin
        SameText(Call.Callee, 'log') or SameText(Call.Callee, 'atan2') or SameText(Call.Callee, 'RandomFloat') or
        SameText(Call.Callee, 'StrToFloat') or (Call.Callee = 'Now') then Exit('Float64');
     if (Call.Callee = 'GetTickCount64') or (Call.Callee = 'GetNanoseconds') then Exit('UInt64');
-    if (Call.Callee = 'FileSize') then Exit('Int64');
+    if (Call.Callee = 'FileSize') or (Call.Callee = 'SocketSendFile') then Exit('Int64');
     if SameText(Call.Callee, 'Contains') or SameText(Call.Callee, 'StartsWith') or SameText(Call.Callee, 'EndsWith') or
        (Call.Callee = 'FileExists') or (Call.Callee = 'WriteFile') or (Call.Callee = 'CreateDir') or (Call.Callee = 'RemoveDir') or
        (Call.Callee = 'DeleteFile') or (Call.Callee = 'DirExists') or (Call.Callee = 'SocketSetTimeout') or
@@ -4694,6 +4694,12 @@ begin
     if Call.Callee = 'SocketRecvHex' then
     begin
       Result := 'AetherSocketRecvHex(' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + ', ' + EmitExpr(TASTCallArg(Call.Args[1]).Expr) + ')';
+      Exit;
+    end;
+
+    if Call.Callee = 'SocketSendFile' then
+    begin
+      Result := 'AetherSocketSendFile(' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + ', ' + EmitExpr(TASTCallArg(Call.Args[1]).Expr) + ')';
       Exit;
     end;
 
@@ -7668,6 +7674,7 @@ begin
     Emit('static inline char* AetherSocketPeerIP(int32_t fd) { (void)fd; char* b = (char*)malloc(10); if (b) memcpy(b, "127.0.0.1", 10); return b; }');
     Emit('static inline int32_t AetherSocketSendHex(int32_t fd, const char* h) { (void)fd; (void)h; return 0; }');
     Emit('static inline char* AetherSocketRecvHex(int32_t fd, int32_t m) { (void)fd; (void)m; char* b = (char*)malloc(1); if (b) b[0] = ''\0''; return b; }');
+    Emit('static inline int64_t AetherSocketSendFile(int32_t fd, const char* path) { (void)fd; (void)path; return -1; }');
     Emit('#else');
     Emit('#ifdef _WIN32');
     Emit('static inline void AetherSocketInit(void) {');
@@ -7749,10 +7756,15 @@ begin
     Emit('}');
     Emit('');
     Emit('static inline int32_t AetherSocketSend(int32_t fd, const char* data) {');
-    Emit('    if (!data) return 0;');
+    Emit('    if (fd < 0 || !data) return 0;');
     Emit('    size_t len = strlen(data);');
-    Emit('    if (len == 0) return 0;');
-    Emit('    return (int32_t)send(fd, data, (int)len, 0);');
+    Emit('    size_t off = 0;');
+    Emit('    while (off < len) {');
+    Emit('        int sent = send(fd, data + off, (int)(len - off), 0);');
+    Emit('        if (sent <= 0) return (off > 0) ? (int32_t)off : -1;');
+    Emit('        off += (size_t)sent;');
+    Emit('    }');
+    Emit('    return (int32_t)off;');
     Emit('}');
     Emit('');
     Emit('static inline char* AetherSocketRecv(int32_t fd, int32_t max_len) {');
@@ -7823,9 +7835,14 @@ begin
     Emit('        v = (hi << 4) | lo;');
     Emit('        buf[i] = (uint8_t)v;');
     Emit('    }');
-    Emit('    int32_t sent = (int32_t)send(fd, (const char*)buf, (int)blen, 0);');
+    Emit('    size_t off = 0;');
+    Emit('    while (off < blen) {');
+    Emit('        int32_t sent = (int32_t)send(fd, (const char*)(buf + off), (int)(blen - off), 0);');
+    Emit('        if (sent <= 0) { free(buf); return (off > 0) ? (int32_t)off : -1; }');
+    Emit('        off += (size_t)sent;');
+    Emit('    }');
     Emit('    free(buf);');
-    Emit('    return sent;');
+    Emit('    return (int32_t)off;');
     Emit('}');
     Emit('');
     Emit('static inline char* AetherSocketRecvHex(int32_t fd, int32_t max_len) {');
@@ -7846,6 +7863,29 @@ begin
     Emit('    }');
     Emit('    free(buf);');
     Emit('    return out;');
+    Emit('}');
+    Emit('');
+    Emit('static inline int64_t AetherSocketSendFile(int32_t fd, const char* path) {');
+    Emit('    if (fd < 0 || !path || !path[0]) return -1;');
+    Emit('    FILE* f = fopen(path, "rb");');
+    Emit('    if (!f) return -1;');
+    Emit('    uint8_t buf[65536];');
+    Emit('    int64_t total = 0;');
+    Emit('    size_t rd = 0;');
+    Emit('    while ((rd = fread(buf, 1, sizeof(buf), f)) > 0) {');
+    Emit('        size_t off = 0;');
+    Emit('        while (off < rd) {');
+    Emit('            int sent = send(fd, (const char*)(buf + off), (int)(rd - off), 0);');
+    Emit('            if (sent <= 0) {');
+    Emit('                fclose(f);');
+    Emit('                return -1;');
+    Emit('            }');
+    Emit('            off += (size_t)sent;');
+    Emit('            total += (int64_t)sent;');
+    Emit('        }');
+    Emit('    }');
+    Emit('    fclose(f);');
+    Emit('    return total;');
     Emit('}');
     Emit('#endif // !__wasm__');
     Emit('');

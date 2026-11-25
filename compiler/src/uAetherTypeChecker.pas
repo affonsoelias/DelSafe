@@ -3385,6 +3385,15 @@ begin
       Exit('String');
     end;
 
+    if Call.Callee = 'SocketSendFile' then
+    begin
+      if Call.Args.Count <> 2 then
+        Error('E0061', 'Function "SocketSendFile" expects 2 arguments (Fd: Int32, Path: String)', Call.Line, Call.Col);
+      CheckExpr(TASTCallArg(Call.Args[0]).Expr);
+      CheckExpr(TASTCallArg(Call.Args[1]).Expr);
+      Exit('Int64');
+    end;
+
     if SameText(Call.Callee, 'Free') or SameText(Call.Callee, 'Dispose') then
     begin
       if Call.Args.Count <> 1 then

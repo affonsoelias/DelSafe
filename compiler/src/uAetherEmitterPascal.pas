@@ -3155,7 +3155,7 @@ Begin
     );
   If (Call.Callee = 'GetTickCount64') Or (Call.Callee = 'GetNanoseconds') Then
     Exit('UInt64');
-  If (Call.Callee = 'FileSize') Then Exit('Int64');
+  If (Call.Callee = 'FileSize') Or (Call.Callee = 'SocketSendFile') Then Exit('Int64');
   If SameText(Call.Callee, 'Contains') Or SameText(Call.Callee, 'StartsWith') Or
      SameText(Call.Callee, 'EndsWith') Or
      (Call.Callee = 'FileExists') Or (Call.Callee = 'WriteFile') Or (Call.Callee
@@ -4679,6 +4679,14 @@ Begin
       If Call.Callee = 'SocketRecvHex' Then
         Begin
           Result := 'AetherSocketRecvHex(' + EmitExpr(TASTCallArg(Call.Args[0]).
+                    Expr) + ', ' + EmitExpr(TASTCallArg(Call.Args[1]).Expr) +
+                    ')';
+          Exit;
+        End;
+
+      If Call.Callee = 'SocketSendFile' Then
+        Begin
+          Result := 'AetherSocketSendFile(' + EmitExpr(TASTCallArg(Call.Args[0]).
                     Expr) + ', ' + EmitExpr(TASTCallArg(Call.Args[1]).Expr) +
                     ')';
           Exit;
@@ -7269,6 +7277,7 @@ Begin
     'function AetherSocketSendHex(Fd: LongInt; const HexData: String): LongInt;'
       );
       Emit('function AetherSocketRecvHex(Fd, MaxLen: LongInt): String;');
+      Emit('function AetherSocketSendFile(Fd: LongInt; const Path: String): Int64;');
       EmittedAny := True;
     End;
   If EmittedAny Then Emit('');
@@ -8384,9 +8393,18 @@ Begin
 
           'function AetherSocketSend(Fd: LongInt; const Data: String): LongInt;'
       );
+      Emit('var Off, Sent, Len: LongInt;');
       Emit('begin');
-      Emit('  if Length(Data) = 0 then Exit(0);');
-      Emit('  Result := Sockets.fpsend(Fd, @Data[1], Length(Data), 0);');
+      Emit('  Len := Length(Data);');
+      Emit('  if Len = 0 then Exit(0);');
+      Emit('  Off := 0;');
+      Emit('  while Off < Len do');
+      Emit('  begin');
+      Emit('    Sent := Sockets.fpsend(Fd, @Data[Off + 1], Len - Off, 0);');
+      Emit('    if Sent <= 0 then begin if Off > 0 then Exit(Off) else Exit(-1); end;');
+      Emit('    Off := Off + Sent;');
+      Emit('  end;');
+      Emit('  Result := Off;');
       Emit('end;');
       Emit('');
       Emit('function AetherSocketRecv(Fd: LongInt; MaxLen: LongInt): String;');
@@ -8464,7 +8482,7 @@ Begin
       );
       Emit('var');
       Emit('  Buf: array of Byte;');
-      Emit('  N, I: LongInt;');
+      Emit('  N, I, Off, Sent: LongInt;');
       Emit('begin');
       Emit('  N := Length(HexData) div 2;');
       Emit('  if N <= 0 then Exit(0);');
@@ -8474,7 +8492,14 @@ Begin
 
       '    Buf[I] := Byte(StrToIntDef(''$'' + Copy(HexData, I * 2 + 1, 2), 0));'
       );
-      Emit('  Result := Sockets.fpsend(Fd, @Buf[0], N, 0);');
+      Emit('  Off := 0;');
+      Emit('  while Off < N do');
+      Emit('  begin');
+      Emit('    Sent := Sockets.fpsend(Fd, @Buf[Off], N - Off, 0);');
+      Emit('    if Sent <= 0 then begin if Off > 0 then Exit(Off) else Exit(-1); end;');
+      Emit('    Off := Off + Sent;');
+      Emit('  end;');
+      Emit('  Result := Off;');
       Emit('end;');
       Emit('');
       Emit('function AetherSocketRecvHex(Fd, MaxLen: LongInt): String;');
@@ -8489,6 +8514,35 @@ Begin
       Emit('  if Bytes > 0 then');
       Emit('    for I := 0 to Bytes - 1 do');
       Emit('      Result := Result + LowerCase(IntToHex(Buf[I], 2));');
+      Emit('end;');
+      Emit('');
+      Emit('function AetherSocketSendFile(Fd: LongInt; const Path: String): Int64;');
+      Emit('var');
+      Emit('  FH: THandle;');
+      Emit('  Buf: array[0..65535] of Byte;');
+      Emit('  Rd, Off, Sent: LongInt;');
+      Emit('begin');
+      Emit('  if (Fd < 0) or (Path = '''') then Exit(-1);');
+      Emit('  FH := FileOpen(Path, fmOpenRead or fmShareDenyNone);');
+      Emit('  if FH = THandle(-1) then Exit(-1);');
+      Emit('  Result := 0;');
+      Emit('  try');
+      Emit('    Rd := FileRead(FH, Buf[0], SizeOf(Buf));');
+      Emit('    while Rd > 0 do');
+      Emit('    begin');
+      Emit('      Off := 0;');
+      Emit('      while Off < Rd do');
+      Emit('      begin');
+      Emit('        Sent := Sockets.fpsend(Fd, @Buf[Off], Rd - Off, 0);');
+      Emit('        if Sent <= 0 then Exit(-1);');
+      Emit('        Off := Off + Sent;');
+      Emit('        Result := Result + Sent;');
+      Emit('      end;');
+      Emit('      Rd := FileRead(FH, Buf[0], SizeOf(Buf));');
+      Emit('    end;');
+      Emit('  finally');
+      Emit('    FileClose(FH);');
+      Emit('  end;');
       Emit('end;');
       Emit('{$ELSE}');
       Emit('function AetherSocketCreate(): LongInt; begin Result := -1; end;');
@@ -8528,6 +8582,10 @@ Begin
       Emit(
 
 'function AetherSocketRecvHex(Fd, MaxLen: LongInt): String; begin Result := ''''; end;'
+      );
+      Emit(
+
+'function AetherSocketSendFile(Fd: LongInt; const Path: String): Int64; begin Result := -1; end;'
       );
       Emit('{$ENDIF}');
       Emit('');
