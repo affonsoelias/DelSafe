@@ -18,8 +18,21 @@
 
 ## Quickstart in 60 Seconds
 
+### Prerequisites
+
+- **[Free Pascal Compiler (FPC 3.2+)](https://www.freepascal.org/)** *(Required)* — Builds `aetherc` from source and powers the default Object Pascal backend (`--target=pascal`).
+- **[MSYS2](https://www.msys2.org/) (UCRT64) with GCC, Clang & `pkg-config`** *(Recommended on Windows)* — Required on Windows for the native C99 backend (`--target=c`, `--cc=gcc` or `--cc=clang`), WebAssembly compilation (`--target=wasm` via Clang), native C FFI resolution (`--sys-lib`, `aetherc pkg add-sys`), and automatic MSYS2 DLL bundling (`--bundle-dlls`):
+  ```bash
+  # Inside the MSYS2 UCRT64 terminal:
+  pacman -S --needed mingw-w64-ucrt-x86_64-gcc mingw-w64-ucrt-x86_64-clang mingw-w64-ucrt-x86_64-lld mingw-w64-ucrt-x86_64-pkgconf
+  ```
+  Add `C:\msys64\ucrt64\bin` to your Windows `PATH` so `gcc`, `clang`, and `pkg-config` are discovered automatically.
+- **GCC / Clang & `pkg-config` on Linux / macOS** *(Recommended)* — Install via your system package manager (e.g., `sudo apt install fp-compiler gcc clang lld pkg-config` on Debian/Ubuntu, or `brew install fpc llvm pkg-config` on macOS).
+- **Pas2JS** *(Optional)* — Needed only for JavaScript output (`--target=js`; pre-bundled when using [BlaiseVue](https://github.com/affonsoelias/BlaiseVue)).
+
+After building, run `./bin/aetherc --doctor` to verify your detected toolchains (`FPC`, `GCC`, `Clang`, `MSYS2`, `pkg-config`, and `Pas2JS`).
+
 ### Building the Compiler
-Prerequisites: [Free Pascal Compiler (FPC 3.2+)](https://www.freepascal.org/).
 
 ```bash
 # Windows (PowerShell or CMD)
