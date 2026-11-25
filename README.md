@@ -12,7 +12,7 @@
 - **Structured Concurrency**: Native lightweight coroutines with `async function`, `await`, and `Task<T>`.
 - **Native OS Sockets & HTTP**: Kernel-level socket abstractions with zero-copy request handling (`std/net.aeth`).
 - **BlaiseVue Ready**: Seamless unit generation (`--unit`) and home to **Zephyr**, BlaiseVue's native high-performance backend.
-- **Built-in Developer Tooling**: Embedded Language Server (`aetherc lsp`), benchmark runner (`aetherc bench`), documentation generator (`aetherc doc`), and package management.
+- **Built-in Developer Tooling**: Embedded Language Server (`aetherc lsp`), benchmark runner (`aetherc bench`), documentation generator (`aetherc doc`), and package management via **[aether-ecosystem](https://github.com/affonsoelias/aether-ecosystem)**.
 
 ---
 
@@ -128,6 +128,13 @@ Aether uses a streamlined single-branch workflow during pre-1.0 development:
 - [Roadmap & Development Plan](docs/planning/DEVELOPMENT_ROADMAP.md)
 - [Language Specification](docs/technical/LANGUAGE_SPECIFICATION.md)
 - [BlaiseVue & Zephyr Integration](docs/technical/BLAISEVUE_AND_PASCAL_INTEGRATION.md)
+
+---
+
+## Ecosystem & Related Repositories
+
+- **[Aether Ecosystem (`affonsoelias/aether-ecosystem`)](https://github.com/affonsoelias/aether-ecosystem)** — Official package registry (`registry/index.json`) and community ecosystem index for AetherLang.
+- **[BlaiseVue (`affonsoelias/BlaiseVue`)](https://github.com/affonsoelias/BlaiseVue)** — Universal Object Pascal reactive framework powered by optional Aether interop and the native **Zephyr** backend.
 
 ---
 
