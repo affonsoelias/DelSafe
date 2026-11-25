@@ -68,9 +68,11 @@ Begin
   WriteLn('  bootstrap         Run full self-hosting cycle (Stage 1, 2, and 3)');
   WriteLn('');
   WriteLn('Code Emission and Inspection Commands (BlaiseVue Integration):');
-  WriteLn('  emit <pascal|c> [file] [options]');
-  WriteLn('                    Emit transpiled code into generated/ or a custom directory');
+  WriteLn('  emit <pascal|c|wasm|runtime> [file] [options]');
+  WriteLn('                    Emit transpiled code, Wasm binary, or shared runtime unit');
   WriteLn('    --unit          Generate in Free Pascal Unit format (unit/interface/implementation)');
+  WriteLn('    --shared-runtime Generate/use shared uAetherRuntime.pas with --unit (BlaiseVue)');
+  WriteLn('    --manifest      Generate .wasm.json export manifest alongside .wasm');
   WriteLn('    --out-dir=<dir> Specify the destination directory for generated files (-d)');
   WriteLn('    --stdout        Print the code directly to the console without saving to disk');
   WriteLn('    --silent, -s    Silent headless mode for external tooling and pipelines');
@@ -245,6 +247,10 @@ Var
   GlobalEmitHtmlWrapper: Boolean = False;
   GlobalOptionSharedLib: Boolean = False;
   GlobalEmitHeader: Boolean = False;
+  GlobalSharedRuntime: Boolean = False;
+  GlobalSourceFileDisplay: string = '';
+  GlobalLineOffset: Integer = 0;
+  GlobalEmitWasmManifest: Boolean = False;
 
 Procedure InitGlobalPaths;
 Begin
@@ -441,6 +447,32 @@ Begin
   Else If (Arg = '--no-bundle-dlls') Then
   Begin
     GlobalBundleDlls := False;
+  End
+  Else If (Arg = '--shared-runtime') Then
+  Begin
+    GlobalSharedRuntime := True;
+  End
+  Else If (Arg = '--wasm-manifest') Or (Arg = '--manifest') Then
+  Begin
+    GlobalEmitWasmManifest := True;
+  End
+  Else If (Arg = '--source-file') And (I + 1 <= ParamCount) Then
+  Begin
+    Inc(I);
+    GlobalSourceFileDisplay := ParamStr(I);
+  End
+  Else If Pos('--source-file=', Arg) = 1 Then
+  Begin
+    GlobalSourceFileDisplay := Copy(Arg, 15, Length(Arg));
+  End
+  Else If (Arg = '--line-offset') And (I + 1 <= ParamCount) Then
+  Begin
+    Inc(I);
+    GlobalLineOffset := StrToIntDef(ParamStr(I), 0);
+  End
+  Else If Pos('--line-offset=', Arg) = 1 Then
+  Begin
+    GlobalLineOffset := StrToIntDef(Copy(Arg, 15, Length(Arg)), 0);
   End
   Else
     Result := False;
@@ -851,6 +883,112 @@ Begin
   Result := Trim(Base);
 End;
 
+Procedure WriteRuntimeUnitIfNeeded(Const DestDir: String; Silent: Boolean);
+Var
+  RuntimePath, Content, Existing: string;
+  SL: TStringList;
+Begin
+  If DestDir <> '' Then ForceDirectories(DestDir);
+  RuntimePath := IncludeTrailingPathDelimiter(DestDir) + 'uAetherRuntime.pas';
+  Content := TAetherEmitterPascal.GenerateRuntimeUnit;
+  Existing := '';
+  If FileExists(RuntimePath) Then
+  Begin
+    SL := TStringList.Create;
+    Try
+      SL.LoadFromFile(RuntimePath);
+      Existing := SL.Text;
+    Finally
+      SL.Free;
+    End;
+  End;
+  If (Not FileExists(RuntimePath)) Or (Existing <> Content) Then
+  Begin
+    SL := TStringList.Create;
+    Try
+      SL.Text := Content;
+      SL.SaveToFile(RuntimePath);
+      If Not Silent Then
+        WriteLn('  --> ' + RuntimePath + ' (Shared Runtime Unit)');
+    Finally
+      SL.Free;
+    End;
+  End;
+End;
+
+Procedure SaveWasmManifestToFile(ModuleNode: TASTModule; Const WasmFilePath, ManifestPath: String);
+Var
+  Lines: TStringList;
+  I, J, ExportIdx, ExportTotal: Integer;
+  Func: TASTFunction;
+  Param: TASTParam;
+  RetTypeStr: string;
+Begin
+  Lines := TStringList.Create;
+  Try
+    Lines.Add('{');
+    Lines.Add('  "schema_version": "1.0",');
+    Lines.Add(Format('  "module": "%s",', [EscapeJSONString(ModuleNode.Name)]));
+    Lines.Add(Format('  "wasm_file": "%s",', [EscapeJSONString(ExtractFileName(WasmFilePath))]));
+    Lines.Add('  "exports": [');
+
+    ExportTotal := 0;
+    For I := 0 To ModuleNode.Functions.Count - 1 Do
+    Begin
+      Func := TASTFunction(ModuleNode.Functions[I]);
+      If (Func.SourceModule = '') And (Not Func.IsExtern) And
+         (Func.GenericParams.Count = 0) And (Func.GenericParam = '') And
+         (Func.IsExport Or Func.IsPublic Or ModuleNode.IsUnit) Then
+        Inc(ExportTotal);
+    End;
+
+    ExportIdx := 0;
+    For I := 0 To ModuleNode.Functions.Count - 1 Do
+    Begin
+      Func := TASTFunction(ModuleNode.Functions[I]);
+      If (Func.SourceModule = '') And (Not Func.IsExtern) And
+         (Func.GenericParams.Count = 0) And (Func.GenericParam = '') And
+         (Func.IsExport Or Func.IsPublic Or ModuleNode.IsUnit) Then
+      Begin
+        Inc(ExportIdx);
+        If Func.IsProcedure Or (Func.ReturnType = '') Then
+          RetTypeStr := 'Void'
+        Else
+          RetTypeStr := Func.ReturnType;
+        Lines.Add('    {');
+        Lines.Add(Format('      "name": "%s",', [EscapeJSONString(Func.Name)]));
+        If Func.IsProcedure Then
+          Lines.Add('      "is_procedure": true,')
+        Else
+          Lines.Add('      "is_procedure": false,');
+        Lines.Add(Format('      "return_type": "%s",', [EscapeJSONString(RetTypeStr)]));
+        Lines.Add('      "params": [');
+        For J := 0 To Func.Params.Count - 1 Do
+        Begin
+          Param := TASTParam(Func.Params[J]);
+          If J < Func.Params.Count - 1 Then
+            Lines.Add(Format('        { "name": "%s", "type": "%s" },', [EscapeJSONString(Param.Name), EscapeJSONString(Param.TypeName)]))
+          Else
+            Lines.Add(Format('        { "name": "%s", "type": "%s" }', [EscapeJSONString(Param.Name), EscapeJSONString(Param.TypeName)]));
+        End;
+        Lines.Add('      ]');
+        If ExportIdx < ExportTotal Then
+          Lines.Add('    },')
+        Else
+          Lines.Add('    }');
+      End;
+    End;
+
+    Lines.Add('  ]');
+    Lines.Add('}');
+    If ExtractFileDir(ManifestPath) <> '' Then
+      ForceDirectories(ExtractFileDir(ManifestPath));
+    Lines.SaveToFile(ManifestPath);
+  Finally
+    Lines.Free;
+  End;
+End;
+
 Function IsBuiltinCrtOrOsLib(Const NormLib: String): Boolean;
 Var
   LowLib: string;
@@ -1010,7 +1148,7 @@ Begin
   End;
 
   Source := LoadFileContent(SourceFile);
-  Lexer := TAetherLexer.Create(Source);
+  Lexer := TAetherLexer.Create(Source, 1 + GlobalLineOffset);
   Parser := TAetherParser.Create(Lexer);
   Try
     ModuleNode := Parser.ParseModule;
@@ -1028,8 +1166,9 @@ Begin
     CleanBase := StringReplace(CleanBase, '_', '', [rfReplaceAll]);
     CleanMod := StringReplace(ModuleNode.Name, '_', '', [rfReplaceAll]);
 
-    If Not SameText(FileBase, ModuleNode.Name) And Not SameText(CleanBase,
-       CleanMod) Then
+    If (GlobalSourceFileDisplay = '') And
+       (Not SameText(FileBase, ModuleNode.Name)) And
+       (Not SameText(CleanBase, CleanMod)) Then
       raise Exception.CreateFmt(
 
 '[Module Error E0005 at %s]: Declared module name "%s" differs from file name "%s.aeth". In Aether, the module name must match the file name.'
@@ -1247,11 +1386,15 @@ Begin
   Begin
     If Incremental Then
       SaveBuildCache(BaseProjDir, SourceFile, TargetBackendStr, FinalExe, DependencyFiles);
+    If GlobalEmitWasmManifest Then
+      SaveWasmManifestToFile(ModuleNode, FinalExe, ChangeFileExt(FinalExe, '.wasm.json'));
     If Not SilentBanner Then
     Begin
       WriteLn('');
       WriteLn('SUCCESS! WebAssembly module (.wasm) generated via Clang:');
       WriteLn('  --> ' + FinalExe);
+      If GlobalEmitWasmManifest Then
+        WriteLn('  --> ' + ChangeFileExt(FinalExe, '.wasm.json') + ' (Wasm Manifest)');
       If GlobalEmitHtmlWrapper Then
       Begin
         GenerateWasmHtmlWrapper(FinalExe, ChangeFileExt(FinalExe, '.html'));
@@ -1409,10 +1552,12 @@ Begin
   IntermediateFile := GenDir + PathDelim + ChangeFileExt(ExtractFileName(SourceFile), '.pas');
   EmitterPas := TAetherEmitterPascal.Create;
   Try
-    GeneratedCode := EmitterPas.Generate(ModuleNode, GlobalAsUnit, AsLibrary Or GlobalOptionSharedLib);
+    GeneratedCode := EmitterPas.Generate(ModuleNode, GlobalAsUnit, AsLibrary Or GlobalOptionSharedLib, GlobalSharedRuntime);
   Finally
     EmitterPas.Free;
   End;
+  If GlobalAsUnit And GlobalSharedRuntime Then
+    WriteRuntimeUnitIfNeeded(GenDir, SilentBanner);
 
   CodeFile := TStringList.Create;
   Try
@@ -1508,7 +1653,8 @@ Begin
 End;
 
 Procedure EmitFile(Const SourceFile: String; TargetPascal: Boolean; Const CustomOutput: String;
-                   Const CustomOutDir: String; AsUnit: Boolean; ToStdout: Boolean; Silent: Boolean);
+                   Const CustomOutDir: String; AsUnit: Boolean; ToStdout: Boolean; Silent: Boolean;
+                   SharedRuntime: Boolean = False);
 Var 
   Source: string;
   Lexer: TAetherLexer;
@@ -1527,7 +1673,7 @@ Var
 Begin
   ModuleNode := nil;
   Source := LoadFileContent(SourceFile);
-  Lexer := TAetherLexer.Create(Source);
+  Lexer := TAetherLexer.Create(Source, 1 + GlobalLineOffset);
   Parser := TAetherParser.Create(Lexer);
   Try
     ModuleNode := Parser.ParseModule;
@@ -1545,7 +1691,9 @@ Begin
     CleanBase := StringReplace(CleanBase, '_', '', [rfReplaceAll]);
     CleanMod := StringReplace(ModuleNode.Name, '_', '', [rfReplaceAll]);
 
-    If Not SameText(FileBase, ModuleNode.Name) And Not SameText(CleanBase, CleanMod) Then
+    If (GlobalSourceFileDisplay = '') And
+       (Not SameText(FileBase, ModuleNode.Name)) And
+       (Not SameText(CleanBase, CleanMod)) Then
       raise Exception.CreateFmt(
         '[Module Error E0005 at %s]: Declared module name "%s" differs from file name "%s.aeth". In Aether, the module name must match the file name.',
         [ExtractFileName(SourceFile), ModuleNode.Name, FileBase]);
@@ -1574,7 +1722,7 @@ Begin
     Begin
       EmitterPas := TAetherEmitterPascal.Create;
       Try
-        GeneratedCode := EmitterPas.Generate(ModuleNode, AsUnit);
+        GeneratedCode := EmitterPas.Generate(ModuleNode, AsUnit, False, SharedRuntime);
       Finally
         EmitterPas.Free;
       End;
@@ -1640,6 +1788,9 @@ Begin
     Finally
       CodeFile.Free;
     End;
+
+    If TargetPascal And AsUnit And SharedRuntime Then
+      WriteRuntimeUnitIfNeeded(ExtractFileDir(FinalTargetFile), Silent);
 
     If Not Silent Then
     Begin
@@ -2262,7 +2413,8 @@ Var
   BenchIters, ProfileRuns: Integer;
   TargetEntry, TargetOut, TargetBackend, TargetCC: string;
   EmitTargetPascal, EmitToStdout, HasTargetSpecified, EmitAsUnit, EmitSilent, EmitWatch: Boolean;
-  EmitSource, EmitOut, EmitOutDir: string;
+  EmitSource, EmitOut, EmitOutDir, EmitKind, DisplaySrcFile: string;
+  EmitManifest, EmitRelease: Boolean;
   UpgradeOpts: TUpgradeOptions;
   OptionTargetAll, OkPas, OkC, TestOk: Boolean;
   PasPass, PasFail, PasTotal, CPass, CFail, CTotal: Integer;
@@ -2413,10 +2565,11 @@ Begin
       End;
     End;
 
-  // Check emit command: emit <pascal|c> [file] [options]
+  // Check emit command: emit <pascal|c|wasm|runtime> [file] [options]
   If (ParamCount >= 1) And (LowerCase(ParamStr(1)) = 'emit') Then
     Begin
       EmitTargetPascal := True;
+      EmitKind := 'pascal';
       EmitSource := '';
       EmitOut := '';
       EmitOutDir := '';
@@ -2424,6 +2577,8 @@ Begin
       EmitAsUnit := False;
       EmitSilent := False;
       EmitWatch := False;
+      EmitManifest := False;
+      EmitRelease := False;
       HasTargetSpecified := False;
 
       I := 2;
@@ -2433,25 +2588,68 @@ Begin
           If LowerCase(Arg) = 'pascal' Then
             Begin
               EmitTargetPascal := True;
+              EmitKind := 'pascal';
               HasTargetSpecified := True;
             End
           Else If LowerCase(Arg) = 'c' Then
             Begin
               EmitTargetPascal := False;
+              EmitKind := 'c';
+              HasTargetSpecified := True;
+            End
+          Else If LowerCase(Arg) = 'wasm' Then
+            Begin
+              EmitKind := 'wasm';
+              HasTargetSpecified := True;
+            End
+          Else If LowerCase(Arg) = 'runtime' Then
+            Begin
+              EmitKind := 'runtime';
               HasTargetSpecified := True;
             End
           Else If Arg = '--target=pascal' Then
             Begin
               EmitTargetPascal := True;
+              EmitKind := 'pascal';
               HasTargetSpecified := True;
             End
           Else If Arg = '--target=c' Then
             Begin
               EmitTargetPascal := False;
+              EmitKind := 'c';
+              HasTargetSpecified := True;
+            End
+          Else If Arg = '--target=wasm' Then
+            Begin
+              EmitKind := 'wasm';
               HasTargetSpecified := True;
             End
           Else If Arg = '--unit' Then
             EmitAsUnit := True
+          Else If Arg = '--shared-runtime' Then
+            GlobalSharedRuntime := True
+          Else If (Arg = '--manifest') Or (Arg = '--wasm-manifest') Then
+            EmitManifest := True
+          Else If Arg = '--release' Then
+            EmitRelease := True
+          Else If Arg = '--html' Then
+            GlobalEmitHtmlWrapper := True
+          Else If (Arg = '--emit-json-diag') Or (Arg = '--emit-json-diagnostics') Then
+            OptionJSONDiag := True
+          Else If (Arg = '--source-file') And (I + 1 <= ParamCount) Then
+            Begin
+              Inc(I);
+              GlobalSourceFileDisplay := ParamStr(I);
+            End
+          Else If Pos('--source-file=', Arg) = 1 Then
+            GlobalSourceFileDisplay := Copy(Arg, 15, Length(Arg))
+          Else If (Arg = '--line-offset') And (I + 1 <= ParamCount) Then
+            Begin
+              Inc(I);
+              GlobalLineOffset := StrToIntDef(ParamStr(I), 0);
+            End
+          Else If Pos('--line-offset=', Arg) = 1 Then
+            GlobalLineOffset := StrToIntDef(Copy(Arg, 15, Length(Arg)), 0)
           Else If (Arg = '--silent') Or (Arg = '-s') Then
             EmitSilent := True
           Else If (Arg = '--watch') Or (Arg = '-w') Then
@@ -2474,6 +2672,9 @@ Begin
             End
           Else If Pos('-o', Arg) = 1 Then
             EmitOut := Copy(Arg, 3, Length(Arg))
+          Else If ParsePathFlag(Arg, I) Then
+          Begin
+          End
           Else If (Length(Arg) > 0) And (Arg[1] <> '-') Then
             Begin
               If EmitSource = '' Then EmitSource := Arg;
@@ -2481,18 +2682,37 @@ Begin
           Inc(I);
         End;
 
+      If EmitKind = 'runtime' Then
+        Begin
+          If EmitToStdout Then
+            Begin
+              Write(TAetherEmitterPascal.GenerateRuntimeUnit);
+              Halt(0);
+            End;
+          If EmitOutDir = '' Then
+            EmitOutDir := GetCurrentDir + PathDelim + 'generated' + PathDelim + 'pascal';
+          If Not EmitSilent Then PrintBanner;
+          WriteRuntimeUnitIfNeeded(EmitOutDir, EmitSilent);
+          Halt(0);
+        End;
+
       If LoadProjectConfig(ProjConfig) Then
         Begin
           If EmitSource = '' Then
             EmitSource := ProjConfig.RootDir + PathDelim + StringReplace(ProjConfig.Entry, '/', PathDelim, [rfReplaceAll]);
           If Not HasTargetSpecified Then
+          Begin
             EmitTargetPascal := ProjConfig.Backend <> 'c';
+            If EmitTargetPascal Then EmitKind := 'pascal' Else EmitKind := 'c';
+          End;
           If EmitOutDir = '' Then
             Begin
-              If EmitTargetPascal And (ProjConfig.Outputs.PascalSrcDir <> '') Then
+              If (EmitKind = 'pascal') And (ProjConfig.Outputs.PascalSrcDir <> '') Then
                 EmitOutDir := ProjConfig.RootDir + PathDelim + ProjConfig.Outputs.PascalSrcDir
-              Else If (Not EmitTargetPascal) And (ProjConfig.Outputs.CSrcDir <> '') Then
-                EmitOutDir := ProjConfig.RootDir + PathDelim + ProjConfig.Outputs.CSrcDir;
+              Else If (EmitKind = 'c') And (ProjConfig.Outputs.CSrcDir <> '') Then
+                EmitOutDir := ProjConfig.RootDir + PathDelim + ProjConfig.Outputs.CSrcDir
+              Else If (EmitKind = 'wasm') And (ProjConfig.Outputs.BinDir <> '') Then
+                EmitOutDir := ProjConfig.RootDir + PathDelim + ProjConfig.Outputs.BinDir;
             End;
           If ProjConfig.Outputs.AsUnit Then
             EmitAsUnit := True;
@@ -2501,12 +2721,72 @@ Begin
       Else If EmitSource = '' Then
         Begin
           WriteLn(ErrOutput, 'Error: No source file specified and no "aether.json" found.');
-          WriteLn(ErrOutput, 'Usage: aetherc emit <pascal|c> [file.aeth] [--unit] [--out-dir=dir] [--stdout]');
+          WriteLn(ErrOutput, 'Usage: aetherc emit <pascal|c|wasm|runtime> [file.aeth] [--unit] [--shared-runtime] [--out-dir=dir] [--stdout]');
           Halt(1);
         End;
 
-      If (Not EmitToStdout) And (Not EmitSilent) And (Not EmitWatch) Then
+      If GlobalSourceFileDisplay <> '' Then
+        DisplaySrcFile := GlobalSourceFileDisplay
+      Else
+        DisplaySrcFile := EmitSource;
+
+      If (Not EmitToStdout) And (Not EmitSilent) And (Not EmitWatch) And (Not OptionJSONDiag) Then
         PrintBanner;
+
+      If EmitKind = 'wasm' Then
+        Begin
+          If EmitOutDir <> '' Then
+            GlobalOutBinDir := ExcludeTrailingPathDelimiter(EmitOutDir);
+          GlobalEmitWasmManifest := GlobalEmitWasmManifest Or EmitManifest;
+          Try
+            CompileFile(EmitSource, 'wasm', False, False, EmitOut,
+                        EmitSilent Or OptionJSONDiag, False, False,
+                        EmitRelease, EmitRelease, 'clang', 'clang', False, False);
+            Halt(0);
+          Except
+            on E: EAetherBorrowError Do
+              Begin
+                If OptionJSONDiag Then
+                  WriteLn(GenerateJSONDiagnostic(DisplaySrcFile, 'Error', E.Code, E.Message, E.Line, E.Col, E.MovedLine, E.MovedCol,
+                    'borrow_instead_of_move', 'Change the call to "borrow" if ownership transfer is not required.', 'borrow'))
+                Else
+                  WriteLn(ErrOutput, 'WebAssembly build error: ', E.Message);
+                Halt(1);
+              End;
+            on E: EAetherTypeError Do
+              Begin
+                If OptionJSONDiag Then
+                  WriteLn(GenerateJSONDiagnostic(DisplaySrcFile, 'Error', E.Code, E.Message, E.Line, E.Col))
+                Else
+                  WriteLn(ErrOutput, 'WebAssembly build error: ', E.Message);
+                Halt(1);
+              End;
+            on E: EAetherParserError Do
+              Begin
+                If OptionJSONDiag Then
+                  WriteLn(GenerateJSONDiagnostic(DisplaySrcFile, 'Error', 'E0001', E.Message, E.Line, E.Col))
+                Else
+                  WriteLn(ErrOutput, 'WebAssembly build error: ', E.Message);
+                Halt(1);
+              End;
+            on E: EAetherLexerError Do
+              Begin
+                If OptionJSONDiag Then
+                  WriteLn(GenerateJSONDiagnostic(DisplaySrcFile, 'Error', 'E0000', E.Message, E.Line, E.Col))
+                Else
+                  WriteLn(ErrOutput, 'WebAssembly build error: ', E.Message);
+                Halt(1);
+              End;
+            on E: Exception Do
+              Begin
+                If OptionJSONDiag Then
+                  WriteLn(GenerateJSONDiagnostic(DisplaySrcFile, 'Error', 'E9999', E.Message, 1 + GlobalLineOffset, 1))
+                Else
+                  WriteLn(ErrOutput, 'WebAssembly build error: ', E.Message);
+                Halt(1);
+              End;
+          End;
+        End;
 
       If EmitWatch Then
         Begin
@@ -2515,12 +2795,48 @@ Begin
         End;
 
       Try
-        EmitFile(EmitSource, EmitTargetPascal, EmitOut, EmitOutDir, EmitAsUnit, EmitToStdout, EmitSilent);
+        EmitFile(EmitSource, EmitTargetPascal, EmitOut, EmitOutDir, EmitAsUnit, EmitToStdout, EmitSilent, GlobalSharedRuntime);
         Halt(0);
       Except
+        on E: EAetherBorrowError Do
+          Begin
+            If OptionJSONDiag Then
+              WriteLn(GenerateJSONDiagnostic(DisplaySrcFile, 'Error', E.Code, E.Message, E.Line, E.Col, E.MovedLine, E.MovedCol,
+                'borrow_instead_of_move', 'Change the call to "borrow" if ownership transfer is not required.', 'borrow'))
+            Else
+              WriteLn(ErrOutput, 'Code generation error: ', E.Message);
+            Halt(1);
+          End;
+        on E: EAetherTypeError Do
+          Begin
+            If OptionJSONDiag Then
+              WriteLn(GenerateJSONDiagnostic(DisplaySrcFile, 'Error', E.Code, E.Message, E.Line, E.Col))
+            Else
+              WriteLn(ErrOutput, 'Code generation error: ', E.Message);
+            Halt(1);
+          End;
+        on E: EAetherParserError Do
+          Begin
+            If OptionJSONDiag Then
+              WriteLn(GenerateJSONDiagnostic(DisplaySrcFile, 'Error', 'E0001', E.Message, E.Line, E.Col))
+            Else
+              WriteLn(ErrOutput, 'Code generation error: ', E.Message);
+            Halt(1);
+          End;
+        on E: EAetherLexerError Do
+          Begin
+            If OptionJSONDiag Then
+              WriteLn(GenerateJSONDiagnostic(DisplaySrcFile, 'Error', 'E0000', E.Message, E.Line, E.Col))
+            Else
+              WriteLn(ErrOutput, 'Code generation error: ', E.Message);
+            Halt(1);
+          End;
         on E: Exception Do
           Begin
-            WriteLn(ErrOutput, 'Code generation error: ', E.Message);
+            If OptionJSONDiag Then
+              WriteLn(GenerateJSONDiagnostic(DisplaySrcFile, 'Error', 'E9999', E.Message, 1 + GlobalLineOffset, 1))
+            Else
+              WriteLn(ErrOutput, 'Code generation error: ', E.Message);
             Halt(1);
           End;
       End;
@@ -3441,6 +3757,11 @@ Try
   If OptionDumpTokens Then
     DumpTokens(InputFile);
 
+  If GlobalSourceFileDisplay <> '' Then
+    DisplaySrcFile := GlobalSourceFileDisplay
+  Else
+    DisplaySrcFile := InputFile;
+
   CompileFile(InputFile, GlobalTargetKind, OptionCheckOnly, OptionDumpAST,
               OutputExe, OptionJSONDiag, OptionIncremental, OptionForce,
               OptionRelease, OptionOptimize, GlobalBackendOverride, GlobalCCompiler,
@@ -3449,7 +3770,7 @@ Except
   on E: EAetherBorrowError Do
         Begin
           If OptionJSONDiag Then
-            WriteLn(GenerateJSONDiagnostic(InputFile, 'Error', E.Code, E.Message
+            WriteLn(GenerateJSONDiagnostic(DisplaySrcFile, 'Error', E.Code, E.Message
                     , E.Line, E.Col, E.MovedLine, E.MovedCol,
                     'borrow_instead_of_move',
 
@@ -3462,7 +3783,7 @@ Except
   on E: EAetherTypeError Do
         Begin
           If OptionJSONDiag Then
-            WriteLn(GenerateJSONDiagnostic(InputFile, 'Error', E.Code, E.Message
+            WriteLn(GenerateJSONDiagnostic(DisplaySrcFile, 'Error', E.Code, E.Message
                     , E.Line, E.Col))
           Else
             WriteLn(ErrOutput, 'Compilation Error: ', E.Message);
@@ -3471,7 +3792,7 @@ Except
   on E: EAetherParserError Do
         Begin
           If OptionJSONDiag Then
-            WriteLn(GenerateJSONDiagnostic(InputFile, 'Error', 'E0001', E.
+            WriteLn(GenerateJSONDiagnostic(DisplaySrcFile, 'Error', 'E0001', E.
                     Message, E.Line, E.Col))
           Else
             WriteLn(ErrOutput, 'Compilation Error: ', E.Message);
@@ -3480,7 +3801,7 @@ Except
   on E: EAetherLexerError Do
         Begin
           If OptionJSONDiag Then
-            WriteLn(GenerateJSONDiagnostic(InputFile, 'Error', 'E0000', E.
+            WriteLn(GenerateJSONDiagnostic(DisplaySrcFile, 'Error', 'E0000', E.
                     Message, E.Line, E.Col))
           Else
             WriteLn(ErrOutput, 'Compilation Error: ', E.Message);
@@ -3489,8 +3810,8 @@ Except
   on E: Exception Do
         Begin
           If OptionJSONDiag Then
-            WriteLn(GenerateJSONDiagnostic(InputFile, 'Error', 'E9999', E.
-                    Message, 1, 1))
+            WriteLn(GenerateJSONDiagnostic(DisplaySrcFile, 'Error', 'E9999', E.
+                    Message, 1 + GlobalLineOffset, 1))
           Else
             WriteLn(ErrOutput, 'Compilation Error: ', E.Message);
           Halt(1);

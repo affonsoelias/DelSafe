@@ -35,4 +35,4 @@ Formal specifications and compiler architecture:
 
 ### 4. [Roadmap & Planning](planning/)
 Project evolution, milestones, and design records:
-- **[Development Roadmap](planning/ROADMAP_DE_DESENVOLVIMENTO.md):** Complete project phase history and future ecosystem milestones.
+- **[Development Roadmap](planning/DEVELOPMENT_ROADMAP.md):** Complete project phase history and future ecosystem milestones.

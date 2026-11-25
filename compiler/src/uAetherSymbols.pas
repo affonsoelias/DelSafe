@@ -281,6 +281,8 @@ begin
   FGlobalScope.Define(TSymbol.Create('__JsonGetObj', skFunction, 'String', 0, 0));
   FGlobalScope.Define(TSymbol.Create('CharToStr', skFunction, 'String', 0, 0));
   FGlobalScope.Define(TSymbol.Create('CharAt', skFunction, 'String', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('ByteAt', skFunction, 'Int32', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('CharFromByte', skFunction, 'String', 0, 0));
   FGlobalScope.Define(TSymbol.Create('Substring', skFunction, 'String', 0, 0));
   FGlobalScope.Define(TSymbol.Create('FileExists', skFunction, 'Bool', 0, 0));
   FGlobalScope.Define(TSymbol.Create('ReadFile', skFunction, 'String', 0, 0));
@@ -319,6 +321,10 @@ begin
   FGlobalScope.Define(TSymbol.Create('SocketSend', skFunction, 'Int32', 0, 0));
   FGlobalScope.Define(TSymbol.Create('SocketRecv', skFunction, 'String', 0, 0));
   FGlobalScope.Define(TSymbol.Create('SocketClose', skFunction, 'Void', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('SocketSetTimeout', skFunction, 'Bool', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('SocketPeerIP', skFunction, 'String', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('SocketSendHex', skFunction, 'Int32', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('SocketRecvHex', skFunction, 'String', 0, 0));
 
   // OS Threading & Synchronization Primitives (Phase 53)
   FGlobalScope.Define(TSymbol.Create('__SyncAtomicNew', skFunction, 'Pointer', 0, 0));

@@ -6,7 +6,7 @@
 
 param(
     [string]$Version = "",
-    [string]$Repo = $(if ($env:AETHER_UPGRADE_REPO) { $env:AETHER_UPGRADE_REPO } else { "aetherlang/aether" }),
+    [string]$Repo = $(if ($env:AETHER_UPGRADE_REPO) { $env:AETHER_UPGRADE_REPO } else { "affonsoelias/aether" }),
     [string]$InstallRoot = $(Join-Path $env:USERPROFILE ".aether"),
     [switch]$Nightly,
     [switch]$AllowUnsigned,

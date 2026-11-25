@@ -34,6 +34,10 @@ function SocketConnectClient(borrow h: String; borrow p: UInt32) return Socket;
 function SocketSendString(borrow s: Socket; borrow payload: String) return Int32;
 function SocketRecvString(borrow s: Socket; borrow max_len: Int32) return String;
 procedure SocketCloseHandle(mut borrow s: Socket);
+function SocketSetTimeoutMs(borrow s: Socket; read_ms, write_ms: Int32) return Bool;
+function SocketGetPeerIP(borrow s: Socket) return String;
+function SocketSendRawHex(borrow s: Socket; borrow hex_bytes: String) return Int32;
+function SocketRecvRawHex(borrow s: Socket; max_len: Int32) return String;
 function BuildHttpRequest(borrow method, host, path: String) return String;
 function BuildHttpResponse(borrow status_code: UInt32; borrow content_type, body: String) return String;
 function ParseHttpRequest(borrow raw_request: String; mut borrow out_req: HttpRequest) return Bool;
@@ -138,6 +142,38 @@ begin
         s.fd := -1;
     end if;
 end SocketCloseHandle;
+
+function SocketSetTimeoutMs(borrow s: Socket; read_ms, write_ms: Int32) return Bool is
+begin
+    if not s.is_open then
+        return false;
+    end if;
+    return SocketSetTimeout(s.fd, read_ms, write_ms);
+end SocketSetTimeoutMs;
+
+function SocketGetPeerIP(borrow s: Socket) return String is
+begin
+    if not s.is_open then
+        return "127.0.0.1";
+    end if;
+    return SocketPeerIP(s.fd);
+end SocketGetPeerIP;
+
+function SocketSendRawHex(borrow s: Socket; borrow hex_bytes: String) return Int32 is
+begin
+    if not s.is_open then
+        return 0;
+    end if;
+    return SocketSendHex(s.fd, hex_bytes);
+end SocketSendRawHex;
+
+function SocketRecvRawHex(borrow s: Socket; max_len: Int32) return String is
+begin
+    if not s.is_open then
+        return "";
+    end if;
+    return SocketRecvHex(s.fd, max_len);
+end SocketRecvRawHex;
 
 function BuildHttpRequest(borrow method, host, path: String) return String is
 var

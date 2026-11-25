@@ -45,7 +45,7 @@ type
     function ScanString: TToken;
     function ScanCharLiteral: TToken;
   public
-    constructor Create(const ASource: string);
+    constructor Create(const ASource: string; AStartLine: Integer = 1);
     function NextToken: TToken;
     function ConsumeDocComment: string;
     function SaveState: TLexerState;
@@ -63,13 +63,13 @@ begin
   Col := ACol;
 end;
 
-constructor TAetherLexer.Create(const ASource: string);
+constructor TAetherLexer.Create(const ASource: string; AStartLine: Integer);
 begin
   inherited Create;
   FSource := ASource;
   FLength := Length(FSource);
   FPos := 1;
-  FLine := 1;
+  if AStartLine < 1 then FLine := 1 else FLine := AStartLine;
   FCol := 1;
   FCurrentDocComment := '';
   FLastTokenKind := tokEOF;

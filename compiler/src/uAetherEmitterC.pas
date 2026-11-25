@@ -3132,7 +3132,8 @@ begin
     if (Call.Callee = 'ReadFile') or (Call.Callee = 'CharAt') or (Call.Callee = 'Substring') or (Call.Callee = 'ToString') or
        (Call.Callee = 'IntToStr') or (Call.Callee = 'FloatToStr') or (Call.Callee = 'BoolToStr') or (Call.Callee = 'CharToStr') or
        (Call.Callee = '__InterpToStr') or (Call.Callee = '__JsonGetStr') or (Call.Callee = '__JsonGetObj') or
-       (Call.Callee = 'SocketRecv') or (Call.Callee = 'ParamStr') or
+       (Call.Callee = 'SocketRecv') or (Call.Callee = 'SocketRecvHex') or (Call.Callee = 'SocketPeerIP') or
+       (Call.Callee = 'CharFromByte') or (Call.Callee = 'ParamStr') or
        SameText(Call.Callee, 'Trim') or SameText(Call.Callee, 'UpperCase') or SameText(Call.Callee, 'LowerCase') or SameText(Call.Callee, 'Replace') or
        SameText(Call.Callee, 'Join') or SameText(Call.Callee, 'PadLeft') or SameText(Call.Callee, 'PadRight') or
        SameText(Call.Callee, 'RepeatStr') or SameText(Call.Callee, 'ReadLn') or SameText(Call.Callee, 'GetEnv') then Exit('String');
@@ -3197,7 +3198,7 @@ begin
     if SameText(Call.Callee, 'Length') or SameText(Call.Callee, 'Count') or SameText(Call.Callee, 'Ord') or SameText(Call.Callee, 'SizeOf') or
        SameText(Call.Callee, 'IndexOf') or (Call.Callee = 'StrToInt') or SameText(Call.Callee, 'RandomInt') or (Call.Callee = 'SocketCreate') or
        (Call.Callee = 'SocketListen') or (Call.Callee = 'SocketAccept') or (Call.Callee = 'SocketConnect') or
-       (Call.Callee = 'SocketSend') or (Call.Callee = 'ParamCount') then Exit('Int32');
+       (Call.Callee = 'SocketSend') or (Call.Callee = 'SocketSendHex') or (Call.Callee = 'ByteAt') or (Call.Callee = 'ParamCount') then Exit('Int32');
     if SameText(Call.Callee, 'sin') or SameText(Call.Callee, 'cos') or SameText(Call.Callee, 'tan') or
        SameText(Call.Callee, 'sqrt') or SameText(Call.Callee, 'floor') or SameText(Call.Callee, 'ceil') or
        SameText(Call.Callee, 'round') or SameText(Call.Callee, 'pow') or SameText(Call.Callee, 'exp') or
@@ -3207,7 +3208,7 @@ begin
     if (Call.Callee = 'FileSize') then Exit('Int64');
     if SameText(Call.Callee, 'Contains') or SameText(Call.Callee, 'StartsWith') or SameText(Call.Callee, 'EndsWith') or
        (Call.Callee = 'FileExists') or (Call.Callee = 'WriteFile') or (Call.Callee = 'CreateDir') or (Call.Callee = 'RemoveDir') or
-       (Call.Callee = 'DeleteFile') or (Call.Callee = 'DirExists') or
+       (Call.Callee = 'DeleteFile') or (Call.Callee = 'DirExists') or (Call.Callee = 'SocketSetTimeout') or
        SameText(Call.Callee, 'SetEnv') or SameText(Call.Callee, 'CopyFile') or SameText(Call.Callee, 'RenameFile') then Exit('Bool');
     if SameText(Call.Callee, 'Clear') or SameText(Call.Callee, 'Delete') or SameText(Call.Callee, 'Insert') or
        SameText(Call.Callee, 'Inc') or SameText(Call.Callee, 'Dec') or SameText(Call.Callee, 'Remove') or
@@ -4456,6 +4457,18 @@ begin
       Exit;
     end;
 
+    if Call.Callee = 'ByteAt' then
+    begin
+      Result := 'AetherByteAt(' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + ', ' + EmitExpr(TASTCallArg(Call.Args[1]).Expr) + ')';
+      Exit;
+    end;
+
+    if Call.Callee = 'CharFromByte' then
+    begin
+      Result := 'AetherCharFromByte(' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + ')';
+      Exit;
+    end;
+
     if Call.Callee = 'Substring' then
     begin
       Result := 'AetherSubstring(' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + ', ' + EmitExpr(TASTCallArg(Call.Args[1]).Expr) + ', ' + EmitExpr(TASTCallArg(Call.Args[2]).Expr) + ')';
@@ -4657,6 +4670,30 @@ begin
     if Call.Callee = 'SocketClose' then
     begin
       Result := 'AetherSocketClose(' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + ')';
+      Exit;
+    end;
+
+    if Call.Callee = 'SocketSetTimeout' then
+    begin
+      Result := 'AetherSocketSetTimeout(' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + ', ' + EmitExpr(TASTCallArg(Call.Args[1]).Expr) + ', ' + EmitExpr(TASTCallArg(Call.Args[2]).Expr) + ')';
+      Exit;
+    end;
+
+    if Call.Callee = 'SocketPeerIP' then
+    begin
+      Result := 'AetherSocketPeerIP(' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + ')';
+      Exit;
+    end;
+
+    if Call.Callee = 'SocketSendHex' then
+    begin
+      Result := 'AetherSocketSendHex(' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + ', ' + EmitExpr(TASTCallArg(Call.Args[1]).Expr) + ')';
+      Exit;
+    end;
+
+    if Call.Callee = 'SocketRecvHex' then
+    begin
+      Result := 'AetherSocketRecvHex(' + EmitExpr(TASTCallArg(Call.Args[0]).Expr) + ', ' + EmitExpr(TASTCallArg(Call.Args[1]).Expr) + ')';
       Exit;
     end;
 
@@ -6768,11 +6805,13 @@ begin
   Emit('#define true 1');
   Emit('#define false 0');
   Emit('typedef _Bool bool;');
-  Emit('static unsigned char __wasm_heap[65536];');
+  Emit('static unsigned char __wasm_heap[262144];');
   Emit('static unsigned long __wasm_heap_ptr = 0;');
   Emit('static inline void* malloc(size_t sz) {');
+  Emit('    size_t aligned = (sz + 7) & ~(size_t)7;');
+  Emit('    if (__wasm_heap_ptr + aligned > sizeof(__wasm_heap)) return NULL;');
   Emit('    void* p = (void*)&__wasm_heap[__wasm_heap_ptr];');
-  Emit('    __wasm_heap_ptr += (sz + 7) & ~7;');
+  Emit('    __wasm_heap_ptr += aligned;');
   Emit('    return p;');
   Emit('}');
   Emit('static inline void free(void* p) { (void)p; }');
@@ -6783,6 +6822,41 @@ begin
   Emit('    char* d = (char*)dst; const char* s = (const char*)src;');
   Emit('    for (size_t i = 0; i < n; i++) d[i] = s[i]; return dst;');
   Emit('}');
+  Emit('static inline void* memmove(void* dst, const void* src, size_t n) {');
+  Emit('    char* d = (char*)dst; const char* s = (const char*)src;');
+  Emit('    if (d < s) { for (size_t i = 0; i < n; i++) d[i] = s[i]; }');
+  Emit('    else if (d > s) { for (size_t i = n; i > 0; i--) d[i - 1] = s[i - 1]; }');
+  Emit('    return dst;');
+  Emit('}');
+  Emit('static inline void* memset(void* dst, int c, size_t n) {');
+  Emit('    unsigned char* d = (unsigned char*)dst;');
+  Emit('    for (size_t i = 0; i < n; i++) d[i] = (unsigned char)c; return dst;');
+  Emit('}');
+  Emit('static inline int strcmp(const char* a, const char* b) {');
+  Emit('    if (a == b) return 0; if (!a) return -1; if (!b) return 1;');
+  Emit('    while (*a && (*a == *b)) { a++; b++; }');
+  Emit('    return (int)(unsigned char)(*a) - (int)(unsigned char)(*b);');
+  Emit('}');
+  Emit('static inline int strncmp(const char* a, const char* b, size_t n) {');
+  Emit('    for (size_t i = 0; i < n; i++) {');
+  Emit('        if (a[i] != b[i] || a[i] == 0) return (int)(unsigned char)a[i] - (int)(unsigned char)b[i];');
+  Emit('    }');
+  Emit('    return 0;');
+  Emit('}');
+  Emit('#ifndef fabs');
+  Emit('static inline double fabs(double x) { return __builtin_fabs(x); }');
+  Emit('#endif');
+  Emit('#ifndef floor');
+  Emit('static inline double floor(double x) { return __builtin_floor(x); }');
+  Emit('#endif');
+  Emit('#ifndef ceil');
+  Emit('static inline double ceil(double x) { return __builtin_ceil(x); }');
+  Emit('#endif');
+  Emit('#ifndef sqrt');
+  Emit('static inline double sqrt(double x) { return __builtin_sqrt(x); }');
+  Emit('#endif');
+  Emit('__attribute__((visibility("default"))) void* aether_wasm_alloc(size_t sz) { return malloc(sz); }');
+  Emit('__attribute__((visibility("default"))) void aether_wasm_reset_heap(void) { __wasm_heap_ptr = 0; }');
   Emit('static inline int printf(const char* fmt, ...) { (void)fmt; return 0; }');
   Emit('int puts(const char* s) { (void)s; return 0; }');
   Emit('#define assert(x) ((void)0)');
@@ -6929,7 +7003,9 @@ begin
 
   if HasExports or (Pos('AETHER_EXPORT', ReachText) > 0) then
   begin
-    Emit('#if defined(_WIN32) || defined(__CYGWIN__)');
+    Emit('#if defined(__wasm__)');
+    Emit('  #define AETHER_EXPORT __attribute__((visibility("default")))');
+    Emit('#elif defined(_WIN32) || defined(__CYGWIN__)');
     Emit('  #define AETHER_EXPORT __declspec(dllexport)');
     Emit('#else');
     Emit('  #define AETHER_EXPORT __attribute__((visibility("default")))');
@@ -7001,6 +7077,28 @@ begin
     Emit('    char* res = (char*)malloc(2);');
     Emit('    if (index < slen) { res[0] = s[index]; res[1] = ''\0''; }');
     Emit('    else { res[0] = ''\0''; }');
+    Emit('    return res;');
+    Emit('}');
+    Emit('');
+  end;
+
+  if Pos('AetherByteAt', ReachText) > 0 then
+  begin
+    Emit('static inline int32_t AetherByteAt(const char* s, int32_t index) {');
+    Emit('    if (!s || index < 0) return 0;');
+    Emit('    int32_t slen = (int32_t)strlen(s);');
+    Emit('    if (index >= slen) return 0;');
+    Emit('    return (int32_t)(unsigned char)s[index];');
+    Emit('}');
+    Emit('');
+  end;
+
+  if Pos('AetherCharFromByte', ReachText) > 0 then
+  begin
+    Emit('static inline char* AetherCharFromByte(int32_t b) {');
+    Emit('    if (b <= 0 || b > 255) { char* e = (char*)malloc(1); if (e) e[0] = ''\0''; return e; }');
+    Emit('    char* res = (char*)malloc(2);');
+    Emit('    if (res) { res[0] = (char)b; res[1] = ''\0''; }');
     Emit('    return res;');
     Emit('}');
     Emit('');
@@ -7566,6 +7664,10 @@ begin
     Emit('static inline int32_t AetherSocketSend(int32_t fd, const char* data) { (void)fd; (void)data; return 0; }');
     Emit('static inline char* AetherSocketRecv(int32_t fd, int32_t max_len) { (void)fd; (void)max_len; char* b = (char*)malloc(1); if (b) b[0] = ''\0''; return b; }');
     Emit('static inline void AetherSocketClose(int32_t fd) { (void)fd; }');
+    Emit('static inline bool AetherSocketSetTimeout(int32_t fd, int32_t r, int32_t w) { (void)fd; (void)r; (void)w; return false; }');
+    Emit('static inline char* AetherSocketPeerIP(int32_t fd) { (void)fd; char* b = (char*)malloc(10); if (b) memcpy(b, "127.0.0.1", 10); return b; }');
+    Emit('static inline int32_t AetherSocketSendHex(int32_t fd, const char* h) { (void)fd; (void)h; return 0; }');
+    Emit('static inline char* AetherSocketRecvHex(int32_t fd, int32_t m) { (void)fd; (void)m; char* b = (char*)malloc(1); if (b) b[0] = ''\0''; return b; }');
     Emit('#else');
     Emit('#ifdef _WIN32');
     Emit('static inline void AetherSocketInit(void) {');
@@ -7674,6 +7776,76 @@ begin
     Emit('        close(fd);');
     Emit('#endif');
     Emit('    }');
+    Emit('}');
+    Emit('');
+    Emit('static inline bool AetherSocketSetTimeout(int32_t fd, int32_t read_ms, int32_t write_ms) {');
+    Emit('    if (fd < 0) return false;');
+    Emit('    bool ok = true;');
+    Emit('#ifdef _WIN32');
+    Emit('    if (read_ms > 0) { DWORD tv = (DWORD)read_ms; if (setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, (const char*)&tv, sizeof(tv)) != 0) ok = false; }');
+    Emit('    if (write_ms > 0) { DWORD tv = (DWORD)write_ms; if (setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, (const char*)&tv, sizeof(tv)) != 0) ok = false; }');
+    Emit('#else');
+    Emit('    if (read_ms > 0) { struct timeval tv; tv.tv_sec = read_ms / 1000; tv.tv_usec = (read_ms % 1000) * 1000; if (setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv)) != 0) ok = false; }');
+    Emit('    if (write_ms > 0) { struct timeval tv; tv.tv_sec = write_ms / 1000; tv.tv_usec = (write_ms % 1000) * 1000; if (setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv)) != 0) ok = false; }');
+    Emit('#endif');
+    Emit('    return ok;');
+    Emit('}');
+    Emit('');
+    Emit('static inline char* AetherSocketPeerIP(int32_t fd) {');
+    Emit('    struct sockaddr_in addr;');
+    Emit('    socklen_t len = sizeof(addr);');
+    Emit('    memset(&addr, 0, sizeof(addr));');
+    Emit('    if (fd >= 0 && getpeername(fd, (struct sockaddr*)&addr, &len) == 0) {');
+    Emit('        const char* ip = inet_ntoa(addr.sin_addr);');
+    Emit('        if (ip && ip[0]) {');
+    Emit('            size_t l = strlen(ip);');
+    Emit('            char* out = (char*)malloc(l + 1);');
+    Emit('            if (out) { memcpy(out, ip, l + 1); return out; }');
+    Emit('        }');
+    Emit('    }');
+    Emit('    char* def = (char*)malloc(10);');
+    Emit('    if (def) memcpy(def, "127.0.0.1", 10);');
+    Emit('    return def;');
+    Emit('}');
+    Emit('');
+    Emit('static inline int32_t AetherSocketSendHex(int32_t fd, const char* hex_data) {');
+    Emit('    if (fd < 0 || !hex_data) return 0;');
+    Emit('    size_t hlen = strlen(hex_data);');
+    Emit('    size_t blen = hlen / 2;');
+    Emit('    if (blen == 0) return 0;');
+    Emit('    uint8_t* buf = (uint8_t*)malloc(blen);');
+    Emit('    if (!buf) return -1;');
+    Emit('    for (size_t i = 0; i < blen; i++) {');
+    Emit('        unsigned int v = 0;');
+    Emit('        char c1 = hex_data[i * 2], c2 = hex_data[i * 2 + 1];');
+    Emit('        unsigned int hi = (c1 >= ''0'' && c1 <= ''9'') ? (unsigned)(c1 - ''0'') : ((c1 >= ''a'' && c1 <= ''f'') ? (unsigned)(c1 - ''a'' + 10) : ((c1 >= ''A'' && c1 <= ''F'') ? (unsigned)(c1 - ''A'' + 10) : 0));');
+    Emit('        unsigned int lo = (c2 >= ''0'' && c2 <= ''9'') ? (unsigned)(c2 - ''0'') : ((c2 >= ''a'' && c2 <= ''f'') ? (unsigned)(c2 - ''a'' + 10) : ((c2 >= ''A'' && c2 <= ''F'') ? (unsigned)(c2 - ''A'' + 10) : 0));');
+    Emit('        v = (hi << 4) | lo;');
+    Emit('        buf[i] = (uint8_t)v;');
+    Emit('    }');
+    Emit('    int32_t sent = (int32_t)send(fd, (const char*)buf, (int)blen, 0);');
+    Emit('    free(buf);');
+    Emit('    return sent;');
+    Emit('}');
+    Emit('');
+    Emit('static inline char* AetherSocketRecvHex(int32_t fd, int32_t max_len) {');
+    Emit('    if (fd < 0) { char* e = (char*)malloc(1); if (e) e[0] = ''\0''; return e; }');
+    Emit('    if (max_len <= 0) max_len = 4096;');
+    Emit('    uint8_t* buf = (uint8_t*)malloc((size_t)max_len);');
+    Emit('    if (!buf) { char* e = (char*)malloc(1); if (e) e[0] = ''\0''; return e; }');
+    Emit('    int bytes = recv(fd, (char*)buf, max_len, 0);');
+    Emit('    if (bytes <= 0) { free(buf); char* e = (char*)malloc(1); if (e) e[0] = ''\0''; return e; }');
+    Emit('    static const char hx[] = "0123456789abcdef";');
+    Emit('    char* out = (char*)malloc((size_t)bytes * 2 + 1);');
+    Emit('    if (out) {');
+    Emit('        for (int i = 0; i < bytes; i++) {');
+    Emit('            out[i * 2] = hx[(buf[i] >> 4) & 0xF];');
+    Emit('            out[i * 2 + 1] = hx[buf[i] & 0xF];');
+    Emit('        }');
+    Emit('        out[bytes * 2] = ''\0'';');
+    Emit('    }');
+    Emit('    free(buf);');
+    Emit('    return out;');
     Emit('}');
     Emit('#endif // !__wasm__');
     Emit('');

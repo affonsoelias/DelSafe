@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REPO="${AETHER_UPGRADE_REPO:-aetherlang/aether}"
+REPO="${AETHER_UPGRADE_REPO:-affonsoelias/aether}"
 INSTALL_ROOT="${AETHER_HOME:-$HOME/.aether}"
 VERSION=""
 NIGHTLY=0

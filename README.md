@@ -105,7 +105,19 @@ Aether powers **Zephyr** (`vendor/zephyr`), the native backend engine for the Bl
 | `aetherc emit pascal --unit` | Emit clean Free Pascal unit for external consumption |
 | `aetherc emit-header <file>` | Generate C header (`.h`) for C/C++ FFI |
 | `aetherc lsp` | Launch Language Server Protocol engine |
+| `aetherc upgrade` | Upgrade toolchain (`--check`, `--nightly`, `--from-source`, `--rollback`) |
 | `aetherc --doctor` | Diagnose compiler toolchains (FPC, GCC, Clang, Pas2JS) |
+
+---
+
+## Branching, Channels & Release Model
+
+Aether uses a streamlined single-branch workflow during pre-1.0 development:
+
+- **Primary Branch (`main`)**: Single integration branch carrying active development (short-lived feature branches are optional for large changes).
+- **`stable` Channel (`aetherc upgrade`)**: Pulls the latest official GitHub Release built automatically from SemVer tags (`v*.*.*`).
+- **`nightly` Channel (`aetherc upgrade --nightly`)**: Pulls the weekly pre-release built every Sunday from `main` via [`.github/workflows/release.yml`](.github/workflows/release.yml).
+- **Source Sync (`aetherc upgrade --from-source`)**: Syncs directly against `origin/main` and rebuilds the toolchain locally.
 
 ---
 
@@ -113,7 +125,7 @@ Aether powers **Zephyr** (`vendor/zephyr`), the native backend engine for the Bl
 
 - [The Aether Masterclass Course](docs/course/README.md)
 - [Documentation Index](docs/README.md)
-- [Roadmap & Development Plan](docs/planning/ROADMAP_DE_DESENVOLVIMENTO.md)
+- [Roadmap & Development Plan](docs/planning/DEVELOPMENT_ROADMAP.md)
 - [Language Specification](docs/technical/LANGUAGE_SPECIFICATION.md)
 - [BlaiseVue & Zephyr Integration](docs/technical/BLAISEVUE_AND_PASCAL_INTEGRATION.md)
 

@@ -902,7 +902,7 @@ var
 begin
   RepoName := SysUtils.GetEnvironmentVariable('AETHER_UPGRADE_REPO');
   if RepoName = '' then
-    RepoName := 'aetherlang/aether';
+    RepoName := 'affonsoelias/aether';
 
   IsNightly := Opts.Nightly or SameText(Opts.Channel, 'nightly');
   if IsNightly then ChannelLabel := 'nightly' else ChannelLabel := 'stable';

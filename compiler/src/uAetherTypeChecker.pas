@@ -3090,6 +3090,29 @@ begin
       Exit('String');
     end;
 
+    if Call.Callee = 'ByteAt' then
+    begin
+      if Call.Args.Count <> 2 then
+        Error('E0061', 'Function "ByteAt" expects 2 arguments (String, Int32)', Call.Line, Call.Col);
+      ArgType := CheckExpr(TASTCallArg(Call.Args[0]).Expr);
+      if ArgType <> 'String' then
+        Error('E0308', Format('First argument to "ByteAt" must be String, got: "%s"', [ArgType]), Call.Line, Call.Col);
+      ArgType := CheckExpr(TASTCallArg(Call.Args[1]).Expr);
+      if not IsIntegerType(ArgType) and (ArgType <> 'IntLiteral') then
+        Error('E0308', Format('Second argument to "ByteAt" must be integer, got: "%s"', [ArgType]), Call.Line, Call.Col);
+      Exit('Int32');
+    end;
+
+    if Call.Callee = 'CharFromByte' then
+    begin
+      if Call.Args.Count <> 1 then
+        Error('E0061', 'Function "CharFromByte" expects 1 argument (Int32)', Call.Line, Call.Col);
+      ArgType := CheckExpr(TASTCallArg(Call.Args[0]).Expr);
+      if not IsIntegerType(ArgType) and (ArgType <> 'IntLiteral') then
+        Error('E0308', Format('Argument to "CharFromByte" must be integer, got: "%s"', [ArgType]), Call.Line, Call.Col);
+      Exit('String');
+    end;
+
     if Call.Callee = 'Substring' then
     begin
       if Call.Args.Count <> 3 then
@@ -3324,6 +3347,42 @@ begin
       if Call.Args.Count <> 1 then
         Error('E0061', 'Function "SocketClose" expects 1 argument (Fd: Int32)', Call.Line, Call.Col);
       Exit('Void');
+    end;
+
+    if Call.Callee = 'SocketSetTimeout' then
+    begin
+      if Call.Args.Count <> 3 then
+        Error('E0061', 'Function "SocketSetTimeout" expects 3 arguments (Fd: Int32, ReadMs: Int32, WriteMs: Int32)', Call.Line, Call.Col);
+      CheckExpr(TASTCallArg(Call.Args[0]).Expr);
+      CheckExpr(TASTCallArg(Call.Args[1]).Expr);
+      CheckExpr(TASTCallArg(Call.Args[2]).Expr);
+      Exit('Bool');
+    end;
+
+    if Call.Callee = 'SocketPeerIP' then
+    begin
+      if Call.Args.Count <> 1 then
+        Error('E0061', 'Function "SocketPeerIP" expects 1 argument (Fd: Int32)', Call.Line, Call.Col);
+      CheckExpr(TASTCallArg(Call.Args[0]).Expr);
+      Exit('String');
+    end;
+
+    if Call.Callee = 'SocketSendHex' then
+    begin
+      if Call.Args.Count <> 2 then
+        Error('E0061', 'Function "SocketSendHex" expects 2 arguments (Fd: Int32, HexData: String)', Call.Line, Call.Col);
+      CheckExpr(TASTCallArg(Call.Args[0]).Expr);
+      CheckExpr(TASTCallArg(Call.Args[1]).Expr);
+      Exit('Int32');
+    end;
+
+    if Call.Callee = 'SocketRecvHex' then
+    begin
+      if Call.Args.Count <> 2 then
+        Error('E0061', 'Function "SocketRecvHex" expects 2 arguments (Fd: Int32, MaxLen: Int32)', Call.Line, Call.Col);
+      CheckExpr(TASTCallArg(Call.Args[0]).Expr);
+      CheckExpr(TASTCallArg(Call.Args[1]).Expr);
+      Exit('String');
     end;
 
     if SameText(Call.Callee, 'Free') or SameText(Call.Callee, 'Dispose') then
