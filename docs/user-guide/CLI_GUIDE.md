@@ -1,32 +1,32 @@
-# Complete Aether CLI Guide (`aetherc`)
+# Complete DelSafe CLI Guide (`delsafec`)
 
-The official Aether compiler (`aetherc`) is an all-in-one toolchain for native compilation, project scaffolding, package management, security auditing, formatting, testing, benchmarking, and IDE integration.
+The official DelSafe compiler (`delsafec`) is an all-in-one toolchain for native compilation, project scaffolding, package management, security auditing, formatting, testing, benchmarking, and IDE integration.
 
 ---
 
 ## 1. Command Syntax Overview
 
 ```bash
-aetherc <command | file.aeth> [options]
+delsafec <command | file.dels> [options]
 ```
 
 ---
 
 ## 2. Build and Execution Commands
 
-### `aetherc build`
-Compiles the project defined by the `aether.json` manifest in the current directory or parent folders.
-- Automatically restores missing dependencies from `.aether/deps/`.
+### `delsafec build`
+Compiles the project defined by the `delsafe.json` manifest in the current directory or parent folders.
+- Automatically restores missing dependencies from `.delsafe/deps/`.
 - Runs parsing, type checking, and the *Borrow Checker*.
 - Transpiles output into `generated/pascal/` or `generated/c/`.
 - Invokes the native compiler (FPC, GCC, or Clang) and places the binary inside `bin/`.
 
 ```bash
-aetherc build
-aetherc build --target=c
-aetherc build --target=c --cc=clang
-aetherc build --target=wasm --html -o public/module.wasm
-aetherc build --target=js --html -o public/module.js
+delsafec build
+delsafec build --target=c
+delsafec build --target=c --cc=clang
+delsafec build --target=wasm --html -o public/module.wasm
+delsafec build --target=js --html -o public/module.js
 ```
 
 ### Compilation Targets (`--target`):
@@ -41,56 +41,56 @@ aetherc build --target=js --html -o public/module.js
 
 ### Browser HTML Runner (`--html`):
 When `--html` is passed together with `--target=wasm` or `--target=js`, the compiler automatically generates a styled `.html` file with an embedded browser runner:
-- For `.wasm`: instantiates WebAssembly with `WebAssembly.instantiateStreaming` and exposes exports on `window.aetherWasm`.
+- For `.wasm`: instantiates WebAssembly with `WebAssembly.instantiateStreaming` and exposes exports on `window.delsafeWasm`.
 - For `.js`: copies Pas2JS's `rtl.js` runtime and initializes modules under `window.pas`.
 
-### `aetherc run`
+### `delsafec run`
 Compiles the project application and runs it immediately in the terminal:
 ```bash
-aetherc run
-aetherc run --target=c
+delsafec run
+delsafec run --target=c
 ```
 
-### `aetherc test [filter | path] [options]`
+### `delsafec test [filter | path] [options]`
 Runs the automated unit test suite under `tests/` or executes a specific test file directly:
 ```bash
-# Run all tests (*.aeth in tests/)
-aetherc test
+# Run all tests (*.dels in tests/)
+delsafec test
 
 # Run tests with the native C99 backend
-aetherc test --target=c
+delsafec test --target=c
 
 # Run only tests whose filename contains "math"
-aetherc test math
+delsafec test math
 
-# Run a single test file directly (with or without aether.json)
-aetherc test tests/01_suite_matematica_test.aeth
+# Run a single test file directly (with or without delsafe.json)
+delsafec test tests/01_suite_matematica_test.dels
 ```
 Tests use the built-in assertion statement:
-```aether
+```delsafe
 Assert(condition, "Descriptive failure message");
 ```
 
-### `aetherc bench [filter] [function_filter] [options]`
-Runs the project's canonical benchmark suite (`benches/*_bench.aeth` or explicitly specified `.aeth` files):
+### `delsafec bench [filter] [function_filter] [options]`
+Runs the project's canonical benchmark suite (`benches/*_bench.dels` or explicitly specified `.dels` files):
 
 ```bash
 # Run all benchmarks in benches/ on the default backend (Free Pascal)
-aetherc bench
+delsafec bench
 
 # Compare Free Pascal vs GCC C99 side by side
-aetherc bench --compare
+delsafec bench --compare
 
 # Filter by file and/or benchmark procedure name
-aetherc bench math Fib
-aetherc bench benches/math_bench.aeth --iters=500
+delsafec bench math Fib
+delsafec bench benches/math_bench.dels --iters=500
 
 # Output structured JSON for CI/CD pipelines
-aetherc bench --compare --json
+delsafec bench --compare --json
 ```
 
 **Benchmark Syntax (`@bench`):**
-```aether
+```delsafe
 module math_bench;
 
 function Fibonacci(n: Int32) return Int32;
@@ -111,40 +111,40 @@ Benchmark options:
 - `--iters=<N>`: Configures iteration count per benchmark (default: 100).
 - `--target=<pascal|c>`: Selects a single backend target.
 
-### `aetherc clean`
-Safely removes all build artifacts from the current project (`bin/`, `generated/`, and `.aether/cache/build/`), preserving source code and the compiler:
+### `delsafec clean`
+Safely removes all build artifacts from the current project (`bin/`, `generated/`, and `.delsafe/cache/build/`), preserving source code and the compiler:
 ```bash
-aetherc clean
+delsafec clean
 ```
 
-### `aetherc upgrade [options]`
-Updates the AetherLang compiler toolchain to the latest version from the official release repository or local Git source:
+### `delsafec upgrade [options]`
+Updates the DelSafe compiler toolchain to the latest version from the official release repository or local Git source:
 ```bash
 # Check whether a new version is available without downloading
-aetherc upgrade --check
+delsafec upgrade --check
 
 # Update toolchain automatically (detects git repo or downloads official binary)
-aetherc upgrade
+delsafec upgrade
 
 # Force update from official prebuilt binary release
-aetherc upgrade --binary
+delsafec upgrade --binary
 
 # Rebuild from local Git repository source
-aetherc upgrade --from-source
+delsafec upgrade --from-source
 
 # Update to a specific version tag
-aetherc upgrade --version=v0.6.0
+delsafec upgrade --version=v0.6.0
 
 # Simulate the upgrade without modifying files on disk
-aetherc upgrade --dry-run
+delsafec upgrade --dry-run
 
 # Roll back immediately to the previous compiler binary
-aetherc upgrade --rollback
+delsafec upgrade --rollback
 ```
 
 **Upgrader Highlights:**
 - **Zero External Dependencies**: Uses native `curl` and `tar` (`bsdtar`) available on Windows 10/11, Linux, and macOS.
-- **Atomic Replacement on Windows**: Moves the running executable to `aetherc.exe.bak`, installs the new version in place, verifies integrity, and automatically rolls back on failure.
+- **Atomic Replacement on Windows**: Moves the running executable to `delsafec.exe.bak`, installs the new version in place, verifies integrity, and automatically rolls back on failure.
 - **SHA-256 Cryptographic Verification**: Validates the downloaded archive hash against the official release signature before extraction (Error `E9991` on mismatch).
 - **Instant Rollback**: `--rollback` restores the previous working binary immediately.
 
@@ -152,7 +152,7 @@ aetherc upgrade --rollback
 
 ## 2.1 Incremental Compilation & Cache System (`--incremental`)
 
-Aether features a high-performance **SHA-256** incremental compilation engine that tracks every source file and all of its transitive imports (`import std.fs;`, `import std.http;`, etc.).
+DelSafe features a high-performance **SHA-256** incremental compilation engine that tracks every source file and all of its transitive imports (`import std.fs;`, `import std.http;`, etc.).
 
 ### Incremental Flags:
 - `--incremental`: Enables cache tracking. If the output executable already exists and neither the entry file nor any transitive dependency changed, compilation returns **immediately** (`0 ms`), reusing the cached binary.
@@ -161,28 +161,28 @@ Aether features a high-performance **SHA-256** incremental compilation engine th
 
 ```bash
 # Fast incremental build
-aetherc build src/main.aeth --incremental
+delsafec build src/main.dels --incremental
 
 # Incremental run
-aetherc run src/main.aeth --incremental
+delsafec run src/main.dels --incremental
 
 # Force full rebuild ignoring cache
-aetherc build src/main.aeth --incremental --force
+delsafec build src/main.dels --incremental --force
 ```
 
-Incremental build manifests are saved inside `.aether/cache/build/` in deterministic JSON format.
+Incremental build manifests are saved inside `.delsafe/cache/build/` in deterministic JSON format.
 
 ---
 
 ## 2.2 AST Optimizations & Release Mode (`--release`, `--opt`)
 
-Aether includes a built-in AST optimizer (`uAetherOptimizer.pas`) for maximum runtime performance and compact executables:
+DelSafe includes a built-in AST optimizer (`uDelSafeOptimizer.pas`) for maximum runtime performance and compact executables:
 
 ### AST Optimizations:
 1. **Constant Folding**:
    - Integer expressions: `24 * 60 * 60` -> `86400`
    - Boolean expressions: `(100 > 50) and (20 = 20)` -> `true`
-   - String literal concatenation: `"Aether " + "Engine " + "Release"` -> `"Aether Engine Release"`
+   - String literal concatenation: `"DelSafe " + "Engine " + "Release"` -> `"DelSafe Engine Release"`
 2. **Algebraic Simplifications**:
    - `x + 0` -> `x`, `x - 0` -> `x`, `x * 1` -> `x`, `x / 1` -> `x`, `not (not x)` -> `x`
 3. **Dead Code Elimination (DCE)**:
@@ -198,23 +198,23 @@ Aether includes a built-in AST optimizer (`uAetherOptimizer.pas`) for maximum ru
 
 ```bash
 # Production release build
-aetherc build src/main.aeth --release
+delsafec build src/main.dels --release
 
 # C99 release build
-aetherc build src/main.aeth --target=c --release -o bin/app.exe
+delsafec build src/main.dels --target=c --release -o bin/app.exe
 
 # Run with AST optimizations enabled
-aetherc run src/main.aeth --opt
+delsafec run src/main.dels --opt
 ```
 
 ---
 
-## 3. Code Emission & Transpilation (`aetherc emit`)
+## 3. Code Emission & Transpilation (`delsafec emit`)
 
 The `emit` command generates transpiled source code without requiring immediate native compilation—ideal for inspection, debugging, CI/CD, and **BlaiseVue** integration:
 
 ```bash
-aetherc emit <pascal | c> [file.aeth] [options]
+delsafec emit <pascal | c> [file.dels] [options]
 ```
 
 ### `emit` Options:
@@ -228,27 +228,27 @@ aetherc emit <pascal | c> [file.aeth] [options]
 ### Practical `emit` Examples:
 ```bash
 # 1. Emit a Pascal unit for BlaiseVue
-aetherc emit pascal src/Store.aeth --unit
+delsafec emit pascal src/Store.dels --unit
 
 # 2. Emit directly into a BlaiseVue managed folder
-aetherc emit pascal src/Store.aeth --unit --out-dir=./generated/blaisevue
+delsafec emit pascal src/Store.dels --unit --out-dir=./generated/blaisevue
 
 # 3. Watch for changes and regenerate on save
-aetherc emit pascal src/Store.aeth --unit --watch
+delsafec emit pascal src/Store.dels --unit --watch
 
 # 4. Inspect generated C99 output in stdout
-aetherc emit c src/main.aeth --stdout | head -n 30
+delsafec emit c src/main.dels --stdout | head -n 30
 
 # 5. Generate a C header (.h) for exported FFI types and functions
-aetherc emit-header src/math_lib.aeth -o include/math_lib.h
+delsafec emit-header src/math_lib.dels -o include/math_lib.h
 ```
 
 ---
 
-### `aetherc emit-header <file.aeth> [-o <output.h>]`
+### `delsafec emit-header <file.dels> [-o <output.h>]`
 Generates an **ANSI C99 / C++ compatible** header (`.h`) with `extern "C"` linkage containing:
-- Include guards (`#ifndef AETHER_<MODULE>_H`);
-- Cross-platform export macro (`AETHER_API` / `__declspec(dllexport)`);
+- Include guards (`#ifndef DELSAFE_<MODULE>_H`);
+- Cross-platform export macro (`DELSAFE_API` / `__declspec(dllexport)`);
 - Exported `struct` definitions with C types (`int32_t`, `double`, `bool`, etc.);
 - Prototypes for all functions marked `export cdecl function ...`, preserving original doc comments (`///`).
 
@@ -256,30 +256,30 @@ Generates an **ANSI C99 / C++ compatible** header (`.h`) with `extern "C"` linka
 
 ## 4. Project & Package Management
 
-### `aetherc new [name | .]`
-Scaffolds a new Aether project with `aether.json`, `src/main.aeth`, `tests/main_test.aeth`, `.gitignore`, and `README.md`:
+### `delsafec new [name | .]`
+Scaffolds a new DelSafe project with `delsafe.json`, `src/main.dels`, `tests/main_test.dels`, `.gitignore`, and `README.md`:
 ```bash
 # Create a new project in a new folder:
-aetherc new my_project
+delsafec new my_project
 
 # Initialize inside the current directory:
-aetherc new .
+delsafec new .
 ```
 
-### Custom Paths & Native Interop (`paths` in `aether.json`)
-In `aether.json`, the `"paths"` block configures custom `.aeth` search directories, C sources/headers, Free Pascal units, native libraries, and automatic DLL/SO copying:
+### Custom Paths & Native Interop (`paths` in `delsafe.json`)
+In `delsafe.json`, the `"paths"` block configures custom `.dels` search directories, C sources/headers, Free Pascal units, native libraries, and automatic DLL/SO copying:
 
 ```json
 {
   "name": "my_project",
   "version": "0.1.0",
   "backend": "pascal",
-  "entry": "src/main.aeth",
+  "entry": "src/main.dels",
   "output": "bin/my_project.exe",
   "paths": {
-    "aether": [
+    "delsafe": [
       "src",
-      "libs/my_aether_lib"
+      "libs/my_delsafe_lib"
     ],
     "c_includes": [
       "include"
@@ -303,7 +303,7 @@ In `aether.json`, the `"paths"` block configures custom `.aeth` search directori
 }
 ```
 
-- **`aether`**: Extra search paths for imported `.aeth` modules (`import trees.oak;`).
+- **`delsafe`**: Extra search paths for imported `.dels` modules (`import trees.oak;`).
 - **`c_includes`**: C header directories (`.h`), passed as `-I"<path>"`.
 - **`c_sources`**: Extra `.c` files compiled and linked into the final binary.
 - **`pascal_units`**: Free Pascal unit directories (`.pas`/`.ppu`), passed as `-Fu"<path>"` to FPC (ideal for BlaiseVue).
@@ -315,13 +315,13 @@ In `aether.json`, the `"paths"` block configures custom `.aeth` search directori
 
 ### Output Directories & BlaiseVue Integration (`outputs`)
 
-To integrate cleanly with **BlaiseVue** and control generated artifacts, `aether.json` supports an `"outputs"` block:
+To integrate cleanly with **BlaiseVue** and control generated artifacts, `delsafe.json` supports an `"outputs"` block:
 
 ```json
 {
   "name": "my_blaise_module",
   "version": "0.1.0",
-  "entry": "src/my_module.aeth",
+  "entry": "src/my_module.dels",
   "backend": "pascal",
   "outputs": {
     "bin_dir": "bin",
@@ -337,13 +337,13 @@ To integrate cleanly with **BlaiseVue** and control generated artifacts, `aether
 - **`pascal_src_dir`**: Directory for generated Object Pascal `.pas` files (e.g., `.blaisevue/generated`).
 - **`pascal_unit_dir`**: Output directory for compiled FPC `.ppu`/`.o` files (`-FU"<dir>"`).
 - **`c_src_dir`**: Directory for generated `.c` files.
-- **`as_unit`**: When `true`, emits and compiles Aether code as an **Object Pascal Unit** (`unit ... interface ... implementation ... end.`) ready for `uses` in BlaiseVue and Lazarus.
+- **`as_unit`**: When `true`, emits and compiles DelSafe code as an **Object Pascal Unit** (`unit ... interface ... implementation ... end.`) ready for `uses` in BlaiseVue and Lazarus.
 
 ---
 
 ### Multi-Target Configuration & C Compilers (`targets` and `c_compiler`)
 
-Projects targeting multiple outputs at once (e.g., WebAssembly, JavaScript, Clang native, and GCC native) can define a `"targets"` array in `aether.json`:
+Projects targeting multiple outputs at once (e.g., WebAssembly, JavaScript, Clang native, and GCC native) can define a `"targets"` array in `delsafe.json`:
 
 ```json
 {
@@ -353,28 +353,28 @@ Projects targeting multiple outputs at once (e.g., WebAssembly, JavaScript, Clan
   "targets": [
     {
       "name": "web_module",
-      "entry": "src/calculator.aeth",
+      "entry": "src/calculator.dels",
       "target": "wasm",
       "backend": "clang",
       "output": "public/calculator.wasm"
     },
     {
       "name": "js_script",
-      "entry": "src/calculator.aeth",
+      "entry": "src/calculator.dels",
       "target": "js",
       "backend": "pas2js",
       "output": "public/calculator.js"
     },
     {
       "name": "native_clang_bin",
-      "entry": "src/main.aeth",
+      "entry": "src/main.dels",
       "target": "c",
       "backend": "clang",
       "output": "bin/app_clang.exe"
     },
     {
       "name": "native_gcc_bin",
-      "entry": "src/main.aeth",
+      "entry": "src/main.dels",
       "target": "c",
       "backend": "gcc",
       "output": "bin/app_gcc.exe"
@@ -383,7 +383,7 @@ Projects targeting multiple outputs at once (e.g., WebAssembly, JavaScript, Clan
 }
 ```
 
-Running `aetherc build` builds each configured target in sequence.
+Running `delsafec build` builds each configured target in sequence.
 
 ### Command-Line Path, Output & Interop Flags
 You can also specify these flags directly on the CLI:
@@ -392,7 +392,7 @@ You can also specify these flags directly on the CLI:
 - `--out-pascal <dir>`: Output directory for generated `.pas` sources.
 - `--out-c <dir>`: Output directory for generated `.c` sources.
 - `--unit`: Emit/compile as a Pascal Unit (`unit/interface/implementation`).
-- `-I <dir>`: Add search path for Aether modules and C headers.
+- `-I <dir>`: Add search path for DelSafe modules and C headers.
 - `-Fu <dir>`: Add search path for Free Pascal units (`.pas`/`.ppu`).
 - `-L <dir>`: Add native library search folder (`-L` GCC, `-Fl` FPC).
 - `-l <lib>`: Link with a system/external library (e.g., `-lraylib`, `-lws2_32`).
@@ -401,44 +401,44 @@ You can also specify these flags directly on the CLI:
 - `--lib` or `--shared`: Build as a **shared dynamic library** (`.dll` on Windows, `.so` on Linux/macOS) exporting `cdecl` symbols.
 - `--emit-header`: Automatically generate the matching C header (`.h`) next to the built library.
 
-### `aetherc pkg <subcommand>`
-Built-in Aether package manager:
-- `aetherc pkg add <package>`: Add a Registry, Git (`--git=...`), or local (`--path=...`) dependency to `aether.json` and `aether.lock`.
-- `aetherc pkg remove <package>` (`rm`): Remove dependency and clean local caches.
-- `aetherc pkg update [package]` (`upgrade`): Update Git/Registry dependencies and refresh the lockfile.
-- `aetherc pkg publish [--registry=<url>] [--dry-run]`: Publish package to the Registry with manifest validation, SemVer, SHA-256 checksum, and signature.
-- `aetherc pkg search <term>` (`find`): Search packages in the Registry catalog.
-- `aetherc pkg audit`: Verify SHA integrity hashes and TLS policy compliance.
-- `aetherc pkg list` (`ls`): Display the declared dependency tree.
-- `aetherc pkg clean`: Clear shared cache at `~/.aether/cache`.
+### `delsafec pkg <subcommand>`
+Built-in DelSafe package manager:
+- `delsafec pkg add <package>`: Add a Registry, Git (`--git=...`), or local (`--path=...`) dependency to `delsafe.json` and `delsafe.lock`.
+- `delsafec pkg remove <package>` (`rm`): Remove dependency and clean local caches.
+- `delsafec pkg update [package]` (`upgrade`): Update Git/Registry dependencies and refresh the lockfile.
+- `delsafec pkg publish [--registry=<url>] [--dry-run]`: Publish package to the Registry with manifest validation, SemVer, SHA-256 checksum, and signature.
+- `delsafec pkg search <term>` (`find`): Search packages in the Registry catalog.
+- `delsafec pkg audit`: Verify SHA integrity hashes and TLS policy compliance.
+- `delsafec pkg list` (`ls`): Display the declared dependency tree.
+- `delsafec pkg clean`: Clear shared cache at `~/.delsafe/cache`.
 
-> **Tip**: `publish` and `search` can also be invoked at root level: `aetherc publish` and `aetherc search <term>`.
+> **Tip**: `publish` and `search` can also be invoked at root level: `delsafec publish` and `delsafec search <term>`.
 
 ---
 
 ## 5. Language Tooling & Diagnostics
 
-### `aetherc --doctor`
-Verifies installation, paths, and versions of all 4 Aether toolchain backends:
+### `delsafec --doctor`
+Verifies installation, paths, and versions of all 4 DelSafe toolchain backends:
 1. **Free Pascal (`fpc`)**: Native Object Pascal compiler.
 2. **GCC (`gcc`)**: Native C compiler (MSYS2 UCRT64 on Windows, system GCC on Linux/macOS).
 3. **Clang / LLVM (`clang`)**: Native C compiler and WebAssembly (`wasm32`) cross-compiler.
 4. **Pas2JS (`pas2js`)**: Free Pascal to modular JavaScript compiler.
 
-### `aetherc lsp` (or `--lsp`)
+### `delsafec lsp` (or `--lsp`)
 Starts the built-in **Language Server Protocol (LSP)** server, providing completions, hover docs, go-to-definition, and real-time diagnostics for VS Code and compatible editors.
 
-### `aetherc --emit-json-diag`
+### `delsafec --emit-json-diag`
 Runs the compiler emitting structured JSON diagnostics designed for AI agents and IDE tooling:
 ```bash
-aetherc build --emit-json-diag
+delsafec build --emit-json-diag
 ```
 
-### `aetherc --check-only`
+### `delsafec --check-only`
 Runs syntax analysis, type checking, and the Borrow Checker without emitting code or binaries (fast validation for CI/linters).
 
-### `aetherc fmt [file | folder] [--check]`
-Official canonical code formatter enforcing Aether style:
+### `delsafec fmt [file | folder] [--check]`
+Official canonical code formatter enforcing DelSafe style:
 - Canonical 4-space indentation per scope level.
 - Standardized spacing around operators (`:=`, `:`, `,`, `;`, `=`, `<`, `>`, `+`, `-`).
 - Lossless preservation of string literals, line comments (`//`), and block comments (`/* ... */`).
@@ -447,31 +447,31 @@ Official canonical code formatter enforcing Aether style:
 
 ```bash
 # Format a specific file
-aetherc fmt src/main.aeth
+delsafec fmt src/main.dels
 
-# Format all .aeth files recursively
-aetherc fmt src/
+# Format all .dels files recursively
+delsafec fmt src/
 
 # Check formatting without writing (CI/CD)
-aetherc fmt src/ --check
+delsafec fmt src/ --check
 ```
 
-### `aetherc --dump-tokens` and `aetherc --dump-ast`
+### `delsafec --dump-tokens` and `delsafec --dump-ast`
 Prints the lexer token stream or Abstract Syntax Tree (AST) for debugging and compiler study.
 
 ---
 
-## 6. Self-Hosting & Closed-Loop Bootstrapping (`aetherc bootstrap`)
+## 6. Self-Hosting & Closed-Loop Bootstrapping (`delsafec bootstrap`)
 
 The `bootstrap` command executes full *Stage 3 Bootstrapping* to verify self-hosting independence and deterministic output:
 
 ```bash
-aetherc bootstrap
+delsafec bootstrap
 ```
 
 ### What it executes:
-1. **Stage 1 (Compile the Aether Compiler)**: The Pascal bootstrap compiler compiles `compiler/aeth/main.aeth` using GCC C99 in optimized release mode into `bin/bootstrap/aetherc-stage1.exe`.
-2. **Stage 2 (Stage-1 Self-Compilation)**: `aetherc-stage1.exe` emits C99 (`stage2_compiler.c` and `stage2_suite.c`) and builds the Stage 2 binary with GCC.
+1. **Stage 1 (Compile the DelSafe Compiler)**: The Pascal bootstrap compiler compiles `compiler/dels/main.dels` using GCC C99 in optimized release mode into `bin/bootstrap/delsafec-stage1.exe`.
+2. **Stage 2 (Stage-1 Self-Compilation)**: `delsafec-stage1.exe` emits C99 (`stage2_compiler.c` and `stage2_suite.c`) and builds the Stage 2 binary with GCC.
 3. **Stage 3 (Fixed-Point Verification)**: Repeats the cycle in isolation (`stage3_compiler.c`, `stage3_suite.c`).
 4. **Runtime & Bit-for-Bit Determinism Check**:
    - Stage 2 and Stage 3 binaries execute and produce identical outputs.
@@ -482,16 +482,16 @@ aetherc bootstrap
 
 ## 7. Structured Concurrency & Async/Await (`Task<T>`)
 
-Since **Phase 31**, Aether supports native structured concurrency and lightweight cooperative tasks (`Task<T>`):
+Since **Phase 31**, DelSafe supports native structured concurrency and lightweight cooperative tasks (`Task<T>`):
 
 ### Syntax & Primitives:
 - `async function Name(params) return Type`: Declares an asynchronous function whose return value is wrapped in `Task<Type>`.
 - `await <expr>`: Awaits task completion and safely extracts its resolved value.
 - `spawn <expr>`: Dispatches an async task, returning a `Task<T>` handle.
-- `Task<T>`: Built-in generic task handle (`specialize TAetherTask<T>` in Pascal / `AetherTask` in C99).
+- `Task<T>`: Built-in generic task handle (`specialize TDelSafeTask<T>` in Pascal / `DelSafeTask` in C99).
 
-### Aether Example:
-```aether
+### DelSafe Example:
+```delsafe
 module async_demo;
 
 async function ComputeStep(n: Int32) return Int32 is
@@ -525,34 +525,34 @@ Async tasks run across all compiler backends:
 
 ---
 
-## 8. Canonical Documentation Generator (`aetherc doc`)
+## 8. Canonical Documentation Generator (`delsafec doc`)
 
-Since **Phase 32**, Aether includes a built-in documentation generator (`aetherc doc`) that parses `.aeth` modules, extracts doc comments (`///`), contracts (`require` / `ensure`), ownership modes (`borrow`, `mut borrow`, `take`), and runs doctests automatically.
+Since **Phase 32**, DelSafe includes a built-in documentation generator (`delsafec doc`) that parses `.dels` modules, extracts doc comments (`///`), contracts (`require` / `ensure`), ownership modes (`borrow`, `mut borrow`, `take`), and runs doctests automatically.
 
 ### Commands & Options:
 ```bash
 # Generate static HTML documentation for the whole project in docs/api/
-aetherc doc
+delsafec doc
 
 # Generate docs for a specific file
-aetherc doc src/math_lib.aeth
+delsafec doc src/math_lib.dels
 
 # Custom output directory
-aetherc doc --out-dir=public/api
+delsafec doc --out-dir=public/api
 
 # Export Markdown documentation for Git repositories
-aetherc doc --format=md
-aetherc doc --format=all
+delsafec doc --format=md
+delsafec doc --format=all
 
 # Open generated site in the default browser
-aetherc doc --open
+delsafec doc --open
 
 # Extract and run all embedded code examples (Doctests)
-aetherc doc --test
+delsafec doc --test
 ```
 
 ### Writing Doc Comments (`///`):
-```aether
+```delsafe
 /// Numerical and vector computation module.
 module math_lib;
 
@@ -561,7 +561,7 @@ module math_lib;
 /// @param y Vertical Y component
 /// @return New Vector2D value
 ///
-/// ```aether
+/// ```delsafe
 /// var v: Vector2D := CreateVector(3.0, 4.0);
 /// Assert(v.x > 0.0);
 /// ```

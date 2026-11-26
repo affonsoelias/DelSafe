@@ -1,0 +1,146 @@
+module contracts_ufcs_fmt_header_test;
+
+type
+    JobPhase = (Queued, Running, Finished);
+    TextAlias = String;
+    SmallScore = 0..10;
+    Vec3 = array[3] of Int32;
+    Point = record
+        x: Int32;
+        y: Int32;
+    end record;
+
+function SafeDoublePositive(x: Int32) return Int32 is
+contract
+    require
+        x > 0;
+    ensure
+        result > x;
+begin
+    if x > 100 then
+        return x + 10;
+    end if;
+    return x * 2;
+end SafeDoublePositive;
+
+function MakePositivePoint(ax, ay: Int32) return Point is
+contract
+    require
+        ax > 0;
+        ay > 0;
+    ensure
+        (result.x > 0) and (result.y > 0);
+begin
+    return Point(x: ax, y: ay);
+end MakePositivePoint;
+
+function NonEmptyTag(prefix: TextAlias) return String is
+contract
+    require
+        prefix.Length() > 0;
+    ensure
+        result.Length() > 0;
+begin
+    return "[" + prefix + "]";
+end NonEmptyTag;
+
+function ReturnWithDeferAndEnsure(mut borrow acc: Int32; val: Int32) return Int32 is
+contract
+    require
+        val > 0;
+    ensure
+        result >= 10;
+begin
+    defer acc := acc + 100;
+    if val < 10 then
+        return 10;
+    end if;
+    return val;
+end ReturnWithDeferAndEnsure;
+
+procedure BumpPointInPlace(mut borrow p: Point) is
+contract
+    require
+        (p.x >= 0) and (p.y >= 0);
+    ensure
+        (p.x > 0) and (p.y > 0);
+begin
+    p.x := p.x + 1;
+    p.y := p.y + 1;
+end BumpPointInPlace;
+
+function IdentityPositive<T>(val: T) return T is
+contract
+    require
+        val > 0;
+    ensure
+        result > 0;
+begin
+    return val;
+end IdentityPositive;
+
+export cdecl function ExportedStep(p: Point; phase: JobPhase; score: SmallScore; vec: Vec3) return JobPhase is
+begin
+    if (p.x > 0) and (score >= 0) and (vec[0] >= 0) then
+        return phase;
+    end if;
+    return JobPhase.Queued;
+end ExportedStep;
+
+program Main;
+var
+    a, b, acc, absNeg, clampedLit, arrLitElem, genRes: Int32;
+    pt: Point;
+    tag, cleanStr: String;
+    ch0: Char;
+    arr3: Vec3;
+    phaseOut: JobPhase;
+begin
+    // 1. ensure + result contracts (scalar return, record, String, defer+early return, Void, generic)
+    a := SafeDoublePositive(7);
+    Assert(a = 14);
+    b := SafeDoublePositive(120);
+    Assert(b = 130);
+
+    pt := MakePositivePoint(3, 5);
+    Assert((pt.x = 3) and (pt.y = 5));
+
+    tag := NonEmptyTag("CORE");
+    Assert(tag = "[CORE]");
+
+    acc := 0;
+    Assert(ReturnWithDeferAndEnsure(mut borrow acc, 4) = 10);
+    Assert(acc = 100);
+    Assert(ReturnWithDeferAndEnsure(mut borrow acc, 25) = 25);
+    Assert(acc = 200);
+
+    pt := Point(x: 0, y: 2);
+    BumpPointInPlace(mut borrow pt);
+    Assert((pt.x = 1) and (pt.y = 3));
+
+    genRes := IdentityPositive(42);
+    Assert(genRes = 42);
+
+    // 2. Direct postfixes on literals and expressions (Phase 56.3)
+    clampedLit := 55.Clamp(0, 40);
+    Assert(clampedLit = 40);
+
+    absNeg := (-42).Abs();
+    Assert(absNeg = 42);
+
+    cleanStr := "  delsafe  ".Trim().UpperCase();
+    Assert(cleanStr = "DELSAFE");
+
+    ch0 := "DelSafe"[0];
+    Assert(ch0 = 'D');
+
+    arrLitElem := [10, 20, 30][1];
+    Assert(arrLitElem = 20);
+
+    // 3. Exercise types exported to C header (enum, alias, subrange, fixed array)
+    arr3 := [1, 2, 3];
+    phaseOut := ExportedStep(pt, JobPhase.Finished, 9, arr3);
+    Assert(phaseOut = JobPhase.Finished);
+
+    PrintLn("=== PHASE 50 + 56 TEST PASSED (ENSURE+RESULT, LITERAL UFCS, FMT, EMIT-HEADER) ===");
+end contracts_ufcs_fmt_header_test.

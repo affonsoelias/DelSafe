@@ -1,7 +1,0 @@
-{
-  "name": "aether_math",
-  "version": "1.0.0",
-  "type": "cdylib",
-  "entry": "src/math_lib.aeth",
-  "output": "bin/aether_math.dll"
-}

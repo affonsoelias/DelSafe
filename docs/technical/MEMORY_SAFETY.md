@@ -1,12 +1,12 @@
-# Memory Safety Analysis: Aether vs Rust
+# Memory Safety Analysis: DelSafe vs Rust
 
-This document details the formal safety model and static guarantees that make **Aether as memory-safe as Rust** in compile-time memory management and concurrency.
+This document details the formal safety model and static guarantees that make **DelSafe as memory-safe as Rust** in compile-time memory management and concurrency.
 
 ---
 
 ## 1. Core Principle: Compile-Time Safety
 
-Just like Rust, Aether follows the principle of **Zero-Cost Abstractions**:
+Just like Rust, DelSafe follows the principle of **Zero-Cost Abstractions**:
 - There is no Garbage Collector (*GC*).
 - There are zero runtime GC pauses.
 - All safety verification runs **100% at compile time** through the **Borrow Checker** and static type system.
@@ -15,7 +15,7 @@ Just like Rust, Aether follows the principle of **Zero-Cost Abstractions**:
 
 ## 2. Safety Guarantees Comparison
 
-| Vulnerability Class | C / C++ | Traditional Object Pascal | Rust | AetherLang |
+| Vulnerability Class | C / C++ | Traditional Object Pascal | Rust | DelSafe |
 |:---|:---:|:---:|:---:|:---:|
 | **Use-After-Free** | Critical risk | Possible | Prevented | **Prevented** (via `take`) |
 | **Double-Free** | Critical risk | Possible | Prevented | **Prevented** (Single Owner) |
@@ -26,7 +26,7 @@ Just like Rust, Aether follows the principle of **Zero-Cost Abstractions**:
 
 ---
 
-## 3. The 3 Pillars Making Aether as Safe as Rust
+## 3. The 3 Pillars Making DelSafe as Safe as Rust
 
 ### Pillar 1: Single Ownership
 Every allocated value or resource has **exactly one owning variable** at any given time.
@@ -35,14 +35,14 @@ Every allocated value or resource has **exactly one owning variable** at any giv
 - When the owner exits its scope (reaching `end`), any resource destructor (`impl Drop`) is invoked automatically. Zero memory leaks.
 
 ### Pillar 2: Aliasing XOR Mutability (Golden Rule of the Borrow Checker)
-The Aether compiler strictly enforces:
+The DelSafe compiler strictly enforces:
 $$\text{Simultaneous Borrows} = (\text{Multiple } \texttt{borrow}) \lor (\text{Exactly one } \texttt{mut borrow})$$
 
 - While data is mutably borrowed (`mut borrow`), no other reference can read or mutate that data concurrently.
 - This **mathematically eliminates data races** in concurrent programs.
 
 ### Pillar 3: Eliminating Null (The Billion-Dollar Mistake)
-In Aether, **no regular variable can ever be null**.
+In DelSafe, **no regular variable can ever be null**.
 - Whenever a value may be absent, the programmer explicitly uses the algebraic type `Option<T>`:
   ```pascal
   type

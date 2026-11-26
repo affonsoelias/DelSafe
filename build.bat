@@ -2,7 +2,7 @@
 setlocal enabledelayedexpansion
 
 echo ========================================================
-echo   AetherLang Compiler (aetherc) - Quick Build Script
+echo   DelSafe Compiler (delsafec) - Quick Build Script
 echo ========================================================
 
 :: Check for FPC in PATH
@@ -40,8 +40,8 @@ echo [*] Free Pascal found. Creating build directories...
 if not exist "bin" mkdir bin
 if not exist "build" mkdir build
 
-echo [*] Compiling aetherc compiler...
-fpc -MObjFPC -Sc -O2 -FEbin -FUbuild -Fucompiler/src compiler/aetherc.lpr
+echo [*] Compiling delsafec compiler...
+fpc -MObjFPC -Sc -O2 -FEbin -FUbuild -Fucompiler/src compiler/delsafec.lpr
 
 if %ERRORLEVEL% neq 0 (
     echo [ERROR] Compilation failed!
@@ -49,14 +49,14 @@ if %ERRORLEVEL% neq 0 (
 )
 
 echo.
-echo [SUCCESS] aetherc compiled successfully to: bin\aetherc.exe
+echo [SUCCESS] delsafec compiled successfully to: bin\delsafec.exe
 echo.
 echo [*] Running quick diagnostic test:
-bin\aetherc.exe --version
-bin\aetherc.exe test
+bin\delsafec.exe --version
+bin\delsafec.exe test
 
 echo.
 echo ========================================================
-echo   Build complete! You can run 'bin\aetherc' now.
+echo   Build complete! You can run 'bin\delsafec' now.
 echo ========================================================
 exit /b 0

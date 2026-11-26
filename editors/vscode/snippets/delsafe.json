@@ -1,0 +1,128 @@
+{
+  "Module Declaration": {
+    "prefix": "module",
+    "body": [
+      "module ${1:ModuleName};",
+      "",
+      "$0"
+    ],
+    "description": "Create the initial declaration of an DelSafe module"
+  },
+  "Program Block": {
+    "prefix": "program",
+    "body": [
+      "program Main;",
+      "var",
+      "    ${2:variable}: ${3:TypeName};",
+      "begin",
+      "    ${0:PrintLn(\"Hello DelSafe!\");}",
+      "end ${1:ModuleName}."
+    ],
+    "description": "Create the main program entry-point block"
+  },
+  "Function Declaration": {
+    "prefix": "function",
+    "body": [
+      "function ${1:FunctionName}(borrow ${2:param}: ${3:TypeName}) return ${4:ReturnType} is",
+      "begin",
+      "    ${0:return ...;}",
+      "end ${1:FunctionName};"
+    ],
+    "description": "Declare a function with an immutable borrow parameter"
+  },
+  "Function with Contract": {
+    "prefix": "function-contract",
+    "body": [
+      "function ${1:FunctionName}(borrow ${2:param}: ${3:TypeName}) return ${4:ReturnType} is",
+      "contract",
+      "    require",
+      "        ${5:true};",
+      "    ensure",
+      "        ${6:result.is_ok};",
+      "begin",
+      "    ${0:return ...;}",
+      "end ${1:FunctionName};"
+    ],
+    "description": "Declare a function guarded by require/ensure contracts"
+  },
+  "Extern C Function": {
+    "prefix": "extern",
+    "body": [
+      "extern function ${1:puts}(borrow ${2:s}: String) return ${3:Int32};$0"
+    ],
+    "description": "Declare an external C function (libc / C runtime)"
+  },
+  "Import Module": {
+    "prefix": "import",
+    "body": [
+      "import ${1:ModuleName};$0"
+    ],
+    "description": "Import another DelSafe module"
+  },
+  "Import Pascal Unit": {
+    "prefix": "import-pascal",
+    "body": [
+      "import pascal ${1:Math};$0"
+    ],
+    "description": "Directly import a Free Pascal / Boss Object Pascal unit"
+  },
+  "Record Declaration": {
+    "prefix": "record",
+    "body": [
+      "${1:RecordName} = record",
+      "    ${2:id}: ${3:UInt32};",
+      "    ${4:field_name}: ${5:String};",
+      "end record;$0"
+    ],
+    "description": "Define a modern record data structure"
+  },
+  "Enum ADT Declaration": {
+    "prefix": "enum",
+    "body": [
+      "${1:EnumName} = enum",
+      "    ${2:Variant1},",
+      "    ${3:VariantWithData}(${4:data}: ${5:String})",
+      "end enum;$0"
+    ],
+    "description": "Define an algebraic enum with optional associated data"
+  },
+  "Match Statement": {
+    "prefix": "match",
+    "body": [
+      "match ${1:outcome} do",
+      "    case Ok(let ${2:val}):",
+      "        ${3:PrintLn(\"Success: %v\", val);}",
+      "    case Err(${4:err}):",
+      "        ${5:PrintLn(\"Error: %v\", err);}",
+      "end match;$0"
+    ],
+    "description": "Exhaustive pattern matching over Result or Enum"
+  },
+  "If Statement": {
+    "prefix": "if",
+    "body": [
+      "if ${1:condition} then",
+      "    ${2:// then branch}",
+      "else",
+      "    ${3:// else branch}",
+      "end if;$0"
+    ],
+    "description": "Unambiguous conditional block (terminated by end if;)"
+  },
+  "While Loop": {
+    "prefix": "while",
+    "body": [
+      "while ${1:condition} do",
+      "    ${2:// loop body}",
+      "end while;$0"
+    ],
+    "description": "While loop (while..do..end while;)"
+  },
+  "PrintLn Statement": {
+    "prefix": "println",
+    "body": [
+      "PrintLn(\"${1:%s}\", ${2:val});$0"
+    ],
+    "description": "Print formatted text to standard output"
+  }
+}

@@ -1,23 +1,23 @@
 # Chapter 06: Object-Oriented Programming (OOP): Records, UFCS & Composition
 
-Aether provides a modern, high-performance approach to **Object-Oriented Programming (OOP)**. Instead of relying on heavyweight classes and fragile inheritance trees, Aether follows the proven architectural paradigm of modern systems languages (such as Rust, Go, and Ada 2012): **Composition over Inheritance**, **Value-Type Records**, and **Uniform Function Call Syntax (UFCS)**.
+DelSafe provides a modern, high-performance approach to **Object-Oriented Programming (OOP)**. Instead of relying on heavyweight classes and fragile inheritance trees, DelSafe follows the proven architectural paradigm of modern systems languages (such as Rust, Go, and Ada 2012): **Composition over Inheritance**, **Value-Type Records**, and **Uniform Function Call Syntax (UFCS)**.
 
 ---
 
-## 1. The Object-Oriented Philosophy of Aether
+## 1. The Object-Oriented Philosophy of DelSafe
 
 In classic object-oriented languages (like Java, C++, or pre-2000 Delphi), OOP is built around classes with inheritance (`class Car extends Vehicle`):
 
-### Why Aether Rejects Classic Class Inheritance:
+### Why DelSafe Rejects Classic Class Inheritance:
 1. **The Fragile Base Class Problem:** Modifying a base class silently breaks assumptions in derived subclasses throughout the codebase.
 2. **Virtual Method Indirection (vtable penalties):** Every virtual call requires pointer chasing, destroying CPU instruction caches and branch prediction.
 3. **Forced Heap Allocation & Garbage Collection:** Classic objects live in the heap, causing memory fragmentation and GC pauses.
 4. **State Bloat:** Subclasses inherit every internal field of their ancestors, creating tightly coupled, bloated data structures.
 
-### The Aether Solution:
-Aether satisfies all fundamental pillars of OOP with **Zero-Cost Abstractions**:
+### The DelSafe Solution:
+DelSafe satisfies all fundamental pillars of OOP with **Zero-Cost Abstractions**:
 
-| OOP Pillar | Classic OOP (Java / Delphi) | Modern Aether OOP |
+| OOP Pillar | Classic OOP (Java / Delphi) | Modern DelSafe OOP |
 | :--- | :--- | :--- |
 | **Encapsulation & State** | Heap-allocated `class` | Stack-allocated **`record`** (contiguous, predictable, 0 GC) |
 | **Methods & Behavior** | Methods inside class body | **UFCS** (`instance.Method()`) with explicit ownership |
@@ -31,7 +31,7 @@ Aether satisfies all fundamental pillars of OOP with **Zero-Cost Abstractions**:
 
 A `record` represents the object's encapsulated state. Fields are laid out contiguously in memory:
 
-```aether
+```delsafe
 module geometry;
 
 type
@@ -51,7 +51,7 @@ type
 ### Positional Constructors
 Every record automatically provides a canonical, type-safe constructor:
 
-```aether
+```delsafe
 program Main;
 var
     pt: Point;
@@ -71,13 +71,13 @@ end geometry.
 
 In traditional languages, there is a rigid divide between procedural functions (`CalculateArea(rect)`) and methods (`rect.CalculateArea()`).
 
-In Aether, **UFCS unifies both worlds**: any function whose first parameter receives the record (either by `borrow`, `mut borrow`, or `take`) can be called using standard object-oriented dot-syntax:
+In DelSafe, **UFCS unifies both worlds**: any function whose first parameter receives the record (either by `borrow`, `mut borrow`, or `take`) can be called using standard object-oriented dot-syntax:
 
 $$\text{Function}(x, y) \iff x.\text{Function}(y)$$
 
 ### Defining Read-Only and Mutating Methods:
 
-```aether
+```delsafe
 module shapes;
 
 type
@@ -127,15 +127,15 @@ end shapes.
 ### The Architectural Benefits of UFCS:
 1. **Zero Runtime Overhead:** Direct function calls without vtables or pointer overhead.
 2. **Open Extensibility:** You can add new methods to *any* record type (even types from third-party libraries) without altering the original record definition!
-3. **First-Class Tooling & IDE Autocomplete:** The Aether LSP and IDEs discover all available functions for any record type when you type `.`.
+3. **First-Class Tooling & IDE Autocomplete:** The DelSafe LSP and IDEs discover all available functions for any record type when you type `.`.
 
 ---
 
 ## 4. Composition Over Inheritance
 
-Rather than creating fragile inheritance hierarchies like `Vehicle -> MotorVehicle -> Car`, Aether models domains by composing independent, reusable components:
+Rather than creating fragile inheritance hierarchies like `Vehicle -> MotorVehicle -> Car`, DelSafe models domains by composing independent, reusable components:
 
-```aether
+```delsafe
 module vehicle_system;
 
 type
@@ -171,7 +171,7 @@ program Main;
 var
     my_car: Car;
 begin
-    my_car := Car("Aether GT", Engine(450, false), GPS(-23.5505, -46.6333));
+    my_car := Car("DelSafe GT", Engine(450, false), GPS(-23.5505, -46.6333));
     my_car.Drive();
 end vehicle_system.
 ```
@@ -182,7 +182,7 @@ end vehicle_system.
 
 To eliminate tedious boilerplate, records can automatically derive fundamental object behaviors at compile time:
 
-```aether
+```delsafe
 [derive(Debug, JSON, Clone, Equals)]
 type
     Account = record
@@ -202,7 +202,7 @@ The compiler synthesizes:
 
 ## 6. Summary
 
-1. **Aether is fully object-oriented**, but ditches legacy class inheritance in favor of **Composition, Records, and UFCS**.
+1. **DelSafe is fully object-oriented**, but ditches legacy class inheritance in favor of **Composition, Records, and UFCS**.
 2. **Records** provide contiguous, cache-friendly value semantics with zero garbage collection overhead.
 3. **UFCS** enables clean `instance.Method()` dot-syntax while retaining the simplicity and speed of pure functions.
 4. **Borrow Checker integration** ensures that methods taking `mut borrow self` can never suffer from data races or concurrent aliasing bugs.

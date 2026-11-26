@@ -20,17 +20,17 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 cd "$REPO_ROOT"
 
 if [[ -z "$VERSION" ]]; then
-  VERSION="$(sed -n "s/.*AETHER_COMPILER_VERSION = '\([^']*\)'.*/\1/p" compiler/src/uAetherIncremental.pas | head -n 1)"
+  VERSION="$(sed -n "s/.*DELSAFE_COMPILER_VERSION = '\([^']*\)'.*/\1/p" compiler/src/uDelSafeIncremental.pas | head -n 1)"
   VERSION="${VERSION:-0.5.0}"
 fi
 
 if [[ "$SKIP_BUILD" -eq 0 ]]; then
   mkdir -p bin build
-  fpc -MObjFPC -Sc -O2 -FEbin -FUbuild -Fucompiler/src compiler/aetherc.lpr
+  fpc -MObjFPC -Sc -O2 -FEbin -FUbuild -Fucompiler/src compiler/delsafec.lpr
 fi
 
-if [[ ! -f "bin/aetherc" ]]; then
-  echo "Error: bin/aetherc not found" >&2
+if [[ ! -f "bin/delsafec" ]]; then
+  echo "Error: bin/delsafec not found" >&2
   exit 1
 fi
 
@@ -49,14 +49,14 @@ case "$UNAME_M" in
 esac
 
 mkdir -p "$OUT_DIR"
-ASSET_BASE="aether-v${VERSION}-${OS_NAME}-${ARCH_NAME}"
+ASSET_BASE="delsafe-v${VERSION}-${OS_NAME}-${ARCH_NAME}"
 STAGE_DIR="$OUT_DIR/_stage_${ASSET_BASE}"
 rm -rf "$STAGE_DIR"
 mkdir -p "$STAGE_DIR/bin" "$STAGE_DIR/std"
 
-cp "bin/aetherc" "$STAGE_DIR/bin/aetherc"
-chmod +x "$STAGE_DIR/bin/aetherc"
-cp std/*.aeth "$STAGE_DIR/std/"
+cp "bin/delsafec" "$STAGE_DIR/bin/delsafec"
+chmod +x "$STAGE_DIR/bin/delsafec"
+cp std/*.dels "$STAGE_DIR/std/"
 [[ -f README.md ]] && cp README.md "$STAGE_DIR/"
 [[ -f LICENSE ]] && cp LICENSE "$STAGE_DIR/"
 

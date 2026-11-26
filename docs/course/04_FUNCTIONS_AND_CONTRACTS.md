@@ -1,14 +1,14 @@
 # Chapter 04: Functions & Contracts
 
-Functions in Aether are first-class constructs. Furthermore, Aether natively incorporates **Design by Contract (DbC)** — a formal software verification method pioneered by Bertrand Meyer — directly into function syntax.
+Functions in DelSafe are first-class constructs. Furthermore, DelSafe natively incorporates **Design by Contract (DbC)** — a formal software verification method pioneered by Bertrand Meyer — directly into function syntax.
 
 ---
 
 ## 1. Routine Syntax (`procedure` and `function`)
 
-Aether distinguishes between routines that do not return a value (**`procedure`**) and routines that return a value (**`function ... return <Type>`**), with Ada-style `is` headers and explicit named `end <Name>;` closings:
+DelSafe distinguishes between routines that do not return a value (**`procedure`**) and routines that return a value (**`function ... return <Type>`**), with Ada-style `is` headers and explicit named `end <Name>;` closings:
 
-```aether
+```delsafe
 module functions_demo;
 
 function AddNumbers(a, b: Int32) return Int32 is
@@ -29,9 +29,9 @@ end GreetUser;
 Contracts turn documentation into executable specifications verified by the compiler:
 
 - **`require` (Pre-condition):** What the caller **must guarantee** before invoking the routine.
-- **`ensure` (Post-condition):** What the routine **guarantees** to deliver before returning. Within `ensure` clauses on functions, Aether automatically provides the special read-only identifier `result` bound to the function's return value (in both the Free Pascal and GCC C99 backends). Post-conditions are verified automatically at **every** `return` statement—including early returns—as well as at the end of `procedure` routines. Contracts declared on generic functions (such as `function IdentityPositive<T>(val: T) return T is`) are also preserved across monomorphization.
+- **`ensure` (Post-condition):** What the routine **guarantees** to deliver before returning. Within `ensure` clauses on functions, DelSafe automatically provides the special read-only identifier `result` bound to the function's return value (in both the Free Pascal and GCC C99 backends). Post-conditions are verified automatically at **every** `return` statement—including early returns—as well as at the end of `procedure` routines. Contracts declared on generic functions (such as `function IdentityPositive<T>(val: T) return T is`) are also preserved across monomorphization.
 
-```aether
+```delsafe
 module contracts_demo;
 
 function Divide(numerator, denominator: Int32) return Int32 is
@@ -106,16 +106,16 @@ end contracts_demo.
 
 ## 4. Contracts on FFI and External Functions
 
-Aether allows attaching contracts even to external C functions! For example:
+DelSafe allows attaching contracts even to external C functions! For example:
 
-```aether
+```delsafe
 extern c function sqrt(x: Float64) return Float64
 contract
     require
         x >= 0.0;
 ```
 
-This ensures your Aether code protects against passing bad data to foreign C routines before the foreign call even occurs.
+This ensures your DelSafe code protects against passing bad data to foreign C routines before the foreign call even occurs.
 
 ---
 

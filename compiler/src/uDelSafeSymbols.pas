@@ -1,0 +1,425 @@
+unit uDelSafeSymbols;
+
+{$mode objfpc}{$H+}
+
+interface
+
+uses
+  SysUtils, Classes, uDelSafeAST;
+
+type
+  TSymbolKind = (skVariable, skConstant, skFunction, skType, skEnumVariant, skTrait);
+
+  TSymbol = class
+  public
+    Name: string;
+    Kind: TSymbolKind;
+    TypeName: string;
+    Line: Integer;
+    Col: Integer;
+    IsMutable: Boolean;
+    Ownership: TOwnershipKind;
+    Node: TASTNode; // Optional reference to AST node (e.g., TASTFunction, TASTEnumDecl)
+    IsPublic: Boolean;
+    SourceModule: string;
+    constructor Create(const AName: string; AKind: TSymbolKind; const AType: string;
+      ALine, ACol: Integer; AMut: Boolean = True; AOwn: TOwnershipKind = owNone; ANode: TASTNode = nil);
+  end;
+
+  TScope = class
+  private
+    FParent: TScope;
+    FSymbols: TFPList;
+    function FindSymbolIndex(const AName: string): Integer;
+  public
+    constructor Create(AParent: TScope = nil);
+    destructor Destroy; override;
+
+    procedure Define(Sym: TSymbol);
+    function Resolve(const AName: string): TSymbol;
+    function ResolveLocal(const AName: string): TSymbol;
+    function ResolveType(const AName: string): TSymbol;
+    property Parent: TScope read FParent;
+  end;
+
+  TSymbolTable = class
+  private
+    FGlobalScope: TScope;
+    FCurrentScope: TScope;
+    procedure InitBuiltinTypes;
+  public
+    constructor Create;
+    destructor Destroy; override;
+
+    procedure EnterScope;
+    procedure LeaveScope;
+    procedure Define(Sym: TSymbol);
+    function Resolve(const AName: string): TSymbol;
+    function ResolveType(const ATypeName: string): Boolean;
+    function ResolveTypeSymbol(const ATypeName: string): TSymbol;
+
+    property CurrentScope: TScope read FCurrentScope;
+    property GlobalScope: TScope read FGlobalScope;
+  end;
+
+implementation
+
+{ TSymbol }
+
+constructor TSymbol.Create(const AName: string; AKind: TSymbolKind; const AType: string;
+  ALine, ACol: Integer; AMut: Boolean; AOwn: TOwnershipKind; ANode: TASTNode);
+begin
+  inherited Create;
+  Name := AName;
+  Kind := AKind;
+  TypeName := AType;
+  Line := ALine;
+  Col := ACol;
+  IsMutable := AMut;
+  Ownership := AOwn;
+  Node := ANode;
+  IsPublic := True;
+  SourceModule := '';
+end;
+
+{ TScope }
+
+constructor TScope.Create(AParent: TScope);
+begin
+  inherited Create;
+  FParent := AParent;
+  FSymbols := TFPList.Create;
+end;
+
+destructor TScope.Destroy;
+var
+  I: Integer;
+begin
+  for I := 0 to FSymbols.Count - 1 do
+    TSymbol(FSymbols[I]).Free;
+  FSymbols.Free;
+  inherited Destroy;
+end;
+
+function TScope.FindSymbolIndex(const AName: string): Integer;
+var
+  I: Integer;
+  Sym: TSymbol;
+begin
+  for I := 0 to FSymbols.Count - 1 do
+  begin
+    Sym := TSymbol(FSymbols[I]);
+    if SameText(Sym.Name, AName) then
+      Exit(I);
+  end;
+  Result := -1;
+end;
+
+procedure TScope.Define(Sym: TSymbol);
+var
+  Idx: Integer;
+begin
+  Idx := FindSymbolIndex(Sym.Name);
+  if Idx <> -1 then
+    raise Exception.CreateFmt('Symbol "%s" already defined in this scope at line %d', [Sym.Name, TSymbol(FSymbols[Idx]).Line]);
+  FSymbols.Add(Sym);
+end;
+
+function TScope.ResolveLocal(const AName: string): TSymbol;
+var
+  Idx: Integer;
+begin
+  Idx := FindSymbolIndex(AName);
+  if Idx <> -1 then
+    Result := TSymbol(FSymbols[Idx])
+  else
+    Result := nil;
+end;
+
+function TScope.Resolve(const AName: string): TSymbol;
+var
+  Current: TScope;
+  Sym: TSymbol;
+begin
+  Current := Self;
+  while Assigned(Current) do
+  begin
+    Sym := Current.ResolveLocal(AName);
+    if Assigned(Sym) then
+      Exit(Sym);
+    Current := Current.Parent;
+  end;
+  Result := nil;
+end;
+
+function TScope.ResolveType(const AName: string): TSymbol;
+var
+  Current: TScope;
+  Sym: TSymbol;
+  I: Integer;
+begin
+  Current := Self;
+  while Assigned(Current) do
+  begin
+    for I := 0 to Current.FSymbols.Count - 1 do
+    begin
+      Sym := TSymbol(Current.FSymbols[I]);
+      if (Sym.Kind = skType) and SameText(Sym.Name, AName) then
+        Exit(Sym);
+    end;
+    Current := Current.Parent;
+  end;
+  Result := nil;
+end;
+
+{ TSymbolTable }
+
+constructor TSymbolTable.Create;
+begin
+  inherited Create;
+  FGlobalScope := TScope.Create(nil);
+  FCurrentScope := FGlobalScope;
+  InitBuiltinTypes;
+end;
+
+destructor TSymbolTable.Destroy;
+begin
+  // Since scopes are chained, free from global or current scope
+  while FCurrentScope <> FGlobalScope do
+    LeaveScope;
+  FGlobalScope.Free;
+  inherited Destroy;
+end;
+
+procedure TSymbolTable.InitBuiltinTypes;
+  procedure AddType(const TypeName: string);
+  begin
+    FGlobalScope.Define(TSymbol.Create(TypeName, skType, TypeName, 0, 0));
+  end;
+begin
+  // Integer Primitive Types
+  AddType('Int8');
+  AddType('Int16');
+  AddType('Int32');
+  AddType('Int64');
+  AddType('UInt8');
+  AddType('UInt16');
+  AddType('UInt32');
+  AddType('UInt64');
+
+  // Floating-Point Types
+  AddType('Float32');
+  AddType('Float64');
+
+  // Boolean, Char, String, and Pointer
+  AddType('Bool');
+  AddType('Char');
+  AddType('String');
+  AddType('Void');
+  AddType('Pointer');
+
+  // Built-in native functions
+  FGlobalScope.Define(TSymbol.Create('PrintLn', skFunction, 'Void', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('Print', skFunction, 'Void', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('Ok', skFunction, 'Result', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('Err', skFunction, 'Result', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('Some', skFunction, 'Option', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('None', skFunction, 'Option', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('Length', skFunction, 'UInt32', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('Count', skFunction, 'Int32', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('Contains', skFunction, 'Bool', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('Remove', skFunction, 'Void', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('SetLength', skFunction, 'Void', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('Push', skFunction, 'Void', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('Pop', skFunction, 'Any', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('Clear', skFunction, 'Void', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('Ord', skFunction, 'Int32', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('Chr', skFunction, 'Char', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('SizeOf', skFunction, 'Int32', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('Inc', skFunction, 'Void', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('Dec', skFunction, 'Void', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('Trim', skFunction, 'String', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('UpperCase', skFunction, 'String', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('LowerCase', skFunction, 'String', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('StartsWith', skFunction, 'Bool', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('EndsWith', skFunction, 'Bool', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('IndexOf', skFunction, 'Int32', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('Replace', skFunction, 'String', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('Split', skFunction, 'array of String', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('Join', skFunction, 'String', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('PadLeft', skFunction, 'String', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('PadRight', skFunction, 'String', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('RepeatStr', skFunction, 'String', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('Abs', skFunction, 'Any', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('Min', skFunction, 'Any', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('Max', skFunction, 'Any', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('Clamp', skFunction, 'Any', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('Sqrt', skFunction, 'Float64', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('Floor', skFunction, 'Float64', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('Ceil', skFunction, 'Float64', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('Round', skFunction, 'Float64', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('Pow', skFunction, 'Float64', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('Exp', skFunction, 'Float64', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('Log', skFunction, 'Float64', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('Sin', skFunction, 'Float64', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('Cos', skFunction, 'Float64', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('Tan', skFunction, 'Float64', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('Atan2', skFunction, 'Float64', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('RandomInt', skFunction, 'Int32', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('RandomFloat', skFunction, 'Float64', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('Delete', skFunction, 'Void', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('Insert', skFunction, 'Void', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('Slice', skFunction, 'Any', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('Default', skFunction, 'Any', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('__InterpToStr', skFunction, 'String', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('__JsonGetStr', skFunction, 'String', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('__JsonGetInt', skFunction, 'Int32', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('__JsonGetFloat', skFunction, 'Float64', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('__JsonGetBool', skFunction, 'Bool', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('__JsonGetChar', skFunction, 'Char', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('__JsonHasValue', skFunction, 'Bool', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('__JsonGetObj', skFunction, 'String', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('CharToStr', skFunction, 'String', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('CharAt', skFunction, 'String', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('ByteAt', skFunction, 'Int32', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('CharFromByte', skFunction, 'String', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('Substring', skFunction, 'String', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('FileExists', skFunction, 'Bool', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('ReadFile', skFunction, 'String', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('WriteFile', skFunction, 'Bool', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('CreateDir', skFunction, 'Bool', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('RemoveDir', skFunction, 'Bool', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('DeleteFile', skFunction, 'Bool', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('DirExists', skFunction, 'Bool', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('FileSize', skFunction, 'Int64', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('ListDir', skFunction, 'array of String', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('CopyFile', skFunction, 'Bool', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('RenameFile', skFunction, 'Bool', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('ReadLn', skFunction, 'String', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('GetEnv', skFunction, 'String', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('SetEnv', skFunction, 'Bool', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('GetNanoseconds', skFunction, 'UInt64', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('SleepMs', skFunction, 'Void', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('IntToStr', skFunction, 'String', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('FloatToStr', skFunction, 'String', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('BoolToStr', skFunction, 'String', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('StrToInt', skFunction, 'Int32', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('StrToFloat', skFunction, 'Float64', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('TryStrToInt', skFunction, 'Option<Int32>', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('TryStrToFloat', skFunction, 'Option<Float64>', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('ParamCount', skFunction, 'Int32', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('ParamStr', skFunction, 'String', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('Assert', skFunction, 'Void', 0, 0));
+
+  // Native OS/Network Socket functions and Memory Free/Dispose
+  FGlobalScope.Define(TSymbol.Create('Free', skFunction, 'Void', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('Dispose', skFunction, 'Void', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('SocketCreate', skFunction, 'Int32', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('SocketListen', skFunction, 'Int32', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('SocketAccept', skFunction, 'Int32', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('SocketConnect', skFunction, 'Int32', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('SocketSend', skFunction, 'Int32', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('SocketRecv', skFunction, 'String', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('SocketClose', skFunction, 'Void', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('SocketSetTimeout', skFunction, 'Bool', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('SocketPeerIP', skFunction, 'String', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('SocketSendHex', skFunction, 'Int32', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('SocketRecvHex', skFunction, 'String', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('SocketSendFile', skFunction, 'Int64', 0, 0));
+
+  // OS Threading & Synchronization Primitives (Phase 53)
+  FGlobalScope.Define(TSymbol.Create('__SyncAtomicNew', skFunction, 'Pointer', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('__SyncAtomicLoad', skFunction, 'Int32', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('__SyncAtomicStore', skFunction, 'Void', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('__SyncAtomicAdd', skFunction, 'Int32', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('__SyncAtomicCas', skFunction, 'Bool', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('__SyncAtomicFree', skFunction, 'Void', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('__SyncMutexNew', skFunction, 'Pointer', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('__SyncMutexLock', skFunction, 'Void', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('__SyncMutexTryLock', skFunction, 'Bool', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('__SyncMutexUnlock', skFunction, 'Void', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('__SyncMutexFree', skFunction, 'Void', 0, 0));
+
+  // Generic Buffered Channels
+  AddType('Channel');
+  AddType('Task');
+  FGlobalScope.Define(TSymbol.Create('NewChannel', skFunction, 'Any', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('Send', skFunction, 'Bool', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('TrySend', skFunction, 'Bool', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('Recv', skFunction, 'Any', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('TryRecv', skFunction, 'Any', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('CloseChannel', skFunction, 'Void', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('ChannelLen', skFunction, 'Int32', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('IsChannelEmpty', skFunction, 'Bool', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('IsChannelFull', skFunction, 'Bool', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('IsChannelClosed', skFunction, 'Bool', 0, 0));
+  FGlobalScope.Define(TSymbol.Create('DestroyChannel', skFunction, 'Void', 0, 0));
+end;
+
+procedure TSymbolTable.EnterScope;
+begin
+  FCurrentScope := TScope.Create(FCurrentScope);
+end;
+
+procedure TSymbolTable.LeaveScope;
+var
+  OldScope: TScope;
+begin
+  if FCurrentScope <> FGlobalScope then
+  begin
+    OldScope := FCurrentScope;
+    FCurrentScope := FCurrentScope.Parent;
+    OldScope.Free;
+  end;
+end;
+
+procedure TSymbolTable.Define(Sym: TSymbol);
+begin
+  FCurrentScope.Define(Sym);
+end;
+
+function TSymbolTable.Resolve(const AName: string): TSymbol;
+begin
+  Result := FCurrentScope.Resolve(AName);
+end;
+
+function TSymbolTable.ResolveTypeSymbol(const ATypeName: string): TSymbol;
+var
+  CleanName: string;
+  P: Integer;
+begin
+  CleanName := ATypeName;
+  P := Pos('<', CleanName);
+  if P > 0 then
+    CleanName := Copy(CleanName, 1, P - 1);
+  Result := FCurrentScope.ResolveType(CleanName);
+end;
+
+function TSymbolTable.ResolveType(const ATypeName: string): Boolean;
+var
+  CleanName: string;
+  P: Integer;
+  Sym: TSymbol;
+begin
+  CleanName := Trim(ATypeName);
+  if (Pos('fn(', CleanName) = 1) or
+     ((Length(CleanName) > 2) and (CleanName[1] = '(') and (CleanName[Length(CleanName)] = ')')) then
+    Exit(True);
+
+  P := Pos('<', CleanName);
+  if P > 0 then
+    CleanName := Copy(CleanName, 1, P - 1);
+
+  if (Length(CleanName) > 1) and (CleanName[1] = '^') then
+    Exit(ResolveType(Copy(CleanName, 2, Length(CleanName))));
+
+  if (CleanName = 'Result') or (CleanName = 'Option') or (CleanName = 'Box') or (CleanName = 'Task') or (CleanName = 'Channel') or
+     (Pos('array[', CleanName) = 1) or (Pos('array of ', CleanName) = 1) or (Pos('set of', CleanName) = 1) or
+     (Pos('map[', CleanName) = 1) then
+    Exit(True);
+
+  Sym := ResolveTypeSymbol(CleanName);
+  Result := Assigned(Sym) and (Sym.Kind = skType);
+end;
+
+end.

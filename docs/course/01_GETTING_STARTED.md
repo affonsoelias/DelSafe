@@ -1,21 +1,21 @@
-# Chapter 01: Getting Started with Aether
+# Chapter 01: Getting Started with DelSafe
 
-Welcome to your first step into Aether development! In this chapter, you will understand the architecture of an Aether source file, how the compilation pipeline works, and how to harness the compiler CLI for multi-target native builds.
+Welcome to your first step into DelSafe development! In this chapter, you will understand the architecture of an DelSafe source file, how the compilation pipeline works, and how to harness the compiler CLI for multi-target native builds.
 
 ---
 
-## 1. Anatomy of an Aether Source File
+## 1. Anatomy of an DelSafe Source File
 
-Every Aether program begins with a **module declaration** that strictly matches the file name (case-insensitive canonical match).
+Every DelSafe program begins with a **module declaration** that strictly matches the file name (case-insensitive canonical match).
 
-Create a file named `hello.aeth`:
+Create a file named `hello.dels`:
 
-```aether
+```delsafe
 module hello;
 
-program HelloAether;
+program HelloDelSafe;
 begin
-    PrintLn("Hello, World! Welcome to Aether.");
+    PrintLn("Hello, World! Welcome to DelSafe.");
 end.
 ```
 
@@ -29,11 +29,11 @@ end.
 
 ## 2. Compiling and Running
 
-Compile and run `hello.aeth` using the native compiler:
+Compile and run `hello.dels` using the native compiler:
 
 ```bash
 # Compile and output binary to bin/
-aetherc hello.aeth -o bin/hello.exe
+delsafec hello.dels -o bin/hello.exe
 
 # Run immediately
 ./bin/hello.exe
@@ -41,34 +41,34 @@ aetherc hello.aeth -o bin/hello.exe
 
 ### Multi-Backend Support Out of the Box:
 
-Aether supports native transpilation to both **Object Pascal (Free Pascal)** and **C99 (GCC/Clang)**:
+DelSafe supports native transpilation to both **Object Pascal (Free Pascal)** and **C99 (GCC/Clang)**:
 
 ```bash
 # Target Free Pascal (Default)
-aetherc hello.aeth --target=pascal -o bin/hello_pas.exe
+delsafec hello.dels --target=pascal -o bin/hello_pas.exe
 
 # Target C99 via GCC
-aetherc hello.aeth --target=c -o bin/hello_c.exe
+delsafec hello.dels --target=c -o bin/hello_c.exe
 
 # Target WebAssembly (.wasm) via Clang
-aetherc hello.aeth --target=wasm -o bin/hello.wasm
+delsafec hello.dels --target=wasm -o bin/hello.wasm
 ```
 
 ---
 
 ## 3. The Compiler Toolchain Suite
 
-The `aetherc` compiler comes equipped with built-in developer tools:
+The `delsafec` compiler comes equipped with built-in developer tools:
 
 | Command                           | Purpose                                                                                               |
 |:--------------------------------- |:----------------------------------------------------------------------------------------------------- |
-| `aetherc check <file.aeth>`       | Runs parsing, semantic analysis, and borrow checking without emitting binaries (sub-10ms validation). |
-| `aetherc test`                    | Automatically discovers and executes unit tests in `tests/`.                                          |
-| `aetherc lint [path] --fix`       | Runs static analysis and automatically cleans unused imports.                                         |
-| `aetherc fmt [path]`              | Canonical code formatter according to official style guidelines.                                      |
-| `aetherc profile <file.aeth>`     | Compiles with heap instrumentation, profiling memory allocations and certifying zero leaks.           |
-| `aetherc emit-header <file.aeth>` | Generates ANSI C/C++ header files (`.h`) for libraries.                                               |
-| `aetherc upgrade`                 | Self-updates the Aether compiler toolchain with SHA-256 verification and atomic rollback.             |
+| `delsafec check <file.dels>`       | Runs parsing, semantic analysis, and borrow checking without emitting binaries (sub-10ms validation). |
+| `delsafec test`                    | Automatically discovers and executes unit tests in `tests/`.                                          |
+| `delsafec lint [path] --fix`       | Runs static analysis and automatically cleans unused imports.                                         |
+| `delsafec fmt [path]`              | Canonical code formatter according to official style guidelines.                                      |
+| `delsafec profile <file.dels>`     | Compiles with heap instrumentation, profiling memory allocations and certifying zero leaks.           |
+| `delsafec emit-header <file.dels>` | Generates ANSI C/C++ header files (`.h`) for libraries.                                               |
+| `delsafec upgrade`                 | Self-updates the DelSafe compiler toolchain with SHA-256 verification and atomic rollback.             |
 
 ---
 
@@ -78,7 +78,7 @@ Let's split code into a reusable module and an application program.
 
 Create ``:
 
-```aether
+```delsafe
 module math_utils;
 
 function DoubleValue(x: Int32): Int32
@@ -87,9 +87,9 @@ begin
 end;
 ```
 
-Now create `app.aeth` in the same directory:
+Now create `app.dels` in the same directory:
 
-```aether
+```delsafe
 module app;
 
 import math_utils;
@@ -108,7 +108,7 @@ end.
 Compile and run:
 
 ```bash
-aetherc app.aeth -o bin/app.exe
+delsafec app.dels -o bin/app.exe
 ./bin/app.exe
 ```
 
@@ -118,6 +118,6 @@ Output:
 Double of 21 is: 42
 ```
 
-In the next chapter, we dive into Aether's strong static type system, immutability, and numerical hierarchies.
+In the next chapter, we dive into DelSafe's strong static type system, immutability, and numerical hierarchies.
 
 ➡️ **Next:** **[Chapter 02: Variables, Types & Mutability](02_VARIABLES_TYPES_MUTABILITY.md)**

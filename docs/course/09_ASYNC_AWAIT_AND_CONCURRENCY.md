@@ -1,14 +1,14 @@
 # Chapter 09: Asynchronous Programming & Concurrency
 
-Modern network services, HTTP backends, and game engines cannot afford to block operating system threads on I/O. Aether introduces **Native Structured Concurrency** with `async function` and lightweight cooperative task scheduling.
+Modern network services, HTTP backends, and game engines cannot afford to block operating system threads on I/O. DelSafe introduces **Native Structured Concurrency** with `async function` and lightweight cooperative task scheduling.
 
 ---
 
 ## 1. Defining Asynchronous Routines (`async`)
 
-An `async function` runs cooperatively in the Aether runtime fiber pool without locking the calling thread:
+An `async function` runs cooperatively in the DelSafe runtime fiber pool without locking the calling thread:
 
-```aether
+```delsafe
 module async_demo;
 
 async function FetchUserData(user_id: Int32) return String is
@@ -20,8 +20,8 @@ end FetchUserData;
 ```
 
 When transpiled:
-- **Free Pascal Backend:** Generates `function FetchUserData(...): specialize TAetherTask<String>;` powered by Aether's multi-threaded task runtime.
-- **C99 Backend:** Generates `AetherTask FetchUserData(...)` wired to a lightweight non-blocking event loop.
+- **Free Pascal Backend:** Generates `function FetchUserData(...): specialize TDelSafeTask<String>;` powered by DelSafe's multi-threaded task runtime.
+- **C99 Backend:** Generates `DelSafeTask FetchUserData(...)` wired to a lightweight non-blocking event loop.
 
 ---
 
@@ -29,10 +29,10 @@ When transpiled:
 
 To retrieve the result of an asynchronous task, use `await`:
 
-```aether
+```delsafe
 program Main;
 var
-    task: TAetherTask<String>;
+    task: TDelSafeTask<String>;
     result: String;
 begin
     // Spawns the task asynchronously:
@@ -51,7 +51,7 @@ end async_demo.
 
 You can launch multiple asynchronous operations concurrently and await them all:
 
-```aether
+```delsafe
 module async_parallel;
 
 async function FetchSensorA() return Float64 is
@@ -66,8 +66,8 @@ end FetchSensorB;
 
 program Main;
 var
-    tA: TAetherTask<Float64>;
-    tB: TAetherTask<Float64>;
+    tA: TDelSafeTask<Float64>;
+    tB: TDelSafeTask<Float64>;
     temp: Float64;
     pressure: Float64;
 begin
@@ -90,7 +90,7 @@ end async_parallel.
 
 In many languages, multi-threading introduces terrifying data races when two threads mutate shared memory without synchronization.
 
-In Aether, **the Borrow Checker applies across thread boundaries**:
+In DelSafe, **the Borrow Checker applies across thread boundaries**:
 - If data is shared across threads, it must be immutable (`borrow`) or wrapped in safe synchronization primitives.
 - Mutable references (`mut borrow`) can never be shared across tasks simultaneously.
 - Result: **Data-race-free concurrency by design**.

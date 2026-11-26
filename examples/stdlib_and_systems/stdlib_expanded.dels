@@ -1,0 +1,107 @@
+module stdlib_expanded;
+
+import std.fs;
+import std.time;
+import std.json;
+import std.http;
+
+program Main;
+var
+    test_dir: String;
+    test_file: String;
+    content: String;
+    created_dir: Bool;
+    written: Bool;
+    read_txt: String;
+    file_sz: Int64;
+    info: FileInfo;
+    deleted: Bool;
+    removed_dir: Bool;
+
+    // Time
+    t: Timer;
+    elapsed_ns: UInt64;
+    elapsed_ms: UInt64;
+
+    // JSON
+    jb: JsonBuilder;
+    json_str: String;
+    parsed_name: String;
+    parsed_age: Int32;
+    parsed_active: Bool;
+    ok_name: Bool;
+    ok_age: Bool;
+    ok_active: Bool;
+
+    // HTTP
+    cli: Client;
+begin
+    PrintLn("=== 1. Testing std.time ===");
+    t := NewTimer();
+    StartTimer(mut borrow t);
+    Sleep(20);
+    elapsed_ns := StopTimer(mut borrow t);
+    elapsed_ms := ElapsedMs(borrow t);
+    PrintLn("Elapsed time: %d ms (%d ns)", Int32(elapsed_ms), Int32(elapsed_ns));
+    Assert(elapsed_ns > 0, "Timer must record positive elapsed time");
+
+    PrintLn("=== 2. Testing std.fs ===");
+    test_dir := "temp_test_dir";
+    test_file := "temp_test_dir/test_file.txt";
+    content := "DelSafe - Safe and GC-Free File System!";
+
+    created_dir := MakeDir(borrow test_dir);
+    PrintLn("Directory created: %s", test_dir);
+    Assert(HasDir(borrow test_dir), "Directory must exist");
+
+    written := WriteFile(borrow test_file, borrow content);
+    Assert(written, "File must be written successfully");
+    Assert(FileExists(borrow test_file), "File must exist");
+
+    file_sz := GetFileSize(borrow test_file);
+    PrintLn("File size: %d bytes", Int32(file_sz));
+    Assert(file_sz > 0, "Size must be greater than zero");
+
+    read_txt := ReadFile(borrow test_file);
+    Assert(Length(borrow read_txt) > 0, "Read content must not be empty");
+
+    info := GetFileInfo(borrow test_file);
+    Assert(info.exists, "Info: file must exist");
+    Assert(not info.is_dir, "Info: must not be a directory");
+
+    deleted := RemoveFile(borrow test_file);
+    Assert(deleted, "File must be deleted");
+    Assert(not FileExists(borrow test_file), "File must no longer exist");
+
+    removed_dir := DeleteDir(borrow test_dir);
+    Assert(removed_dir, "Directory must be removed");
+    Assert(not HasDir(borrow test_dir), "Directory must no longer exist");
+    PrintLn("File and directory cleanup completed successfully.");
+
+    PrintLn("=== 3. Testing std.json ===");
+    jb := NewJsonBuilder();
+    AddString(mut borrow jb, "language", "DelSafe");
+    AddInt(mut borrow jb, "version", 1);
+    AddBool(mut borrow jb, "zero_cost", true);
+    json_str := Build(borrow jb);
+    PrintLn("Generated JSON: %s", json_str);
+    Assert(Validate(borrow json_str), "Generated JSON must be valid");
+
+    parsed_name := "";
+    parsed_age := 0;
+    parsed_active := false;
+    ok_name := ExtractString(borrow json_str, "language", mut borrow parsed_name);
+    ok_age := ExtractInt(borrow json_str, "version", mut borrow parsed_age);
+    ok_active := ExtractBool(borrow json_str, "zero_cost", mut borrow parsed_active);
+
+    Assert(ok_name and (parsed_name = "DelSafe"), "JSON string extraction");
+    Assert(ok_age and (parsed_age = 1), "JSON int extraction");
+    Assert(ok_active and parsed_active, "JSON bool extraction");
+    PrintLn("JSON parsed successfully: language=%s, version=%d, zero_cost=true", parsed_name, parsed_age);
+
+    PrintLn("=== 4. Testing std.http ===");
+    cli := NewClient("127.0.0.1", 8080);
+    PrintLn("HTTP client configured for %s:%d", cli.host, Int32(cli.port));
+
+    PrintLn("=== All Phase 25 tests completed with 100% success! ===");
+end stdlib_expanded.

@@ -1,0 +1,248 @@
+module Emitter;
+
+import AST;
+import Collections;
+
+function MapTypeToC(borrow dels_type: String): String
+begin
+    if dels_type = "Int32" then return "int32_t"; end;
+    if dels_type = "UInt32" then return "uint32_t"; end;
+    if dels_type = "Int64" then return "int64_t"; end;
+    if dels_type = "UInt64" then return "uint64_t"; end;
+    if dels_type = "String" then return "const char*"; end;
+    if dels_type = "Bool" then return "bool"; end;
+    if dels_type = "Real" then return "double"; end;
+    if dels_type = "Void" then return "void"; end;
+    return dels_type;
+end;
+
+function EmitArgsC(borrow arg_opt: Option<Box<ASTExprNode>>): String
+var
+    curr_str: String;
+    rest_str: String;
+begin
+    if arg_opt.is_some then
+        curr_str := EmitExprC(borrow arg_opt.value);
+        if arg_opt.value.right.is_some then
+            rest_str := EmitArgsC(borrow arg_opt.value.right);
+            return curr_str + ", " + rest_str;
+        else
+            return curr_str;
+        end;
+    else
+        return "";
+    end;
+end;
+
+function EmitExprC(borrow expr: ASTExprNode): String
+var
+    l_str: String;
+    r_str: String;
+begin
+    if expr.kind = ASTExprKind.ekIntLiteral then return expr.str_val; end;
+    if expr.kind = ASTExprKind.ekStringLiteral then return expr.str_val; end;
+    if expr.kind = ASTExprKind.ekBoolLiteral then return expr.str_val; end;
+    if expr.kind = ASTExprKind.ekIdentifier then return expr.str_val; end;
+
+    if expr.kind = ASTExprKind.ekCall then
+        l_str := EmitArgsC(borrow expr.left);
+        if expr.str_val = "PrintLn" then
+            return "printf(\"%s\\n\", " + l_str + ")";
+        else
+            return expr.str_val + "(" + l_str + ")";
+        end;
+    end;
+
+    if expr.kind = ASTExprKind.ekBinary then
+        l_str := "";
+        r_str := "";
+        if expr.left.is_some then
+            l_str := EmitExprC(borrow expr.left.value);
+        end;
+        if expr.right.is_some then
+            r_str := EmitExprC(borrow expr.right.value);
+        end;
+        if expr.op = "=" then
+            return "(" + l_str + " == " + r_str + ")";
+        end;
+        if expr.op = "<>" then
+            return "(" + l_str + " != " + r_str + ")";
+        end;
+        return "(" + l_str + " " + expr.op + " " + r_str + ")";
+    end;
+
+    return "";
+end;
+
+function EmitStmtC(borrow stmt: ASTStmtNode): String
+var
+    expr_str: String;
+    c_type: String;
+    then_str: String;
+    else_str: String;
+begin
+    if stmt.kind = ASTStmtKind.skVarDecl then
+        if stmt.name <> "" then
+            c_type := MapTypeToC(borrow stmt.type_name);
+            return "    " + c_type + " " + stmt.name + ";\n";
+        else
+            return "";
+        end;
+    end;
+
+    if stmt.kind = ASTStmtKind.skAssign then
+        if stmt.expr.is_some then
+            expr_str := EmitExprC(borrow stmt.expr.value);
+            return "    " + stmt.name + " = " + expr_str + ";\n";
+        end;
+    end;
+
+    if stmt.kind = ASTStmtKind.skPrintLn then
+        if stmt.expr.is_some then
+            expr_str := EmitExprC(borrow stmt.expr.value);
+            return "    " + expr_str + ";\n";
+        end;
+    end;
+
+    if stmt.kind = ASTStmtKind.skIf then
+        if stmt.expr.is_some then
+            expr_str := EmitExprC(borrow stmt.expr.value);
+            then_str := "";
+            else_str := "";
+            if stmt.then_branch.is_some then
+                then_str := EmitBlockC(borrow stmt.then_branch.value);
+            end;
+            if stmt.else_branch.is_some then
+                else_str := EmitBlockC(borrow stmt.else_branch.value);
+            end;
+
+            if else_str <> "" then
+                return "    if (" + expr_str + ") {\n" + then_str + "    } else {\n" + else_str + "    }\n";
+            else
+                return "    if (" + expr_str + ") {\n" + then_str + "    }\n";
+            end;
+        end;
+    end;
+
+    if stmt.kind = ASTStmtKind.skWhile then
+        if stmt.expr.is_some then
+            expr_str := EmitExprC(borrow stmt.expr.value);
+            then_str := "";
+            if stmt.then_branch.is_some then
+                then_str := EmitBlockC(borrow stmt.then_branch.value);
+            end;
+            return "    while (" + expr_str + ") {\n" + then_str + "    }\n";
+        end;
+    end;
+
+    if stmt.kind = ASTStmtKind.skReturn then
+        if stmt.expr.is_some then
+            expr_str := EmitExprC(borrow stmt.expr.value);
+            return "    return " + expr_str + ";\n";
+        else
+            return "    return;\n";
+        end;
+    end;
+
+    return "";
+end;
+
+function EmitBlockC(borrow stmt: ASTStmtNode): String
+var
+    code: String;
+begin
+    code := EmitStmtC(borrow stmt);
+    if stmt.next.is_some then
+        return code + EmitBlockC(borrow stmt.next.value);
+    else
+        return code;
+    end;
+end;
+
+function EmitFieldsC(borrow field_opt: Option<Box<ASTFieldNode>>): String
+var
+    c_type: String;
+    rest: String;
+begin
+    if field_opt.is_some then
+        c_type := MapTypeToC(borrow field_opt.value.type_name);
+        rest := EmitFieldsC(borrow field_opt.value.next);
+        return "    " + c_type + " " + field_opt.value.name + ";\n" + rest;
+    else
+        return "";
+    end;
+end;
+
+function EmitStructC(borrow st: ASTStructNode): String
+var
+    fields_str: String;
+begin
+    fields_str := EmitFieldsC(borrow st.fields);
+    return "typedef struct {\n" + fields_str + "} " + st.name + ";\n\n";
+end;
+
+function EmitStructsC(borrow st_opt: Option<Box<ASTStructNode>>): String
+var
+    curr_str: String;
+    rest_str: String;
+begin
+    if st_opt.is_some then
+        curr_str := EmitStructC(borrow st_opt.value);
+        rest_str := EmitStructsC(borrow st_opt.value.next);
+        return curr_str + rest_str;
+    else
+        return "";
+    end;
+end;
+
+function EmitParamsC(borrow param_opt: Option<Box<ASTParamNode>>): String
+var
+    c_type: String;
+    rest: String;
+begin
+    if param_opt.is_some then
+        c_type := MapTypeToC(borrow param_opt.value.type_name);
+        if param_opt.value.next.is_some then
+            rest := EmitParamsC(borrow param_opt.value.next);
+            return c_type + " " + param_opt.value.name + ", " + rest;
+        else
+            return c_type + " " + param_opt.value.name;
+        end;
+    else
+        return "void";
+    end;
+end;
+
+function EmitFunctionC(borrow fn: ASTFunctionNode): String
+var
+    c_rtype: String;
+    params_str: String;
+    vars_str: String;
+    body_str: String;
+begin
+    c_rtype := MapTypeToC(borrow fn.return_type);
+    params_str := EmitParamsC(borrow fn.params);
+    vars_str := "";
+    if fn.var_decls.is_some then
+        vars_str := EmitBlockC(borrow fn.var_decls.value);
+    end;
+    body_str := "";
+    if fn.body.is_some then
+        body_str := EmitBlockC(borrow fn.body.value);
+    end;
+    return c_rtype + " " + fn.name + "(" + params_str + ") {\n" + vars_str + body_str + "}\n\n";
+end;
+
+function EmitFunctionsC(borrow fn_opt: Option<Box<ASTFunctionNode>>): String
+var
+    curr_str: String;
+    rest_str: String;
+begin
+    if fn_opt.is_some then
+        curr_str := EmitFunctionC(borrow fn_opt.value);
+        rest_str := EmitFunctionsC(borrow fn_opt.value.next);
+        return curr_str + rest_str;
+    else
+        return "";
+    end;
+end;

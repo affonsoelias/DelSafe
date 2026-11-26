@@ -1,0 +1,633 @@
+unit uDelSafeFormatter;
+
+{$mode objfpc}{$H+}
+
+interface
+
+uses
+  SysUtils, Classes;
+
+type
+  { TDelSafeFormatter: Official Canonical Formatter for DelSafe Code }
+  TDelSafeFormatter = class
+  private
+    class function IsAlphaNumChar(C: Char): Boolean;
+    class function NormalizeOperators(const Line: string): string;
+    class function TrimRightSpaces(const S: string): string;
+  public
+    class function FormatSource(const Source: string): string;
+    class function FormatFile(const FilePath: string; CheckOnly: Boolean = False): Boolean;
+    class function FormatDirectory(const DirPath: string; var TotalFiles, FormattedFiles: Integer; CheckOnly: Boolean = False): Boolean;
+  end;
+
+implementation
+
+class function TDelSafeFormatter.IsAlphaNumChar(C: Char): Boolean;
+begin
+  Result := (C in ['a'..'z', 'A'..'Z', '0'..'9', '_']);
+end;
+
+class function TDelSafeFormatter.TrimRightSpaces(const S: string): string;
+var
+  I: Integer;
+begin
+  I := Length(S);
+  while (I > 0) and (S[I] in [' ', #9]) do
+    Dec(I);
+  Result := Copy(S, 1, I);
+end;
+
+class function TDelSafeFormatter.NormalizeOperators(const Line: string): string;
+var
+  I, Len, GenericDepth: Integer;
+  InString, InChar: Boolean;
+  C, NextC, LastCh: Char;
+  Res, TwoChar: string;
+
+  procedure TrimResTrailingSpaces;
+  begin
+    while (Length(Res) > 0) and (Res[Length(Res)] = ' ') do
+      Delete(Res, Length(Res), 1);
+  end;
+
+  procedure SkipLineSpaces;
+  begin
+    while (I <= Len) and (Line[I] in [' ', #9]) do
+      Inc(I);
+  end;
+
+  procedure EmitSpacedOp(const Op: string);
+  begin
+    TrimResTrailingSpaces;
+    if Length(Res) > 0 then
+      Res := Res + ' ';
+    Res := Res + Op + ' ';
+    Inc(I, Length(Op));
+    SkipLineSpaces;
+  end;
+
+begin
+  Res := '';
+  InString := False;
+  InChar := False;
+  GenericDepth := 0;
+  I := 1;
+  Len := Length(Line);
+
+  while I <= Len do
+  begin
+    C := Line[I];
+    if I < Len then NextC := Line[I + 1] else NextC := #0;
+
+    // Detect line comment
+    if (not InString) and (not InChar) and (C = '/') and (NextC = '/') then
+    begin
+      Res := Res + Copy(Line, I, Len - I + 1);
+      Break;
+    end;
+
+    // Detect string literal "..."
+    if (not InChar) and (C = '"') then
+    begin
+      InString := not InString;
+      Res := Res + C;
+      Inc(I);
+      Continue;
+    end;
+
+    if InString then
+    begin
+      if (C = '\') and (NextC <> #0) then
+      begin
+        Res := Res + C + NextC;
+        Inc(I, 2);
+        Continue;
+      end;
+      Res := Res + C;
+      Inc(I);
+      Continue;
+    end;
+
+    // Detect Char literal '...'
+    if C = '''' then
+    begin
+      InChar := not InChar;
+      Res := Res + C;
+      Inc(I);
+      Continue;
+    end;
+
+    if InChar then
+    begin
+      if (C = '\') and (NextC <> #0) then
+      begin
+        Res := Res + C + NextC;
+        Inc(I, 2);
+        Continue;
+      end;
+      Res := Res + C;
+      Inc(I);
+      Continue;
+    end;
+
+    // Collapse consecutive spaces outside strings and comments
+    if C in [' ', #9] then
+    begin
+      if (Length(Res) > 0) and (Res[Length(Res)] <> ' ') then
+        Res := Res + ' ';
+      Inc(I);
+      Continue;
+    end;
+
+    // 3-4 char and 2-char compound operators (takes priority over single chars)
+    if (I + 3 <= Len) and (LowerCase(Copy(Line, I, 4)) = 'mod=') and
+       ((Length(Res) = 0) or (not IsAlphaNumChar(Res[Length(Res)]))) then
+    begin
+      EmitSpacedOp(Copy(Line, I, 4));
+      Continue;
+    end;
+
+    if (I + 2 <= Len) and ((Copy(Line, I, 3) = '<<=') or (Copy(Line, I, 3) = '>>=')) then
+    begin
+      EmitSpacedOp(Copy(Line, I, 3));
+      Continue;
+    end;
+
+    TwoChar := C + NextC;
+    if (TwoChar = ':=') or (TwoChar = '+=') or (TwoChar = '-=') or (TwoChar = '*=') or
+       (TwoChar = '/=') or (TwoChar = '%=') or (TwoChar = '&=') or (TwoChar = '|=') or
+       (TwoChar = '^=') or (TwoChar = '=>') or (TwoChar = '<>') or (TwoChar = '<=') or
+       (TwoChar = '>=') then
+    begin
+      EmitSpacedOp(TwoChar);
+      Continue;
+    end;
+
+    if TwoChar = '..' then
+    begin
+      TrimResTrailingSpaces;
+      Res := Res + '..';
+      Inc(I, 2);
+      SkipLineSpaces;
+      Continue;
+    end;
+
+    if C = ':' then
+    begin
+      TrimResTrailingSpaces;
+      if NextC = ']' then
+        Res := Res + ':'
+      else
+        Res := Res + ': ';
+      Inc(I);
+      SkipLineSpaces;
+      Continue;
+    end;
+
+    if C = ',' then
+    begin
+      TrimResTrailingSpaces;
+      Res := Res + ', ';
+      Inc(I);
+      SkipLineSpaces;
+      Continue;
+    end;
+
+    if C = ';' then
+    begin
+      TrimResTrailingSpaces;
+      Res := Res + ';';
+      Inc(I);
+      Continue;
+    end;
+
+    if C = '=' then
+    begin
+      EmitSpacedOp('=');
+      Continue;
+    end;
+
+    if C = '<' then
+    begin
+      if (Length(Res) > 0) and IsAlphaNumChar(Res[Length(Res)]) then
+      begin
+        Inc(GenericDepth);
+        Res := Res + '<';
+        Inc(I);
+      end
+      else
+        EmitSpacedOp('<');
+      Continue;
+    end;
+
+    if C = '>' then
+    begin
+      if GenericDepth > 0 then
+      begin
+        Dec(GenericDepth);
+        TrimResTrailingSpaces;
+        Res := Res + '>';
+        Inc(I);
+      end
+      else
+        EmitSpacedOp('>');
+      Continue;
+    end;
+
+    if C = '+' then
+    begin
+      EmitSpacedOp('+');
+      Continue;
+    end;
+
+    if C = '-' then
+    begin
+      if Length(Res) = 0 then LastCh := #0 else LastCh := Res[Length(Res)];
+      if (LastCh = #0) or (LastCh in ['(', '[', ',', '=', ':', '<', '>', '+', '-', '*', '/', '.']) then
+      begin
+        // Unary sign or negative after operator/delimiter (e.g., (-42), -10..-1)
+        Res := Res + '-';
+        Inc(I);
+      end
+      else if (LastCh = ' ') and (Length(Res) >= 2) and (Res[Length(Res) - 1] in ['=', ':', ',', '<', '>', '+', '-', '*', '/', '(']) then
+      begin
+        Res := Res + '-';
+        Inc(I);
+      end
+      else if (Pos('return ', LowerCase(Res)) = Length(Res) - 6) or
+              (Pos('then ', LowerCase(Res)) = Length(Res) - 4) or
+              (Pos('else ', LowerCase(Res)) = Length(Res) - 4) or
+              (Pos('case ', LowerCase(Res)) = Length(Res) - 4) or
+              (Pos('do ', LowerCase(Res)) = Length(Res) - 2) then
+      begin
+        Res := Res + '-';
+        Inc(I);
+      end
+      else
+        EmitSpacedOp('-');
+      Continue;
+    end;
+
+    Res := Res + C;
+    Inc(I);
+  end;
+
+  Result := TrimRightSpaces(Res);
+end;
+
+class function TDelSafeFormatter.FormatSource(const Source: string): string;
+const
+  bkBlock = 1;
+  bkMatch = 2;
+  bkMatchArm = 3;
+var
+  Lines, OutputList: TStringList;
+  I, IndentLevel, SectionIndent, CurrentIndent, BlankCount: Integer;
+  RawLine, TrimmedLine, LowerLine, CodeOnly, IndentedLine: string;
+  InAsmBlock: Boolean;
+  BlockStack: array of Integer;
+
+  procedure PushBlock(Kind: Integer);
+  begin
+    SetLength(BlockStack, Length(BlockStack) + 1);
+    BlockStack[High(BlockStack)] := Kind;
+  end;
+
+  function TopBlock: Integer;
+  begin
+    if Length(BlockStack) > 0 then
+      Result := BlockStack[High(BlockStack)]
+    else
+      Result := 0;
+  end;
+
+  procedure PopBlock;
+  begin
+    if Length(BlockStack) > 0 then
+      SetLength(BlockStack, Length(BlockStack) - 1);
+  end;
+
+  function StripLineComment(const S: string): string;
+  var
+    K: Integer;
+    InS, InC: Boolean;
+  begin
+    InS := False; InC := False;
+    for K := 1 to Length(S) do
+    begin
+      if (not InC) and (S[K] = '"') and ((K = 1) or (S[K - 1] <> '\')) then InS := not InS
+      else if (not InS) and (S[K] = '''') and ((K = 1) or (S[K - 1] <> '\')) then InC := not InC
+      else if (not InS) and (not InC) and (S[K] = '/') and (K < Length(S)) and (S[K + 1] = '/') then
+        Exit(Trim(Copy(S, 1, K - 1)));
+    end;
+    Result := Trim(S);
+  end;
+
+  function EndsWithWord(const S, W: string): Boolean;
+  var
+    L, WL: Integer;
+  begin
+    L := Length(S); WL := Length(W);
+    if L < WL then Exit(False);
+    if Copy(S, L - WL + 1, WL) <> W then Exit(False);
+    Result := (L = WL) or (not IsAlphaNumChar(S[L - WL]));
+  end;
+
+  function StartsWithWord(const S, W: string): Boolean;
+  var
+    L, WL: Integer;
+  begin
+    L := Length(S); WL := Length(W);
+    if L < WL then Exit(False);
+    if Copy(S, 1, WL) <> W then Exit(False);
+    Result := (L = WL) or (not IsAlphaNumChar(S[WL + 1]));
+  end;
+
+  function IsEndLine(const S: string): Boolean;
+  var
+    Rest: string;
+    K: Integer;
+  begin
+    if (S = 'end') or (S = 'end;') or (S = 'end.') then
+      Exit(True);
+    if StartsWithWord(S, 'end') and (Length(S) > 4) then
+    begin
+      if (S[Length(S)] = ';') or (S[Length(S)] = '.') then
+        Rest := Trim(Copy(S, 4, Length(S) - 4))
+      else
+        Rest := Trim(Copy(S, 4, Length(S) - 3));
+      if Length(Rest) > 0 then
+      begin
+        for K := 1 to Length(Rest) do
+          if not IsAlphaNumChar(Rest[K]) then Exit(False);
+        Exit(True);
+      end;
+    end;
+    Result := False;
+  end;
+
+begin
+  Lines := TStringList.Create;
+  OutputList := TStringList.Create;
+  SetLength(BlockStack, 0);
+  try
+    Lines.Text := Source;
+    IndentLevel := 0;
+    SectionIndent := 0;
+    BlankCount := 0;
+    InAsmBlock := False;
+
+    for I := 0 to Lines.Count - 1 do
+    begin
+      RawLine := Lines[I];
+      TrimmedLine := Trim(RawLine);
+
+      if TrimmedLine = '' then
+      begin
+        Inc(BlankCount);
+        if BlankCount <= 1 then
+          OutputList.Add('');
+        Continue;
+      end;
+
+      BlankCount := 0;
+      CodeOnly := LowerCase(StripLineComment(TrimmedLine));
+      LowerLine := LowerCase(TrimmedLine);
+
+      // Preserve inner content of asm blocks
+      if InAsmBlock then
+      begin
+        if (CodeOnly = 'end asm;') or (CodeOnly = 'end asm') or (CodeOnly = 'end;') or (CodeOnly = 'end') then
+        begin
+          InAsmBlock := False;
+          if IndentLevel > 0 then Dec(IndentLevel);
+          if TopBlock = bkBlock then PopBlock;
+          CurrentIndent := IndentLevel + SectionIndent;
+        end
+        else
+        begin
+          OutputList.Add(StringOfChar(' ', (IndentLevel + SectionIndent) * 4) + TrimmedLine);
+          Continue;
+        end;
+      end
+      else
+      begin
+        // End top-level section before a new routine, program, or module section
+        if (Length(BlockStack) = 0) and (
+             StartsWithWord(CodeOnly, 'pub') or StartsWithWord(CodeOnly, 'priv') or
+             StartsWithWord(CodeOnly, 'private') or
+             StartsWithWord(CodeOnly, 'function') or StartsWithWord(CodeOnly, 'procedure') or
+             StartsWithWord(CodeOnly, 'async') or StartsWithWord(CodeOnly, 'extern') or
+             StartsWithWord(CodeOnly, 'export') or StartsWithWord(CodeOnly, 'program') or
+             (CodeOnly = 'interface') or (CodeOnly = 'implementation') or
+             (CodeOnly = 'initialization') or (CodeOnly = 'finalization') or
+             (CodeOnly = 'type') or (CodeOnly = 'const') or (CodeOnly = 'var') or
+             (CodeOnly = 'let') or (CodeOnly = 'contract') or StartsWithWord(CodeOnly, 'impl')
+           ) then
+          SectionIndent := 0;
+
+        // Align require/ensure sections at level 1 inside contract before var/let/begin
+        if (CodeOnly = 'require') or (CodeOnly = 'ensure') then
+          SectionIndent := 1
+        else if (CodeOnly = 'var') or (CodeOnly = 'let') or (CodeOnly = 'begin') then
+          SectionIndent := 0;
+
+        // Block closings
+        if IsEndLine(CodeOnly) then
+        begin
+          if TopBlock = bkMatchArm then
+          begin
+            PopBlock;
+            if IndentLevel > 0 then Dec(IndentLevel);
+          end;
+          if Length(BlockStack) > 0 then
+            PopBlock;
+          if IndentLevel > 0 then Dec(IndentLevel);
+          if (Length(BlockStack) = 0) and
+             (not StartsWithWord(CodeOnly, 'end record')) and
+             (not StartsWithWord(CodeOnly, 'end enum')) and
+             (not StartsWithWord(CodeOnly, 'end trait')) then
+            SectionIndent := 0;
+          CurrentIndent := IndentLevel + SectionIndent;
+        end
+        else if StartsWithWord(CodeOnly, 'until') then
+        begin
+          if Length(BlockStack) > 0 then PopBlock;
+          if IndentLevel > 0 then Dec(IndentLevel);
+          CurrentIndent := IndentLevel + SectionIndent;
+        end
+        else if StartsWithWord(CodeOnly, 'else') or (CodeOnly = 'except') then
+        begin
+          CurrentIndent := IndentLevel + SectionIndent;
+          if CurrentIndent > 0 then Dec(CurrentIndent);
+        end
+        else if (TopBlock = bkMatchArm) and (
+                  (Copy(CodeOnly, Length(CodeOnly) - 1, 2) = '=>') or
+                  (StartsWithWord(CodeOnly, 'case') and (Length(CodeOnly) > 0) and (CodeOnly[Length(CodeOnly)] = ':')) or
+                  ((Length(CodeOnly) > 0) and (CodeOnly[Length(CodeOnly)] = ':') and (Pos(':=', CodeOnly) = 0))
+                ) then
+        begin
+          PopBlock;
+          if IndentLevel > 0 then Dec(IndentLevel);
+          CurrentIndent := IndentLevel + SectionIndent;
+        end
+        else
+          CurrentIndent := IndentLevel + SectionIndent;
+      end;
+
+      // Normalize operators only outside full-line comments
+      if (Pos('//', TrimmedLine) <> 1) and (Pos('/*', TrimmedLine) <> 1) and (Pos('{', TrimmedLine) <> 1) then
+        TrimmedLine := NormalizeOperators(TrimmedLine);
+
+      if CurrentIndent > 0 then
+        IndentedLine := StringOfChar(' ', CurrentIndent * 4) + TrimmedLine
+      else
+        IndentedLine := TrimmedLine;
+
+      IndentedLine := TrimRightSpaces(IndentedLine);
+      OutputList.Add(IndentedLine);
+
+      // Section and compound block openings for subsequent lines
+      if (not InAsmBlock) and (not IsEndLine(CodeOnly)) and (CodeOnly <> '') then
+      begin
+        if CodeOnly = 'asm' then
+        begin
+          InAsmBlock := True;
+          PushBlock(bkBlock);
+          Inc(IndentLevel);
+        end
+        else if (CodeOnly = 'type') or (CodeOnly = 'const') or (CodeOnly = 'var') or (CodeOnly = 'let') or
+                (CodeOnly = 'contract') or (CodeOnly = 'initialization') or (CodeOnly = 'finalization') or
+                (CodeOnly = 'pub type') or (CodeOnly = 'priv type') or (CodeOnly = 'pub const') or (CodeOnly = 'priv const') then
+        begin
+          SectionIndent := 1;
+        end
+        else if (CodeOnly = 'require') or (CodeOnly = 'ensure') then
+        begin
+          if SectionIndent < 2 then SectionIndent := 2;
+        end
+        else if (TopBlock = bkMatch) and (
+                  (Copy(CodeOnly, Length(CodeOnly) - 1, 2) = '=>') or
+                  ((Length(CodeOnly) > 0) and (CodeOnly[Length(CodeOnly)] = ':') and (Pos(':=', CodeOnly) = 0))
+                ) then
+        begin
+          PushBlock(bkMatchArm);
+          Inc(IndentLevel);
+        end
+        else if ((StartsWithWord(CodeOnly, 'match') or (Pos(':= match ', CodeOnly) > 0) or (Pos('return match ', CodeOnly) > 0)) and
+                 (EndsWithWord(CodeOnly, 'do') or EndsWithWord(CodeOnly, 'with'))) then
+        begin
+          PushBlock(bkMatch);
+          Inc(IndentLevel);
+        end
+        else if (CodeOnly = 'begin') or (CodeOnly = 'repeat') or (CodeOnly = 'try') or (CodeOnly = 'unsafe') or
+                (EndsWithWord(CodeOnly, 'record') and (Pos('end;', CodeOnly) = 0) and (Pos('end record', CodeOnly) = 0)) or
+                (EndsWithWord(CodeOnly, 'enum') and (Pos('end;', CodeOnly) = 0) and (Pos('end enum', CodeOnly) = 0)) or
+                (StartsWithWord(CodeOnly, 'impl') and (Pos('end;', CodeOnly) = 0) and (Pos('end impl', CodeOnly) = 0)) or
+                (StartsWithWord(CodeOnly, 'trait') and (Pos('end;', CodeOnly) = 0) and (Pos('end trait', CodeOnly) = 0)) or
+                (StartsWithWord(CodeOnly, 'pub trait') and (Pos('end;', CodeOnly) = 0) and (Pos('end trait', CodeOnly) = 0)) or
+                (StartsWithWord(CodeOnly, 'priv trait') and (Pos('end;', CodeOnly) = 0) and (Pos('end trait', CodeOnly) = 0)) or
+                ((Pos('= trait', CodeOnly) > 0) and (Pos('end;', CodeOnly) = 0) and (Pos('end trait', CodeOnly) = 0)) or
+                (StartsWithWord(CodeOnly, 'if') and EndsWithWord(CodeOnly, 'then')) or
+                (StartsWithWord(CodeOnly, 'while') and EndsWithWord(CodeOnly, 'do')) or
+                (StartsWithWord(CodeOnly, 'for') and EndsWithWord(CodeOnly, 'do')) then
+        begin
+          PushBlock(bkBlock);
+          Inc(IndentLevel);
+        end;
+      end;
+    end;
+
+    Result := OutputList.Text;
+    if (Result <> '') and (Result[Length(Result)] <> #10) then
+      Result := Result + LineEnding;
+  finally
+    Lines.Free;
+    OutputList.Free;
+  end;
+end;
+
+class function TDelSafeFormatter.FormatFile(const FilePath: string; CheckOnly: Boolean): Boolean;
+var
+  OriginalContent, FormattedContent: string;
+  F: TextFile;
+  Line: string;
+begin
+  Result := True;
+  if not FileExists(FilePath) then
+    Exit(False);
+
+  // Read original content
+  OriginalContent := '';
+  AssignFile(F, FilePath);
+  {$I-} Reset(F); {$I+}
+  if IOResult <> 0 then Exit(False);
+  while not Eof(F) do
+  begin
+    ReadLn(F, Line);
+    OriginalContent := OriginalContent + Line + LineEnding;
+  end;
+  CloseFile(F);
+
+  FormattedContent := FormatSource(OriginalContent);
+
+  // Compare
+  if OriginalContent <> FormattedContent then
+  begin
+    if not CheckOnly then
+    begin
+      // Write formatted output
+      AssignFile(F, FilePath);
+      {$I-} Rewrite(F); {$I+}
+      if IOResult <> 0 then Exit(True);
+      Write(F, FormattedContent);
+      CloseFile(F);
+    end;
+    Result := False; // Return False to indicate formatting was needed
+  end
+  else
+    Result := True;
+end;
+
+class function TDelSafeFormatter.FormatDirectory(const DirPath: string; var TotalFiles, FormattedFiles: Integer; CheckOnly: Boolean): Boolean;
+var
+  SearchRec: TSearchRec;
+  FilePath: string;
+  IsClean: Boolean;
+begin
+  Result := True;
+  if FindFirst(DirPath + PathDelim + '*.dels', faAnyFile, SearchRec) = 0 then
+  begin
+    repeat
+      if (SearchRec.Attr and faDirectory) = 0 then
+      begin
+        FilePath := DirPath + PathDelim + SearchRec.Name;
+        Inc(TotalFiles);
+        IsClean := FormatFile(FilePath, CheckOnly);
+        if not IsClean then
+        begin
+          Inc(FormattedFiles);
+          Result := False;
+        end;
+      end;
+    until FindNext(SearchRec) <> 0;
+    FindClose(SearchRec);
+  end;
+
+  // Recursive subdirectory search
+  if FindFirst(DirPath + PathDelim + '*', faDirectory, SearchRec) = 0 then
+  begin
+    repeat
+      if ((SearchRec.Attr and faDirectory) <> 0) and
+         (SearchRec.Name <> '.') and (SearchRec.Name <> '..') and
+         (SearchRec.Name <> '.git') and (SearchRec.Name <> 'bin') and
+         (SearchRec.Name <> 'generated') and (SearchRec.Name <> 'cache') then
+      begin
+        FormatDirectory(DirPath + PathDelim + SearchRec.Name, TotalFiles, FormattedFiles, CheckOnly);
+      end;
+    until FindNext(SearchRec) <> 0;
+    FindClose(SearchRec);
+  end;
+end;
+
+end.

@@ -1,13 +1,13 @@
 <#
 .SYNOPSIS
-    Official AetherLang Toolchain Installer for Windows.
-    Installs aetherc.exe + std/ into %USERPROFILE%\.aether and updates user PATH.
+    Official DelSafe Toolchain Installer for Windows.
+    Installs delsafec.exe + std/ into %USERPROFILE%\.delsafe and updates user PATH.
 #>
 
 param(
     [string]$Version = "",
-    [string]$Repo = $(if ($env:AETHER_UPGRADE_REPO) { $env:AETHER_UPGRADE_REPO } else { "affonsoelias/aether" }),
-    [string]$InstallRoot = $(Join-Path $env:USERPROFILE ".aether"),
+    [string]$Repo = $(if ($env:DELSAFE_UPGRADE_REPO) { $env:DELSAFE_UPGRADE_REPO } else { "affonsoelias/delsafe" }),
+    [string]$InstallRoot = $(Join-Path $env:USERPROFILE ".delsafe"),
     [switch]$Nightly,
     [switch]$AllowUnsigned,
     [switch]$NoPathUpdate
@@ -16,10 +16,10 @@ param(
 $ErrorActionPreference = "Stop"
 
 Write-Host "========================================================" -ForegroundColor Cyan
-Write-Host "  AetherLang Official Installer (Windows)               " -ForegroundColor Cyan
+Write-Host "  DelSafe Official Installer (Windows)               " -ForegroundColor Cyan
 Write-Host "========================================================" -ForegroundColor Cyan
 
-$apiHeaders = @{ "User-Agent" = "Aether-Installer"; "Accept" = "application/vnd.github.v3+json" }
+$apiHeaders = @{ "User-Agent" = "DelSafe-Installer"; "Accept" = "application/vnd.github.v3+json" }
 if ($Version) {
     $releaseUrl = "https://api.github.com/repos/$Repo/releases/tags/$Version"
     $release = Invoke-RestMethod -Uri $releaseUrl -Headers $apiHeaders
@@ -44,7 +44,7 @@ $sumAsset = $release.assets | Where-Object {
     $_.name -eq "$($asset.name).sha256" -or $_.name -eq "SHA256SUMS.txt"
 } | Select-Object -First 1
 
-$tmpDir = Join-Path $env:TEMP ("aether_install_" + [Guid]::NewGuid().ToString("N"))
+$tmpDir = Join-Path $env:TEMP ("delsafe_install_" + [Guid]::NewGuid().ToString("N"))
 New-Item -ItemType Directory -Path $tmpDir -Force | Out-Null
 
 try {
@@ -67,13 +67,13 @@ try {
 
     Write-Host "[3/4] Installing into $InstallRoot..."
     Expand-Archive -Path $pkgPath -DestinationPath $extDir -Force
-    $exeSrc = Get-ChildItem -Path $extDir -Recurse -Filter "aetherc.exe" | Select-Object -First 1
-    if (-not $exeSrc) { throw "aetherc.exe not found inside archive." }
+    $exeSrc = Get-ChildItem -Path $extDir -Recurse -Filter "delsafec.exe" | Select-Object -First 1
+    if (-not $exeSrc) { throw "delsafec.exe not found inside archive." }
 
     $binDest = Join-Path $InstallRoot "bin"
     $stdDest = Join-Path $InstallRoot "std"
     New-Item -ItemType Directory -Path $binDest -Force | Out-Null
-    Copy-Item $exeSrc.FullName (Join-Path $binDest "aetherc.exe") -Force
+    Copy-Item $exeSrc.FullName (Join-Path $binDest "delsafec.exe") -Force
 
     $stdSrc = Get-ChildItem -Path $extDir -Recurse -Directory -Filter "std" | Select-Object -First 1
     if ($stdSrc) {
@@ -91,7 +91,7 @@ try {
     }
 
     Write-Host "[4/4] Verifying installation..."
-    & (Join-Path $binDest "aetherc.exe") --version
+    & (Join-Path $binDest "delsafec.exe") --version
 }
 finally {
     Remove-Item $tmpDir -Recurse -Force -ErrorAction SilentlyContinue

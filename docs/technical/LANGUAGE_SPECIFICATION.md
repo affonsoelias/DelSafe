@@ -1,4 +1,4 @@
-# Formal Specification of the Aether Language (AetherLang)
+# Formal Specification of the DelSafe Language (DelSafe)
 
 > **"The clarity, structure, and discipline of Object Pascal with the strict memory safety and modern expressiveness of Rust."**
 
@@ -6,7 +6,7 @@
 
 ## 1. Overview and Core Principles
 
-**Aether** is a compiled, statically and strongly typed systems programming language with deterministic memory management and no garbage collector. Its core pillars are:
+**DelSafe** is a compiled, statically and strongly typed systems programming language with deterministic memory management and no garbage collector. Its core pillars are:
 
 1. **Modern Object Orientation (UFCS - Uniform Function Call Syntax):**
    - Pure data modeled via `record` types and algebraic `enum` variants (ADTs).
@@ -211,7 +211,7 @@ CallArg       ::= [ "take" | "borrow" | "mut borrow" ] Expr
 
 ## 5. First-Class Interoperability (Pascal & C FFI)
 
-Aether integrates natively with Free Pascal units and C99 headers with **Zero-Boilerplate** auto-import:
+DelSafe integrates natively with Free Pascal units and C99 headers with **Zero-Boilerplate** auto-import:
 
 ### 5.1 Importing Free Pascal Units (`import pascal`)
 Consume any unit from the Free Pascal or Lazarus ecosystem (`SysUtils`, `Classes`, `DateUtils`, `Math`, etc.):
@@ -254,7 +254,7 @@ end CExample.
 
 ## 6. Traits and Static Polymorphism
 
-Aether favors composition over inheritance using **Traits** and decoupled implementations (`impl ... for ...`) with compile-time static dispatch (*Zero-Cost Abstractions*):
+DelSafe favors composition over inheritance using **Traits** and decoupled implementations (`impl ... for ...`) with compile-time static dispatch (*Zero-Cost Abstractions*):
 
 ```pascal
 module TraitsExample;
@@ -284,16 +284,16 @@ end DisplayElement;
 
 ---
 
-## 7. OS Networking and Socket Layer (`std/net.aeth`)
+## 7. OS Networking and Socket Layer (`std/net.dels`)
 
 Real OS-level sockets built into both compiler backends:
 - **Object Pascal Backend:** Uses FPC's native `Sockets` unit (`fpsocket`, `fpbind`, `fplisten`, `fpaccept`, `fpconnect`, `fpsend`, `fprecv`).
 - **C99 Backend:** Uses `WinSock2` (`<winsock2.h>`) on Windows and POSIX BSD sockets on Linux/macOS.
-- Built-in HTTP server and zero-copy request parser in `std/net.aeth`.
+- Built-in HTTP server and zero-copy request parser in `std/net.dels`.
 
 ---
 
-## 8. Unit Emission for BlaiseVue (`aetherc emit pascal --unit`)
+## 8. Unit Emission for BlaiseVue (`delsafec emit pascal --unit`)
 
 When transpiled in unit mode:
 1. Emits `unit <ModuleName>;` in `<ModuleName>.pas`.
@@ -305,9 +305,9 @@ When transpiled in unit mode:
 
 ## 9. Low-Level Access & Intel Inline Assembly (`asm ... end asm;`)
 
-Aether supports hardware-level access via **Intel-Syntax Inline Assembly** blocks:
+DelSafe supports hardware-level access via **Intel-Syntax Inline Assembly** blocks:
 
-```aether
+```delsafe
 asm
     mov eax, 42
     add eax, 8
@@ -335,9 +335,9 @@ end asm;
 
 ## 10. Automatic Derive Metaprogramming (`[derive(...)]`)
 
-Aether automatically synthesizes common trait methods for `record` and `enum` types via `[derive(...)]`:
+DelSafe automatically synthesizes common trait methods for `record` and `enum` types via `[derive(...)]`:
 
-```aether
+```delsafe
 type
     [derive(Debug, JSON, Clone, Equals)]
     Point = record
@@ -360,7 +360,7 @@ type
 - **`Equals`**: Generates `Equals(borrow self, other: borrow Self) return Bool` for recursive structural equality.
 
 Generated methods work naturally via UFCS:
-```aether
+```delsafe
 var p1: Point;
 var p2: Point;
 p1 := Point(10.5, 20.25);

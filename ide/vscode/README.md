@@ -1,6 +1,6 @@
-# Official Aether Language Extension for VS Code
+# Official DelSafe Language Extension for VS Code
 
-Full smart language support for the **Aether** programming language (`aetherc`).
+Full smart language support for the **DelSafe** programming language (`delsafec`).
 
 ---
 
@@ -12,7 +12,7 @@ Full smart language support for the **Aether** programming language (`aetherc`).
    - Built-in types and monads: `Int8`..`Int64`, `UInt8`..`UInt64`, `Float32`, `Float64`, `Bool`, `String`, `Void`, `Result<T, E>`, `Option<T>`, `Box<T>`.
 
 2. **Language Server Protocol (Integrated LSP)**:
-   - Native connection to `aetherc lsp`.
+   - Native connection to `delsafec lsp`.
    - **Autocompletion**: Keywords, primitive types, monads, function signatures, and trait/UFCS methods.
    - **Hover**: Inferred types, contracts, and ownership documentation.
    - **Go-to-Definition**: Quick navigation to functions, records, enums, and traits.
@@ -29,10 +29,10 @@ Full smart language support for the **Aether** programming language (`aetherc`).
    - `test`: Unit test function.
 
 4. **Build and Test Commands**:
-   - `Aether: Compile Current File (Pascal Backend)`
-   - `Aether: Compile Current File (C99 / GCC Backend)`
-   - `Aether: Run Unit Tests (aetherc test)`
-   - `Aether: Restart Language Server (LSP)`
+   - `DelSafe: Compile Current File (Pascal Backend)`
+   - `DelSafe: Compile Current File (C99 / GCC Backend)`
+   - `DelSafe: Run Unit Tests (delsafec test)`
+   - `DelSafe: Restart Language Server (LSP)`
 
 ---
 
@@ -41,6 +41,6 @@ Full smart language support for the **Aether** programming language (`aetherc`).
 To test and use locally in VS Code:
 
 1. Copy the `ide/vscode` folder into your VS Code extensions directory:
-   - On Windows: `%USERPROFILE%\.vscode\extensions\aether-lang`
+   - On Windows: `%USERPROFILE%\.vscode\extensions\delsafe-lang`
 2. Restart or reload Visual Studio Code (`Ctrl+Shift+P` -> `Developer: Reload Window`).
-3. Open any file with the `.aeth` extension.
+3. Open any file with the `.dels` extension.

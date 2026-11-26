@@ -1,0 +1,18 @@
+module Main;
+
+import IO;
+import MathExtra;
+
+program Main;
+var
+    d: Int32;
+    t: Int32;
+begin
+    PrintLn("=== PACKAGE MANAGER AND DEPENDENCIES DEMO (PHASE 15) ===");
+    d := DoubleVal(borrow 21);
+    t := TripleVal(borrow 14);
+    PrintLn("Calling module from dependency 'math_extra':");
+    PrintLn("  DoubleVal(21) = %d", d);
+    PrintLn("  TripleVal(14) = %d", t);
+    PrintLn("\nExecuted successfully via delsafec run!");
+end Main.

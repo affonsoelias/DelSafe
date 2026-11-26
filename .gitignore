@@ -12,6 +12,6 @@ build/
 *.vsix
 *.lps
 *.wasm
-.aether/
+.delsafe/
 .DS_Store
 Thumbs.db

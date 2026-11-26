@@ -1,13 +1,13 @@
-# Official VS Code Extension for Aether (AetherLang)
+# Official VS Code Extension for DelSafe (DelSafe)
 
-This extension adds full first-class support for the **Aether** programming language (`.aeth`) in Visual Studio Code and derivatives (Cursor, VSCodium, Windsurf).
+This extension adds full first-class support for the **DelSafe** programming language (`.dels`) in Visual Studio Code and derivatives (Cursor, VSCodium, Windsurf).
 
 ---
 
 ## Features
 
-1. **High-Performance Native LSP (`aetherc --lsp`):**
-   - **Canonical Formatting (`Shift + Alt + F` / `formatOnSave`)**: Direct integration with `textDocument/formatting` powered by `uAetherFormatter.pas` (4-space indentation, normalized operators).
+1. **High-Performance Native LSP (`delsafec --lsp`):**
+   - **Canonical Formatting (`Shift + Alt + F` / `formatOnSave`)**: Direct integration with `textDocument/formatting` powered by `uDelSafeFormatter.pas` (4-space indentation, normalized operators).
    - **Safe Refactoring (`F2` / Rename Symbol)**: Atomic workspace-wide rename via `textDocument/rename` without altering literals or comments.
    - **Quick-Fix Code Actions (`Ctrl + .`)**: Instant suggestions to resolve ownership conflicts (`borrow` or `mut borrow`) and auto-import standard library modules (`std.fs`, `std.time`, `std.http`, `std.json`).
    - **Smart Autocompletion (`Ctrl + Space`)**: Keywords, ownership modifiers, primitive types, monads, and local symbols.
@@ -20,11 +20,11 @@ This extension adds full first-class support for the **Aether** programming lang
 3. **Smart Snippets:**
    - Generate modules, functions with contracts, records, algebraic enums, and exhaustive `match` blocks cleanly with `Tab`.
 4. **Built-In Commands:**
-   - `Aether: Format Document (Shift+Alt+F)`.
-   - `Aether: Compile Current File (Pascal Backend)`.
-   - `Aether: Compile Current File (C99 / GCC Backend)`.
-   - `Aether: Build Project (Build)`.
-   - `Aether: Run Project (Run)`.
+   - `DelSafe: Format Document (Shift+Alt+F)`.
+   - `DelSafe: Compile Current File (Pascal Backend)`.
+   - `DelSafe: Compile Current File (C99 / GCC Backend)`.
+   - `DelSafe: Build Project (Build)`.
+   - `DelSafe: Run Project (Run)`.
 
 ---
 
@@ -38,13 +38,13 @@ Open a terminal (PowerShell on Windows) and run:
 
 ```powershell
 # Create local VS Code extension directory
-New-Item -ItemType Directory -Path "$HOME/.vscode/extensions/aether-lang" -Force
+New-Item -ItemType Directory -Path "$HOME/.vscode/extensions/delsafe-lang" -Force
 
 # Copy extension files
-Copy-Item -Path "editors/vscode/*" -Destination "$HOME/.vscode/extensions/aether-lang" -Recurse -Force
+Copy-Item -Path "editors/vscode/*" -Destination "$HOME/.vscode/extensions/delsafe-lang" -Recurse -Force
 ```
 
-Then restart or reload VS Code (`Ctrl + Shift + P` -> `Developer: Reload Window`). Any `.aeth` file will open with full syntax highlighting and tooling enabled!
+Then restart or reload VS Code (`Ctrl + Shift + P` -> `Developer: Reload Window`). Any `.dels` file will open with full syntax highlighting and tooling enabled!
 
 ### Method 2: VSIX Packaging (via `vsce`)
 
@@ -53,7 +53,7 @@ If you have npm's `vsce` tool installed:
 ```bash
 cd editors/vscode
 npx @vscode/vsce package
-code --install-extension aether-lang-1.0.0.vsix
+code --install-extension delsafe-lang-1.0.0.vsix
 ```
 
 ---
@@ -64,7 +64,7 @@ In your VS Code `settings.json`:
 
 ```json
 {
-  "aether.compilerPath": "c:/Users/Pichau/Documents/aether/bin/aetherc.exe"
+  "delsafe.compilerPath": "c:/Users/Pichau/Documents/delsafe/bin/delsafec.exe"
 }
 ```
-*(If omitted, the extension automatically searches for `bin/aetherc.exe` inside the active workspace).*
+*(If omitted, the extension automatically searches for `bin/delsafec.exe` inside the active workspace).*

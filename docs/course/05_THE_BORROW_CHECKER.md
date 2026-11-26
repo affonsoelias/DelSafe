@@ -1,12 +1,12 @@
 # Chapter 05: The Borrow Checker & Ownership
 
-The Borrow Checker is the core engine of Aether's memory safety. It guarantees **100% memory safety (no use-after-free, no double-free, no dangling pointers, and no data races)** at compile time without requiring a garbage collector.
+The Borrow Checker is the core engine of DelSafe's memory safety. It guarantees **100% memory safety (no use-after-free, no double-free, no dangling pointers, and no data races)** at compile time without requiring a garbage collector.
 
 ---
 
 ## 1. The Core Ownership Rules
 
-Every piece of heap-allocated or non-trivial data in Aether adheres to three fundamental rules:
+Every piece of heap-allocated or non-trivial data in DelSafe adheres to three fundamental rules:
 
 1. **Each resource has exactly one Owner.**
 2. **When the Owner goes out of scope, the resource is automatically freed (Deterministic RAII).**
@@ -21,7 +21,7 @@ Every piece of heap-allocated or non-trivial data in Aether adheres to three fun
 
 When a variable is passed with `take`, its ownership is transferred to the receiving function. The original variable becomes invalid and cannot be read again:
 
-```aether
+```delsafe
 module ownership_move;
 
 type
@@ -55,7 +55,7 @@ end ownership_move.
 
 Often, a function only needs to inspect or read data without taking ownership or making a costly copy. Use `borrow`:
 
-```aether
+```delsafe
 module borrow_read;
 
 type
@@ -73,7 +73,7 @@ program Main;
 var
     doc: Document;
 begin
-    doc := Document("Aether Language Spec", 5400);
+    doc := Document("DelSafe Language Spec", 5400);
 
     // We can borrow 'doc' multiple times safely:
     PrintSummary(borrow doc);
@@ -90,7 +90,7 @@ end borrow_read.
 
 When a function needs to modify an existing resource in place, use `mut borrow`:
 
-```aether
+```delsafe
 module borrow_mut;
 
 type
@@ -121,9 +121,9 @@ end borrow_mut.
 
 ## 5. Preventing Data Races and Aliasing Conflicts
 
-The Aether compiler prevents aliasing bugs at compile time. For instance, you cannot pass a resource as mutable while another reference is reading it:
+The DelSafe compiler prevents aliasing bugs at compile time. For instance, you cannot pass a resource as mutable while another reference is reading it:
 
-```aether
+```delsafe
 // This pattern is rejected by the Borrow Checker:
 // UpdateBuffer(mut borrow buf, borrow buf.data);
 // Error: Cannot borrow 'buf' as mutable more than once or concurrently with immutable borrows!

@@ -1,20 +1,20 @@
 # Chapter 11: Foreign Function Interface (FFI) & Zero-Boilerplate Interoperability
 
-> **"Aether is not an isolated island. It is a modern bridge."**
+> **"DelSafe is not an isolated island. It is a modern bridge."**
 
 One of the greatest pitfalls of new systems programming languages is the **"Rewrite Trap"** — forcing teams to rewrite millions of lines of proven C libraries, operating system APIs, and Pascal components from scratch.
 
-Aether takes the opposite approach. Interoperability is the **crown jewel of the language**. Aether provides **seamless, bidirectional, zero-cost integration** with both the vast C99/C++ ecosystem and the rich Free Pascal / Delphi landscape.
+DelSafe takes the opposite approach. Interoperability is the **crown jewel of the language**. DelSafe provides **seamless, bidirectional, zero-cost integration** with both the vast C99/C++ ecosystem and the rich Free Pascal / Delphi landscape.
 
 ---
 
 ## 🗺️ The Dual-Bridge Architecture
 
-Aether features a unified compilation architecture that allows simultaneous communication with C and Pascal:
+DelSafe features a unified compilation architecture that allows simultaneous communication with C and Pascal:
 
 ```
                   ┌──────────────────────────────────────────────┐
-                  │           Aether Source Code (.aeth)         │
+                  │           DelSafe Source Code (.dels)         │
                   │   (Type-safe, Borrow-checked, Contracts)     │
                   └──────────────────────┬───────────────────────┘
                                          │
@@ -34,7 +34,7 @@ Aether features a unified compilation architecture that allows simultaneous comm
    └────────────────────────────────┘       └────────────────────────────────┘
 ```
 
-In this chapter, you will learn the 5 levels of Aether interoperability, step-by-step.
+In this chapter, you will learn the 5 levels of DelSafe interoperability, step-by-step.
 
 ---
 
@@ -42,18 +42,18 @@ In this chapter, you will learn the 5 levels of Aether interoperability, step-by
 
 In most systems languages, calling an external function requires manually copying C signatures, creating tedious header bindings, and maintaining fragile binding wrappers.
 
-In Aether, **standard libraries are auto-imported with zero boilerplate**.
+In DelSafe, **standard libraries are auto-imported with zero boilerplate**.
 
 ### How it Works:
 1. You write `import c "<header.h>";` for C standard library headers.
 2. You write `import pascal UnitName;` for Free Pascal / Delphi standard units.
-3. The Aether compiler **automatically resolves the symbol names, arguments, return types, and linkage** — with **ZERO manual `extern` declarations**!
+3. The DelSafe compiler **automatically resolves the symbol names, arguments, return types, and linkage** — with **ZERO manual `extern` declarations**!
 
 ### Step-by-Step Practical Example:
 
-Create `interop_auto.aeth`:
+Create `interop_auto.dels`:
 
-```aether
+```delsafe
 module interop_auto;
 
 // 1. Auto-import Free Pascal standard units
@@ -93,11 +93,11 @@ end interop_auto.
 ### Compiling and Running:
 ```bash
 # Compile and run with Free Pascal backend:
-aetherc interop_auto.aeth -o bin/interop_pas.exe
+delsafec interop_auto.dels -o bin/interop_pas.exe
 ./bin/interop_pas.exe
 
 # Compile and run with GCC C99 backend:
-aetherc interop_auto.aeth --target=c -o bin/interop_c.exe
+delsafec interop_auto.dels --target=c -o bin/interop_c.exe
 ./bin/interop_c.exe
 ```
 
@@ -118,7 +118,7 @@ When consuming **custom C libraries, third-party DLLs (`.dll`, `.so`, `.dylib`),
 
 ### 1. Anatomy of an `extern c` Declaration
 
-```aether
+```delsafe
 // Format:
 // extern c ["optional_library_name"] (function Name(params) return Type; | procedure Name(params);)
 
@@ -134,17 +134,17 @@ extern c "raylib" procedure InitWindow(width, height: Int32; title: String);
 
 By default, `extern c` uses the standard **`cdecl`** calling convention. For Windows Win32 APIs, specify `stdcall`:
 
-```aether
+```delsafe
 extern c "kernel32" stdcall function GetCurrentProcessId() return UInt32;
 ```
 
 ---
 
-## 📊 Type Mapping Reference: Aether to C99
+## 📊 Type Mapping Reference: DelSafe to C99
 
 When interfacing with C, types map directly according to the C ABI without conversion overhead:
 
-| Aether Type | C99 Native Type | Notes |
+| DelSafe Type | C99 Native Type | Notes |
 | :--- | :--- | :--- |
 | `Int8` | `int8_t` / `signed char` | Exact 8-bit signed integer |
 | `Int16` | `int16_t` / `short` | Exact 16-bit signed integer |
@@ -166,9 +166,9 @@ When interfacing with C, types map directly according to the C ABI without conve
 
 One of the most dangerous aspects of C libraries is that passing invalid arguments (e.g. negative numbers, out-of-bounds indices, null pointers) leads to crashes or memory corruption.
 
-In Aether, **you can attach Design-by-Contract (`require`) to foreign C functions**! The Aether compiler verifies the pre-condition *before* execution ever enters the C runtime:
+In DelSafe, **you can attach Design-by-Contract (`require`) to foreign C functions**! The DelSafe compiler verifies the pre-condition *before* execution ever enters the C runtime:
 
-```aether
+```delsafe
 module safe_c_contracts;
 
 // Foreign C function wrapped in a contract:
@@ -189,7 +189,7 @@ begin
     val := sqrt(144.0); // OK!
     PrintLn("Square root: " + FloatToStr(val));
 
-    // This contract violation will be caught by Aether BEFORE touching C:
+    // This contract violation will be caught by DelSafe BEFORE touching C:
     // val := sqrt(-25.0); // Contract Violation: Pre-condition 'x >= 0.0' failed!
 end safe_c_contracts.
 ```
@@ -200,7 +200,7 @@ end safe_c_contracts.
 
 If you have legacy Pascal code or specialized Free Pascal units without auto-import headers, declare them with `extern pascal`:
 
-```aether
+```delsafe
 module custom_pascal;
 
 // Consuming Pascal functions with native Pascal ABI
@@ -217,15 +217,15 @@ end custom_pascal.
 
 ---
 
-## 📤 Level 4: Exporting Aether to C, C++, Python & Rust (`emit-header`)
+## 📤 Level 4: Exporting DelSafe to C, C++, Python & Rust (`emit-header`)
 
-Interoperability in Aether is **bidirectional**. You can write high-performance, memory-safe algorithms in Aether and export them to external ecosystems:
+Interoperability in DelSafe is **bidirectional**. You can write high-performance, memory-safe algorithms in DelSafe and export them to external ecosystems:
 
-### Step 1: Write your Aether library with `export cdecl`
+### Step 1: Write your DelSafe library with `export cdecl`
 
-Create `algorithms.aeth`:
+Create `algorithms.dels`:
 
-```aether
+```delsafe
 module algorithms;
 
 interface
@@ -259,10 +259,10 @@ end algorithms.
 
 ### Step 2: Automatically Generate C Header (`.h`)
 
-Run the Aether header generator:
+Run the DelSafe header generator:
 
 ```bash
-aetherc emit-header algorithms.aeth -o include/algorithms.h
+delsafec emit-header algorithms.dels -o include/algorithms.h
 ```
 
 Output:
@@ -274,8 +274,8 @@ C header (C99/C++) generated successfully:
 Inspect `include/algorithms.h`:
 
 ```c
-#ifndef AETHER_ALGORITHMS_H
-#define AETHER_ALGORITHMS_H
+#ifndef DELSAFE_ALGORITHMS_H
+#define DELSAFE_ALGORITHMS_H
 
 #include <stdint.h>
 #include <stdbool.h>
@@ -285,35 +285,35 @@ extern "C" {
 #endif
 
 #ifdef _WIN32
-  #define AETHER_EXPORT __declspec(dllexport)
+  #define DELSAFE_EXPORT __declspec(dllexport)
 #else
-  #define AETHER_EXPORT __attribute__((visibility("default")))
+  #define DELSAFE_EXPORT __attribute__((visibility("default")))
 #endif
 
-AETHER_EXPORT uint32_t ComputeHash(const char* data);
-AETHER_EXPORT int32_t FastMultiply(int32_t a, int32_t b);
+DELSAFE_EXPORT uint32_t ComputeHash(const char* data);
+DELSAFE_EXPORT int32_t FastMultiply(int32_t a, int32_t b);
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif // AETHER_ALGORITHMS_H
+#endif // DELSAFE_ALGORITHMS_H
 ```
 
 ### Step 3: Consuming from C or C++
 
-Now any standard C or C++ application can include `algorithms.h` and link directly with your Aether library:
+Now any standard C or C++ application can include `algorithms.h` and link directly with your DelSafe library:
 
 ```c
-// main.c (C Application consuming Aether)
+// main.c (C Application consuming DelSafe)
 #include <stdio.h>
 #include "algorithms.h"
 
 int main() {
-    uint32_t hash = ComputeHash("AetherLang");
+    uint32_t hash = ComputeHash("DelSafe");
     int32_t prod = FastMultiply(6, 7);
 
-    printf("Hash computed by Aether: %u\n", hash);
+    printf("Hash computed by DelSafe: %u\n", hash);
     printf("Multiplication: %d\n", prod);
     return 0;
 }
@@ -323,33 +323,33 @@ int main() {
 
 ## 🧰 Level 5: Compiler CLI Flags for External Linking
 
-When linking external native libraries, `aetherc` provides familiar GNU/Clang CLI flags:
+When linking external native libraries, `delsafec` provides familiar GNU/Clang CLI flags:
 
 | Flag | Purpose | Example |
 | :--- | :--- | :--- |
-| `-l<lib>` | Link with a system or dynamic library | `aetherc app.aeth -lsqlite3 -lraylib` |
-| `-L<dir>` | Add directory to the library search path | `aetherc app.aeth -L./libs -lmylib` |
-| `-I<dir>` | Add directory to C header search path | `aetherc app.aeth -I./include` |
-| `-Fu<dir>` | Add Free Pascal unit search path | `aetherc app.aeth -FuC:/lazarus/components` |
-| `--c-source <file.c>` | Compile an extra `.c` source file into the final binary | `aetherc app.aeth --c-source helper.c` |
-| `--shared-lib <file.dll>` | Automatically copy dynamic library to the executable output folder | `aetherc app.aeth --shared-lib sqlite3.dll` |
+| `-l<lib>` | Link with a system or dynamic library | `delsafec app.dels -lsqlite3 -lraylib` |
+| `-L<dir>` | Add directory to the library search path | `delsafec app.dels -L./libs -lmylib` |
+| `-I<dir>` | Add directory to C header search path | `delsafec app.dels -I./include` |
+| `-Fu<dir>` | Add Free Pascal unit search path | `delsafec app.dels -FuC:/lazarus/components` |
+| `--c-source <file.c>` | Compile an extra `.c` source file into the final binary | `delsafec app.dels --c-source helper.c` |
+| `--shared-lib <file.dll>` | Automatically copy dynamic library to the executable output folder | `delsafec app.dels --shared-lib sqlite3.dll` |
 
 ---
 
 ## 💡 FFI Best Practices & Memory Safety Checklist
 
-When bridging between Aether and foreign code, follow these three golden rules:
+When bridging between DelSafe and foreign code, follow these three golden rules:
 
-1. **Strings across boundaries:** Aether `String` values passed to C `extern c` routines are passed as null-terminated UTF-8 C strings (`const char*`).
+1. **Strings across boundaries:** DelSafe `String` values passed to C `extern c` routines are passed as null-terminated UTF-8 C strings (`const char*`).
 2. **Contracts on FFI:** Always attach `contract require` to foreign C functions that have constraints (e.g. non-null, valid bounds, positive numbers).
-3. **Memory Ownership:** Memory allocated by C (e.g. via `malloc`) should be freed by C (via `free`); memory managed by Aether's Borrow Checker is cleaned up automatically by Aether.
+3. **Memory Ownership:** Memory allocated by C (e.g. via `malloc`) should be freed by C (via `free`); memory managed by DelSafe's Borrow Checker is cleaned up automatically by DelSafe.
 
 ---
 
 ## 🏁 Summary
 - **For standard math/system functions:** Use **Zero-Boilerplate** `import c "<header.h>"` and `import pascal UnitName`.
 - **For custom DLLs/libraries:** Declare explicitly with `extern c "libname" function ...`.
-- **For safety:** Protect foreign C routines with Aether `contract require`.
-- **For exporting:** Use `export cdecl` and generate C headers with `aetherc emit-header`.
+- **For safety:** Protect foreign C routines with DelSafe `contract require`.
+- **For exporting:** Use `export cdecl` and generate C headers with `delsafec emit-header`.
 
 ➡️ **Next:** **[Chapter 12: Modules, Multi-File Projects & Package Management](12_MODULES_PACKAGES_AND_DEPENDENCIES.md)**

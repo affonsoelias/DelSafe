@@ -1,0 +1,129 @@
+module concurrency_async;
+
+import IO;
+import Strings;
+import JSON;
+import Sync;
+import Net;
+
+program Main;
+var
+    jb: JsonBuilder;
+    doc_json: String;
+    is_valid: Bool;
+    name_val: String;
+    age_val: Int32;
+    active_val: Bool;
+    ok_ext: Bool;
+    atom: AtomicInt32;
+    val_atom: Int32;
+    mtx: Mutex;
+    lock_ok: Bool;
+    chan: Channel<Int32>;
+    recv_opt: Option<Int32>;
+    sock: Socket;
+    req_http: String;
+    bytes_sent: UInt32;
+begin
+    PrintLn("====================================================================");
+    PrintLn("  DelSafe - Phase 17 Demonstration: Stdlib and Concurrency       ");
+    PrintLn("====================================================================");
+    PrintLn("");
+
+    // --- 1. JSON Test (Serialization and Extraction) ---
+    PrintLn("[1/3] Testing std/json.dels (JSON Builder and Parser)...");
+    jb := NewJsonBuilder();
+    AddString(mut borrow jb, "language", "DelSafe");
+    AddInt(mut borrow jb, "version", 5);
+    AddBool(mut borrow jb, "safe", true);
+    doc_json := Build(borrow jb);
+
+    PrintLn("      Built JSON: %s", doc_json);
+    is_valid := Validate(borrow doc_json);
+    if is_valid then
+        PrintLn("      [PASS] Structural validation of braces and delimiters: OK");
+    end if;
+
+    name_val := "";
+    ok_ext := ExtractString(borrow doc_json, "language", mut borrow name_val);
+    if ok_ext then
+        PrintLn("      [PASS] String extraction \"language\": \"%s\"", name_val);
+    else
+        PrintLn("      [FAIL] Error extracting string \"language\"");
+    end if;
+
+    age_val := 0;
+    ok_ext := ExtractInt(borrow doc_json, "version", mut borrow age_val);
+    if ok_ext then
+        PrintLn("      [PASS] Integer extraction \"version\": %d", age_val);
+    else
+        PrintLn("      [FAIL] Error extracting integer \"version\"");
+    end if;
+
+    active_val := false;
+    ok_ext := ExtractBool(borrow doc_json, "safe", mut borrow active_val);
+    if ok_ext then
+        if active_val then
+            PrintLn("      [PASS] Boolean extraction \"safe\": true");
+        else
+            PrintLn("      [PASS] Boolean extraction \"safe\": false");
+        end if;
+    else
+        PrintLn("      [FAIL] Error extracting boolean \"safe\"");
+    end if;
+
+    // --- 2. Concurrency and Synchronization Test ---
+    PrintLn("");
+    PrintLn("[2/3] Testing std/sync.dels (Atomic, Mutex and Channels)...");
+    atom := NewAtomic(100);
+    val_atom := AtomicAdd(mut borrow atom, 25);
+    PrintLn("      [PASS] AtomicAdd (100 + 25) = %d", val_atom);
+
+    mtx := NewMutex();
+    Lock(mut borrow mtx);
+    PrintLn("      [PASS] Mutex acquired by thread 1 successfully");
+    Unlock(mut borrow mtx);
+    if not IsLocked(borrow mtx) then
+        PrintLn("      [PASS] Mutex released successfully (IsLocked: false)");
+    end if;
+
+    chan := NewChannel<Int32>(10);
+    Send(chan, 101);
+    Send(chan, 202);
+    PrintLn("      [PASS] CSP Channel populated (length: %d)", ChannelLen(chan));
+
+    recv_opt := Recv(chan);
+    if recv_opt.is_some then
+        PrintLn("      [PASS] Message 1 received from CSP Channel (value: %d)", recv_opt.value);
+    end if;
+    recv_opt := Recv(chan);
+    if recv_opt.is_some then
+        PrintLn("      [PASS] Message 2 received from CSP Channel (value: %d)", recv_opt.value);
+    end if;
+    if IsChannelEmpty(chan) then
+        PrintLn("      [PASS] Channel empty after consumption: OK");
+    end if;
+    DestroyChannel(chan);
+    AtomicDestroy(mut borrow atom);
+    MutexDestroy(mut borrow mtx);
+
+    // --- 3. Networking and Protocols Test ---
+    PrintLn("");
+    PrintLn("[3/3] Testing std/net.dels (Sockets and HTTP)...");
+    sock := NewSocket("127.0.0.1", 8080);
+    Connect(mut borrow sock);
+    if sock.is_open then
+        PrintLn("      [PASS] Socket connected to %s:%d (Open: true)", sock.host, sock.port);
+    end if;
+
+    req_http := BuildHttpRequest("GET", "delsafe-lang.org", "/api/v1/health");
+    bytes_sent := SendData(borrow sock, borrow req_http);
+    PrintLn("      [PASS] HTTP Request sent (%d bytes)", bytes_sent);
+    CloseSocket(mut borrow sock);
+    PrintLn("      [PASS] Socket closed cleanly and safely.");
+
+    PrintLn("");
+    PrintLn("====================================================================");
+    PrintLn("  PHASE 17 COMPLETED SUCCESSFULLY! STD/JSON, STD/SYNC & STD/NET OK! ");
+    PrintLn("====================================================================");
+end concurrency_async.

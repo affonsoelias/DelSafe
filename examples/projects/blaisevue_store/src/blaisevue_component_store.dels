@@ -1,0 +1,46 @@
+// Phase 21.1 Example: Component / Store for BlaiseVue Integration
+// DelSafe transpiles this file as a Free Pascal Unit (unit/interface/implementation)
+module blaisevue_component_store;
+
+import pascal SysUtils;
+
+interface
+
+type
+    UserSession = record
+        username: String;
+        counter: Int32;
+        is_authenticated: Bool;
+    end record;
+
+function CreateUserSession(borrow name: String) return UserSession;
+function IncrementCounter(mut borrow session: UserSession; borrow delta: Int32) return Int32;
+function GetSessionReport(borrow session: UserSession) return String;
+
+implementation
+
+function CreateUserSession(borrow name: String) return UserSession is
+begin
+    return UserSession(name, 0, true);
+end CreateUserSession;
+
+function IncrementCounter(mut borrow session: UserSession; borrow delta: Int32) return Int32 is
+begin
+    session.counter := session.counter + delta;
+    return session.counter;
+end IncrementCounter;
+
+function GetSessionReport(borrow session: UserSession) return String is
+var
+    status: String;
+begin
+    if session.is_authenticated then
+        status := "Authenticated";
+    else
+        status := "Anonymous";
+    end if;
+
+    return "User: " + session.username + " | Clicks: " + IntToStr(session.counter) + " | Status: " + status;
+end GetSessionReport;
+
+end blaisevue_component_store.

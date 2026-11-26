@@ -1,6 +1,6 @@
 # Chapter 13: Capstone Project: High-Performance In-Memory Cache
 
-Congratulations on reaching the final chapter of the Aether Masterclass! In this hands-on project, you will build an **In-Memory Secure Cache Service** that integrates every pillar of the language:
+Congratulations on reaching the final chapter of the DelSafe Masterclass! In this hands-on project, you will build an **In-Memory Secure Cache Service** that integrates every pillar of the language:
 
 1. **Records with Compiler Derivations** (`[derive(Debug, JSON, Clone, Equals)]`).
 2. **Algebraic Enums with Exhaustive `match`** (`CacheResult`).
@@ -8,15 +8,15 @@ Congratulations on reaching the final chapter of the Aether Masterclass! In this
 4. **Ownership & Borrow Checking** (`borrow`, `mut borrow`).
 5. **Cross-Platform Conditional Compilation** (`@cfg`).
 6. **Inlined Hot Paths** (`@inline(always)`).
-7. **Zero Memory Leaks Verification** with `aetherc profile`.
+7. **Zero Memory Leaks Verification** with `delsafec profile`.
 
 ---
 
 ## 1. Project Architecture
 
-Create a project directory or file named `secure_cache.aeth`:
+Create a project directory or file named `secure_cache.dels`:
 
-```aether
+```delsafe
 module secure_cache;
 
 import pascal SysUtils;
@@ -102,7 +102,7 @@ var
     lookup: CacheLookupResult;
     item_clone: CacheItem;
 begin
-    PrintLn("Starting Aether Secure Cache Engine...\n");
+    PrintLn("Starting DelSafe Secure Cache Engine...\n");
 
     // Initialize cache with contract validation:
     cache := CreateCache("ZephyrAuthCache", 3600);
@@ -154,27 +154,27 @@ end secure_cache.
 
 ### Step 1: Native Compilation (Pascal Backend)
 ```bash
-aetherc secure_cache.aeth -o bin/secure_cache.exe
+delsafec secure_cache.dels -o bin/secure_cache.exe
 ./bin/secure_cache.exe
 ```
 
 ### Step 2: Native Compilation (C99 Backend)
 ```bash
-aetherc secure_cache.aeth --target=c -o bin/secure_cache_c.exe
+delsafec secure_cache.dels --target=c -o bin/secure_cache_c.exe
 ./bin/secure_cache_c.exe
 ```
 
 ### Step 3: Zero Memory Leak Profiling
-Run Aether's built-in memory profiler to verify that every single allocation is safely deallocated without leaks:
+Run DelSafe's built-in memory profiler to verify that every single allocation is safely deallocated without leaks:
 
 ```bash
-aetherc profile secure_cache.aeth
+delsafec profile secure_cache.dels
 ```
 
 Output:
 ```text
 ========================================================
-  Aether Memory & Heap Audit
+  DelSafe Memory & Heap Audit
 ========================================================
   Heap Allocations: 18 blocks
   Heap Freed:       18 blocks
@@ -187,10 +187,10 @@ Output:
 
 ## 3. Graduation & Next Steps
 
-Congratulations! You now have a comprehensive, production-grade grasp of the Aether programming language:
+Congratulations! You now have a comprehensive, production-grade grasp of the DelSafe programming language:
 - You write code that is clean, readable, and structured like modern Pascal.
 - You enjoy the compile-time memory safety of an affine Borrow Checker without a garbage collector.
 - You enforce software reliability through Design-by-Contract.
 - You can target Free Pascal, C99, and WebAssembly with seamless FFI and zero-cost abstractions.
 
-Welcome to the Aether ecosystem! 🚀
+Welcome to the DelSafe ecosystem! 🚀

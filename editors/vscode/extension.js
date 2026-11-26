@@ -14,10 +14,10 @@ const pendingRequests = new Map();
 let incomingBuffer = Buffer.alloc(0);
 
 /**
- * Finds the path to the aetherc compiler executable.
+ * Finds the path to the delsafec compiler executable.
  */
 function getCompilerPath() {
-    const config = vscode.workspace.getConfiguration('aether');
+    const config = vscode.workspace.getConfiguration('delsafe');
     const customPath = config.get('compilerPath');
     if (customPath && fs.existsSync(customPath)) {
         return customPath;
@@ -26,13 +26,13 @@ function getCompilerPath() {
     const workspaceFolders = vscode.workspace.workspaceFolders;
     if (workspaceFolders && workspaceFolders.length > 0) {
         const root = workspaceFolders[0].uri.fsPath;
-        const localBin = path.join(root, 'bin', process.platform === 'win32' ? 'aetherc.exe' : 'aetherc');
+        const localBin = path.join(root, 'bin', process.platform === 'win32' ? 'delsafec.exe' : 'delsafec');
         if (fs.existsSync(localBin)) {
             return localBin;
         }
     }
 
-    return 'aetherc';
+    return 'delsafec';
 }
 
 /**
@@ -104,7 +104,7 @@ function handleIncomingData(chunk) {
                 handlePublishDiagnostics(msg.params);
             }
         } catch (e) {
-            console.error('[Aether LSP] Failed to parse JSON payload:', e);
+            console.error('[DelSafe LSP] Failed to parse JSON payload:', e);
         }
     }
 }
@@ -127,7 +127,7 @@ function handlePublishDiagnostics(params) {
             vscode.DiagnosticSeverity.Error
         );
         diag.code = d.code;
-        diag.source = d.source || 'aether-lsp';
+        diag.source = d.source || 'delsafe-lsp';
         return diag;
     });
 
@@ -135,7 +135,7 @@ function handlePublishDiagnostics(params) {
 }
 
 /**
- * Spawns the native Aether LSP server process (aetherc --lsp).
+ * Spawns the native DelSafe LSP server process (delsafec --lsp).
  */
 function startLSPServer(context) {
     const compiler = getCompilerPath();
@@ -151,15 +151,15 @@ function startLSPServer(context) {
         });
 
         lspProcess.stderr.on('data', data => {
-            console.log(`[Aether LSP Log]: ${data.toString()}`);
+            console.log(`[DelSafe LSP Log]: ${data.toString()}`);
         });
 
         lspProcess.on('error', err => {
-            console.error('[Aether LSP] Process error:', err);
+            console.error('[DelSafe LSP] Process error:', err);
         });
 
         lspProcess.on('exit', code => {
-            console.log(`[Aether LSP] Server exited with code ${code}`);
+            console.log(`[DelSafe LSP] Server exited with code ${code}`);
             lspProcess = null;
         });
 
@@ -180,9 +180,9 @@ function startLSPServer(context) {
             }
         });
 
-        // Send didOpen immediately for any already-open Aether documents
+        // Send didOpen immediately for any already-open DelSafe documents
         vscode.workspace.textDocuments.forEach(doc => {
-            if (doc.languageId === 'aether') {
+            if (doc.languageId === 'delsafe') {
                 sendLSP({
                     jsonrpc: '2.0',
                     method: 'textDocument/didOpen',
@@ -198,7 +198,7 @@ function startLSPServer(context) {
         });
 
     } catch (e) {
-        console.error('[Aether LSP] Failed to start server process:', e);
+        console.error('[DelSafe LSP] Failed to start server process:', e);
     }
 }
 
@@ -207,16 +207,16 @@ function startLSPServer(context) {
  * @param {vscode.ExtensionContext} context 
  */
 function activate(context) {
-    diagnosticCollection = vscode.languages.createDiagnosticCollection('aether');
+    diagnosticCollection = vscode.languages.createDiagnosticCollection('delsafe');
     context.subscriptions.push(diagnosticCollection);
 
-    // Start native Aether LSP server
+    // Start native DelSafe LSP server
     startLSPServer(context);
 
     // Real-time document synchronization (didOpen, didChange, didClose)
     context.subscriptions.push(
         vscode.workspace.onDidOpenTextDocument(doc => {
-            if (doc.languageId === 'aether') {
+            if (doc.languageId === 'delsafe') {
                 sendLSP({
                     jsonrpc: '2.0',
                     method: 'textDocument/didOpen',
@@ -232,7 +232,7 @@ function activate(context) {
         }),
 
         vscode.workspace.onDidChangeTextDocument(e => {
-            if (e.document.languageId === 'aether') {
+            if (e.document.languageId === 'delsafe') {
                 sendLSP({
                     jsonrpc: '2.0',
                     method: 'textDocument/didChange',
@@ -250,7 +250,7 @@ function activate(context) {
         }),
 
         vscode.workspace.onDidCloseTextDocument(doc => {
-            if (doc.languageId === 'aether') {
+            if (doc.languageId === 'delsafe') {
                 diagnosticCollection.delete(doc.uri);
                 sendLSP({
                     jsonrpc: '2.0',
@@ -267,7 +267,7 @@ function activate(context) {
 
     // Smart Autocompletion provider (CompletionItemProvider)
     context.subscriptions.push(
-        vscode.languages.registerCompletionItemProvider('aether', {
+        vscode.languages.registerCompletionItemProvider('delsafe', {
             async provideCompletionItems(document, position) {
                 const res = await requestLSP('textDocument/completion', {
                     textDocument: { uri: document.uri.toString() },
@@ -292,7 +292,7 @@ function activate(context) {
 
     // Hover Documentation provider (HoverProvider)
     context.subscriptions.push(
-        vscode.languages.registerHoverProvider('aether', {
+        vscode.languages.registerHoverProvider('delsafe', {
             async provideHover(document, position) {
                 const res = await requestLSP('textDocument/hover', {
                     textDocument: { uri: document.uri.toString() },
@@ -307,7 +307,7 @@ function activate(context) {
 
     // Go-to-Definition provider (DefinitionProvider)
     context.subscriptions.push(
-        vscode.languages.registerDefinitionProvider('aether', {
+        vscode.languages.registerDefinitionProvider('delsafe', {
             async provideDefinition(document, position) {
                 const res = await requestLSP('textDocument/definition', {
                     textDocument: { uri: document.uri.toString() },
@@ -328,7 +328,7 @@ function activate(context) {
         }),
 
         // Document Formatting provider (Shift+Alt+F / formatOnSave)
-        vscode.languages.registerDocumentFormattingEditProvider('aether', {
+        vscode.languages.registerDocumentFormattingEditProvider('delsafe', {
             async provideDocumentFormattingEdits(document) {
                 const res = await requestLSP('textDocument/formatting', {
                     textDocument: { uri: document.uri.toString() },
@@ -349,7 +349,7 @@ function activate(context) {
         }),
 
         // Safe Refactoring provider (Rename / F2)
-        vscode.languages.registerRenameProvider('aether', {
+        vscode.languages.registerRenameProvider('delsafe', {
             async provideRenameEdits(document, position, newName) {
                 const res = await requestLSP('textDocument/rename', {
                     textDocument: { uri: document.uri.toString() },
@@ -379,7 +379,7 @@ function activate(context) {
         }),
 
         // Quick-Fix Code Actions provider (Ctrl+.)
-        vscode.languages.registerCodeActionsProvider('aether', {
+        vscode.languages.registerCodeActionsProvider('delsafe', {
             async provideCodeActions(document, range, context) {
                 const res = await requestLSP('textDocument/codeAction', {
                     textDocument: { uri: document.uri.toString() },
@@ -427,17 +427,17 @@ function activate(context) {
         })
     );
 
-    // Command: Initialize Aether Project
+    // Command: Initialize DelSafe Project
     context.subscriptions.push(
-        vscode.commands.registerCommand('aether.initProject', async () => {
+        vscode.commands.registerCommand('delsafe.initProject', async () => {
             const name = await vscode.window.showInputBox({
-                prompt: 'Name of the new Aether project (leave blank to initialize in the current folder):',
+                prompt: 'Name of the new DelSafe project (leave blank to initialize in the current folder):',
                 placeHolder: 'my_project'
             });
             if (name === undefined) return; // Cancelled
 
             const compiler = getCompilerPath();
-            const term = vscode.window.createTerminal('Aether (Init)');
+            const term = vscode.window.createTerminal('DelSafe (Init)');
             term.show();
             term.sendText(`"${compiler}" init ${name.trim()}`);
         })
@@ -445,9 +445,9 @@ function activate(context) {
 
     // Command: Build Project
     context.subscriptions.push(
-        vscode.commands.registerCommand('aether.buildProject', () => {
+        vscode.commands.registerCommand('delsafe.buildProject', () => {
             const compiler = getCompilerPath();
-            const term = vscode.window.createTerminal('Aether Build');
+            const term = vscode.window.createTerminal('DelSafe Build');
             term.show();
             term.sendText(`"${compiler}" build`);
         })
@@ -455,9 +455,9 @@ function activate(context) {
 
     // Command: Run Project
     context.subscriptions.push(
-        vscode.commands.registerCommand('aether.runProject', () => {
+        vscode.commands.registerCommand('delsafe.runProject', () => {
             const compiler = getCompilerPath();
-            const term = vscode.window.createTerminal('Aether Run');
+            const term = vscode.window.createTerminal('DelSafe Run');
             term.show();
             term.sendText(`"${compiler}" run`);
         })
@@ -465,14 +465,14 @@ function activate(context) {
 
     // Command: Compile via Pascal
     context.subscriptions.push(
-        vscode.commands.registerCommand('aether.compilePascal', () => {
+        vscode.commands.registerCommand('delsafe.compilePascal', () => {
             const editor = vscode.window.activeTextEditor;
             if (!editor) {
-                vscode.window.showWarningMessage('No Aether file is currently open in the editor.');
+                vscode.window.showWarningMessage('No DelSafe file is currently open in the editor.');
                 return;
             }
             const compiler = getCompilerPath();
-            const term = vscode.window.createTerminal('Aether Build (Pascal)');
+            const term = vscode.window.createTerminal('DelSafe Build (Pascal)');
             term.show();
             term.sendText(`"${compiler}" "${editor.document.uri.fsPath}"`);
         })
@@ -480,20 +480,20 @@ function activate(context) {
 
     // Command: Compile via C99 / GCC
     context.subscriptions.push(
-        vscode.commands.registerCommand('aether.compileC', () => {
+        vscode.commands.registerCommand('delsafe.compileC', () => {
             const editor = vscode.window.activeTextEditor;
             if (!editor) {
-                vscode.window.showWarningMessage('No Aether file is currently open in the editor.');
+                vscode.window.showWarningMessage('No DelSafe file is currently open in the editor.');
                 return;
             }
             const compiler = getCompilerPath();
-            const term = vscode.window.createTerminal('Aether Build (C99)');
+            const term = vscode.window.createTerminal('DelSafe Build (C99)');
             term.show();
             term.sendText(`"${compiler}" "${editor.document.uri.fsPath}" --target=c`);
         }),
 
         // Command: Format Document
-        vscode.commands.registerCommand('aether.formatDocument', () => {
+        vscode.commands.registerCommand('delsafe.formatDocument', () => {
             vscode.commands.executeCommand('editor.action.formatDocument');
         })
     );

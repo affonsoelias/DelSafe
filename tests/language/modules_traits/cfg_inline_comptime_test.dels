@@ -1,0 +1,64 @@
+module cfg_inline_comptime_test;
+
+@cfg(target_os = "windows")
+function get_os_name() return String is
+begin
+  return "Windows";
+end get_os_name;
+
+@cfg(target_os = "linux")
+function get_os_name() return String is
+begin
+  return "Linux";
+end get_os_name;
+
+@cfg(target_os = "darwin")
+function get_os_name() return String is
+begin
+  return "macOS";
+end get_os_name;
+
+@inline(always)
+function compute_fast_math(x, y: Int32) return Int32 is
+begin
+  return (x * y) + 10;
+end compute_fast_math;
+
+@cold
+function error_handler() return String is
+begin
+  return "rare error";
+end error_handler;
+
+@cfg(target_os = "windows")
+type
+  PlatformConfig = record
+    name: String;
+    is_win: Bool;
+  end record;
+
+@cfg(not(windows))
+type
+  PlatformConfig = record
+    name: String;
+    is_win: Bool;
+  end record;
+
+program Main;
+var
+  current_os: String;
+  val: Int32;
+  cfg: PlatformConfig;
+begin
+  current_os := get_os_name();
+  Assert(current_os = "Windows", "get_os_name must return Windows in current test environment");
+
+  val := compute_fast_math(5, 6);
+  Assert(val = 40, "compute_fast_math must return 40");
+
+  cfg.name := "DelSafeOS";
+  cfg.is_win := true;
+  Assert(cfg.is_win, "is_win must be true");
+
+  PrintLn("CFG and Inline Test: All tests passed successfully!");
+end cfg_inline_comptime_test.

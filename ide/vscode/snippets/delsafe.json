@@ -1,0 +1,98 @@
+{
+  "DelSafe Module": {
+    "prefix": "module",
+    "body": [
+      "module ${1:ModuleName};",
+      "",
+      "import IO;",
+      "",
+      "${0}",
+      "",
+      "program Main;",
+      "begin",
+      "    PrintLn(\"Hello from DelSafe!\");",
+      "end ${1:ModuleName}."
+    ],
+    "description": "Basic structure of an executable DelSafe module"
+  },
+  "DelSafe Function with Contract": {
+    "prefix": "fn",
+    "body": [
+      "function ${1:FunctionName}(${2:borrow x: Int32}) return ${3:Result<Int32, String>} is",
+      "contract",
+      "    require",
+      "        ${4:true};",
+      "    ensure",
+      "        ${5:result.is_ok};",
+      "begin",
+      "    ${0:return Ok(x);}",
+      "end ${1:FunctionName};"
+    ],
+    "description": "DelSafe function declaration with formal contracts (require / ensure)"
+  },
+  "DelSafe Record": {
+    "prefix": "record",
+    "body": [
+      "${1:RecordName} = record",
+      "    ${2:field1}: ${3:String};",
+      "    ${4:field2}: ${5:Int32};",
+      "end record;"
+    ],
+    "description": "DelSafe Record type declaration"
+  },
+  "DelSafe Enum": {
+    "prefix": "enum",
+    "body": [
+      "${1:EnumName} = enum",
+      "    ${2:Variant1},",
+      "    ${3:Variant2}",
+      "end enum;"
+    ],
+    "description": "DelSafe Enum type declaration"
+  },
+  "DelSafe Trait": {
+    "prefix": "trait",
+    "body": [
+      "trait ${1:TraitName}",
+      "    procedure ${2:Method}(${3:borrow self: ${4:TypeName}});",
+      "end trait;"
+    ],
+    "description": "DelSafe Trait / Interface declaration"
+  },
+  "DelSafe Impl": {
+    "prefix": "impl",
+    "body": [
+      "impl ${1:TraitName} for ${2:TypeName}",
+      "    procedure ${3:Method}(${4:borrow self: ${2:TypeName}}) is",
+      "    begin",
+      "        ${0}",
+      "    end ${3:Method};",
+      "end impl;"
+    ],
+    "description": "Trait implementation for a Record type (UFCS)"
+  },
+  "DelSafe Match Result": {
+    "prefix": "match",
+    "body": [
+      "match ${1:outcome} do",
+      "    case Ok(let ${2:val}):",
+      "        ${3:PrintLn(\"Success: %s\", val);}",
+      "    case Err(let ${4:msg}):",
+      "        ${5:PrintLn(\"Error: %s\", msg);}",
+      "end match;"
+    ],
+    "description": "Exhaustive pattern matching on Result<T, E>"
+  },
+  "DelSafe Unit Test": {
+    "prefix": "test",
+    "body": [
+      "function Test_${1:CaseName}() return Bool is",
+      "begin",
+      "    PrintLn(\"[TEST] Running test for ${1:CaseName}...\");",
+      "    ${0}",
+      "    return true;",
+      "end Test_${1:CaseName};"
+    ],
+    "description": "Unit test function for the delsafec test runner"
+  }
+}

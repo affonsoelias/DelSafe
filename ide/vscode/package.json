@@ -1,9 +1,9 @@
 {
-  "name": "aether-lang",
-  "displayName": "Aether Programming Language",
-  "description": "Official smart support for the Aether language (LSP, Syntax Highlighting, Borrow Checker, Snippets, and Tests)",
-  "version": "0.5.0",
-  "publisher": "aether-lang",
+  "name": "delsafe-lang",
+  "displayName": "DelSafe Programming Language",
+  "description": "Official smart support for the DelSafe language (LSP, Syntax Highlighting, Borrow Checker, Snippets, and Tests)",
+  "version": "0.5.1",
+  "publisher": "delsafe-lang",
   "engines": {
     "vscode": "^1.75.0"
   },
@@ -13,7 +13,7 @@
     "Snippets"
   ],
   "keywords": [
-    "aether",
+    "delsafe",
     "pascal",
     "rust",
     "borrow-checker",
@@ -22,68 +22,68 @@
     "lsp"
   ],
   "activationEvents": [
-    "onLanguage:aether"
+    "onLanguage:delsafe"
   ],
   "main": "./out/extension.js",
   "contributes": {
     "languages": [
       {
-        "id": "aether",
+        "id": "delsafe",
         "aliases": [
-          "Aether",
-          "aether"
+          "DelSafe",
+          "delsafe"
         ],
         "extensions": [
-          ".aeth"
+          ".dels"
         ],
         "configuration": "./language-configuration.json"
       }
     ],
     "grammars": [
       {
-        "language": "aether",
-        "scopeName": "source.aether",
-        "path": "./syntaxes/aether.tmLanguage.json"
+        "language": "delsafe",
+        "scopeName": "source.delsafe",
+        "path": "./syntaxes/delsafe.tmLanguage.json"
       }
     ],
     "snippets": [
       {
-        "language": "aether",
-        "path": "./snippets/aether.json"
+        "language": "delsafe",
+        "path": "./snippets/delsafe.json"
       }
     ],
     "commands": [
       {
-        "command": "aether.build",
-        "title": "Aether: Compile Current File (Pascal Backend)",
-        "category": "Aether"
+        "command": "delsafe.build",
+        "title": "DelSafe: Compile Current File (Pascal Backend)",
+        "category": "DelSafe"
       },
       {
-        "command": "aether.buildC",
-        "title": "Aether: Compile Current File (C99 / GCC Backend)",
-        "category": "Aether"
+        "command": "delsafe.buildC",
+        "title": "DelSafe: Compile Current File (C99 / GCC Backend)",
+        "category": "DelSafe"
       },
       {
-        "command": "aether.runTests",
-        "title": "Aether: Run Unit Tests (aetherc test)",
-        "category": "Aether"
+        "command": "delsafe.runTests",
+        "title": "DelSafe: Run Unit Tests (delsafec test)",
+        "category": "DelSafe"
       },
       {
-        "command": "aether.restartLSP",
-        "title": "Aether: Restart Language Server (LSP)",
-        "category": "Aether"
+        "command": "delsafe.restartLSP",
+        "title": "DelSafe: Restart Language Server (LSP)",
+        "category": "DelSafe"
       }
     ],
     "configuration": {
       "type": "object",
-      "title": "Aether Language Configuration",
+      "title": "DelSafe Language Configuration",
       "properties": {
-        "aether.compilerPath": {
+        "delsafe.compilerPath": {
           "type": "string",
-          "default": "aetherc",
-          "description": "Absolute or relative path to the Aether compiler executable (aetherc / aetherc.exe)."
+          "default": "delsafec",
+          "description": "Absolute or relative path to the DelSafe compiler executable (delsafec / delsafec.exe)."
         },
-        "aether.defaultBackend": {
+        "delsafe.defaultBackend": {
           "type": "string",
           "enum": [
             "pascal",
@@ -92,7 +92,7 @@
           "default": "pascal",
           "description": "Default compilation backend used by build commands and tests."
         },
-        "aether.trace.server": {
+        "delsafe.trace.server": {
           "type": "string",
           "enum": [
             "off",

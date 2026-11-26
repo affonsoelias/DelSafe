@@ -1,4 +1,4 @@
-name: Release AetherLang
+name: Release DelSafe
 
 on:
   push:
@@ -55,7 +55,7 @@ jobs:
         shell: pwsh
         run: |
           .\build.ps1
-          & .\bin\aetherc.exe test
+          & .\bin\delsafec.exe test
           $tag = "${{ github.ref_name }}"
           if ($tag.StartsWith("v")) { $ver = $tag.Substring(1) } else { $ver = "" }
           if ("${{ github.event_name }}" -eq "schedule" -or "${{ inputs.channel }}" -eq "nightly") { $ver = "nightly" }
@@ -70,7 +70,7 @@ jobs:
         run: |
           chmod +x build.sh scripts/package_release.sh
           ./build.sh
-          ./bin/aetherc test
+          ./bin/delsafec test
           TAG="${{ github.ref_name }}"
           VER=""
           if [[ "$TAG" == v* ]]; then VER="${TAG#v}"; fi

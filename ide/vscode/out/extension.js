@@ -7,36 +7,36 @@ const cp = require("child_process");
 let lspProcess = null;
 
 function activate(context) {
-    const config = vscode.workspace.getConfiguration('aether');
-    let compilerPath = config.get('compilerPath', 'aetherc');
+    const config = vscode.workspace.getConfiguration('delsafe');
+    let compilerPath = config.get('compilerPath', 'delsafec');
 
     // Register Build and Test Commands
     context.subscriptions.push(
-        vscode.commands.registerCommand('aether.build', () => {
-            runAetherCommand('', 'Compile Aether (Pascal Backend)');
+        vscode.commands.registerCommand('delsafe.build', () => {
+            runDelSafeCommand('', 'Compile DelSafe (Pascal Backend)');
         }),
-        vscode.commands.registerCommand('aether.buildC', () => {
-            runAetherCommand('--target=c', 'Compile Aether (C99 / GCC Backend)');
+        vscode.commands.registerCommand('delsafe.buildC', () => {
+            runDelSafeCommand('--target=c', 'Compile DelSafe (C99 / GCC Backend)');
         }),
-        vscode.commands.registerCommand('aether.runTests', () => {
-            runAetherTerminalCommand('test', 'Aether Test Runner');
+        vscode.commands.registerCommand('delsafe.runTests', () => {
+            runDelSafeTerminalCommand('test', 'DelSafe Test Runner');
         }),
-        vscode.commands.registerCommand('aether.restartLSP', () => {
-            vscode.window.showInformationMessage('Aether LSP connected via aetherc lsp.');
+        vscode.commands.registerCommand('delsafe.restartLSP', () => {
+            vscode.window.showInformationMessage('DelSafe LSP connected via delsafec lsp.');
         })
     );
 }
 exports.activate = activate;
 
-function runAetherCommand(flags, title) {
+function runDelSafeCommand(flags, title) {
     const editor = vscode.window.activeTextEditor;
     if (!editor) {
-        vscode.window.showWarningMessage('Open an .aeth file to compile.');
+        vscode.window.showWarningMessage('Open an .dels file to compile.');
         return;
     }
     const filePath = editor.document.uri.fsPath;
-    const config = vscode.workspace.getConfiguration('aether');
-    const compiler = config.get('compilerPath', 'aetherc');
+    const config = vscode.workspace.getConfiguration('delsafe');
+    const compiler = config.get('compilerPath', 'delsafec');
     const cmd = `${compiler} ${flags} "${filePath}"`.trim();
 
     const terminal = getOrCreateTerminal(title);
@@ -44,9 +44,9 @@ function runAetherCommand(flags, title) {
     terminal.sendText(cmd);
 }
 
-function runAetherTerminalCommand(subcmd, title) {
-    const config = vscode.workspace.getConfiguration('aether');
-    const compiler = config.get('compilerPath', 'aetherc');
+function runDelSafeTerminalCommand(subcmd, title) {
+    const config = vscode.workspace.getConfiguration('delsafe');
+    const compiler = config.get('compilerPath', 'delsafec');
     const cmd = `${compiler} ${subcmd}`.trim();
 
     const terminal = getOrCreateTerminal(title);
@@ -54,12 +54,12 @@ function runAetherTerminalCommand(subcmd, title) {
     terminal.sendText(cmd);
 }
 
-let aetherTerminal;
+let delsafeTerminal;
 function getOrCreateTerminal(name) {
-    if (!aetherTerminal || aetherTerminal.exitStatus !== undefined) {
-        aetherTerminal = vscode.window.createTerminal(name);
+    if (!delsafeTerminal || delsafeTerminal.exitStatus !== undefined) {
+        delsafeTerminal = vscode.window.createTerminal(name);
     }
-    return aetherTerminal;
+    return delsafeTerminal;
 }
 
 function deactivate() {

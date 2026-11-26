@@ -1,0 +1,29 @@
+{
+  "name": "multi_path_ffi_pascal",
+  "version": "0.1.0",
+  "description": "Test project for custom paths, subfolders, and interop",
+  "backend": "pascal",
+  "entry": "src/main_pascal.dels",
+  "output": "bin/multi_path_ffi_pascal.exe",
+  "paths": {
+    "delsafe": [
+      "src"
+    ],
+    "c_includes": [
+      "include"
+    ],
+    "c_sources": [
+      "c_src/helper.c"
+    ],
+    "pascal_units": [
+      "pascal_src"
+    ],
+    "lib_dirs": [
+      "lib"
+    ],
+    "libs": [],
+    "shared_libs": [
+      "lib/sample_lib.dll"
+    ]
+  }
+}

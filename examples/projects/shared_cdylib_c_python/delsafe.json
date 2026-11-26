@@ -1,0 +1,7 @@
+{
+  "name": "delsafe_math",
+  "version": "1.0.0",
+  "type": "cdylib",
+  "entry": "src/math_lib.dels",
+  "output": "bin/delsafe_math.dll"
+}

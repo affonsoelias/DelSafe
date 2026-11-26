@@ -1,0 +1,241 @@
+module borrow_fields_raii_drop_test;
+
+type
+    MyInt = Int32;
+    StateFlag = enum
+        Inactive,
+        Active
+    end enum;
+    Digit = 0..9;
+    DigitSet = set of Digit;
+
+    FieldPair = record
+        a: Int32;
+        b: Int32;
+    end record;
+
+    MixedBox = record
+        name: String;
+        num: Int32;
+    end record;
+
+    Counter = record
+        drops: Int32;
+        order_log: Int32;
+    end record;
+
+    PtrCounter = ^Counter;
+
+    Resource = record
+        id: Int32;
+        tracker: PtrCounter;
+    end record;
+
+impl Drop for Resource
+    procedure Drop(mut borrow self) is
+    begin
+        unsafe
+            self.tracker^.drops := self.tracker^.drops + 1;
+            self.tracker^.order_log := (self.tracker^.order_log * 10) + self.id;
+        end unsafe;
+    end Drop;
+end impl;
+
+function DoubleAlias(x: MyInt; e: StateFlag; d: Digit; s: DigitSet) return Int32 is
+begin
+    if (e = StateFlag.Active) and (d in s) then
+        return x * 2;
+    end if;
+    return x;
+end DoubleAlias;
+
+function ReadGeneric<T>(borrow v: T) return T is
+begin
+    return v;
+end ReadGeneric;
+
+procedure IncMut(mut borrow v: Int32) is
+begin
+    v := v + 10;
+end IncMut;
+
+function IncAndReturn(mut borrow v: Int32) return Int32 is
+begin
+    v := v + 5;
+    return v;
+end IncAndReturn;
+
+procedure SwapFields(mut borrow x, y: Int32) is
+var
+    tmp: Int32;
+begin
+    tmp := x;
+    x := y;
+    y := tmp;
+end SwapFields;
+
+function ConsumeText(take s: String) return Int32 is
+begin
+    return Length(s);
+end ConsumeText;
+
+function ReadBox(borrow c: MixedBox) return Int32 is
+begin
+    return Length(c.name) + c.num;
+end ReadBox;
+
+procedure TestRaiiScopes(tracker: PtrCounter) is
+var
+    r1: Resource;
+    r2: Resource;
+begin
+    r1 := Resource(1, tracker);
+    r2 := Resource(2, tracker);
+
+    if r1.id = 1 then
+        var r3: Resource := Resource(3, tracker);
+        Assert(r3.id = 3);
+    end if;
+
+    unsafe
+        Assert(tracker^.drops = 1);
+        Assert(tracker^.order_log = 3);
+    end unsafe;
+end TestRaiiScopes;
+
+function TestRaiiEarlyReturn(tracker: PtrCounter; early: Bool) return Int32 is
+var
+    r4: Resource;
+begin
+    r4 := Resource(4, tracker);
+    if early then
+        return r4.id * 10;
+    end if;
+    return 0;
+end TestRaiiEarlyReturn;
+
+procedure TestRaiiLoopBreak(tracker: PtrCounter) is
+var
+    k: Int32;
+begin
+    for k := 1 to 4 do
+        var rl: Resource := Resource(k, tracker);
+        if k = 2 then
+            break;
+        end if;
+    end for;
+end TestRaiiLoopBreak;
+
+procedure TestRaiiBox(tracker: PtrCounter) is
+var
+    bx: Box<Resource>;
+begin
+    bx := Box(Resource(7, tracker));
+    Assert(bx.id = 7);
+end TestRaiiBox;
+
+program Main;
+var
+    age: MyInt;
+    st: StateFlag;
+    dig: Digit;
+    dset: DigitSet;
+    sum_val: Int32;
+    pair_val: FieldPair;
+    mb: MixedBox;
+    b1: Box<FieldPair>;
+    b2: Box<FieldPair>;
+    dyn: array of Int32;
+    m_map: map[String]Int32;
+    pRaw: ^Int32;
+    pRaw2: ^Int32;
+    cnt: Counter;
+    pCnt: PtrCounter;
+    earlyRes: Int32;
+    gNum: Int32;
+    gTxt: String;
+begin
+    // 4.1 Copy Types (Alias, Enum, Subrange, Set), inference and generic template
+    age := 21;
+    st := StateFlag.Active;
+    dig := 5;
+    dset := [1, 5, 9];
+    sum_val := DoubleAlias(age, st, dig, dset);
+    sum_val := sum_val + DoubleAlias(age, st, dig, dset);
+    Assert(sum_val = 84);
+
+    gNum := ReadGeneric(99);
+    gTxt := ReadGeneric("DelSafe");
+    Assert(gNum = 99);
+    Assert(gTxt = "DelSafe");
+
+    // 4.2 mut borrow restoration + disjoint field borrow + partial move + reinitialization
+    var acc: Int32 := 0;
+    IncMut(mut borrow acc);
+    IncMut(mut borrow acc);
+    Assert(acc = 20);
+
+    var rSum: Int32 := IncAndReturn(mut borrow acc) + IncAndReturn(mut borrow acc);
+    Assert(acc = 30);
+    Assert(rSum = 55);
+
+    pair_val := FieldPair(10, 25);
+    SwapFields(mut borrow pair_val.a, mut borrow pair_val.b);
+    Assert(pair_val.a = 25);
+    Assert(pair_val.b = 10);
+
+    mb := MixedBox("Hello", 42);
+    Assert(ConsumeText(take mb.name) = 5);
+    Assert(mb.num = 42);
+    mb.name := "World";
+    Assert(ReadBox(borrow mb) = 47);
+
+    // 4.3 Explicit Free/Dispose on managed heap and raw pointer inside unsafe
+    b1 := Box(FieldPair(7, 8));
+    b2 := Box(FieldPair(9, 10));
+    Assert(b1.a + b2.b = 17);
+    Free(b1);
+    Dispose(b2);
+
+    SetLength(dyn, 3);
+    dyn[0] := 11;
+    dyn[1] := 22;
+    dyn[2] := 33;
+    Assert(Length(dyn) = 3);
+    Free(dyn);
+
+    m_map["alpha"] := 100;
+    Assert(m_map["alpha"] = 100);
+    Dispose(m_map);
+
+    pRaw := nil;
+    pRaw2 := nil;
+    unsafe
+        Free(pRaw);
+        Dispose(pRaw2);
+    end unsafe;
+
+    // 4.3 Deterministic RAII & Drop in LIFO order (scope, if, early return, loop break, Box)
+    cnt := Counter(0, 0);
+    unsafe
+        pCnt := @cnt;
+    end unsafe;
+    TestRaiiScopes(pCnt);
+    Assert(cnt.drops = 3);
+    Assert(cnt.order_log = 321);
+
+    earlyRes := TestRaiiEarlyReturn(pCnt, true);
+    Assert(earlyRes = 40);
+    Assert(cnt.drops = 4);
+    Assert(cnt.order_log = 3214);
+
+    TestRaiiLoopBreak(pCnt);
+    Assert(cnt.drops = 6);
+    Assert(cnt.order_log = 321412);
+
+    TestRaiiBox(pCnt);
+    Assert(cnt.drops = 7);
+    Assert(cnt.order_log = 3214127);
+
+    PrintLn("=== PHASE 52 TEST PASSED (POST-INFERENCE BORROW, GENERICS, DISJOINT FIELDS, FREE/DISPOSE & RAII DROP) ===");
+end borrow_fields_raii_drop_test.

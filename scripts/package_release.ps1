@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    Packages a release archive of AetherLang (aetherc + std/ + SHA256SUMS.txt) on Windows.
+    Packages a release archive of DelSafe (delsafec + std/ + SHA256SUMS.txt) on Windows.
 #>
 
 param(
@@ -16,8 +16,8 @@ Push-Location $RepoRoot
 
 try {
     if ([string]::IsNullOrWhiteSpace($Version)) {
-        $incFile = Join-Path $RepoRoot "compiler\src\uAetherIncremental.pas"
-        $match = Select-String -Path $incFile -Pattern "AETHER_COMPILER_VERSION\s*=\s*'([^']+)'" | Select-Object -First 1
+        $incFile = Join-Path $RepoRoot "compiler\src\uDelSafeIncremental.pas"
+        $match = Select-String -Path $incFile -Pattern "DELSAFE_COMPILER_VERSION\s*=\s*'([^']+)'" | Select-Object -First 1
         if ($match) {
             $Version = $match.Matches[0].Groups[1].Value
         } else {
@@ -28,13 +28,13 @@ try {
     if (-not $SkipBuild) {
         if (-not (Test-Path "bin")) { New-Item -ItemType Directory -Path "bin" | Out-Null }
         if (-not (Test-Path "build")) { New-Item -ItemType Directory -Path "build" | Out-Null }
-        & fpc -MObjFPC -Sc -O2 -FEbin -FUbuild -Fucompiler/src compiler/aetherc.lpr
+        & fpc -MObjFPC -Sc -O2 -FEbin -FUbuild -Fucompiler/src compiler/delsafec.lpr
         if ($LASTEXITCODE -ne 0) {
             throw "FPC build failed with exit code $LASTEXITCODE"
         }
     }
 
-    $exePath = Join-Path $RepoRoot "bin\aetherc.exe"
+    $exePath = Join-Path $RepoRoot "bin\delsafec.exe"
     if (-not (Test-Path $exePath)) {
         throw "Compiler binary not found at $exePath"
     }
@@ -47,14 +47,14 @@ try {
     if (-not (Test-Path $OutDirFull)) { New-Item -ItemType Directory -Path $OutDirFull -Force | Out-Null }
 
     $Arch = "x86_64"
-    $AssetBase = "aether-v$Version-windows-$Arch"
+    $AssetBase = "delsafe-v$Version-windows-$Arch"
     $StageDir = Join-Path $OutDirFull "_stage_$AssetBase"
     if (Test-Path $StageDir) { Remove-Item $StageDir -Recurse -Force }
     New-Item -ItemType Directory -Path (Join-Path $StageDir "bin") -Force | Out-Null
     New-Item -ItemType Directory -Path (Join-Path $StageDir "std") -Force | Out-Null
 
-    Copy-Item $exePath (Join-Path $StageDir "bin\aetherc.exe") -Force
-    Copy-Item (Join-Path $RepoRoot "std\*.aeth") (Join-Path $StageDir "std") -Force
+    Copy-Item $exePath (Join-Path $StageDir "bin\delsafec.exe") -Force
+    Copy-Item (Join-Path $RepoRoot "std\*.dels") (Join-Path $StageDir "std") -Force
     if (Test-Path (Join-Path $RepoRoot "README.md")) {
         Copy-Item (Join-Path $RepoRoot "README.md") $StageDir -Force
     }

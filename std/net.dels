@@ -1,0 +1,266 @@
+module Net;
+
+import Strings;
+
+interface
+
+type
+    Socket = record
+        fd: Int32;
+        port: UInt32;
+        host: String;
+        is_open: Bool;
+    end record;
+
+    HttpRequest = record
+        method: String;
+        path: String;
+        body: String;
+    end record;
+
+    HttpResponse = record
+        status_code: UInt32;
+        content_type: String;
+        body: String;
+    end record;
+
+function NewSocket(borrow h: String; borrow p: UInt32) return Socket;
+function Connect(mut borrow s: Socket) return Bool;
+function SendData(borrow s: Socket; borrow payload: String) return UInt32;
+procedure CloseSocket(mut borrow s: Socket);
+function SocketListenServer(borrow p: UInt32; borrow backlog: Int32) return Socket;
+function SocketAcceptClient(borrow server: Socket) return Socket;
+function SocketConnectClient(borrow h: String; borrow p: UInt32) return Socket;
+function SocketSendString(borrow s: Socket; borrow payload: String) return Int32;
+function SocketRecvString(borrow s: Socket; borrow max_len: Int32) return String;
+procedure SocketCloseHandle(mut borrow s: Socket);
+function SocketSetTimeoutMs(borrow s: Socket; read_ms, write_ms: Int32) return Bool;
+function SocketGetPeerIP(borrow s: Socket) return String;
+function SocketSendRawHex(borrow s: Socket; borrow hex_bytes: String) return Int32;
+function SocketRecvRawHex(borrow s: Socket; max_len: Int32) return String;
+function BuildHttpRequest(borrow method, host, path: String) return String;
+function BuildHttpResponse(borrow status_code: UInt32; borrow content_type, body: String) return String;
+function ParseHttpRequest(borrow raw_request: String; mut borrow out_req: HttpRequest) return Bool;
+function ParseHttpResponse(borrow raw_response: String; mut borrow out_resp: HttpResponse) return Bool;
+
+implementation
+
+function NewSocket(borrow h: String; borrow p: UInt32) return Socket is
+begin
+    return Socket(fd: -1, port: p, host: h, is_open: false);
+end NewSocket;
+
+function Connect(mut borrow s: Socket) return Bool is
+begin
+    if s.is_open then
+        return false;
+    end if;
+    s.fd := SocketConnect(s.host, s.port);
+    s.is_open := true;
+    return true;
+end Connect;
+
+function SendData(borrow s: Socket; borrow payload: String) return UInt32 is
+begin
+    if not s.is_open then
+        return 0;
+    end if;
+    if s.fd >= 0 then
+        SocketSend(s.fd, payload);
+    end if;
+    return Length(borrow payload);
+end SendData;
+
+procedure CloseSocket(mut borrow s: Socket) is
+begin
+    if s.is_open then
+        if s.fd >= 0 then
+            SocketClose(s.fd);
+            s.fd := -1;
+        end if;
+        s.is_open := false;
+    end if;
+end CloseSocket;
+
+function SocketListenServer(borrow p: UInt32; borrow backlog: Int32) return Socket is
+var
+    listen_fd: Int32;
+begin
+    listen_fd := SocketListen(p, backlog);
+    if listen_fd < 0 then
+        return Socket(fd: -1, port: p, host: "0.0.0.0", is_open: false);
+    end if;
+    return Socket(fd: listen_fd, port: p, host: "0.0.0.0", is_open: true);
+end SocketListenServer;
+
+function SocketAcceptClient(borrow server: Socket) return Socket is
+var
+    client_fd: Int32;
+begin
+    if not server.is_open then
+        return Socket(fd: -1, port: 0, host: "", is_open: false);
+    end if;
+    client_fd := SocketAccept(server.fd);
+    if client_fd < 0 then
+        return Socket(fd: -1, port: 0, host: "", is_open: false);
+    end if;
+    return Socket(fd: client_fd, port: server.port, host: "client", is_open: true);
+end SocketAcceptClient;
+
+function SocketConnectClient(borrow h: String; borrow p: UInt32) return Socket is
+var
+    conn_fd: Int32;
+begin
+    conn_fd := SocketConnect(h, p);
+    if conn_fd < 0 then
+        return Socket(fd: -1, port: p, host: h, is_open: false);
+    end if;
+    return Socket(fd: conn_fd, port: p, host: h, is_open: true);
+end SocketConnectClient;
+
+function SocketSendString(borrow s: Socket; borrow payload: String) return Int32 is
+begin
+    if not s.is_open then
+        return -1;
+    end if;
+    return SocketSend(s.fd, payload);
+end SocketSendString;
+
+function SocketRecvString(borrow s: Socket; borrow max_len: Int32) return String is
+begin
+    if not s.is_open then
+        return "";
+    end if;
+    return SocketRecv(s.fd, max_len);
+end SocketRecvString;
+
+procedure SocketCloseHandle(mut borrow s: Socket) is
+begin
+    if s.is_open then
+        SocketClose(s.fd);
+        s.is_open := false;
+        s.fd := -1;
+    end if;
+end SocketCloseHandle;
+
+function SocketSetTimeoutMs(borrow s: Socket; read_ms, write_ms: Int32) return Bool is
+begin
+    if not s.is_open then
+        return false;
+    end if;
+    return SocketSetTimeout(s.fd, read_ms, write_ms);
+end SocketSetTimeoutMs;
+
+function SocketGetPeerIP(borrow s: Socket) return String is
+begin
+    if not s.is_open then
+        return "127.0.0.1";
+    end if;
+    return SocketPeerIP(s.fd);
+end SocketGetPeerIP;
+
+function SocketSendRawHex(borrow s: Socket; borrow hex_bytes: String) return Int32 is
+begin
+    if not s.is_open then
+        return 0;
+    end if;
+    return SocketSendHex(s.fd, hex_bytes);
+end SocketSendRawHex;
+
+function SocketRecvRawHex(borrow s: Socket; max_len: Int32) return String is
+begin
+    if not s.is_open then
+        return "";
+    end if;
+    return SocketRecvHex(s.fd, max_len);
+end SocketRecvRawHex;
+
+function BuildHttpRequest(borrow method, host, path: String) return String is
+var
+    req: String;
+begin
+    req := method + " " + path + " HTTP/1.1\r\n";
+    req := req + "Host: " + host + "\r\n";
+    req := req + "User-Agent: DelSafe/0.5 (BlaiseVue-Engine)\r\n";
+    req := req + "Connection: close\r\n\r\n";
+    return req;
+end BuildHttpRequest;
+
+function BuildHttpResponse(borrow status_code: UInt32; borrow content_type, body: String) return String is
+var
+    res: String;
+    status_text: String;
+begin
+    status_text := "OK";
+    if status_code = 404 then
+        status_text := "Not Found";
+    end if;
+    if status_code = 500 then
+        status_text := "Internal Server Error";
+    end if;
+
+    res := "HTTP/1.1 " + IntToStr(Int32(status_code)) + " " + status_text + "\r\n";
+    res := res + "Content-Type: " + content_type + "\r\n";
+    res := res + "Content-Length: " + IntToStr(Int32(Length(borrow body))) + "\r\n";
+    res := res + "Server: DelSafe-BlaiseVue/1.0\r\n";
+    res := res + "Connection: close\r\n\r\n";
+    res := res + body;
+    return res;
+end BuildHttpResponse;
+
+function ParseHttpRequest(borrow raw_request: String; mut borrow out_req: HttpRequest) return Bool is
+var
+    first_space: Int32;
+    second_space: Int32;
+    len: UInt32;
+    i: UInt32;
+    ch: String;
+begin
+    len := Length(borrow raw_request);
+    if len = 0 then
+        return false;
+    end if;
+
+    first_space := -1;
+    second_space := -1;
+    i := 0;
+    while i < len do
+        ch := CharAt(borrow raw_request, i);
+        if ch = " " then
+            if first_space = -1 then
+                first_space := Int32(i);
+            else if second_space = -1 then
+                second_space := Int32(i);
+            end if;
+        end if;
+        i := i + 1;
+    end while;
+
+    if first_space > 0 then
+        out_req.method := Substring(borrow raw_request, 0, UInt32(first_space));
+    else
+        out_req.method := "GET";
+    end if;
+
+    if (first_space > 0) and (second_space > first_space) then
+        out_req.path := Substring(borrow raw_request, UInt32(first_space + 1), UInt32(second_space - first_space - 1));
+    else
+        out_req.path := "/";
+    end if;
+
+    out_req.body := "";
+    return true;
+end ParseHttpRequest;
+
+function ParseHttpResponse(borrow raw_response: String; mut borrow out_resp: HttpResponse) return Bool is
+begin
+    if Length(borrow raw_response) = 0 then
+        return false;
+    end if;
+    out_resp.status_code := 200;
+    out_resp.content_type := "text/plain";
+    out_resp.body := raw_response;
+    return true;
+end ParseHttpResponse;
+
+end Net.

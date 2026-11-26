@@ -1,6 +1,6 @@
 # AI Mode & JSON Diagnostics (`--emit-json-diagnostics`)
 
-The official Aether compiler was designed from day one for seamless collaboration between **Humans** and **AI Coding Agents**.
+The official DelSafe compiler was designed from day one for seamless collaboration between **Humans** and **AI Coding Agents**.
 
 When invoked with `--emit-json-diag` (or `--emit-json-diagnostics`), the compiler suppresses visual banners and outputs a standardized JSON payload to `stdout`.
 
@@ -15,7 +15,7 @@ When invoked with `--emit-json-diag` (or `--emit-json-diagnostics`), the compile
     {
       "severity": "Error",
       "code": "E0382",
-      "file": "path/to/file.aeth",
+      "file": "path/to/file.dels",
       "range": {
         "start": { "line": 25, "col": 12 },
         "end": { "line": 25, "col": 17 }

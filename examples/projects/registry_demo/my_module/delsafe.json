@@ -1,0 +1,8 @@
+{
+  "name": "vectors_2d",
+  "version": "1.2.3",
+  "author": "DelSafe Core Team <core@delsafe-lang.org>",
+  "description": "Math library for 2D vector operations and computational geometry",
+  "license": "MIT",
+  "entry": "src/vectors_2d.dels"
+}

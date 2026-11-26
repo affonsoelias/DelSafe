@@ -1,0 +1,39 @@
+{
+  "name": "calc_web_multitarget",
+  "version": "0.1.0",
+  "description": "Phase 30 Example: Multiple targets (Wasm via Clang, JS via Pas2JS, Native C with Clang and GCC)",
+  "backend": "clang",
+  "c_compiler": "clang",
+  "entry": "calc_web.dels",
+  "output": "bin/calc_web.wasm",
+  "targets": [
+    {
+      "name": "modulo_wasm",
+      "entry": "calc_web.dels",
+      "target": "wasm",
+      "backend": "clang",
+      "output": "public/calc_web.wasm"
+    },
+    {
+      "name": "modulo_js",
+      "entry": "calc_web.dels",
+      "target": "js",
+      "backend": "pas2js",
+      "output": "public/calc_web.js"
+    },
+    {
+      "name": "executavel_clang",
+      "entry": "calc_web.dels",
+      "target": "c",
+      "backend": "clang",
+      "output": "bin/calc_web_clang.exe"
+    },
+    {
+      "name": "executavel_gcc",
+      "entry": "calc_web.dels",
+      "target": "c",
+      "backend": "gcc",
+      "output": "bin/calc_web_gcc.exe"
+    }
+  ]
+}

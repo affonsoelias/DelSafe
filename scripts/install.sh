@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REPO="${AETHER_UPGRADE_REPO:-affonsoelias/aether}"
-INSTALL_ROOT="${AETHER_HOME:-$HOME/.aether}"
+REPO="${DELSAFE_UPGRADE_REPO:-affonsoelias/delsafe}"
+INSTALL_ROOT="${DELSAFE_HOME:-$HOME/.delsafe}"
 VERSION=""
 NIGHTLY=0
 ALLOW_UNSIGNED=0
@@ -40,7 +40,7 @@ else
 fi
 
 echo "[1/4] Fetching release metadata (${OS_NAME}-${ARCH_NAME})..."
-META_JSON="$(curl -fsSL -H 'User-Agent: Aether-Installer' -H 'Accept: application/vnd.github.v3+json' "$API_URL")"
+META_JSON="$(curl -fsSL -H 'User-Agent: DelSafe-Installer' -H 'Accept: application/vnd.github.v3+json' "$API_URL")"
 
 ASSET_URL="$(printf '%s' "$META_JSON" | grep -oE '"browser_download_url"\s*:\s*"[^"]*"' | cut -d'"' -f4 | grep -E "${OS_NAME}.*(${ARCH_NAME}|amd64|arm64)" | grep -vE '\.(sha256|sig|asc)$' | head -n 1)"
 if [[ -z "$ASSET_URL" ]]; then
@@ -54,7 +54,7 @@ TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TMP_DIR"' EXIT
 
 echo "[2/4] Downloading ${ASSET_NAME}..."
-curl -fsSL -H 'User-Agent: Aether-Installer' -o "$TMP_DIR/$ASSET_NAME" "$ASSET_URL"
+curl -fsSL -H 'User-Agent: DelSafe-Installer' -o "$TMP_DIR/$ASSET_NAME" "$ASSET_URL"
 
 if command -v sha256sum >/dev/null 2>&1; then
   CALC_HASH="$(sha256sum "$TMP_DIR/$ASSET_NAME" | awk '{print $1}')"
@@ -77,13 +77,13 @@ fi
 echo "[3/4] Extracting into ${INSTALL_ROOT}..."
 mkdir -p "$TMP_DIR/extracted" "$INSTALL_ROOT/bin" "$INSTALL_ROOT/std"
 tar -xzf "$TMP_DIR/$ASSET_NAME" -C "$TMP_DIR/extracted"
-EXE_SRC="$(find "$TMP_DIR/extracted" -type f -name aetherc | head -n 1)"
+EXE_SRC="$(find "$TMP_DIR/extracted" -type f -name delsafec | head -n 1)"
 if [[ -z "$EXE_SRC" ]]; then
-  echo "Error: aetherc binary missing from archive." >&2
+  echo "Error: delsafec binary missing from archive." >&2
   exit 1
 fi
-cp "$EXE_SRC" "$INSTALL_ROOT/bin/aetherc"
-chmod +x "$INSTALL_ROOT/bin/aetherc"
+cp "$EXE_SRC" "$INSTALL_ROOT/bin/delsafec"
+chmod +x "$INSTALL_ROOT/bin/delsafec"
 
 STD_SRC="$(find "$TMP_DIR/extracted" -type d -name std | head -n 1 || true)"
 if [[ -n "$STD_SRC" ]]; then
@@ -92,5 +92,5 @@ if [[ -n "$STD_SRC" ]]; then
 fi
 
 echo "[4/4] Installed!"
-"$INSTALL_ROOT/bin/aetherc" --version
+"$INSTALL_ROOT/bin/delsafec" --version
 echo "Add to PATH: export PATH=\"$INSTALL_ROOT/bin:\$PATH\""

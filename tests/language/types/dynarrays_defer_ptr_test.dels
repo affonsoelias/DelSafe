@@ -1,0 +1,138 @@
+module dynarrays_defer_ptr_test;
+
+type
+    IntList = array of Int32;
+
+function TestDeferOrder(mut borrow log: IntList; early: Bool) return Int32 is
+begin
+    defer log.Push(1);
+    defer log.Push(2);
+    if early then
+        log.Push(10);
+        return 77;
+    end if;
+    log.Push(99);
+    return 88;
+end TestDeferOrder;
+
+procedure RaiseTestError is
+begin
+    raise "Subroutine failure";
+end RaiseTestError;
+
+function ReadWritePointer(p: ^Int32; newValue: Int32) return Int32 is
+var
+    prev: Int32;
+begin
+    prev := 0;
+    unsafe
+        prev := p^;
+        p^ := newValue;
+    end unsafe;
+    return prev;
+end ReadWritePointer;
+
+program Main;
+var
+    list_vals: IntList;
+    names: array of String;
+    log: IntList;
+    log2: IntList;
+    ret: Int32;
+    name: String;
+    points: Int32;
+    grade: Float64;
+    active: Bool;
+    msg: String;
+    attempts: Int32;
+    x: Int32;
+    prev: Int32;
+    ptr: ^Int32;
+begin
+    PrintLn("=== PHASE 45 TEST: DYNAMIC ARRAYS, DEFER, INTERPOLATION, TRY/EXCEPT AND UNSAFE/POINTERS ===");
+
+    // 1. Dynamic Arrays (array of T)
+    SetLength(list_vals, 3);
+    list_vals[0] := 10;
+    list_vals[1] := 20;
+    list_vals[2] := 30;
+    assert(Length(list_vals) = 3);
+    assert(list_vals.Length() = 3);
+    assert(list_vals[0] + list_vals[2] = 40);
+
+    list_vals.Push(40);
+    list_vals.Push(50);
+    assert(list_vals.Length() = 5);
+    assert(list_vals[3] = 40);
+    assert(list_vals[4] = 50);
+
+    names.Push("Alice");
+    names.Push("Bob");
+    assert(names.Length() = 2);
+    assert(names[0] = "Alice");
+    assert(names[1] = "Bob");
+
+    // 2. Scope cleanup guarantee (LIFO defer and early return)
+    ret := TestDeferOrder(mut borrow log, true);
+    assert(ret = 77);
+    assert(log.Length() = 3);
+    assert(log[0] = 10);
+    assert(log[1] = 2);
+    assert(log[2] = 1);
+
+    ret := TestDeferOrder(mut borrow log2, false);
+    assert(ret = 88);
+    assert(log2.Length() = 3);
+    assert(log2[0] = 99);
+    assert(log2[1] = 2);
+    assert(log2[2] = 1);
+
+    // 3. String Interpolation ($"...")
+    name := "DelSafe";
+    points := 42;
+    grade := 9.5;
+    active := true;
+    msg := $"Lang: {name}, Pts: {points + 8}, Grade: {grade}, Active: {active}, Braces: {{ok}}";
+    assert(msg = "Lang: DelSafe, Pts: 50, Grade: 9.5, Active: true, Braces: {ok}");
+
+    // 4. Exception handling (try ... except and raise)
+    attempts := 0;
+    try
+        attempts := 1;
+        raise "Simulated error";
+        attempts := 999;
+    except
+        attempts := attempts + 10;
+    end try;
+    assert(attempts = 11);
+
+    // Exception propagated from called function
+    attempts := 0;
+    try
+        RaiseTestError();
+        attempts := 500;
+    except
+        attempts := 42;
+    end try;
+    assert(attempts = 42);
+
+    // 5. unsafe blocks and Raw Pointers (^T, @var, ptr^, nil)
+    ptr := nil;
+    assert(ptr = nil);
+
+    x := 123;
+    ptr := @x;
+    assert(ptr <> nil);
+
+    unsafe
+        assert(ptr^ = 123);
+        ptr^ := 456;
+    end unsafe;
+    assert(x = 456);
+
+    prev := ReadWritePointer(ptr, 789);
+    assert(prev = 456);
+    assert(x = 789);
+
+    PrintLn("Phase 45: All tests passed successfully on both backends!");
+end dynarrays_defer_ptr_test.

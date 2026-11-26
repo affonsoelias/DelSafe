@@ -1,6 +1,6 @@
 # Chapter 07: Traits, Generics & Compiler Derivations
 
-Aether achieves safe code reuse and polymorphism through **Traits** (interfaces without class inheritance) and **Generics with Trait Bounds**.
+DelSafe achieves safe code reuse and polymorphism through **Traits** (interfaces without class inheritance) and **Generics with Trait Bounds**.
 
 ---
 
@@ -8,7 +8,7 @@ Aether achieves safe code reuse and polymorphism through **Traits** (interfaces 
 
 A `trait` defines a contract of method signatures:
 
-```aether
+```delsafe
 module traits_demo;
 
 interface
@@ -28,7 +28,7 @@ end trait;
 
 Types explicitly implement traits using the `impl` block:
 
-```aether
+```delsafe
 type
     Circle = record
         radius: Float64;
@@ -59,7 +59,7 @@ end impl;
 
 Types can also define methods and constructors directly via inherent `impl Type` blocks without declaring a separate trait:
 
-```aether
+```delsafe
 type
     Vector2D = record
         x: Int32;
@@ -87,7 +87,7 @@ Call static associated functions with `Type.Method(...)` (`Vector2D.New(3, 4)`) 
 
 You can write generic functions constrained by traits using `<T: Trait>` bounds:
 
-```aether
+```delsafe
 procedure DisplayArea<T: AreaCalculable>(shape: T) is
 begin
     PrintLn("Calculated area: " + FloatToStr(shape.GetArea()));
@@ -98,9 +98,9 @@ end DisplayArea;
 
 ## 4. Automatic Compiler Derivations (`[derive(...)]`)
 
-Writing boilerplate for serializing, cloning, or printing structures is error-prone. Aether includes a compile-time derivation engine:
+Writing boilerplate for serializing, cloning, or printing structures is error-prone. DelSafe includes a compile-time derivation engine:
 
-```aether
+```delsafe
 [derive(Debug, JSON, Clone, Equals)]
 type
     Player = record
@@ -113,11 +113,11 @@ type
 When annotated with `[derive(...)]`, the compiler automatically generates:
 
 1. **`Debug` (`ToString()`):**
-   ```aether
+   ```delsafe
    p.ToString() // "Player { id: 1, nickname: Alice, score: 9500 }"
    ```
 2. **`JSON` (`ToJSON()` and `FromJSON()`):**
-   ```aether
+   ```delsafe
    let raw := p.ToJSON(); // '{"id": 1, "nickname": "Alice", "score": 9500}'
    let restored := Player.FromJSON(raw);
    ```
@@ -129,7 +129,7 @@ When annotated with `[derive(...)]`, the compiler automatically generates:
 
 ### Working Example:
 
-```aether
+```delsafe
 module derives_example;
 
 [derive(Debug, JSON, Clone, Equals)]

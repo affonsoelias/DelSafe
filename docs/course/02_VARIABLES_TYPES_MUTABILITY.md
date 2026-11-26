@@ -1,17 +1,17 @@
 # Chapter 02: Variables, Types & Mutability
 
-Aether is a statically, strongly typed language designed to eliminate subtle bugs, integer sign errors, and unintended state mutations.
+DelSafe is a statically, strongly typed language designed to eliminate subtle bugs, integer sign errors, and unintended state mutations.
 
 ---
 
 ## 1. Immutability by Default vs. Explicit Mutation
 
-Aether enforces discipline around mutable state:
+DelSafe enforces discipline around mutable state:
 
 - **`let`:** Declares an **immutable** binding. Once bound, it can never be reassigned.
 - **`var`:** Declares an **explicitly mutable** variable.
 
-```aether
+```delsafe
 module variables_demo;
 
 program Main;
@@ -33,15 +33,15 @@ end variables_demo.
 
 ### 1.1 Module-Level Constants (`const`)
 
-For defining compile-time, globally accessible constants, Aether provides the canonical `const` section at module scope:
+For defining compile-time, globally accessible constants, DelSafe provides the canonical `const` section at module scope:
 
-```aether
+```delsafe
 module config;
 
 const
     MAX_USERS = 1000;
     PI: Float64 = 3.1415926535;
-    APP_NAME = "AetherCore";
+    APP_NAME = "DelSafeCore";
     TIMEOUT_MS: Int32 = 5000;
 ```
 
@@ -51,7 +51,7 @@ Constants can be untyped (with automatic type inference) or explicitly typed (`N
 
 ## 2. Primitive Types & Hierarchy
 
-Aether provides fixed-width scalar types with unambiguous bit sizes:
+DelSafe provides fixed-width scalar types with unambiguous bit sizes:
 
 ### Signed Integers
 - `Int8`: -128 to 127
@@ -79,9 +79,9 @@ Aether provides fixed-width scalar types with unambiguous bit sizes:
 
 ## 3. Explicit Type Conversions
 
-To prevent silent precision loss and overflow vulnerabilities, Aether **disallows implicit widening or narrowing conversions between different integer types**:
+To prevent silent precision loss and overflow vulnerabilities, DelSafe **disallows implicit widening or narrowing conversions between different integer types**:
 
-```aether
+```delsafe
 module conversions_demo;
 
 program Main;
@@ -108,9 +108,9 @@ end conversions_demo.
 
 ## 4. Compile-Time Expressions (`comptime`)
 
-Aether evaluates constant expressions at compile-time directly in the semantic analysis pipeline:
+DelSafe evaluates constant expressions at compile-time directly in the semantic analysis pipeline:
 
-```aether
+```delsafe
 module comptime_demo;
 
 program Main;
@@ -131,13 +131,13 @@ end comptime_demo.
 
 ## 5. Multidimensional Arrays, Sets & Subranges
 
-Aether incorporates the rich, mathematically disciplined data types from the classical Pascal tradition:
+DelSafe incorporates the rich, mathematically disciplined data types from the classical Pascal tradition:
 
 ### 5.1 Multidimensional Arrays (1D, 2D, 3D, and N-D)
 
 Arrays have a fixed size known at compile-time and are laid out contiguously in memory for zero-overhead performance:
 
-```aether
+```delsafe
 module arrays_demo;
 
 type
@@ -169,7 +169,7 @@ The compiler enforces strict bounds checking at compile-time for constant indice
 
 Sets represent collections of discrete elements (such as enums or subranges) backed by high-performance native bitmasks:
 
-```aether
+```delsafe
 module sets_demo;
 
 type
@@ -202,7 +202,7 @@ end sets_demo.
 
 Subrange types constrain a scalar variable to an exact closed interval `Low..High`:
 
-```aether
+```delsafe
 module subrange_demo;
 
 type
@@ -222,7 +222,7 @@ end subrange_demo.
 
 When the number of elements is only known at runtime, use resizable dynamic arrays (`array of T`) with `SetLength`, `Length()`, and `Push()`:
 
-```aether
+```delsafe
 module dyn_arrays_demo;
 
 type
@@ -247,7 +247,7 @@ end dyn_arrays_demo.
 
 Rather than manually chaining `+ IntToStr(...)` calls, prefix a string literal with `$` and embed expressions inside `{...}` braces (use `{{` and `}}` to emit literal braces):
 
-```aether
+```delsafe
 module interp_demo;
 
 program Main;
@@ -256,7 +256,7 @@ var
     level: Int32;
     active: Bool;
 begin
-    user := "AetherDev";
+    user := "DelSafeDev";
     level := 5;
     active := true;
 
@@ -267,9 +267,9 @@ end interp_demo.
 
 ### 5.6 Raw Pointers (`^T`, `@var`, `nil`) and `unsafe` Blocks
 
-Safe Aether code forbids null dereferences and dangling pointers at compile time. When writing low-level hardware drivers or C FFI code that requires raw pointers, pointers are declared with `^T`, addresses are obtained with `@var`, and pointer dereferencing (`ptr^`) is explicitly gated behind an `unsafe ... end unsafe;` block:
+Safe DelSafe code forbids null dereferences and dangling pointers at compile time. When writing low-level hardware drivers or C FFI code that requires raw pointers, pointers are declared with `^T`, addresses are obtained with `@var`, and pointer dereferencing (`ptr^`) is explicitly gated behind an `unsafe ... end unsafe;` block:
 
-```aether
+```delsafe
 module unsafe_pointers_demo;
 
 program Main;
@@ -295,21 +295,21 @@ end unsafe_pointers_demo.
 
 Related variables of the same type can share a declaration line, and variables initialized inline can omit the type annotation to infer their concrete type (`Int32`, `Float64`, `String`, `Bool`, etc.):
 
-```aether
+```delsafe
 var
     a, b, c: Int32;
     total := 100;       // Inferred as Int32
     ratio := 2.5;       // Inferred as Float64
 let
-    appName := "Aether"; // Immutable, inferred as String
+    appName := "DelSafe"; // Immutable, inferred as String
     enabled := true;     // Immutable, inferred as Bool
 ```
 
 ### 5.8 Associative Maps (`map[K]V`)
 
-Aether includes first-class associative dictionaries using `map[KeyType]ValueType`, declared either as a named `type` alias or inline in `var` sections. Supported operations use bracket indexing and UFCS methods:
+DelSafe includes first-class associative dictionaries using `map[KeyType]ValueType`, declared either as a named `type` alias or inline in `var` sections. Supported operations use bracket indexing and UFCS methods:
 
-```aether
+```delsafe
 module maps_demo;
 
 type
@@ -337,7 +337,7 @@ end maps_demo.
 
 Integer types support both Pascal (`$FF`, `%1010`) and C-style (`0xFF`, `0b1010`) hexadecimal and binary literals alongside bitwise operators `shl`, `shr`, `xor`, `and`, `or`, and `not`:
 
-```aether
+```delsafe
 module BitwiseDemo;
 
 program Main;
@@ -355,7 +355,7 @@ end BitwiseDemo.
 
 Fixed and dynamic arrays can be initialized directly using `[e1, e2, ...]`, and dynamic arrays infer their element type when initialized with `:=`. Dynamic arrays support `.Push(v)`, `.Pop()`, and `.Clear()`, while `String` supports 0-based character indexing (`s[i]` returning `Char`) alongside `Ord`, `Chr`, `SizeOf`, and explicit numeric/pointer casts:
 
-```aether
+```delsafe
 module ArrayLiteralsDemo;
 
 program Main;
@@ -366,7 +366,7 @@ var
 begin
     last := nums.Pop();   // 30 (nums now has 2 elements)
     nums.Clear();
-    ch := "Aether"[0];    // 'A' (Ord(ch) = 65, Chr(66) = 'B')
+    ch := "DelSafe"[0];    // 'A' (Ord(ch) = 65, Chr(66) = 'B')
 end ArrayLiteralsDemo.
 ```
 
@@ -380,11 +380,11 @@ Strings include rich standard operations callable either in UFCS (`s.Trim()`) or
 - **Text helpers:** `Trim`, `UpperCase`, `LowerCase`, `StartsWith`, `EndsWith`, `Contains`, `IndexOf` (0-based, `-1` if absent), and `Replace`.
 - **Numeric helpers:** `Abs`, `Min`, `Max`, and `Clamp(val, low, high)` for signed/unsigned integers and floating-point values.
 
-```aether
+```delsafe
 var
-    cleaned := "  Aether Lang  ".Trim(); // "Aether Lang"
+    cleaned := "  DelSafe Lang  ".Trim(); // "DelSafe Lang"
     idx := cleaned.IndexOf("Lang");        // 7
-    ok := cleaned.StartsWith("Aether") and cleaned.Contains("Lang");
+    ok := cleaned.StartsWith("DelSafe") and cleaned.Contains("Lang");
     bounded := Clamp(150, 0, 100);         // 100
 ```
 
@@ -392,7 +392,7 @@ var
 
 Dynamic arrays support inserting elements at any index (`.Insert(idx, val)`), deleting by index (`.Delete(idx)`), and non-mutating range extraction (`.Slice(start, len)`). Records also support reordered **named field constructors** (`Ponto(y: 20, x: 10)`), and any value/record/enum type can be zero-initialized using **`Default(TypeName)`**:
 
-```aether
+```delsafe
 module SliceAndDefaultDemo;
 
 type

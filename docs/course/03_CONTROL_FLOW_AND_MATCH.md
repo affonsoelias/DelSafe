@@ -1,14 +1,14 @@
 # Chapter 03: Control Flow & Pattern Matching
 
-Control flow in Aether is designed to eliminate the classic "dangling else" ambiguity of C-family languages and avoid verbose `begin...end` boilerplate inside conditional blocks.
+Control flow in DelSafe is designed to eliminate the classic "dangling else" ambiguity of C-family languages and avoid verbose `begin...end` boilerplate inside conditional blocks.
 
 ---
 
 ## 1. Clean Conditionals: `if...then...else...end if;`
 
-In Aether, an `if` statement opens with `if <condition> then`, contains statements directly (with optional flat `else if <condition> then` chains), and closes with a single `end if;`:
+In DelSafe, an `if` statement opens with `if <condition> then`, contains statements directly (with optional flat `else if <condition> then` chains), and closes with a single `end if;`:
 
-```aether
+```delsafe
 module conditionals_demo;
 
 program Main;
@@ -39,9 +39,9 @@ Notice:
 
 ### 1.1 Inline Conditional Expressions (`if ... then ... else ...`)
 
-Aether also supports single-expression `if <cond> then <exprA> else <exprB>` directly inside assignments, initializers, arithmetic, and function calls (without `end if;`), requiring compatible types on both branches:
+DelSafe also supports single-expression `if <cond> then <exprA> else <exprB>` directly inside assignments, initializers, arithmetic, and function calls (without `end if;`), requiring compatible types on both branches:
 
-```aether
+```delsafe
 let limit := if score >= 90 then 100 else 50;
 let badge := if limit = 100 then "GOLD" else "STANDARD";
 let adjusted := (if score > 0 then score else 0) + 10;
@@ -53,7 +53,7 @@ let adjusted := (if score > 0 then score else 0) + 10;
 
 The `while` loop evaluates a condition before each iteration and executes until false:
 
-```aether
+```delsafe
 module loop_demo;
 
 program Main;
@@ -77,12 +77,12 @@ end loop_demo.
 
 ## 2.1 Counting Loops: `for...to` and `for...downto`
 
-For deterministic iteration across numeric ranges, Aether provides canonical `for` loops in the Pascal tradition:
+For deterministic iteration across numeric ranges, DelSafe provides canonical `for` loops in the Pascal tradition:
 
 - **Ascending (`to`):** `for i := start to end do ... end for;`
 - **Descending (`downto`):** `for i := start downto end do ... end for;`
 
-```aether
+```delsafe
 module for_demo;
 
 program Main;
@@ -110,12 +110,12 @@ end for_demo.
 
 You can also iterate directly over fixed arrays, dynamic arrays (`array of T`), and `String` values (`Char` elements) using `for item in collection do ... end for;`:
 
-```aether
+```delsafe
 for n in numbers do
     total := total + n;
 end for;
 
-for ch in "Aether" do
+for ch in "DelSafe" do
     if ch = 'A' then
         PrintLn("Found A!");
     end if;
@@ -139,7 +139,7 @@ You can also update numeric targets using `div` (integer division) and compound 
 
 The `repeat ... until` construct guarantees that the loop body executes **at least once**. It continues iterating until the trailing boolean condition evaluates to `true`:
 
-```aether
+```delsafe
 module repeat_demo;
 
 program Main;
@@ -170,12 +170,12 @@ Notice:
 
 ## 2.3 Loop Flow Control: `break` and `continue`
 
-Aether provides fine-grained loop control statements applicable across all loop types (`for`, `while`, and `repeat ... until`):
+DelSafe provides fine-grained loop control statements applicable across all loop types (`for`, `while`, and `repeat ... until`):
 
 - **`break;`**: Exits the innermost loop immediately.
 - **`continue;`**: Skips the remainder of the current iteration and advances to the next step.
 
-```aether
+```delsafe
 module loop_control_demo;
 
 program Main;
@@ -211,7 +211,7 @@ The compiler strictly verifies that `break` and `continue` only occur inside act
 
 The `defer` statement schedules a statement to execute deterministically in **LIFO (Last-In, First-Out)** order whenever the enclosing block or function exits — including on early `return` paths:
 
-```aether
+```delsafe
 module defer_demo;
 
 function ProcessData(mut borrow log: array of Int32; exitEarly: Bool) return Int32 is
@@ -231,9 +231,9 @@ end ProcessData;
 
 ## 2.5 System Exception Handling (`try ... except` & `raise`)
 
-While Aether uses `Result<T, E>` and `Option<T>` for expected domain errors, low-level runtime faults and unrecoverable panics can be raised with `raise` and caught cleanly with `try ... except ... end try;`:
+While DelSafe uses `Result<T, E>` and `Option<T>` for expected domain errors, low-level runtime faults and unrecoverable panics can be raised with `raise` and caught cleanly with `try ... except ... end try;`:
 
-```aether
+```delsafe
 module exceptions_demo;
 
 program Main;
@@ -259,7 +259,7 @@ end exceptions_demo.
 
 When writing functions returning `Result<T, E>` or `Option<T>`, you can unwrap the inner value or propagate an early error/empty return cleanly with either the postfix `?` operator or prefix `try <expr>`:
 
-```aether
+```delsafe
 function SumPositivesWithTry(a, b: Int32) return Result<Int32, String> is
 begin
     let va := ParsePositive(a)?;
@@ -274,9 +274,9 @@ If `ParsePositive(b)` returns `Err("non-positive")`, `SumPositivesWithTry` immed
 
 ## 3. Algebraic Enums
 
-Enums in Aether are not just lists of numbers; they are **Algebraic Data Types (ADTs)** that can carry payload data with variants:
+Enums in DelSafe are not just lists of numbers; they are **Algebraic Data Types (ADTs)** that can carry payload data with variants:
 
-```aether
+```delsafe
 module enums_demo;
 
 type
@@ -298,9 +298,9 @@ type
 
 ## 4. Exhaustive Pattern Matching (`match`)
 
-Unlike traditional switch statements that fall through or allow unhandled cases, Aether's `match` statement enforces **exhaustiveness checking at compile time**:
+Unlike traditional switch statements that fall through or allow unhandled cases, DelSafe's `match` statement enforces **exhaustiveness checking at compile time**:
 
-```aether
+```delsafe
 module match_demo;
 
 type
@@ -337,7 +337,7 @@ begin
 end match_demo.
 ```
 
-If you omit any variant (e.g., forget `Cancelled`), the Aether compiler will refuse to compile with an exhaustive-check error:
+If you omit any variant (e.g., forget `Cancelled`), the DelSafe compiler will refuse to compile with an exhaustive-check error:
 
 ```text
 Error: Non-exhaustive match pattern! Missing variant: OrderStatus.Cancelled
@@ -347,7 +347,7 @@ Error: Non-exhaustive match pattern! Missing variant: OrderStatus.Cancelled
 
 In addition to `Enum` variants with `with` or `do`, `match` supports integers (including negative values), strings, characters, booleans, `Option<T>` (`Some`/`None`), `Result<T, E>` (`Ok`/`Err`), optional `case` labels, `:` or `=>` arm separators, and `_` catch-all arms across both Free Pascal and GCC C99 backends:
 
-```aether
+```delsafe
 match statusCode do
     200 =>
         PrintLn("OK");
@@ -378,7 +378,7 @@ end match;
 
 `match` arms also accept comma-separated pattern lists (including `Enum` variants, which participate in exhaustiveness checking) as well as inclusive `low..high` ranges for integers and characters:
 
-```aether
+```delsafe
 match httpCode do
     1, 3, 5 =>
         category := "odd-small";
@@ -413,7 +413,7 @@ end match;
 
 `match` can also be used directly as an expression returning a unified value type, and individual arms can bind variables and attach conditional guards using `if` or `when`:
 
-```aether
+```delsafe
 let statusLabel := match code do
     case 200, 201 => "OK";
     case let c if c >= 500 => "SERVER_ERR";

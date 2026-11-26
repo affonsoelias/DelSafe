@@ -1,8 +1,8 @@
-# Aether Masterclass: The Complete Course 🚀
+# DelSafe Masterclass: The Complete Course 🚀
 
-Welcome to the official, in-depth **Aether Programming Language Course**!
+Welcome to the official, in-depth **DelSafe Programming Language Course**!
 
-Aether combines the structural elegance and readability of Pascal with modern systems programming guarantees: **compile-time memory safety via an affine Borrow Checker**, **Design-by-Contract (DbC)**, **algebraic types with pattern matching**, and **seamless zero-boilerplate C & Pascal interoperability** — all with zero garbage collection overhead.
+DelSafe combines the structural elegance and readability of Pascal with modern systems programming guarantees: **compile-time memory safety via an affine Borrow Checker**, **Design-by-Contract (DbC)**, **algebraic types with pattern matching**, and **seamless zero-boilerplate C & Pascal interoperability** — all with zero garbage collection overhead.
 
 ---
 
@@ -22,13 +22,13 @@ Aether combines the structural elegance and readability of Pascal with modern sy
 | **[03. Control Flow & Pattern Matching](03_CONTROL_FLOW_AND_MATCH.md)** | Deterministic Execution | Unambiguous `if...then...else...end if;`, loops, algebraic enums, and compile-time exhaustive `match`. |
 | **[04. Functions & Contracts](04_FUNCTIONS_AND_CONTRACTS.md)** | Design by Contract (DbC) | Signatures, pre-conditions (`require`), post-conditions (`ensure`), debug vs release assertion modes. |
 | **[05. The Borrow Checker](05_THE_BORROW_CHECKER.md)** | Memory Safety | Ownership semantics, move semantics (`take`), immutable borrows (`borrow`), mutable borrows (`mut borrow`), aliasing XOR mutability. |
-| **[06. Object-Oriented Programming (Records & UFCS)](06_RECORDS_AND_UFCS.md)** | Modern OOP Architecture | Object-Oriented design in Aether, encapsulation with records, UFCS method syntax (`val.method()`), composition over inheritance, and derivations. |
+| **[06. Object-Oriented Programming (Records & UFCS)](06_RECORDS_AND_UFCS.md)** | Modern OOP Architecture | Object-Oriented design in DelSafe, encapsulation with records, UFCS method syntax (`val.method()`), composition over inheritance, and derivations. |
 | **[07. Traits, Generics & Derives](07_TRAITS_GENERICS_AND_DERIVES.md)** | Modern Abstractions | Interfaces without inheritance, trait bounds (`<T: Bound>`), compiler derivations (`Debug`, `JSON`, `Clone`, `Equals`). |
 | **[08. Error Handling (Result & Option)](08_ERROR_HANDLING_RESULT_OPTION.md)** | Safe Error Handling | Monadic handling, eliminating null-pointer crashes, `Option<T>` and `Result<T, E>`. |
-| **[09. Async/Await & Concurrency](09_ASYNC_AWAIT_AND_CONCURRENCY.md)** | Non-blocking Systems | `async function`, `AetherTask`, cooperative event loops, worker threads, and structured concurrency. |
+| **[09. Async/Await & Concurrency](09_ASYNC_AWAIT_AND_CONCURRENCY.md)** | Non-blocking Systems | `async function`, `DelSafeTask`, cooperative event loops, worker threads, and structured concurrency. |
 | **[10. Conditional Compilation & Optimizations](10_CONDITIONAL_COMPILATION_AND_OPTIMIZATIONS.md)** | Target Tuning | `@cfg(target_os)`, `@inline(always)`, `@cold` branch prediction, and `comptime` constant folding. |
 | **[11. FFI & Zero-Boilerplate Interop](11_FFI_AND_INTEROPERABILITY.md)** | Universal Bridges | Direct consumption of C headers (`<math.h>`) and Pascal units (`SysUtils`), explicit `extern c`, C header generation. |
-| **[12. Modules, Projects & Packages](12_MODULES_PACKAGES_AND_DEPENDENCIES.md)** | Code Organization | Multi-file projects, 1:1 module mapping, `aether.json` manifest, `aetherc pkg` manager, and lockfile security. |
+| **[12. Modules, Projects & Packages](12_MODULES_PACKAGES_AND_DEPENDENCIES.md)** | Code Organization | Multi-file projects, 1:1 module mapping, `delsafe.json` manifest, `delsafec pkg` manager, and lockfile security. |
 | **[13. Capstone Project](13_CAPSTONE_PROJECT.md)** | End-to-End System | Building an in-memory secure cache service with JSON serialization, contracts, and zero memory leaks. |
 
 ---
@@ -47,4 +47,4 @@ build.bat
 chmod +x build.sh && ./build.sh
 ```
 
-Proceed to **[Chapter 01: Getting Started](01_GETTING_STARTED.md)** to write and run your first Aether program!
+Proceed to **[Chapter 01: Getting Started](01_GETTING_STARTED.md)** to write and run your first DelSafe program!

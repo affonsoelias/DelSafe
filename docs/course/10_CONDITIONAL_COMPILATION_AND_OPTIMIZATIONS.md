@@ -2,7 +2,7 @@
 
 When writing high-performance systems and cross-platform applications, you often need fine-grained control over target platforms, function inlining, and compiler optimization hints.
 
-Aether provides this through **`@cfg`**, **`@inline`**, **`@cold`**, and **`comptime`**.
+DelSafe provides this through **`@cfg`**, **`@inline`**, **`@cold`**, and **`comptime`**.
 
 ---
 
@@ -11,7 +11,7 @@ Aether provides this through **`@cfg`**, **`@inline`**, **`@cold`**, and **`comp
 The `@cfg(...)` attribute controls whether a declaration (function, type, or constant) is compiled based on the target OS, backend, or build profile:
 
 ### Platform-Specific Implementations:
-```aether
+```delsafe
 module platform_demo;
 
 @cfg(target_os = "windows")
@@ -50,7 +50,7 @@ Inactive `@cfg` blocks are **pruned from the AST before type-checking**. This me
 
 In performance-critical hot loops, function call overhead (stack frame push/pop) can be eliminated by inlining:
 
-```aether
+```delsafe
 module inline_demo;
 
 @inline(always)
@@ -76,7 +76,7 @@ end SlowLogOperation;
 
 Error handling routines or panic handlers are rarely executed. Annotating them with `@cold` instructs the CPU branch predictor to favor the happy path:
 
-```aether
+```delsafe
 @cold
 procedure OnCriticalStorageFailure(errorCode: Int32) is
 begin

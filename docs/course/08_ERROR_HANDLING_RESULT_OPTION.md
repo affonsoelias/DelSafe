@@ -2,7 +2,7 @@
 
 Tony Hoare, the inventor of the null pointer reference in 1965, famously referred to it as his *"billion-dollar mistake"*.
 
-In Aether, **there are no raw null pointers (`nil` / `NULL`)**. Instead, optional values and recoverable errors are expressed using algebraic types: **`Option<T>`** and **`Result<T, E>`**.
+In DelSafe, **there are no raw null pointers (`nil` / `NULL`)**. Instead, optional values and recoverable errors are expressed using algebraic types: **`Option<T>`** and **`Result<T, E>`**.
 
 ---
 
@@ -10,7 +10,7 @@ In Aether, **there are no raw null pointers (`nil` / `NULL`)**. Instead, optiona
 
 An `Option` represents a value that may or may not be present:
 
-```aether
+```delsafe
 module option_demo;
 
 type
@@ -56,7 +56,7 @@ When an operation can fail with an error cause, use `Result`:
 - **`Ok(value)`:** Success with the returned computation.
 - **`Err(error_code)`:** Failure with an error message or error type.
 
-```aether
+```delsafe
 module result_demo;
 
 type

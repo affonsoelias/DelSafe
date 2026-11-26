@@ -1,12 +1,12 @@
-# Aether Beginner's Guide
+# DelSafe Beginner's Guide
 
-Welcome to **Aether**! This guide helps you configure your development environment and compile your first program in just a few minutes.
+Welcome to **DelSafe**! This guide helps you configure your development environment and compile your first program in just a few minutes.
 
 ---
 
 ## 1. System Requirements
 
-The official Aether compiler (`aetherc`) generates native code through highly optimized backends:
+The official DelSafe compiler (`delsafec`) generates native code through highly optimized backends:
 
 ### On Windows:
 1. **Free Pascal (or Lazarus):**
@@ -28,18 +28,18 @@ The official Aether compiler (`aetherc`) generates native code through highly op
 
 ---
 
-## 2. Checking Your Environment with `aetherc --doctor`
+## 2. Checking Your Environment with `delsafec --doctor`
 
 To make sure your environment is 100% ready, run in the project terminal:
 
 ```bash
-./bin/aetherc --doctor
+./bin/delsafec --doctor
 ```
 
 The compiler automatically scans your environment and prints a report:
 ```text
 --------------------------------------------------------
-   Aether Environment Diagnostics (aetherc --doctor)
+   DelSafe Environment Diagnostics (delsafec --doctor)
 --------------------------------------------------------
 [OK] Free Pascal (FPC) Found:
      Path    : fpc.exe
@@ -58,14 +58,14 @@ Overall Status: Perfect! Both backends (Pascal and C) are operational.
 
 ## 3. Your First Program ("Hello World")
 
-Create a file named `my_first_app.aeth`:
+Create a file named `my_first_app.dels`:
 
 ```pascal
 module MyFirstApp;
 
 program Main;
 begin
-    PrintLn("Hello, Aether World!");
+    PrintLn("Hello, DelSafe World!");
     PrintLn("Rust-grade safety with Pascal elegance.");
 end MyFirstApp.
 ```
@@ -74,7 +74,7 @@ end MyFirstApp.
 
 To compile using the **Object Pascal Backend** (Default):
 ```bash
-./bin/aetherc my_first_app.aeth
+./bin/delsafec my_first_app.dels
 ```
 The compiler parses the syntax, checks types and memory ownership, generates intermediate code organized in `generated/pascal/my_first_app.pas`, and invokes Free Pascal to build `bin/my_first_app.exe`.
 
@@ -85,7 +85,7 @@ To run it:
 
 To compile using the **C99 Backend** (via GCC):
 ```bash
-./bin/aetherc my_first_app.aeth --target=c
+./bin/delsafec my_first_app.dels --target=c
 ```
 
 ---
@@ -96,28 +96,28 @@ For real-world projects with dependencies, tests, and multiple files, use the `n
 
 ```bash
 # 1. Create a new structured project
-aetherc new my_project
+delsafec new my_project
 cd my_project
 
 # 2. Compile and run immediately
-aetherc run
+delsafec run
 
 # 3. Run unit tests
-aetherc test
+delsafec test
 
 # 4. Emit a Free Pascal unit for BlaiseVue integration
-aetherc emit pascal src/main.aeth --unit
+delsafec emit pascal src/main.dels --unit
 
 # 5. Clean binaries and intermediate build files
-aetherc clean
+delsafec clean
 ```
 
 ---
 
 ## 5. Next Steps
 Now that you have the compiler running, check out:
-- [Complete CLI Guide](CLI_GUIDE.md): All `aetherc` commands, subcommands, and flags.
-- [BlaiseVue & Zephyr Integration](../technical/BLAISEVUE_AND_PASCAL_INTEGRATION.md): Using Aether in the BlaiseVue ecosystem with `--unit` and `--watch`.
-- [Package Management](PACKAGE_MANAGEMENT.md): Managing Git and local dependencies and security audits with `aetherc pkg`.
-- [Ownership & Borrowing Concepts](OWNERSHIP_AND_BORROWING.md): How Aether guarantees memory safety without a Garbage Collector.
+- [Complete CLI Guide](CLI_GUIDE.md): All `delsafec` commands, subcommands, and flags.
+- [BlaiseVue & Zephyr Integration](../technical/BLAISEVUE_AND_PASCAL_INTEGRATION.md): Using DelSafe in the BlaiseVue ecosystem with `--unit` and `--watch`.
+- [Package Management](PACKAGE_MANAGEMENT.md): Managing Git and local dependencies and security audits with `delsafec pkg`.
+- [Ownership & Borrowing Concepts](OWNERSHIP_AND_BORROWING.md): How DelSafe guarantees memory safety without a Garbage Collector.
 - [Official Examples](../../examples/): Practical examples ready for study and testing.

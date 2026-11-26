@@ -2,7 +2,7 @@
 set -e
 
 echo "========================================================"
-echo "  AetherLang Compiler (aetherc) - Linux/macOS Build"
+echo "  DelSafe Compiler (delsafec) - Linux/macOS Build"
 echo "========================================================"
 
 if ! command -v fpc &> /dev/null; then
@@ -13,18 +13,18 @@ fi
 
 mkdir -p bin build
 
-echo "[*] Compiling aetherc with optimizations (-O2)..."
-fpc -MObjFPC -Sc -O2 -FEbin -FUbuild -Fucompiler/src compiler/aetherc.lpr
+echo "[*] Compiling delsafec with optimizations (-O2)..."
+fpc -MObjFPC -Sc -O2 -FEbin -FUbuild -Fucompiler/src compiler/delsafec.lpr
 
 echo ""
-echo "[SUCCESS] Native compiler generated at: bin/aetherc"
+echo "[SUCCESS] Native compiler generated at: bin/delsafec"
 echo ""
 
 echo "[*] Running diagnostic check..."
-./bin/aetherc --version
-./bin/aetherc test
+./bin/delsafec --version
+./bin/delsafec test
 
 echo ""
 echo "========================================================"
-echo "  Build complete! Run './bin/aetherc' to get started."
+echo "  Build complete! Run './bin/delsafec' to get started."
 echo "========================================================"

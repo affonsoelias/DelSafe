@@ -1,9 +1,9 @@
 {
-  "name": "aether-lang",
-  "displayName": "Aether Programming Language",
-  "description": "Official stable support (v1.0.0) for the Aether language (.aeth): syntax highlighting, canonical formatting (Shift+Alt+F), safe refactoring (F2), Borrow Checker quick-fixes, snippets, and native LSP with instant diagnostics.",
+  "name": "delsafe-lang",
+  "displayName": "DelSafe Programming Language",
+  "description": "Official stable support (v1.0.0) for the DelSafe language (.dels): syntax highlighting, canonical formatting (Shift+Alt+F), safe refactoring (F2), Borrow Checker quick-fixes, snippets, and native LSP with instant diagnostics.",
   "version": "1.0.0",
-  "publisher": "aether-lang",
+  "publisher": "delsafe-lang",
   "engines": {
     "vscode": "^1.75.0"
   },
@@ -13,7 +13,7 @@
     "Linters"
   ],
   "keywords": [
-    "aether",
+    "delsafe",
     "pascal",
     "rust",
     "systems programming",
@@ -21,79 +21,79 @@
   ],
   "main": "./extension.js",
   "activationEvents": [
-    "onLanguage:aether",
-    "onCommand:aether.initProject",
-    "onCommand:aether.buildProject",
-    "onCommand:aether.runProject"
+    "onLanguage:delsafe",
+    "onCommand:delsafe.initProject",
+    "onCommand:delsafe.buildProject",
+    "onCommand:delsafe.runProject"
   ],
   "contributes": {
     "languages": [
       {
-        "id": "aether",
+        "id": "delsafe",
         "aliases": [
-          "Aether",
-          "aether"
+          "DelSafe",
+          "delsafe"
         ],
         "extensions": [
-          ".aeth"
+          ".dels"
         ],
         "configuration": "./language-configuration.json"
       }
     ],
     "grammars": [
       {
-        "language": "aether",
-        "scopeName": "source.aeth",
-        "path": "./syntaxes/aether.tmLanguage.json"
+        "language": "delsafe",
+        "scopeName": "source.dels",
+        "path": "./syntaxes/delsafe.tmLanguage.json"
       }
     ],
     "snippets": [
       {
-        "language": "aether",
-        "path": "./snippets/aether.json"
+        "language": "delsafe",
+        "path": "./snippets/delsafe.json"
       }
     ],
     "commands": [
       {
-        "command": "aether.initProject",
-        "title": "Aether: Initialize New Project (Init / aether.json)",
-        "category": "Aether"
+        "command": "delsafe.initProject",
+        "title": "DelSafe: Initialize New Project (Init / delsafe.json)",
+        "category": "DelSafe"
       },
       {
-        "command": "aether.buildProject",
-        "title": "Aether: Build Project (Build)",
-        "category": "Aether"
+        "command": "delsafe.buildProject",
+        "title": "DelSafe: Build Project (Build)",
+        "category": "DelSafe"
       },
       {
-        "command": "aether.runProject",
-        "title": "Aether: Run Project (Run)",
-        "category": "Aether"
+        "command": "delsafe.runProject",
+        "title": "DelSafe: Run Project (Run)",
+        "category": "DelSafe"
       },
       {
-        "command": "aether.compilePascal",
-        "title": "Aether: Compile Current File (Pascal Backend)",
-        "category": "Aether"
+        "command": "delsafe.compilePascal",
+        "title": "DelSafe: Compile Current File (Pascal Backend)",
+        "category": "DelSafe"
       },
       {
-        "command": "aether.compileC",
-        "title": "Aether: Compile Current File (C99 / GCC Backend)",
-        "category": "Aether"
+        "command": "delsafe.compileC",
+        "title": "DelSafe: Compile Current File (C99 / GCC Backend)",
+        "category": "DelSafe"
       },
       {
-        "command": "aether.checkDiagnostics",
-        "title": "Aether: Analyze and Refresh Diagnostics (AI Mode)",
-        "category": "Aether"
+        "command": "delsafe.checkDiagnostics",
+        "title": "DelSafe: Analyze and Refresh Diagnostics (AI Mode)",
+        "category": "DelSafe"
       },
       {
-        "command": "aether.formatDocument",
-        "title": "Aether: Format Document (Shift+Alt+F)",
-        "category": "Aether"
+        "command": "delsafe.formatDocument",
+        "title": "DelSafe: Format Document (Shift+Alt+F)",
+        "category": "DelSafe"
       }
     ],
     "problemMatchers": [
       {
-        "name": "aetherc",
-        "owner": "aether",
+        "name": "delsafec",
+        "owner": "delsafe",
         "fileLocation": [
           "relative",
           "${workspaceFolder}"

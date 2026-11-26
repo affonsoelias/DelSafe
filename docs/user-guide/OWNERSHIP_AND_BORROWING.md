@@ -1,14 +1,14 @@
 # Ownership and Borrowing Concepts
 
-In Aether, you write high-performance systems code **without worrying about memory leaks and without Garbage Collector pauses**.
+In DelSafe, you write high-performance systems code **without worrying about memory leaks and without Garbage Collector pauses**.
 
-This is powered by Aether's **Borrow Checker**, which analyzes the ownership of every variable at compile time.
+This is powered by DelSafe's **Borrow Checker**, which analyzes the ownership of every variable at compile time.
 
 ---
 
 ## 1. The 3 Memory Modifiers
 
-When defining a function or passing arguments in Aether, there are three explicit modifiers:
+When defining a function or passing arguments in DelSafe, there are three explicit modifiers:
 
 | Modifier | Meaning | Practical Behavior | Traditional Pascal Equivalent |
 |:---|:---|:---|:---|
@@ -68,7 +68,7 @@ end OwnershipExample.
 
 ## 3. Friendly Compiler Diagnostics
 
-If you make a *Use-After-Move* mistake (using a variable after it was consumed with `take`), `aetherc` tells you exactly what happened:
+If you make a *Use-After-Move* mistake (using a variable after it was consumed with `take`), `delsafec` tells you exactly what happened:
 
 ```text
 Compilation Error: [Ownership Error E0382 at 32:24]: Use of moved value: "my_buffer"
