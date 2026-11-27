@@ -146,12 +146,17 @@ var
   StringStream: TStringStream;
   {$IFDEF MSWINDOWS}
   OldPath: string;
+  PathChanged: Boolean;
   {$ENDIF}
 begin
   Result := -1;
   OutText := '';
   Proc := TProcess.Create(nil);
   StringStream := TStringStream.Create('');
+  {$IFDEF MSWINDOWS}
+  OldPath := '';
+  PathChanged := False;
+  {$ENDIF}
   try
     Proc.Executable := ExePath;
     Proc.Parameters.Clear;
@@ -164,31 +169,39 @@ begin
     begin
       OldPath := SysUtils.GetEnvironmentVariable('PATH');
       Windows.SetEnvironmentVariableA(PAnsiChar('PATH'), PAnsiChar(ExtraPathDir + ';' + OldPath));
+      PathChanged := True;
     end;
     {$ENDIF}
 
-    Proc.Execute;
+    try
+      Proc.Execute;
 
-    while Proc.Running or (Proc.Output.NumBytesAvailable > 0) do
-    begin
-      if Proc.Output.NumBytesAvailable > 0 then
+      while Proc.Running or (Proc.Output.NumBytesAvailable > 0) do
       begin
-        BytesRead := Proc.Output.Read(Buffer[0], SizeOf(Buffer));
-        if BytesRead > 0 then
-          StringStream.WriteBuffer(Buffer[0], BytesRead);
-      end
-      else
-        Sleep(10);
+        if Proc.Output.NumBytesAvailable > 0 then
+        begin
+          BytesRead := Proc.Output.Read(Buffer[0], SizeOf(Buffer));
+          if BytesRead > 0 then
+            StringStream.WriteBuffer(Buffer[0], BytesRead);
+        end
+        else
+          Sleep(10);
+      end;
+
+      Result := Proc.ExitStatus;
+      OutText := Trim(StringStream.DataString);
+    except
+      on E: Exception do
+      begin
+        Result := -1;
+        OutText := E.Message;
+      end;
     end;
-
-    Result := Proc.ExitStatus;
-    OutText := Trim(StringStream.DataString);
-
+  finally
     {$IFDEF MSWINDOWS}
-    if ExtraPathDir <> '' then
+    if PathChanged then
       Windows.SetEnvironmentVariableA(PAnsiChar('PATH'), PAnsiChar(OldPath));
     {$ENDIF}
-  finally
     StringStream.Free;
     Proc.Free;
   end;

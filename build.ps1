@@ -56,6 +56,10 @@ Write-Host "`n[SUCCESS] Native compiler generated at: bin\delsafec.exe`n" -Foreg
 Write-Host "[*] Running diagnostic check..." -ForegroundColor Cyan
 & .\bin\delsafec.exe --version
 & .\bin\delsafec.exe test
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "[ERROR] Test suite failed with exit code $LASTEXITCODE" -ForegroundColor Red
+    exit $LASTEXITCODE
+}
 
 Write-Host "`n========================================================" -ForegroundColor Cyan
 Write-Host "  Build complete! Run '.\bin\delsafec.exe' to get started." -ForegroundColor Cyan

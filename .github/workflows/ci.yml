@@ -42,6 +42,9 @@ jobs:
             $fpcDir = Get-ChildItem "C:\lazarus\fpc" -Recurse -Filter "fpc.exe" -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty DirectoryName
             if ($fpcDir) { "$fpcDir" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append }
           }
+          if (Test-Path "C:\msys64\usr\bin\pacman.exe") {
+            & C:\msys64\usr\bin\pacman.exe -Sy --noconfirm --needed mingw-w64-ucrt-x86_64-gcc mingw-w64-ucrt-x86_64-pkgconf mingw-w64-ucrt-x86_64-sqlite3
+          }
 
       - name: Build, test, and verify CLI on Linux / macOS
         if: runner.os != 'Windows'
