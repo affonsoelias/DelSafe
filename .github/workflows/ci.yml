@@ -90,8 +90,12 @@ jobs:
             if ($LASTEXITCODE -ne 0) { exit 1 }
             $out = & .\bin\delsafec.exe channel
             if ($LASTEXITCODE -ne 0 -or ($out -join "`n") -notmatch "stable") { exit 1 }
+            $ErrorActionPreference = 'Continue'
             & .\bin\delsafec.exe channel invalid_chan 2>$null
-            if ($LASTEXITCODE -eq 0) { exit 1 }
+            $invalidCode = $LASTEXITCODE
+            $ErrorActionPreference = 'Stop'
+            if ($invalidCode -eq 0) { exit 1 }
+            $global:LASTEXITCODE = 0
           } finally {
             $env:USERPROFILE = $oldProfile
             Remove-Item -Recurse -Force $tmpHome -ErrorAction SilentlyContinue
