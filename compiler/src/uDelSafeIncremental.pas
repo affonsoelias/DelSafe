@@ -48,7 +48,7 @@ type
 
 // Official DelSafe toolchain version
 const
-  DELSAFE_COMPILER_VERSION = '0.5.1';
+  DELSAFE_COMPILER_VERSION = '0.5.2';
 
 // Standalone high-performance SHA-256 cryptographic functions
 function SHA256String(const S: string): string;

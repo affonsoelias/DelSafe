@@ -51,7 +51,7 @@ var
   cfg: PlatformConfig;
 begin
   current_os := get_os_name();
-  Assert(current_os = "Windows", "get_os_name must return Windows in current test environment");
+  Assert((current_os = "Windows") or (current_os = "Linux") or (current_os = "macOS"), "get_os_name must return valid OS name");
 
   val := compute_fast_math(5, 6);
   Assert(val = 40, "compute_fast_math must return 40");

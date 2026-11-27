@@ -81,7 +81,62 @@ function CompileWithPas2JS(const PascalSource, OutJS: string; var OutputLog: str
 function GenerateWasmHtmlWrapper(const WasmFileName, OutHtmlFile: string): Boolean;
 function GenerateJSHtmlWrapper(const JSFileName, OutHtmlFile: string): Boolean;
 
+procedure SplitCmdParams(const Params: string; List: TStrings);
+
 implementation
+
+procedure SplitCmdParams(const Params: string; List: TStrings);
+var
+  I: Integer;
+  CurToken: string;
+  InQuote, HadQuote: Boolean;
+  QuoteChar: Char;
+  Ch: Char;
+begin
+  List.Clear;
+  CurToken := '';
+  InQuote := False;
+  HadQuote := False;
+  QuoteChar := #0;
+  I := 1;
+  while I <= Length(Params) do
+  begin
+    Ch := Params[I];
+    if InQuote then
+    begin
+      if Ch = QuoteChar then
+      begin
+        InQuote := False;
+        QuoteChar := #0;
+      end
+      else
+        CurToken := CurToken + Ch;
+    end
+    else
+    begin
+      if (Ch = '"') or (Ch = '''') then
+      begin
+        InQuote := True;
+        HadQuote := True;
+        QuoteChar := Ch;
+      end
+      else if Ch in [' ', #9, #10, #13] then
+      begin
+        if (CurToken <> '') or HadQuote then
+        begin
+          List.Add(CurToken);
+          CurToken := '';
+          HadQuote := False;
+        end;
+      end
+      else
+        CurToken := CurToken + Ch;
+    end;
+    Inc(I);
+  end;
+  if (CurToken <> '') or HadQuote then
+    List.Add(CurToken);
+end;
 
 function RunCommandCapture(const ExePath, Params: string; const ExtraPathDir: string; var OutText: string): Integer;
 var
@@ -99,7 +154,8 @@ begin
   StringStream := TStringStream.Create('');
   try
     Proc.Executable := ExePath;
-    Proc.CommandLine := '"' + ExePath + '" ' + Params;
+    Proc.Parameters.Clear;
+    SplitCmdParams(Params, Proc.Parameters);
     Proc.Options := [poUsePipes, poStderrToOutPut];
     Proc.ShowWindow := swoNone;
 

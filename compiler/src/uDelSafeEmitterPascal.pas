@@ -7868,12 +7868,20 @@ Begin
 
   If Pos('DelSafeGetEnv', RefText) > 0 Then
     Begin
+      Emit('{$IFNDEF PAS2JS}{$IFNDEF WINDOWS}');
+      Emit('function delsafe_c_getenv(name: PAnsiChar): PAnsiChar; cdecl; external ''c'' name ''getenv'';');
+      Emit('{$ENDIF}{$ENDIF}');
       Emit('function DelSafeGetEnv(const AName: string): string;');
+      Emit('{$IFNDEF PAS2JS}{$IFNDEF WINDOWS}');
+      Emit('var P: PAnsiChar;');
+      Emit('{$ENDIF}{$ENDIF}');
       Emit('begin');
-      Emit(
-
-'  {$IFNDEF PAS2JS}Result := SysUtils.GetEnvironmentVariable(AName);{$ELSE}Result := '''';{$ENDIF}'
-      );
+      Emit('  {$IFDEF PAS2JS}Result := '''';');
+      Emit('  {$ELSE}{$IFDEF WINDOWS}Result := SysUtils.GetEnvironmentVariable(AName);');
+      Emit('  {$ELSE}');
+      Emit('  P := delsafe_c_getenv(PAnsiChar(AnsiString(AName)));');
+      Emit('  if P <> nil then Result := string(P) else Result := SysUtils.GetEnvironmentVariable(AName);');
+      Emit('  {$ENDIF}{$ENDIF}');
       Emit('end;');
       Emit('');
     End;
