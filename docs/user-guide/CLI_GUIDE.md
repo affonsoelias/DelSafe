@@ -148,6 +148,27 @@ delsafec upgrade --rollback
 - **SHA-256 Cryptographic Verification**: Validates the downloaded archive hash against the official release signature before extraction (Error `E9991` on mismatch).
 - **Instant Rollback**: `--rollback` restores the previous working binary immediately.
 
+### `delsafec channel [stable | nightly]`
+View or switch the persistent default release channel saved in `~/.delsafe/config.json` (used by `delsafec upgrade` and shown in `delsafec --version`):
+```bash
+# Display the currently active release channel
+delsafec channel
+
+# Switch default updates to weekly nightly pre-releases
+delsafec channel nightly
+
+# Switch default updates back to official SemVer releases
+delsafec channel stable
+
+# Explicit set syntax
+delsafec channel set nightly
+
+# One-off override via environment variable
+DELSAFE_CHANNEL=nightly delsafec upgrade --check
+```
+
+Channel precedence: `--nightly` / `--channel=<name>` CLI flags > `DELSAFE_CHANNEL` environment variable > `~/.delsafe/config.json` > `stable` (default).
+
 ---
 
 ## 2.1 Incremental Compilation & Cache System (`--incremental`)

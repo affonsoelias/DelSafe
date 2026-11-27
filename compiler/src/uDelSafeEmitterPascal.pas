@@ -6267,7 +6267,7 @@ Var
   Param: TASTParam;
   ModStr, ExportClause: string;
   VarDecl: TASTVarDecl;
-  LibClause: string;
+  LibClause, CleanLib, LowLib: string;
   ParamType, KeyT, ValT: string;
   SkipNames, AutoNames, AutoTypes: TStringList;
 Begin
@@ -6300,8 +6300,24 @@ Begin
         End;
 
       If Func.ExternLib <> '' Then
-        LibClause := Format(' external ''%s'';', [ResolvePascalExternLib(Func.
-                     ExternLib)])
+        Begin
+          CleanLib := ResolvePascalExternLib(Func.ExternLib);
+          LibClause := Format(' external ''%s'';', [CleanLib]);
+          LowLib := LowerCase(CleanLib);
+          If Copy(LowLib, Length(LowLib) - 5, 6) = '.dylib' Then
+            CleanLib := Copy(CleanLib, 1, Length(CleanLib) - 6)
+          Else If Copy(LowLib, Length(LowLib) - 2, 3) = '.so' Then
+            CleanLib := Copy(CleanLib, 1, Length(CleanLib) - 3)
+          Else If Copy(LowLib, Length(LowLib) - 3, 4) = '.dll' Then
+            CleanLib := Copy(CleanLib, 1, Length(CleanLib) - 4);
+          If (Length(CleanLib) > 3) And SameText(Copy(CleanLib, 1, 3), 'lib') And
+             Not SameText(CleanLib, 'libc') Then
+            CleanLib := Copy(CleanLib, 4, Length(CleanLib) - 3);
+          LowLib := LowerCase(CleanLib);
+          If (CleanLib <> '') And (LowLib <> 'msvcrt') And (LowLib <> 'c') And
+             (LowLib <> 'libc') Then
+            Emit(Format('{$IFDEF DARWIN}{$linklib %s}{$ENDIF}', [CleanLib]));
+        End
       Else
         LibClause := ' external ''msvcrt'';';
       // Standard C runtime on Windows/FPC

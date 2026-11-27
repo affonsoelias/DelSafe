@@ -48,6 +48,13 @@ type
     class procedure HandleSourceUpgrade(const GitDir: string; const Opts: TUpgradeOptions);
     class procedure HandleBinaryUpgrade(const ExePath: string; const Opts: TUpgradeOptions);
     class procedure ExecuteUpgrade(const Opts: TUpgradeOptions);
+    class function IsValidChannel(const ChannelName: string): Boolean;
+    class function GetDelSafeConfigDir: string;
+    class function GetConfigFilePath: string;
+    class function GetConfiguredChannel(out SourceLabel: string): string; overload;
+    class function GetConfiguredChannel: string; overload;
+    class function SetConfiguredChannel(const NewChannel: string; out ErrorMsg: string): Boolean;
+    class procedure HandleChannelCommand(const Action, Value: string);
   end;
 
 implementation
@@ -239,22 +246,255 @@ begin
   Result := (RunCommandStream('curl ' + CurlCmd) = 0) and FileExists(DstFile);
 end;
 
-class procedure TDelSafeUpgrade.SaveUpdateCheckCache(const LatestTag: string);
+class function TDelSafeUpgrade.GetDelSafeConfigDir: string;
 var
-  HomeDir, DelSafeDir, CacheFile: string;
-  Obj: TJSONObject;
-  SL: TStringList;
+  HomeDir: string;
 begin
-  if SysUtils.GetEnvironmentVariable('DELSAFE_NO_UPDATE_CHECK') = '1' then Exit;
   {$IFDEF MSWINDOWS}
   HomeDir := SysUtils.GetEnvironmentVariable('USERPROFILE');
   if HomeDir = '' then HomeDir := SysUtils.GetEnvironmentVariable('APPDATA');
   {$ELSE}
   HomeDir := SysUtils.GetEnvironmentVariable('HOME');
   {$ENDIF}
-  if HomeDir = '' then Exit;
+  if HomeDir = '' then
+    Result := ''
+  else
+    Result := IncludeTrailingPathDelimiter(HomeDir) + '.delsafe';
+end;
 
-  DelSafeDir := IncludeTrailingPathDelimiter(HomeDir) + '.delsafe';
+class function TDelSafeUpgrade.GetConfigFilePath: string;
+var
+  ConfigDir: string;
+begin
+  ConfigDir := GetDelSafeConfigDir;
+  if ConfigDir = '' then
+    Result := ''
+  else
+    Result := ConfigDir + PathDelim + 'config.json';
+end;
+
+class function TDelSafeUpgrade.IsValidChannel(const ChannelName: string): Boolean;
+var
+  Norm: string;
+begin
+  Norm := LowerCase(Trim(ChannelName));
+  Result := (Norm = 'stable') or (Norm = 'nightly');
+end;
+
+class function TDelSafeUpgrade.GetConfiguredChannel(out SourceLabel: string): string;
+var
+  EnvVal, ConfigPath, FileVal: string;
+  SL: TStringList;
+  JSON: TJSONData;
+  Obj: TJSONObject;
+begin
+  Result := 'stable';
+  SourceLabel := 'default';
+
+  EnvVal := LowerCase(Trim(SysUtils.GetEnvironmentVariable('DELSAFE_CHANNEL')));
+  if (EnvVal <> '') and IsValidChannel(EnvVal) then
+  begin
+    Result := EnvVal;
+    SourceLabel := 'env (DELSAFE_CHANNEL)';
+    Exit;
+  end;
+
+  ConfigPath := GetConfigFilePath;
+  if (ConfigPath <> '') and FileExists(ConfigPath) then
+  begin
+    SL := TStringList.Create;
+    JSON := nil;
+    try
+      try
+        SL.LoadFromFile(ConfigPath);
+        JSON := GetJSON(SL.Text);
+        if (JSON <> nil) and (JSON.JSONType = jtObject) then
+        begin
+          Obj := TJSONObject(JSON);
+          FileVal := LowerCase(Trim(Obj.Get('channel', '')));
+          if IsValidChannel(FileVal) then
+          begin
+            Result := FileVal;
+            SourceLabel := ConfigPath;
+          end;
+        end;
+      except
+        // Malformed config.json falls back cleanly to default
+      end;
+    finally
+      JSON.Free;
+      SL.Free;
+    end;
+  end;
+end;
+
+class function TDelSafeUpgrade.GetConfiguredChannel: string;
+var
+  DummySource: string;
+begin
+  Result := GetConfiguredChannel(DummySource);
+end;
+
+class function TDelSafeUpgrade.SetConfiguredChannel(const NewChannel: string; out ErrorMsg: string): Boolean;
+var
+  Norm, ConfigDir, ConfigPath: string;
+  SL: TStringList;
+  JSON: TJSONData;
+  Obj: TJSONObject;
+  Idx: Integer;
+begin
+  Result := False;
+  ErrorMsg := '';
+  Norm := LowerCase(Trim(NewChannel));
+
+  if not IsValidChannel(Norm) then
+  begin
+    ErrorMsg := Format('Invalid channel "%s". Valid channels: stable, nightly.', [NewChannel]);
+    Exit;
+  end;
+
+  ConfigDir := GetDelSafeConfigDir;
+  ConfigPath := GetConfigFilePath;
+  if (ConfigDir = '') or (ConfigPath = '') then
+  begin
+    ErrorMsg := 'Could not determine user home directory for ~/.delsafe/config.json.';
+    Exit;
+  end;
+
+  if not ForceDirectories(ConfigDir) then
+  begin
+    ErrorMsg := Format('Could not create configuration directory "%s".', [ConfigDir]);
+    Exit;
+  end;
+
+  Obj := nil;
+  JSON := nil;
+  SL := TStringList.Create;
+  try
+    if FileExists(ConfigPath) then
+    begin
+      try
+        SL.LoadFromFile(ConfigPath);
+        JSON := GetJSON(SL.Text);
+        if (JSON <> nil) and (JSON.JSONType = jtObject) then
+          Obj := TJSONObject(JSON)
+        else
+        begin
+          JSON.Free;
+          JSON := nil;
+        end;
+      except
+        JSON.Free;
+        JSON := nil;
+      end;
+    end;
+
+    if Obj = nil then
+      Obj := TJSONObject.Create;
+
+    Idx := Obj.IndexOfName('channel');
+    if Idx >= 0 then
+      Obj.Delete(Idx);
+    Obj.Add('channel', Norm);
+
+    SL.Text := Obj.FormatJSON;
+    SL.SaveToFile(ConfigPath);
+    Result := True;
+  except
+    on E: Exception do
+    begin
+      ErrorMsg := E.Message;
+      Result := False;
+    end;
+  end;
+  if JSON <> nil then
+    JSON.Free
+  else if Obj <> nil then
+    Obj.Free;
+  SL.Free;
+end;
+
+class procedure TDelSafeUpgrade.HandleChannelCommand(const Action, Value: string);
+var
+  CurChan, SourceLabel, ConfigPath, TargetChan, ErrorMsg: string;
+begin
+  if (Action = '-h') or (Action = '--help') or SameText(Action, 'help') then
+  begin
+    WriteLn('Usage: delsafec channel [stable | nightly | show | set <name>]');
+    WriteLn('');
+    WriteLn('Manage the default release channel persisted in ~/.delsafe/config.json.');
+    WriteLn('');
+    WriteLn('Subcommands:');
+    WriteLn('  (none), show      Display the active release channel and available channels');
+    WriteLn('  stable            Switch default channel to stable (SemVer tags v*.*.*)');
+    WriteLn('  nightly           Switch default channel to nightly (weekly builds from main)');
+    WriteLn('  set <name>        Explicitly set the default channel (stable or nightly)');
+    WriteLn('');
+    WriteLn('Environment Override:');
+    WriteLn('  DELSAFE_CHANNEL   Temporarily override the configured channel');
+    Exit;
+  end;
+
+  if (Action = '') or SameText(Action, 'show') or SameText(Action, 'list') or SameText(Action, 'status') then
+  begin
+    CurChan := GetConfiguredChannel(SourceLabel);
+    ConfigPath := GetConfigFilePath;
+    if ConfigPath = '' then ConfigPath := '~/.delsafe/config.json';
+    WriteLn('--------------------------------------------------------');
+    WriteLn('  DelSafe Release Channel Configuration                 ');
+    WriteLn('--------------------------------------------------------');
+    WriteLn(Format('Active channel : %s (source: %s)', [CurChan, SourceLabel]));
+    WriteLn(Format('Config file    : %s', [ConfigPath]));
+    WriteLn('');
+    WriteLn('Available channels:');
+    if CurChan = 'stable' then
+      WriteLn('  * stable   - Official SemVer releases (v*.*.*)')
+    else
+      WriteLn('    stable   - Official SemVer releases (v*.*.*)');
+    if CurChan = 'nightly' then
+      WriteLn('  * nightly  - Weekly development pre-releases built from main')
+    else
+      WriteLn('    nightly  - Weekly development pre-releases built from main');
+    WriteLn('');
+    WriteLn('To switch channels: delsafec channel <stable|nightly>');
+    Exit;
+  end;
+
+  if SameText(Action, 'set') or SameText(Action, 'use') then
+  begin
+    if Trim(Value) = '' then
+    begin
+      WriteLn(ErrOutput, 'Error: Missing channel name. Usage: delsafec channel set <stable|nightly>');
+      Halt(1);
+    end;
+    TargetChan := Value;
+  end
+  else
+    TargetChan := Action;
+
+  if not SetConfiguredChannel(TargetChan, ErrorMsg) then
+  begin
+    WriteLn(ErrOutput, 'Error: ' + ErrorMsg);
+    Halt(1);
+  end;
+
+  CurChan := LowerCase(Trim(TargetChan));
+  ConfigPath := GetConfigFilePath;
+  WriteLn(Format('Active update channel set to: %s', [CurChan]));
+  if ConfigPath <> '' then
+    WriteLn(Format('Saved configuration to: %s', [ConfigPath]));
+  WriteLn(Format('Run "delsafec upgrade" to update from the %s channel.', [CurChan]));
+end;
+
+class procedure TDelSafeUpgrade.SaveUpdateCheckCache(const LatestTag: string);
+var
+  DelSafeDir, CacheFile: string;
+  Obj: TJSONObject;
+  SL: TStringList;
+begin
+  if SysUtils.GetEnvironmentVariable('DELSAFE_NO_UPDATE_CHECK') = '1' then Exit;
+  DelSafeDir := GetDelSafeConfigDir;
+  if DelSafeDir = '' then Exit;
   try
     ForceDirectories(DelSafeDir);
     CacheFile := DelSafeDir + PathDelim + 'update_check.json';

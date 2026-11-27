@@ -118,6 +118,7 @@ DelSafe powers **Zephyr** (`vendor/zephyr`), the native backend engine for the B
 | `delsafec emit pascal --unit` | Emit clean Free Pascal unit for external consumption |
 | `delsafec emit-header <file>` | Generate C header (`.h`) for C/C++ FFI |
 | `delsafec lsp` | Launch Language Server Protocol engine |
+| `delsafec channel [stable\|nightly]` | View or switch the active release channel (`~/.delsafe/config.json`) |
 | `delsafec upgrade` | Upgrade toolchain (`--check`, `--nightly`, `--from-source`, `--rollback`) |
 | `delsafec --doctor` | Diagnose compiler toolchains (FPC, GCC, Clang, Pas2JS) |
 
@@ -128,8 +129,8 @@ DelSafe powers **Zephyr** (`vendor/zephyr`), the native backend engine for the B
 DelSafe uses a streamlined single-branch workflow during pre-1.0 development:
 
 - **Primary Branch (`main`)**: Single integration branch carrying active development (short-lived feature branches are optional for large changes).
-- **`stable` Channel (`delsafec upgrade`)**: Pulls the latest official GitHub Release built automatically from SemVer tags (`v*.*.*`).
-- **`nightly` Channel (`delsafec upgrade --nightly`)**: Pulls the weekly pre-release built every Sunday from `main` via [`.github/workflows/release.yml`](.github/workflows/release.yml).
+- **`stable` Channel (`delsafec channel stable` / `delsafec upgrade`)**: Pulls the latest official GitHub Release built automatically from SemVer tags (`v*.*.*`).
+- **`nightly` Channel (`delsafec channel nightly` / `delsafec upgrade --nightly`)**: Pulls the weekly pre-release built every Sunday from `main` via [`.github/workflows/release.yml`](.github/workflows/release.yml).
 - **Source Sync (`delsafec upgrade --from-source`)**: Syncs directly against `origin/main` and rebuilds the toolchain locally.
 
 ---

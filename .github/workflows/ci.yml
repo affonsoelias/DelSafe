@@ -1,0 +1,95 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build-and-test:
+    name: Build & Test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Free Pascal & native deps on Linux
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y fpc gcc build-essential pkg-config libsqlite3-dev
+
+      - name: Install Free Pascal & native deps on macOS
+        if: runner.os == 'macOS'
+        run: |
+          brew install fpc pkg-config sqlite
+
+      - name: Install Free Pascal on Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          if (-not (Get-Command fpc -ErrorAction SilentlyContinue)) {
+            choco install lazarus -y --no-progress
+            $fpcDir = Get-ChildItem "C:\lazarus\fpc" -Recurse -Filter "fpc.exe" -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty DirectoryName
+            if ($fpcDir) { "$fpcDir" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append }
+          }
+
+      - name: Build, test, and verify CLI on Linux / macOS
+        if: runner.os != 'Windows'
+        run: |
+          chmod +x build.sh
+          ./build.sh
+          ./bin/delsafec --version
+          ./bin/delsafec --doctor
+          TMP_HOME=$(mktemp -d)
+          HOME="$TMP_HOME" ./bin/delsafec channel | grep -q "stable"
+          HOME="$TMP_HOME" ./bin/delsafec channel nightly
+          HOME="$TMP_HOME" ./bin/delsafec channel | grep -q "nightly"
+          HOME="$TMP_HOME" ./bin/delsafec --version | grep -q "channel: nightly"
+          HOME="$TMP_HOME" ./bin/delsafec channel set stable
+          HOME="$TMP_HOME" ./bin/delsafec channel | grep -q "stable"
+          ! HOME="$TMP_HOME" ./bin/delsafec channel invalid_chan
+          rm -rf "$TMP_HOME"
+
+      - name: Build, test, and verify CLI on Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          .\build.ps1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & .\bin\delsafec.exe --version
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & .\bin\delsafec.exe --doctor
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $tmpHome = Join-Path $env:TEMP ("delsafe_ci_home_" + [guid]::NewGuid().ToString("N"))
+          New-Item -ItemType Directory -Path $tmpHome | Out-Null
+          $oldProfile = $env:USERPROFILE
+          try {
+            $env:USERPROFILE = $tmpHome
+            $out = & .\bin\delsafec.exe channel
+            if ($LASTEXITCODE -ne 0 -or ($out -join "`n") -notmatch "stable") { exit 1 }
+            & .\bin\delsafec.exe channel nightly
+            if ($LASTEXITCODE -ne 0) { exit 1 }
+            $out = & .\bin\delsafec.exe channel
+            if ($LASTEXITCODE -ne 0 -or ($out -join "`n") -notmatch "nightly") { exit 1 }
+            $verOut = & .\bin\delsafec.exe --version
+            if ($LASTEXITCODE -ne 0 -or ($verOut -join "`n") -notmatch "channel: nightly") { exit 1 }
+            & .\bin\delsafec.exe channel set stable
+            if ($LASTEXITCODE -ne 0) { exit 1 }
+            $out = & .\bin\delsafec.exe channel
+            if ($LASTEXITCODE -ne 0 -or ($out -join "`n") -notmatch "stable") { exit 1 }
+            & .\bin\delsafec.exe channel invalid_chan 2>$null
+            if ($LASTEXITCODE -eq 0) { exit 1 }
+          } finally {
+            $env:USERPROFILE = $oldProfile
+            Remove-Item -Recurse -Force $tmpHome -ErrorAction SilentlyContinue
+          }

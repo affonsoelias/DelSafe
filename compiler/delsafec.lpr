@@ -43,10 +43,11 @@ End;
 
 Procedure PrintVersionInfo;
 Var
-  OSName, ArchName: string;
+  OSName, ArchName, ActiveChannel: string;
 Begin
   TDelSafeUpgrade.DetectPlatform(OSName, ArchName);
-  WriteLn(Format('delsafec %s (%s-%s)', [DELSAFE_COMPILER_VERSION, OSName, ArchName]));
+  ActiveChannel := TDelSafeUpgrade.GetConfiguredChannel;
+  WriteLn(Format('delsafec %s (%s-%s, channel: %s)', [DELSAFE_COMPILER_VERSION, OSName, ArchName, ActiveChannel]));
 End;
 
 Procedure PrintUsage;
@@ -63,6 +64,7 @@ Begin
   WriteLn('  fmt [path]        Format DelSafe code according to canonical rules (--check for CI/CD)');
   WriteLn('  doc [path]        Generate canonical project documentation (HTML, Markdown, and Doctests)');
   WriteLn('  emit-header <file> Generate ANSI C/C++-compatible C header (.h)');
+  WriteLn('  channel [name]    View or switch the active release channel (stable, nightly)');
   WriteLn('  upgrade           Upgrade the DelSafe compiler toolchain (--check, --binary, --from-source, --rollback)');
   WriteLn('  clean             Clean project build artifacts (bin/ and generated/)');
   WriteLn('  bootstrap         Run full self-hosting cycle (Stage 1, 2, and 3)');
@@ -3154,6 +3156,26 @@ If (ParamCount >= 1) And (LowerCase(ParamStr(1)) = 'update') Then
   End;
 End;
 
+// Check release channel command: channel [stable|nightly|show|set <name>]
+If (ParamCount >= 1) And (LowerCase(ParamStr(1)) = 'channel') Then
+  Begin
+    PrintBanner;
+    Arg := '';
+    SubCmd := '';
+    If ParamCount >= 2 Then Arg := ParamStr(2);
+    If ParamCount >= 3 Then SubCmd := ParamStr(3);
+    Try
+      TDelSafeUpgrade.HandleChannelCommand(Arg, SubCmd);
+      Halt(0);
+    Except
+      on E: Exception Do
+        Begin
+          WriteLn(ErrOutput, 'Error managing release channel: ', E.Message);
+          Halt(1);
+        End;
+    End;
+  End;
+
 // Check toolchain self-update command: upgrade
 If (ParamCount >= 1) And (LowerCase(ParamStr(1)) = 'upgrade') Then
   Begin
@@ -3163,10 +3185,10 @@ If (ParamCount >= 1) And (LowerCase(ParamStr(1)) = 'upgrade') Then
     UpgradeOpts.BinaryMode := False;
     UpgradeOpts.Rollback := False;
     UpgradeOpts.DryRun := False;
-    UpgradeOpts.Nightly := False;
     UpgradeOpts.AllowUnsigned := False;
     UpgradeOpts.NoStdUpdate := False;
-    UpgradeOpts.Channel := 'stable';
+    UpgradeOpts.Channel := TDelSafeUpgrade.GetConfiguredChannel;
+    UpgradeOpts.Nightly := SameText(UpgradeOpts.Channel, 'nightly');
     UpgradeOpts.TargetVersion := '';
     UpgradeOpts.CustomUrl := '';
 
@@ -3196,13 +3218,23 @@ If (ParamCount >= 1) And (LowerCase(ParamStr(1)) = 'upgrade') Then
         Else If (Arg = '--channel') And (I + 1 <= ParamCount) Then
         Begin
           Inc(I);
-          UpgradeOpts.Channel := LowerCase(ParamStr(I));
-          If UpgradeOpts.Channel = 'nightly' Then UpgradeOpts.Nightly := True;
+          UpgradeOpts.Channel := LowerCase(Trim(ParamStr(I)));
+          If Not TDelSafeUpgrade.IsValidChannel(UpgradeOpts.Channel) Then
+          Begin
+            WriteLn(ErrOutput, Format('Error: Invalid channel "%s". Valid channels: stable, nightly.', [ParamStr(I)]));
+            Halt(1);
+          End;
+          UpgradeOpts.Nightly := SameText(UpgradeOpts.Channel, 'nightly');
         End
         Else If Pos('--channel=', Arg) = 1 Then
         Begin
-          UpgradeOpts.Channel := LowerCase(Copy(Arg, 11, Length(Arg)));
-          If UpgradeOpts.Channel = 'nightly' Then UpgradeOpts.Nightly := True;
+          UpgradeOpts.Channel := LowerCase(Trim(Copy(Arg, 11, Length(Arg))));
+          If Not TDelSafeUpgrade.IsValidChannel(UpgradeOpts.Channel) Then
+          Begin
+            WriteLn(ErrOutput, Format('Error: Invalid channel "%s". Valid channels: stable, nightly.', [Copy(Arg, 11, Length(Arg))]));
+            Halt(1);
+          End;
+          UpgradeOpts.Nightly := SameText(UpgradeOpts.Channel, 'nightly');
         End
         Else If (Arg = '--version') And (I + 1 <= ParamCount) Then
         Begin
@@ -3231,7 +3263,7 @@ If (ParamCount >= 1) And (LowerCase(ParamStr(1)) = 'upgrade') Then
             WriteLn('  --rollback, -r        Restore previous executable and stdlib backup (.bak)');
             WriteLn('  --dry-run, -d         Simulate all steps without modifying files');
             WriteLn('  --version=<tag>       Install a specific version or tag (e.g., --version=v0.6.0)');
-            WriteLn('  --channel=<name>      Select release channel: stable (default) or nightly');
+            WriteLn('  --channel=<name>      Select release channel: stable or nightly (defaults to configured channel via "delsafec channel")');
             WriteLn('  --nightly             Shortcut for --channel=nightly');
             WriteLn('  --url=<url>           Custom release metadata JSON URL (supports file:/// for tests)');
             WriteLn('  --allow-unsigned      Allow binary install when no SHA-256 checksum asset exists');

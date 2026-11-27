@@ -33,12 +33,12 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y fp-compiler gcc build-essential
+          sudo apt-get install -y fpc gcc build-essential pkg-config libsqlite3-dev
 
       - name: Install Free Pascal on macOS
         if: runner.os == 'macOS'
         run: |
-          brew install fpc
+          brew install fpc pkg-config sqlite
 
       - name: Install Free Pascal on Windows
         if: runner.os == 'Windows'
@@ -55,7 +55,9 @@ jobs:
         shell: pwsh
         run: |
           .\build.ps1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           & .\bin\delsafec.exe test
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $tag = "${{ github.ref_name }}"
           if ($tag.StartsWith("v")) { $ver = $tag.Substring(1) } else { $ver = "" }
           if ("${{ github.event_name }}" -eq "schedule" -or "${{ inputs.channel }}" -eq "nightly") { $ver = "nightly" }
