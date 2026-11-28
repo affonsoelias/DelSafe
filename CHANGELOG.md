@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Automatically generate a starter `CHANGELOG.md` (`v0.1.0`) during `delsafec init`.
+
 ### Changed
 - Added a smart GitHub Actions `check` gate to skip scheduled `nightly` builds when `main` has no new commits since the last nightly build.
 
