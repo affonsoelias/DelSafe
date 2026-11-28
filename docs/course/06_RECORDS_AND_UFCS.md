@@ -23,7 +23,7 @@ DelSafe satisfies all fundamental pillars of OOP with **Zero-Cost Abstractions**
 | **Methods & Behavior** | Methods inside class body | **UFCS** (`instance.Method()`) with explicit ownership |
 | **Polymorphism** | `virtual` / `override` vtables | **`trait`** contracts & Generics with Trait Bounds |
 | **Code Reuse** | Subclassing (`class B : A`) | **Composition** (nesting records) & `[derive(...)]` |
-| **Visibility** | `private` / `protected` / `public` | Module boundaries and `export` declarations |
+| **Visibility** | `private` / `protected` / `public` | Unit `interface`/`implementation` sections and `pub`/`priv` modifiers |
 
 ---
 
@@ -48,17 +48,18 @@ type
     end record;
 ```
 
-### Positional Constructors
-Every record automatically provides a canonical, type-safe constructor:
+### Positional & Named Constructors, and `Default(T)`
+Every record automatically provides both positional and named-field constructors, plus zero-initialization via `Default(T)`:
 
 ```delsafe
 program Main;
 var
-    pt: Point;
+    pt, origin: Point;
     rect: Rectangle;
 begin
     pt := Point(10.0, 20.0);
-    rect := Rectangle(pt, 100.0, 50.0);
+    origin := Default(Point);
+    rect := Rectangle(width: 100.0, height: 50.0, origin: pt);
 
     PrintLn("Origin: (" + FloatToStr(rect.origin.x) + ", " + FloatToStr(rect.origin.y) + ")");
     PrintLn("Width: " + FloatToStr(rect.width));
@@ -194,9 +195,11 @@ type
 
 The compiler synthesizes:
 - **`Debug` (`acc.ToString()`):** Formats the object into a readable debug representation.
-- **`JSON` (`acc.ToJSON()`):** Serializes the object into a valid JSON string.
+- **`JSON` (`acc.ToJSON()` / `Account.FromJSON(raw)`):** Serializes and deserializes records using valid JSON strings.
 - **`Clone` (`acc.Clone()`):** Deep-copies the object with independent memory ownership.
 - **`Equals` (`acc.Equals(borrow other)`):** Compares all fields for equality.
+
+> **Tip:** You can also group associated constructors and methods directly inside `impl Type ... end impl;` blocks, covered in the next chapter.
 
 ---
 

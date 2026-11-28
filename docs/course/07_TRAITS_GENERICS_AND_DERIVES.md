@@ -14,12 +14,16 @@ module traits_demo;
 interface
 
 trait Printable
-    procedure PrintInfo;
+    procedure PrintInfo(borrow self);
 end trait;
 
 trait AreaCalculable
-    function GetArea() return Float64;
+    function GetArea(borrow self) return Float64;
 end trait;
+
+implementation
+
+end traits_demo.
 ```
 
 ---
@@ -39,14 +43,14 @@ type
     end record;
 
 impl AreaCalculable for Circle
-    function GetArea() return Float64 is
+    function GetArea(borrow self) return Float64 is
     begin
         return 3.14159 * self.radius * self.radius;
     end GetArea;
 end impl;
 
 impl AreaCalculable for Square
-    function GetArea() return Float64 is
+    function GetArea(borrow self) return Float64 is
     begin
         return self.side * self.side;
     end GetArea;
@@ -88,10 +92,22 @@ Call static associated functions with `Type.Method(...)` (`Vector2D.New(3, 4)`) 
 You can write generic functions constrained by traits using `<T: Trait>` bounds:
 
 ```delsafe
-procedure DisplayArea<T: AreaCalculable>(shape: T) is
+procedure DisplayArea<T: AreaCalculable>(borrow shape: T) is
 begin
     PrintLn("Calculated area: " + FloatToStr(shape.GetArea()));
 end DisplayArea;
+```
+
+### Multi-Parameter Generic Records
+
+Records can also declare multiple type parameters (`Pair<T, U>`), which the compiler monomorphizes cleanly for every concrete combination:
+
+```delsafe
+type
+    Pair<T, U> = record
+        first: T;
+        second: U;
+    end record;
 ```
 
 ---
@@ -118,7 +134,7 @@ When annotated with `[derive(...)]`, the compiler automatically generates:
    ```
 2. **`JSON` (`ToJSON()` and `FromJSON()`):**
    ```delsafe
-   let raw := p.ToJSON(); // '{"id": 1, "nickname": "Alice", "score": 9500}'
+   let raw := p.ToJSON(); // "{\"id\": 1, \"nickname\": \"Alice\", \"score\": 9500}"
    let restored := Player.FromJSON(raw);
    ```
    `[derive(...)]` also supports `Char`, nested `Record` and `Enum` types, `Option<T>`, `Result<T, E>`, subranges, and fixed/dynamic `array` fields (`Debug`, `JSON`, `Equals`).

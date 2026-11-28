@@ -151,6 +151,11 @@ delsafec emit pascal src/UserStore.dels --unit --out-dir=.blaisevue/generated --
 ```
 On success, it exits cleanly with **code 0**. On type or borrow-checker failure, it returns **code 1** with formatted diagnostics.
 
+### 4.4 Shared Runtime Unit & `fppkg` / OPM Integration
+- **Shared Runtime (`--shared-runtime` / `emit runtime`):** When emitting multiple units into the same Pascal project, pass `--shared-runtime` (or run `delsafec emit runtime --out-dir=...`) to centralize helper types and routines inside a single `uDelSafeRuntime.pas` unit instead of duplicating helpers per generated `.pas`.
+- **FPC Package Discovery (`--fpc-pkg` / `delsafec pkg add-fpc`):** Register external Free Pascal or Lazarus OPM packages (`"pascal_packages"` in `delsafe.json`) so DelSafe automatically passes their unit paths during compilation.
+- **Manifest `outputs` Block:** Configure `"pascal_src_dir"`, `"pascal_unit_dir"`, and `"as_unit": true` directly inside `delsafe.json` so `delsafec build` emits units straight into BlaiseVue's target folders.
+
 ---
 
 ## 5. Zephyr: BlaiseVue's Native Backend (`vendor/zephyr`)

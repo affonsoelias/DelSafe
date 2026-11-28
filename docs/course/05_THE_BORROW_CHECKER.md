@@ -131,7 +131,33 @@ The DelSafe compiler prevents aliasing bugs at compile time. For instance, you c
 
 ---
 
-## 6. Summary: Ownership Cheat Sheet
+## 6. Disjoint Field Borrows & Partial Moves
+
+DelSafe's Borrow Checker tracks ownership at **field granularity** inside records:
+
+- **Disjoint mutable field borrows:** Two different fields of the same record can be mutably borrowed at the same time (`SwapFields(mut borrow pair.a, mut borrow pair.b);`), while borrowing the same field twice simultaneously is rejected (`E0502`).
+- **Partial moves:** Moving a single field with `take mb.name` invalidates only that field—remaining fields like `mb.num` stay accessible, and the moved field can be restored by reassigning it (`mb.name := "World";`).
+
+---
+
+## 7. Heap Ownership (`Box<T>`), `Free`/`Dispose`, and Deterministic RAII (`impl Drop for T`)
+
+For recursive structures or explicit heap allocation, wrap values in `Box<T>`. Memory is released deterministically at scope exit (or early via `Free(x)` / `Dispose(x)`), and custom cleanup logic can be attached to any record using `impl Drop for <Type>`:
+
+```delsafe
+impl Drop for Resource
+    procedure Drop(mut borrow self) is
+    begin
+        PrintLn($"Releasing resource #{self.id}");
+    end Drop;
+end impl;
+```
+
+`Drop` runs automatically in **LIFO (Last-In, First-Out)** order at block boundaries, early `return` paths, and loop `break` statements across both Free Pascal and C99 backends.
+
+---
+
+## 8. Summary: Ownership Cheat Sheet
 
 | Parameter Mode | Keyword | Can Read? | Can Write? | Caller Retains Ownership? |
 | :--- | :--- | :--- | :--- | :--- |

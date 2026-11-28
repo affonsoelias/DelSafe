@@ -241,9 +241,9 @@ var
     i: Int32;
 begin
     hash := 5381;
-    i := 1;
-    while i <= Length(data) do
-        hash := ((hash * 33) + UInt32(Byte(data[i])));
+    i := 0;
+    while i < Int32(Length(data)) do
+        hash := ((hash * 33) + UInt32(Ord(data[i])));
         i := i + 1;
     end while;
     return hash;
@@ -333,6 +333,25 @@ When linking external native libraries, `delsafec` provides familiar GNU/Clang C
 | `-Fu<dir>` | Add Free Pascal unit search path | `delsafec app.dels -FuC:/lazarus/components` |
 | `--c-source <file.c>` | Compile an extra `.c` source file into the final binary | `delsafec app.dels --c-source helper.c` |
 | `--shared-lib <file.dll>` | Automatically copy dynamic library to the executable output folder | `delsafec app.dels --shared-lib sqlite3.dll` |
+| `--sys-lib=<lib>` | Resolve a C system library via `pkg-config` and bundle MSYS2 DLLs | `delsafec app.dels --sys-lib=sqlite3` |
+| `--fpc-pkg=<pkg>` | Include Free Pascal packages (`fppkg` / Lazarus OPM units) | `delsafec app.dels --fpc-pkg=bgrabitmap` |
+| `--bundle-dlls` / `--no-bundle-dlls` | Toggle automatic transitive MSYS2 DLL copying on Windows (enabled by default) | `delsafec build --no-bundle-dlls` |
+
+---
+
+## 🧩 Level 6: Native Ecosystem Integration (`pkg-config`, MSYS2 & `fppkg`)
+
+DelSafe automatically discovers native C/C++ libraries via **`pkg-config`** (backed by MSYS2 UCRT64 `pacman` on Windows, or `apt`/`dnf`/`brew` on Linux/macOS) and Free Pascal units via **`fppkg` / Lazarus OPM**:
+
+- **Automatic `extern c "<lib>"` Linking:** When you declare `extern c "sqlite3" ...;`, the compiler queries `pkg-config` for include/library flags and, on Windows, bundles transitive MSYS2 DLLs (such as `libsqlite3-0.dll`) alongside the binary automatically.
+- **Persistent Project Commands:**
+  ```bash
+  # Install/verify a native C library via MSYS2 pacman + pkg-config and add to delsafe.json ("system_libs")
+  delsafec pkg add-sys sqlite3
+
+  # Install/locate a Free Pascal package via fppkg / OPM and add to delsafe.json ("pascal_packages")
+  delsafec pkg add-fpc lazutils
+  ```
 
 ---
 

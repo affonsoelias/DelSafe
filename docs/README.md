@@ -16,20 +16,23 @@ A comprehensive, hands-on 13-chapter curriculum that takes you from complete beg
 
 ### 2. [User Guides](user-guide/)
 Practical manuals for writing, building, and maintaining applications in DelSafe:
-- **[Beginner's Guide](user-guide/BEGINNERS_GUIDE.md):** Environment requirements (Free Pascal and GCC), quickstart, diagnostic validation with `delsafec --doctor`, and creating new projects.
-- **[CLI Reference Manual](user-guide/CLI_GUIDE.md):** Complete reference of all `delsafec` compiler commands (`build`, `run`, `test`, `bench`, `profile`, `lint`, `fmt`, `doc`, `emit-header`).
-- **[Package Manager](user-guide/PACKAGE_MANAGEMENT.md):** Managing Git and local dependencies (`delsafec pkg`), cryptographic lockfiles (`delsafe.lock`), and TLS security audits.
-- **[Ownership & Borrowing Concepts](user-guide/OWNERSHIP_AND_BORROWING.md):** Intuitive explanation of `take`, `borrow`, and `mut borrow` with practical visual examples.
+- **[Beginner's Guide](user-guide/BEGINNERS_GUIDE.md):** Environment requirements (Free Pascal, MSYS2/GCC, Clang, `pkg-config`), quickstart, `delsafec --doctor`, and creating projects with `delsafec new`.
+- **[Syntax Cheatsheet](user-guide/SYNTAX_CHEATSHEET.md):** Concise reference for `program Main;`, `interface`/`implementation` Units, mandatory typed `end` closers, and `asm ... end asm;`.
+- **[Standard Library & Intrinsics](user-guide/STANDARD_LIBRARY.md):** Complete reference of all 10 `std/*.dels` modules (`Collections`, `FS`, `HTTP`, `IO`, `JSON`, `Math`, `Net`, `Strings`, `Sync`, `Time`) and built-in intrinsics.
+- **[CLI Reference Manual](user-guide/CLI_GUIDE.md):** Complete reference of all `delsafec` compiler commands (`new`, `build`, `run`, `test`, `bench`, `profile`, `lint`, `fmt`, `doc`, `emit`, `emit-header`, `upgrade`, `channel`).
+- **[Package Manager](user-guide/PACKAGE_MANAGEMENT.md):** Managing Registry, Git, local, and native (`add-sys`, `add-fpc`) dependencies, `delsafe.lock`, and security audits.
+- **[Ownership & Borrowing Concepts](user-guide/OWNERSHIP_AND_BORROWING.md):** Practical guide to `take`, `borrow`, `mut borrow`, disjoint field borrows, `Box<T>`, and RAII `Drop`.
 
 ---
 
 ### 3. [Technical Documentation](technical/)
 Formal specifications and compiler architecture:
-- **[Language Specification](technical/LANGUAGE_SPECIFICATION.md):** Grammar, type hierarchy, UFCS, traits, and zero-boilerplate FFI (`import c`, `import pascal`).
-- **[BlaiseVue & Zephyr Integration](technical/BLAISEVUE_AND_PASCAL_INTEGRATION.md):** Zephyr backend architecture (`vendor/zephyr`), high-performance FPC/C backend execution, and tooling integration.
-- **[Static Memory Safety](technical/MEMORY_SAFETY.md):** Formal proof of how DelSafe guarantees zero Use-After-Free, Double-Free, Data Races, and Null-Pointer exceptions.
-- **[Compiler Architecture](technical/COMPILER_ARCHITECTURE.md):** Internal subsystems of `delsafec` (Lexer, Recursive-Descent Parser, Type Checker, Borrow Checker, AST Optimizer, and Emitters).
-- **[AI Diagnostic Mode (JSON)](technical/AI_DIAGNOSTIC_MODE_JSON.md):** Structured JSON schema for compiler diagnostics and IDE/AI agent integration.
+- **[Language Specification](technical/LANGUAGE_SPECIFICATION.md):** Formal EBNF grammar, type system, UFCS, traits, tuples/closures, `asm ... end asm;`, and zero-boilerplate FFI (`import c`, `import pascal`).
+- **[Concurrency & Low-Level Architecture](technical/CONCURRENCY_AND_LOW_LEVEL.md):** OS threading (`spawn`/`await`/`Task<T>`), atomics/mutexes/channels, `unsafe` pointers, Intel inline assembly, and `pkg-config`/MSYS2/`fppkg` linking.
+- **[BlaiseVue & Zephyr Integration](technical/BLAISEVUE_AND_PASCAL_INTEGRATION.md):** Zephyr backend architecture (`vendor/zephyr`), `--unit` / `--shared-runtime` emission, and tooling integration.
+- **[Static Memory Safety](technical/MEMORY_SAFETY.md):** Formal guarantees against Use-After-Free, Double-Free, Data Races, and Null-Pointer exceptions, plus `Drop` and `unsafe` boundaries.
+- **[Compiler Architecture](technical/COMPILER_ARCHITECTURE.md):** Internal subsystems of `delsafec` (Lexer, Parser, `@cfg`/`[derive]`, Type Checker, Borrow Checker, AST Optimizer, Emitters, and Tooling).
+- **[AI Diagnostic Mode (JSON)](technical/AI_DIAGNOSTIC_MODE_JSON.md):** Structured JSON schema and full error code reference for IDE and AI agent integration.
 
 ---
 

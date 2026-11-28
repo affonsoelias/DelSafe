@@ -14,7 +14,7 @@ Congratulations on reaching the final chapter of the DelSafe Masterclass! In thi
 
 ## 1. Project Architecture
 
-Create a project directory or file named `secure_cache.dels`:
+Create a project with `delsafec new secure_cache` or create a standalone file named `secure_cache.dels`:
 
 ```delsafe
 module secure_cache;
@@ -87,7 +87,7 @@ begin
     now_ticks := GetTickCount64();
 
     if norm_key = "user:session:1001" then
-        dummy_item := CacheItem(norm_key, '{"user_id": 1001, "role": "admin"}', now_ticks, 1);
+        dummy_item := CacheItem(norm_key, "{\"user_id\": 1001, \"role\": \"admin\"}", now_ticks, 1);
         return CacheLookupResult.Hit(dummy_item);
     else if norm_key = "user:session:expired" then
         return CacheLookupResult.Expired;

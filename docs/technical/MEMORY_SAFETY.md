@@ -44,7 +44,7 @@ $$\text{Simultaneous Borrows} = (\text{Multiple } \texttt{borrow}) \lor (\text{E
 ### Pillar 3: Eliminating Null (The Billion-Dollar Mistake)
 In DelSafe, **no regular variable can ever be null**.
 - Whenever a value may be absent, the programmer explicitly uses the algebraic type `Option<T>`:
-  ```pascal
+  ```delsafe
   type
       Option<T> = enum
           Some(value: T),
@@ -52,3 +52,17 @@ In DelSafe, **no regular variable can ever be null**.
       end enum;
   ```
 - The compiler enforces exhaustive destructuring via `match`, making it impossible to access an absent value unchecked.
+
+---
+
+## 4. Disjoint Field Borrows, `Box<T>`, and Deterministic RAII (`Drop`)
+
+- **Disjoint Field Borrows & Partial Moves:** Borrowing `mut borrow pair.a` and `mut borrow pair.b` simultaneously is permitted because the Borrow Checker proves the fields do not overlap. Moving a single field (`take rec.name`) leaves sibling fields accessible until `rec.name` is reinitialized.
+- **Heap Ownership (`Box<T>` & `Free`/`Dispose`):** Recursive structures use `Box<T>`, which is freed automatically at scope exit (or explicitly via `Free`/`Dispose`) across both Pascal and C99 backends.
+- **Deterministic LIFO RAII:** Types implementing `impl Drop for T` execute `Drop(mut borrow self)` automatically in Last-In, First-Out order on block exit, early `return`, and loop `break`.
+
+---
+
+## 5. Explicit Low-Level Boundary (`unsafe` & `asm`)
+
+Raw pointer dereferencing (`ptr^` on `^T`) is rejected outside an explicit `unsafe ... end unsafe;` block (`E0312`), and Intel-syntax inline assembly requires `asm ... end asm;`, isolating low-level hardware and FFI operations from safe application code.

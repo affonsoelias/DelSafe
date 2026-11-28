@@ -38,11 +38,17 @@ For defining compile-time, globally accessible constants, DelSafe provides the c
 ```delsafe
 module config;
 
+interface
+
 const
     MAX_USERS = 1000;
     PI: Float64 = 3.1415926535;
     APP_NAME = "DelSafeCore";
     TIMEOUT_MS: Int32 = 5000;
+
+implementation
+
+end config.
 ```
 
 Constants can be untyped (with automatic type inference) or explicitly typed (`NAME: Type = Value;`). Attempting to reassign a constant produces compile-time error `E0384`.
@@ -366,7 +372,7 @@ var
 begin
     last := nums.Pop();   // 30 (nums now has 2 elements)
     nums.Clear();
-    ch := "DelSafe"[0];    // 'A' (Ord(ch) = 65, Chr(66) = 'B')
+    ch := "DelSafe"[0];    // 'D' (Ord(ch) = 68, Chr(66) = 'B')
 end ArrayLiteralsDemo.
 ```
 
@@ -415,6 +421,26 @@ begin
     zeroPt := Default(Point); // { x = 0, y = 0 }
 end SliceAndDefaultDemo.
 ```
+
+### 5.14 Anonymous Tuples (`(T1, T2)`) & Destructuring
+
+DelSafe supports fixed-arity anonymous tuples `(T1, T2, ...)` and named tuple aliases (`type Coord = (Int32, Int32);`), with 0-based positional field access (`.0`, `.1`) and destructuring in `let` / `var` bindings (with `_` wildcards):
+
+```delsafe
+type
+    Coord = (Int32, Int32);
+
+var
+    pair: (Int32, String) := (10, "delsafe");
+    pt: Coord := (15, 27);
+begin
+    PrintLn(pair.1);               // "delsafe"
+    let (num, name) := pair;       // Destructuring
+    var (firstCoord, _) := pt;     // Wildcard discards pt.1
+end
+```
+
+Tuples also compose seamlessly inside `Option<(Int32, String)>`, `Result<(Int32, Int32), String>`, dynamic arrays, and generic functions.
 
 ---
 

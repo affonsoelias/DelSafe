@@ -99,7 +99,7 @@ end main.
 
 ## 2. Standard Project Structure
 
-When you initialize a new project with `delsafec new <project_name>`:
+When you initialize a new project with `delsafec new <project_name>` (or `delsafec new .` inside an existing directory):
 
 ```bash
 delsafec new my_service
@@ -110,20 +110,16 @@ DelSafe generates the canonical directory hierarchy:
 ```text
 my_service/
 ├── delsafe.json              <- Project manifest and dependency declarations
-├── delsafe.lock              <- Cryptographic lockfile (exact commit hashes)
 ├── src/
-│   └── my_service.dels      <- Application entry point (module my_service; program Main;)
+│   └── my_service.dels       <- Application entry point (module My_service; program Main;)
 ├── tests/
-│   └── my_service_test.dels <- Automated test suite (run with 'delsafec test')
-├── .delsafe/
-│   └── deps/             <- Installed dependencies (gitignored)
-├── bin/                  <- Output native binaries (gitignored)
-├── generated/            <- Intermediate transpiled code (gitignored)
-│   ├── pascal/           <- Object Pascal outputs
-│   └── c/                <- C99 outputs
-├── .gitignore            <- Standard gitignore for binary hygiene
+│   └── my_service_test.dels  <- Automated test suite (run with 'delsafec test')
+├── bin/                      <- Output native binaries (gitignored)
+├── .gitignore                <- Ignores bin/, build/, generated/, .delsafe/
 └── README.md
 ```
+
+*(When dependencies are added or builds run, `.delsafe/deps/`, `delsafe.lock`, and `build/` directories are created automatically.)*
 
 ---
 
@@ -137,8 +133,17 @@ The `delsafe.json` file is the declarative manifest for your project:
   "version": "1.0.0",
   "description": "High-throughput microservice built with DelSafe and Zephyr",
   "backend": "pascal",
-  "entry": "src/main.dels",
+  "entry": "src/my_service.dels",
   "output": "bin/my_service.exe",
+  "outputs": {
+    "bin_dir": "bin",
+    "pascal_src_dir": "build/pascal",
+    "pascal_unit_dir": "build/units",
+    "c_src_dir": "build/c",
+    "as_unit": false
+  },
+  "system_libs": [],
+  "pascal_packages": [],
   "dependencies": [
     {
       "name": "delsafe_json",
@@ -157,7 +162,9 @@ The `delsafe.json` file is the declarative manifest for your project:
 - `backend`: Default target backend (`"pascal"` or `"c"`).
 - `entry`: Relative path to the application's main entry file.
 - `output`: Destination binary path.
-- `dependencies`: List of external Git packages or local mono-repo path dependencies.
+- `outputs`: Configurable directories for binaries, generated Pascal/C sources, FPC units, and `--unit` mode (`as_unit`).
+- `system_libs` / `pascal_packages`: Native C libraries (resolved via `pkg-config`) and Free Pascal packages (`fppkg` / OPM).
+- `dependencies`: External Registry, Git, or local monorepo path dependencies.
 
 ---
 
@@ -222,6 +229,23 @@ delsafec pkg update
 
 ```bash
 delsafec pkg remove delsafe_http
+```
+
+### 4.5 Native Ecosystem, Registry Search & Publishing
+
+```bash
+# Add a native C system library (MSYS2 pacman + pkg-config)
+delsafec pkg add-sys sqlite3
+
+# Add a Free Pascal package (fppkg / Lazarus OPM)
+delsafec pkg add-fpc lazutils
+
+# Search and publish community packages via delsafe-ecosystem
+delsafec pkg search http
+delsafec pkg publish --dry-run
+
+# Clean the global package cache (~/.delsafe/cache)
+delsafec pkg clean
 ```
 
 ---

@@ -59,12 +59,20 @@ When invoked with `--emit-json-diag` (or `--emit-json-diagnostics`), the compile
 
 - **`E0000`:** Lexical Error (unterminated string literal, invalid character).
 - **`E0001`:** Syntax Error (unexpected token, mismatched `end <construct>`).
+- **`E0002`:** Invalid executable block name (entry block must be `program Main;`).
 - **`E0004`:** Non-exhaustive `match` (missing variant coverage for an `enum`, `Result`, or `Option`).
+- **`E0005`:** Module name mismatch (`module <Name>;` does not match filename `<Name>.dels`).
 - **`E0061`:** Wrong number of arguments in function or constructor call.
+- **`E0301`:** Compile-time division by zero.
 - **`E0308`:** Type mismatch in assignment, comparison, or return expression.
+- **`E0309`:** Constant array index out of bounds.
+- **`E0310`:** Loop control statement (`break` / `continue`) used outside a loop.
+- **`E0312`:** Raw pointer dereference (`ptr^`) outside an `unsafe ... end unsafe;` block.
 - **`E0369`:** Invalid binary or unary operation for the operand type.
 - **`E0382`:** Use of moved value (*Use-After-Move*).
-- **`E0384`:** Attempt to reassign an immutable `let` variable.
+- **`E0384`:** Attempt to reassign an immutable `let` variable or `const`.
 - **`E0412`:** Unrecognized type identifier.
 - **`E0425`:** Unresolved variable or function identifier in scope.
 - **`E0502`:** Mutable borrow conflict with active shared borrows.
+- **`E0603`:** Access to a private (`priv`) module/unit member from outside its module.
+- **`E9991` / `E9992`:** Release SHA-256 verification failure or missing release checksum during `delsafec upgrade`.

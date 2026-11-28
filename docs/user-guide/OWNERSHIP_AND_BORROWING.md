@@ -22,7 +22,7 @@ When defining a function or passing arguments in DelSafe, there are three explic
 
 Consider a simple record managing a data buffer:
 
-```pascal
+```delsafe
 module OwnershipExample;
 
 type
@@ -81,7 +81,7 @@ Compilation Error: [Ownership Error E0382 at 32:24]: Use of moved value: "my_buf
 
 Thanks to **UFCS (*Uniform Function Call Syntax*)**, any function or procedure whose first parameter is `borrow` or `mut borrow` can be called as if it were a method on that value:
 
-```pascal
+```delsafe
 // Traditional procedural style:
 Inspect(borrow my_buffer);
 
@@ -90,3 +90,17 @@ my_buffer.Inspect();
 ```
 
 Both forms compile to the exact same high-speed native machine code and go through the exact same strict safety checks!
+
+---
+
+## 5. Disjoint Field Borrows & Partial Moves
+
+The Borrow Checker tracks individual record fields independently:
+- You can pass two different fields as `mut borrow` in the same call (`SwapFields(mut borrow pair.a, mut borrow pair.b)`).
+- Moving one field via `take rec.name` invalidates only `rec.name`, leaving `rec.count` readable; assigning `rec.name := "new"` restores full ownership of `rec`.
+
+---
+
+## 6. Heap Allocation (`Box<T>`), `Free`/`Dispose`, and RAII (`impl Drop`)
+
+When you need heap indirection (for example, recursive AST nodes), wrap values with `Box<T>` (`Box(val)`). DelSafe automatically frees `Box<T>`, dynamic arrays, maps, and strings deterministically on scope exit, supports manual early release via `Free(x)` / `Dispose(x)`, and invokes custom `impl Drop for MyType` destructors in strict LIFO order.

@@ -20,23 +20,24 @@ It manages local dependencies, remote Git repositories, semantic versions, and l
 
 ## 2. Standard DelSafe Project Layout
 
-When you create a new project with `delsafec new my_app`:
+When you create a new project with `delsafec new my_app` (or `delsafec new .` inside an existing directory):
 
 ```text
 my_app/
 ├── delsafe.json           <- Configuration and dependency manifest
-├── delsafe.lock           <- Exact version and commit lockfile
+├── delsafe.lock           <- Exact version and commit lockfile (created on pkg add/update)
 ├── src/
-│   └── main.dels         <- Application entry point
+│   └── my_app.dels        <- Application entry point (module My_app; program Main;)
 ├── tests/
-│   └── main_test.dels    <- Automated unit test suite
+│   └── my_app_test.dels   <- Automated unit test suite
 ├── .delsafe/
-│   └── deps/             <- Installed dependencies ready for import
-├── bin/                  <- Compiled native executables
-├── generated/            <- Organized transpiled output
-│   ├── pascal/           <- Object Pascal units and programs
-│   └── c/                <- Native C99 source code
-├── .gitignore            <- Ignores bin/, generated/, and .delsafe/deps/
+│   └── deps/              <- Installed dependencies ready for import
+├── bin/                   <- Compiled native executables
+├── build/                 <- Organized compiler outputs
+│   ├── pascal/            <- Generated Object Pascal sources
+│   ├── units/             <- Compiled FPC .ppu / .o units
+│   └── c/                 <- Generated C99 sources
+├── .gitignore             <- Ignores bin/, build/, generated/, and .delsafe/
 └── README.md
 ```
 
@@ -160,4 +161,31 @@ Clears the shared cache at `~/.delsafe/cache/`, forcing fresh downloads when nee
 
 ```bash
 delsafec pkg clean
+```
+
+### 4.7 Native C & Free Pascal Dependencies (`add-sys`, `add-fpc`)
+
+DelSafe also manages native OS libraries via **`pkg-config`** / MSYS2 `pacman` and Free Pascal packages via **`fppkg`** / Lazarus OPM:
+
+```bash
+# Install/verify a C library via MSYS2 pacman + pkg-config and register in delsafe.json ("system_libs")
+delsafec pkg add-sys sqlite3
+
+# Install/locate a Free Pascal package via fppkg / OPM and register in delsafe.json ("pascal_packages")
+delsafec pkg add-fpc lazutils
+```
+
+On Windows, transitive MSYS2 DLLs (e.g., `libsqlite3-0.dll`) are automatically bundled next to the compiled executable unless `"bundle_dlls": false` or `--no-bundle-dlls` is passed.
+
+### 4.8 Registry Search & Publishing (`search`, `publish`)
+
+```bash
+# Search the official delsafe-ecosystem registry
+delsafec pkg search http
+# or shorthand:
+delsafec search http
+
+# Validate and publish your package manifest & tarball
+delsafec pkg publish --dry-run
+delsafec publish
 ```

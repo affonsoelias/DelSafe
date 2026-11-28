@@ -116,8 +116,8 @@ for n in numbers do
 end for;
 
 for ch in "DelSafe" do
-    if ch = 'A' then
-        PrintLn("Found A!");
+    if ch = 'D' then
+        PrintLn("Found D!");
     end if;
 end for;
 
@@ -214,6 +214,12 @@ The `defer` statement schedules a statement to execute deterministically in **LI
 ```delsafe
 module defer_demo;
 
+interface
+
+function ProcessData(mut borrow log: array of Int32; exitEarly: Bool) return Int32;
+
+implementation
+
 function ProcessData(mut borrow log: array of Int32; exitEarly: Bool) return Int32 is
 begin
     defer log.Push(1); // Runs 2nd
@@ -225,6 +231,8 @@ begin
 
     return 1;
 end ProcessData;
+
+end defer_demo.
 ```
 
 ---
@@ -279,6 +287,8 @@ Enums in DelSafe are not just lists of numbers; they are **Algebraic Data Types 
 ```delsafe
 module enums_demo;
 
+interface
+
 type
     Status = enum
         Idle,
@@ -292,6 +302,10 @@ type
         KeyPress,
         Submit
     end enum;
+
+implementation
+
+end enums_demo.
 ```
 
 ---

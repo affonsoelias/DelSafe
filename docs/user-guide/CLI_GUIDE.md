@@ -57,8 +57,10 @@ Runs the automated unit test suite under `tests/` or executes a specific test fi
 # Run all tests (*.dels in tests/)
 delsafec test
 
-# Run tests with the native C99 backend
+# Run tests with the native C99 backend or both backends
 delsafec test --target=c
+delsafec test --target=all
+delsafec test --both
 
 # Run only tests whose filename contains "math"
 delsafec test math
@@ -93,8 +95,21 @@ delsafec bench --compare --json
 ```delsafe
 module math_bench;
 
+interface
+
 function Fibonacci(n: Int32) return Int32;
-...
+/// @bench
+procedure BenchFibonacci;
+
+implementation
+
+function Fibonacci(n: Int32) return Int32 is
+begin
+    if n <= 1 then
+        return n;
+    end if;
+    return Fibonacci(n - 1) + Fibonacci(n - 2);
+end Fibonacci;
 
 /// @bench
 procedure BenchFibonacci is
@@ -103,6 +118,8 @@ var
 begin
     res := Fibonacci(30);
 end BenchFibonacci;
+
+end math_bench.
 ```
 
 Benchmark options:
@@ -110,6 +127,27 @@ Benchmark options:
 - `--json`, `--format=json`: Machine-readable JSON output (no banners) with iterations, `avg_ms`, `std_dev_ms`, and `ops_per_sec`.
 - `--iters=<N>`: Configures iteration count per benchmark (default: 100).
 - `--target=<pascal|c>`: Selects a single backend target.
+
+### `delsafec profile <file.dels> [options]`
+Compiles and runs a program with heap instrumentation, reporting execution timing and verifying zero memory leaks:
+```bash
+delsafec profile src/main.dels
+delsafec profile src/main.dels --runs=10 --target=c
+delsafec profile src/main.dels --json
+```
+
+### `delsafec lint [path] [options]`
+Runs DelSafe's static code quality analyzer across a file or directory:
+```bash
+# Analyze project sources
+delsafec lint src/
+
+# Automatically remove unused imports
+delsafec lint src/ --fix
+
+# Output machine-readable JSON lint report
+delsafec lint src/ --json
+```
 
 ### `delsafec clean`
 Safely removes all build artifacts from the current project (`bin/`, `generated/`, and `.delsafe/cache/build/`), preserving source code and the compiler:
@@ -135,10 +173,21 @@ delsafec upgrade --from-source
 # Update to a specific version tag
 delsafec upgrade --version=v0.6.0
 
+# Use weekly nightly pre-releases
+delsafec upgrade --nightly
+delsafec upgrade --channel=nightly
+
+# Update binary only (keep existing std/), or allow unsigned releases
+delsafec upgrade --binary --no-std
+delsafec upgrade --binary --allow-unsigned
+
+# Custom metadata JSON URL (supports file:/// for offline testing)
+delsafec upgrade --url=file:///C:/path/to/release.json
+
 # Simulate the upgrade without modifying files on disk
 delsafec upgrade --dry-run
 
-# Roll back immediately to the previous compiler binary
+# Roll back immediately to the previous compiler binary and stdlib
 delsafec upgrade --rollback
 ```
 
@@ -232,14 +281,16 @@ delsafec run src/main.dels --opt
 
 ## 3. Code Emission & Transpilation (`delsafec emit`)
 
-The `emit` command generates transpiled source code without requiring immediate native compilation—ideal for inspection, debugging, CI/CD, and **BlaiseVue** integration:
+The `emit` command generates transpiled source code, WebAssembly binaries, or the shared BlaiseVue runtime unit without requiring full project compilation:
 
 ```bash
-delsafec emit <pascal | c> [file.dels] [options]
+delsafec emit <pascal | c | wasm | runtime> [file.dels] [options]
 ```
 
 ### `emit` Options:
 - `--unit`: Emits a **Free Pascal Unit** (`unit ...; interface ... implementation ... end.`) for direct consumption in BlaiseVue via `uses MyUnit;`.
+- `--shared-runtime`: Generates and uses a shared `uDelSafeRuntime.pas` unit alongside `--unit` emissions (recommended for multi-unit BlaiseVue projects; can also be generated directly via `delsafec emit runtime`).
+- `--manifest`: Emits a `.wasm.json` export manifest alongside `.wasm` output.
 - `--out-dir=<path>` or `-d <path>`: Writes generated files into the specified directory (e.g., `.blaisevue/generated/`).
 - `--stdout`: Prints generated code directly to stdout for pipes and inspection (`| gcc -x c -`, `> out.c`).
 - `--silent` or `-s`: Quiet mode for external build tools (exit code 0 on success, errors on stderr).
@@ -248,19 +299,22 @@ delsafec emit <pascal | c> [file.dels] [options]
 
 ### Practical `emit` Examples:
 ```bash
-# 1. Emit a Pascal unit for BlaiseVue
-delsafec emit pascal src/Store.dels --unit
+# 1. Emit a Pascal unit for BlaiseVue (with shared runtime unit)
+delsafec emit pascal src/Store.dels --unit --shared-runtime
 
-# 2. Emit directly into a BlaiseVue managed folder
-delsafec emit pascal src/Store.dels --unit --out-dir=./generated/blaisevue
+# 2. Emit the shared uDelSafeRuntime.pas unit directly
+delsafec emit runtime --out-dir=./generated/blaisevue
 
-# 3. Watch for changes and regenerate on save
+# 3. Emit WebAssembly with JSON manifest
+delsafec emit wasm src/calc.dels --manifest -o public/calc.wasm
+
+# 4. Watch for changes and regenerate on save
 delsafec emit pascal src/Store.dels --unit --watch
 
-# 4. Inspect generated C99 output in stdout
+# 5. Inspect generated C99 output in stdout
 delsafec emit c src/main.dels --stdout | head -n 30
 
-# 5. Generate a C header (.h) for exported FFI types and functions
+# 6. Generate a C header (.h) for exported FFI types and functions
 delsafec emit-header src/math_lib.dels -o include/math_lib.h
 ```
 
@@ -277,8 +331,8 @@ Generates an **ANSI C99 / C++ compatible** header (`.h`) with `extern "C"` linka
 
 ## 4. Project & Package Management
 
-### `delsafec new [name | .]`
-Scaffolds a new DelSafe project with `delsafe.json`, `src/main.dels`, `tests/main_test.dels`, `.gitignore`, and `README.md`:
+### `delsafec new [name | .]` (alias: `delsafec init`)
+Scaffolds a new DelSafe project with `delsafe.json`, `src/<name>.dels`, `tests/<name>_test.dels`, `.gitignore`, and `README.md`:
 ```bash
 # Create a new project in a new folder:
 delsafec new my_project
@@ -421,10 +475,15 @@ You can also specify these flags directly on the CLI:
 - `--shared-lib <file.dll/.so>`: Copy a shared library to the output directory.
 - `--lib` or `--shared`: Build as a **shared dynamic library** (`.dll` on Windows, `.so` on Linux/macOS) exporting `cdecl` symbols.
 - `--emit-header`: Automatically generate the matching C header (`.h`) next to the built library.
+- `--sys-lib=<lib>`: Resolve a native C library via `pkg-config` and bundle MSYS2 DLLs.
+- `--fpc-pkg=<pkg>`: Include Free Pascal package units (`fppkg` / Lazarus OPM).
+- `--bundle-dlls` / `--no-bundle-dlls`: Control automatic transitive MSYS2 DLL bundling next to Windows binaries (default: enabled).
 
 ### `delsafec pkg <subcommand>`
 Built-in DelSafe package manager:
 - `delsafec pkg add <package>`: Add a Registry, Git (`--git=...`), or local (`--path=...`) dependency to `delsafe.json` and `delsafe.lock`.
+- `delsafec pkg add-sys <lib>`: Install via MSYS2 `pacman` (or verify via `pkg-config`) and register in `"system_libs"`.
+- `delsafec pkg add-fpc <pkg>`: Install via `fppkg` / locate FPC or Lazarus OPM units and register in `"pascal_packages"`.
 - `delsafec pkg remove <package>` (`rm`): Remove dependency and clean local caches.
 - `delsafec pkg update [package]` (`upgrade`): Update Git/Registry dependencies and refresh the lockfile.
 - `delsafec pkg publish [--registry=<url>] [--dry-run]`: Publish package to the Registry with manifest validation, SemVer, SHA-256 checksum, and signature.
@@ -440,11 +499,12 @@ Built-in DelSafe package manager:
 ## 5. Language Tooling & Diagnostics
 
 ### `delsafec --doctor`
-Verifies installation, paths, and versions of all 4 DelSafe toolchain backends:
+Verifies installation, paths, and versions of the DelSafe host toolchain:
 1. **Free Pascal (`fpc`)**: Native Object Pascal compiler.
 2. **GCC (`gcc`)**: Native C compiler (MSYS2 UCRT64 on Windows, system GCC on Linux/macOS).
 3. **Clang / LLVM (`clang`)**: Native C compiler and WebAssembly (`wasm32`) cross-compiler.
-4. **Pas2JS (`pas2js`)**: Free Pascal to modular JavaScript compiler.
+4. **`pkg-config` / MSYS2**: Native C FFI library resolution and DLL bundling.
+5. **Pas2JS (`pas2js`)**: Free Pascal to modular JavaScript compiler.
 
 ### `delsafec lsp` (or `--lsp`)
 Starts the built-in **Language Server Protocol (LSP)** server, providing completions, hover docs, go-to-definition, and real-time diagnostics for VS Code and compatible editors.

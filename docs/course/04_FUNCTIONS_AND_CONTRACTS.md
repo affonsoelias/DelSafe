@@ -6,10 +6,18 @@ Functions in DelSafe are first-class constructs. Furthermore, DelSafe natively i
 
 ## 1. Routine Syntax (`procedure` and `function`)
 
-DelSafe distinguishes between routines that do not return a value (**`procedure`**) and routines that return a value (**`function ... return <Type>`**), with Ada-style `is` headers and explicit named `end <Name>;` closings:
+DelSafe distinguishes between routines that do not return a value (**`procedure`**) and routines that return a value (**`function ... return <Type>`**), with Ada-style `is` headers and explicit named `end <Name>;` closings. Parentheses `()` are optional on parameterless procedures:
 
 ```delsafe
 module functions_demo;
+
+interface
+
+function AddNumbers(a, b: Int32) return Int32;
+procedure GreetUser(name: String);
+procedure PrintBanner;
+
+implementation
 
 function AddNumbers(a, b: Int32) return Int32 is
 begin
@@ -20,7 +28,16 @@ procedure GreetUser(name: String) is
 begin
     PrintLn("Hello, " + name + "!");
 end GreetUser;
+
+procedure PrintBanner is
+begin
+    PrintLn("=== DelSafe ===");
+end PrintBanner;
+
+end functions_demo.
 ```
+
+> **Unit Contract Rule:** When a routine is declared inside a Unit's `interface` section, any `contract require` / `ensure` clause belongs on the `interface` signature (without repeating it in `implementation`).
 
 ---
 
@@ -119,9 +136,35 @@ This ensures your DelSafe code protects against passing bad data to foreign C ro
 
 ---
 
-## 5. Summary
+## 5. Function Types, Lambdas & Closures (`fn`)
+
+Routines are first-class values in DelSafe. You can declare named function/procedure callback types, pass named routines, or write inline **expression lambdas** (`fn(...) => expr`) and **block lambdas** (`fn(...) begin ... end fn`) that capture outer variables:
+
+```delsafe
+type
+    IntTransform = function(Int32) return Int32;
+    IntSink = procedure(Int32);
+
+function ApplyTransform(x: Int32; op: IntTransform) return Int32 is
+begin
+    return op(x);
+end ApplyTransform;
+
+function MakeAdder(base: Int32) return IntTransform is
+begin
+    // Closure capturing `base`
+    return fn(delta: Int32) return Int32 => base + delta;
+end MakeAdder;
+```
+
+At call sites, parameter and return types can also be inferred (`ApplyTransform(5, fn(x) => x + 7)`), and multi-statement lambdas use `begin ... end fn`.
+
+---
+
+## 6. Summary
 1. Procedures use `procedure Name[(params)] is ... begin ... end Name;`, and functions use `function Name[(params)] return Type is ... begin ... end Name;`.
-2. Contracts use `contract require <expr>; ensure <expr>;` placed after `is` (or on `interface` / `extern` signatures).
-3. Pre-conditions defend your routines against invalid caller input at zero architectural cost.
+2. Contracts use `contract require <expr>; ensure <expr>;` placed after `is` (or on `interface` / `extern` signatures, without repeating them in `implementation`).
+3. Function types and `fn(...)` lambdas/closures support callbacks, type inference, and outer-scope captures across both backends.
+4. Pre-conditions defend your routines against invalid caller input at zero architectural cost.
 
 ➡️ **Next:** **[Chapter 05: The Borrow Checker (Memory Safety)](05_THE_BORROW_CHECKER.md)**

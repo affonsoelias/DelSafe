@@ -61,26 +61,29 @@
 
 ### 3.1 File & Module Structure
 ```ebnf
-SourceFile    ::= ModuleDecl ( ProgramDecl | UnitDecl | LibraryBody )
+SourceFile    ::= ModuleDecl ( UnitDecl | ProgramModule )
 ModuleDecl    ::= "module" Identifier ";" { ImportDecl }
 ImportDecl    ::= "import" [ "c" | "pascal" | "link" ] ModulePath [ "as" Identifier ] ";"
 
-UnitDecl      ::= "interface" { TopLevelDecl }
-                  "implementation" { TopLevelDecl }
+UnitDecl      ::= "interface" { ImportDecl } { TopLevelDecl }
+                  "implementation" { ImportDecl } { TopLevelDecl }
                   [ "initialization" { Statement ";" } ]
                   [ "finalization" { Statement ";" } ]
                   "end" Identifier "."
 
-LibraryBody   ::= { TopLevelDecl }
-ProgramDecl   ::= "program" Identifier ";" { TopLevelDecl } Block Identifier "."
+ProgramModule ::= { TopLevelDecl }
+                  "program" "Main" ";" [ VarSection ]
+                  Block Identifier "."
 
 TopLevelDecl  ::= ConstDecl | TypeDecl | VarSection | FuncDecl | ProcDecl | TraitDecl | ImplDecl
 ```
 
+*(Modules without `program Main;` must declare `interface ... implementation ... end <ModuleName>.`, and executable modules must name the entry block `program Main;` [`E0002`].)*
+
 ### 3.2 Type Declarations
 ```ebnf
-TypeDecl      ::= "type" { [ DeriveAttr ] Identifier "=" TypeDef ";" }
-TypeDef       ::= RecordDef | EnumDef | ArrayDef | SetDef | SubrangeDef | PointerDef | AliasDef
+TypeDecl      ::= "type" { [ DeriveAttr ] [ "pub" | "priv" ] Identifier [ "<" GenericParamList ">" ] "=" TypeDef ";" }
+TypeDef       ::= RecordDef | EnumDef | ArrayDef | MapDef | SetDef | SubrangeDef | PointerDef | TupleDef | FuncTypeDef | AliasDef
 
 RecordDef     ::= "record" { [ "pub" | "priv" ] Identifier ":" TypeRef ";" } "end" "record"
 EnumDef       ::= "enum" EnumVariant { "," EnumVariant } "end" "enum"
@@ -88,6 +91,10 @@ EnumDef       ::= "enum" EnumVariant { "," EnumVariant } "end" "enum"
 EnumVariant   ::= Identifier [ "(" FieldList ")" ]
 FieldList     ::= FieldDef { "," FieldDef }
 FieldDef      ::= Identifier ":" TypeRef
+TupleDef      ::= "(" TypeRef "," TypeRef { "," TypeRef } ")"
+MapDef        ::= "map" "[" TypeRef "]" TypeRef
+FuncTypeDef   ::= ( "function" "(" [ ParamTypeList ] ")" ( "return" | ":" ) TypeRef )
+                | ( "procedure" [ "(" [ ParamTypeList ] ")" ] )
 
 AliasDef      ::= TypeRef
 TypeRef       ::= Identifier [ "<" TypeRefList ">" ]
@@ -123,6 +130,7 @@ Block         ::= "begin" { Statement ";" } "end"
 
 Statement     ::= Assignment
                 | LocalDecl
+                | TupleDestruct
                 | IfStmt
                 | WhileStmt
                 | RepeatStmt
@@ -132,12 +140,23 @@ Statement     ::= Assignment
                 | UnsafeStmt
                 | AsmStmt
                 | DeferStmt
+                | RaiseStmt
+                | BreakStmt
+                | ContinueStmt
+                | YieldStmt
                 | ReturnStmt
                 | FuncCall
 
-Assignment    ::= LValue ":=" Expr
+Assignment    ::= LValue ( ":=" | "+=" | "-=" | "*=" | "/=" | "%=" | "mod=" | "&=" | "|=" | "^=" | "<<=" | ">>=" ) Expr
 LocalDecl     ::= ( "let" | "var" ) Identifier [ ":" TypeRef ] ":=" Expr
+TupleDestruct ::= ( "let" | "var" ) "(" IdentOrWildcard { "," IdentOrWildcard } ")" [ ":" TupleDef ] ":=" Expr
 ReturnStmt    ::= "return" [ Expr ]
+BreakStmt     ::= "break"
+ContinueStmt  ::= "continue"
+YieldStmt     ::= "yield"
+RaiseStmt     ::= "raise" Expr
+DeferStmt     ::= "defer" Statement
+AsmStmt       ::= "asm" RawIntelAssemblyLines "end" "asm"
 
 IfStmt        ::= "if" Expr "then" { Statement ";" }
                   { "else" "if" Expr "then" { Statement ";" } }
@@ -147,32 +166,40 @@ IfStmt        ::= "if" Expr "then" { Statement ";" }
 WhileStmt     ::= "while" Expr "do" { Statement ";" } "end" "while"
 RepeatStmt    ::= "repeat" { Statement ";" } "until" Expr
 ForStmt       ::= "for" Identifier ":=" Expr ( "to" | "downto" ) Expr "do" { Statement ";" } "end" "for"
-                | "for" Identifier "in" Expr "do" { Statement ";" } "end" "for"
+                | "for" Identifier [ "," Identifier ] "in" Expr "do" { Statement ";" } "end" "for"
 
 MatchStmt     ::= "match" Expr ( "do" | "with" )
-                      { [ "case" ] PatternList ( "=>" | ":" ) { Statement ";" } }
+                      { [ "case" ] PatternList [ ( "if" | "when" ) Expr ] ( "=>" | ":" ) { Statement ";" } }
                   "end" "match"
 
 TryStmt       ::= "try" { Statement ";" } "except" { Statement ";" } "end" "try"
 UnsafeStmt    ::= "unsafe" { Statement ";" } "end" "unsafe"
 ```
 
-### 3.5 Expressions, Calls, and UFCS
+### 3.5 Expressions, Calls, Lambdas, and UFCS
 ```ebnf
 Expr          ::= LogicalExpr
 LogicalExpr   ::= RelationalExpr { ( "and" | "or" | "xor" | "implies" ) RelationalExpr }
 RelationalExpr::= AdditiveExpr [ ( "=" | "<>" | "<" | "<=" | ">" | ">=" | "in" ) AdditiveExpr ]
 AdditiveExpr  ::= MultiplicativeExpr { ( "+" | "-" ) MultiplicativeExpr }
 MultiplicativeExpr ::= UnaryExpr { ( "*" | "/" | "div" | "mod" | "shl" | "shr" ) UnaryExpr }
-UnaryExpr     ::= [ "-" | "not" | "@" ] PrimaryExpr [ "^" | "?" ]
+UnaryExpr     ::= [ "-" | "not" | "@" | "await" | "spawn" | "try" ] PrimaryExpr [ "^" | "?" ]
 
 PrimaryExpr   ::= Literal
-                | Identifier [ "." Identifier [ "(" [ CallArgList ] ")" ] ]
+                | TupleLiteral
+                | ArrayLiteral
+                | MapLiteral
+                | LambdaExpr
+                | Identifier [ "." ( Identifier | IntLiteral ) [ "(" [ CallArgList ] ")" ] ]
                 | RecordInstantiation
                 | FuncCall
+                | MatchExpr
                 | "if" Expr "then" Expr "else" Expr
                 | "(" Expr ")"
 
+LambdaExpr    ::= "fn" "(" [ ParamList ] ")" [ "return" TypeRef ] ( "=>" Expr | "begin" { Statement ";" } "end" "fn" )
+MatchExpr     ::= "match" Expr ( "do" | "with" ) { [ "case" ] PatternList [ ( "if" | "when" ) Expr ] "=>" Expr ";" } "end" "match"
+MapLiteral    ::= "[" ( ":" | Expr ":" Expr { "," Expr ":" Expr } ) "]"
 RecordInstantiation ::= Identifier "(" [ ArgList ] ")"
 FuncCall      ::= Identifier "(" [ CallArgList ] ")"
 CallArgList   ::= CallArg { "," CallArg }
@@ -191,13 +218,15 @@ CallArg       ::= [ "take" | "borrow" | "mut borrow" ] Expr
 - Text: `Char` and `String` (managed/deterministic memory)
 - Empty / Unit: `Void`
 
-### 4.2 Built-In Monadic Types
+### 4.2 Built-In Monadic & Concurrency Types
 - `Option<T>`:
   - `Some(val: T)`
   - `None`
 - `Result<T, E>`:
   - `Ok(val: T)`
   - `Err(err: E)`
+- `Task<T>` / `Task<Void>`: Native OS-thread handle produced by `async` routines and `spawn`, resolved via `await`.
+- `Channel<T>`: Bounded generic ring-buffer channel (`NewChannel<T>(cap)`, `Send`, `Recv`, `TrySend`, `TryRecv`, `CloseChannel`, `DestroyChannel`).
 
 ### 4.3 Ownership & Borrowing Rules
 
@@ -216,7 +245,7 @@ DelSafe integrates natively with Free Pascal units and C99 headers with **Zero-B
 ### 5.1 Importing Free Pascal Units (`import pascal`)
 Consume any unit from the Free Pascal or Lazarus ecosystem (`SysUtils`, `Classes`, `DateUtils`, `Math`, etc.):
 
-```pascal
+```delsafe
 module PascalExample;
 
 import pascal SysUtils;
@@ -235,7 +264,7 @@ end PascalExample.
 ### 5.2 Importing C Headers and Libraries (`import c`)
 Include standard C library headers or third-party C libraries directly:
 
-```pascal
+```delsafe
 module CExample;
 
 import c "<math.h>";
@@ -256,8 +285,10 @@ end CExample.
 
 DelSafe favors composition over inheritance using **Traits** and decoupled implementations (`impl ... for ...`) with compile-time static dispatch (*Zero-Cost Abstractions*):
 
-```pascal
+```delsafe
 module TraitsExample;
+
+interface
 
 trait Printable
     function Describe(borrow self) return String;
@@ -267,6 +298,10 @@ type
     Circle = record
         radius: Int32;
     end record;
+
+procedure DisplayElement<T: Printable>(borrow item: T);
+
+implementation
 
 impl Printable for Circle
     function Describe(borrow self) return String is
@@ -280,6 +315,8 @@ procedure DisplayElement<T: Printable>(borrow item: T) is
 begin
     PrintLn("Element: %s", item.Describe());
 end DisplayElement;
+
+end TraitsExample.
 ```
 
 ---
@@ -357,7 +394,7 @@ type
 - **`Debug`**: Generates `ToString(borrow self) return String` (`Type { field1: val1, ... }` or `Enum.Variant`).
 - **`JSON`**: Generates `ToJSON(borrow self) return String` and `FromJSON(borrow json: String) return Self`.
 - **`Clone`**: Generates `Clone(borrow self) return Self` for explicit duplication under borrow checking.
-- **`Equals`**: Generates `Equals(borrow self, other: borrow Self) return Bool` for recursive structural equality.
+- **`Equals`**: Generates `Equals(borrow self; borrow other: Self) return Bool` for recursive structural equality.
 
 Generated methods work naturally via UFCS:
 ```delsafe
