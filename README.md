@@ -137,6 +137,7 @@ DelSafe uses a streamlined single-branch workflow during pre-1.0 development:
 
 ## Documentation
 
+- [Changelog](CHANGELOG.md)
 - [The DelSafe Masterclass Course](docs/course/README.md)
 - [Documentation Index](docs/README.md)
 - [Roadmap & Development Plan](docs/planning/DEVELOPMENT_ROADMAP.md)
